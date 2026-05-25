@@ -47,13 +47,13 @@ def main():
         input_ids_list = tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=args.seed_response is None,
-            return_tensors=None,
         )
+        input_ids_list = list(input_ids_list)
         # Strip trailing EOS if seed_response is set (we want to continue generation)
         if args.seed_response:
             while input_ids_list and input_ids_list[-1] == tokenizer.eos_token_id:
                 input_ids_list.pop()
-        input_ids = torch.tensor([input_ids_list], device=device)
+        input_ids = torch.tensor([input_ids_list], dtype=torch.long, device=device)
     else:
         input_ids = tokenizer(args.text, return_tensors="pt").input_ids.to(device)
     seq_len = input_ids.shape[1]
