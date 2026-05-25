@@ -20,6 +20,10 @@ def main():
     parser.add_argument("--loss", choices=["kl", "top5"], default="kl",
                         help="kl: minimize KL to ref distribution. "
                              "top5: maximize sum of top-5 ref logits.")
+    parser.add_argument("--chat", action="store_true",
+                        help="Use instruct chat template (Llama 3.1 format)")
+    parser.add_argument("--seed_response", default=None,
+                        help="Seed the assistant response (e.g. 'Answer:')")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,7 +40,21 @@ def main():
     model.gradient_checkpointing_enable()
 
     # Tokenize
-    input_ids = tokenizer(args.text, return_tensors="pt").input_ids.to(device)
+    if args.chat:
+        messages = [{"role": "user", "content": args.text}]
+        if args.seed_response:
+            messages.append({"role": "assistant", "content": args.seed_response})
+        input_ids_list = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=args.seed_response is None,
+        )
+        # Strip trailing EOS if seed_response is set (we want to continue generation)
+        if args.seed_response:
+            while input_ids_list and input_ids_list[-1] == tokenizer.eos_token_id:
+                input_ids_list.pop()
+        input_ids = torch.tensor([input_ids_list], device=device)
+    else:
+        input_ids = tokenizer(args.text, return_tensors="pt").input_ids.to(device)
     seq_len = input_ids.shape[1]
     tokens = [tokenizer.decode(t) for t in input_ids[0]]
     print(f"Input: {args.text!r} -> {seq_len} tokens: {tokens}")
