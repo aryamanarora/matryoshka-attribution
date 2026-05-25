@@ -47,8 +47,16 @@ def main():
         input_ids_list = tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=args.seed_response is None,
+            tokenize=True,
         )
-        input_ids_list = list(input_ids_list)
+        if not isinstance(input_ids_list[0], int):
+            # Fallback: tokenize the rendered string
+            text_rendered = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=args.seed_response is None,
+                tokenize=False,
+            )
+            input_ids_list = tokenizer.encode(text_rendered)
         # Strip trailing EOS if seed_response is set (we want to continue generation)
         if args.seed_response:
             while input_ids_list and input_ids_list[-1] == tokenizer.eos_token_id:
