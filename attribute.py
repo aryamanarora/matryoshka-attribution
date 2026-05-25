@@ -17,6 +17,9 @@ def main():
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--n_iters", type=int, default=30)
     parser.add_argument("--output", default="attribution")
+    parser.add_argument("--loss", choices=["kl", "top5"], default="kl",
+                        help="kl: minimize KL to ref distribution. "
+                             "top5: maximize sum of top-5 ref logits.")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,7 +53,8 @@ def main():
         ref_logits = model(input_ids).logits[0, -1].float()  # [vocab_size]
         ref_probs = F.softmax(ref_logits, dim=-1)
     top5_ref = ref_logits.topk(5)
-    print(f"Reference top-5: {[tokenizer.decode(t) for t in top5_ref.indices.tolist()]}")
+    top5_indices = top5_ref.indices
+    print(f"Reference top-5: {[tokenizer.decode(t) for t in top5_indices.tolist()]}")
 
     # Score tensor (global flat, float32)
     scores = nn.Parameter(torch.zeros(total, device=device))
@@ -82,8 +86,12 @@ def main():
         state["mask"] = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
 
         logits = model(input_ids).logits[0, -1].float()
-        log_probs = F.log_softmax(logits, dim=-1)
-        loss = F.kl_div(log_probs, ref_probs, reduction="batchmean")
+
+        if args.loss == "kl":
+            log_probs = F.log_softmax(logits, dim=-1)
+            loss = F.kl_div(log_probs, ref_probs, reduction="batchmean")
+        else:  # top5
+            loss = -logits[top5_indices].sum()
 
         optimizer.zero_grad()
         loss.backward()
@@ -92,12 +100,12 @@ def main():
         loss_val = loss.item()
         loss_log.append(loss_val)
         if (step + 1) % 50 == 0 or step == 0:
-            print(f"  Step {step+1:>4d}/{args.steps}  KL={loss_val:.6f}  k={k:.0f}/{total}")
+            print(f"  Step {step+1:>4d}/{args.steps}  loss={loss_val:.6f}  k={k:.0f}/{total}")
 
     # === Sparsity evaluation ===
     # Use learned scores to rank neurons, then apply hard top-k at various
-    # sparsity levels and measure KL divergence. Compare against random ordering.
-    print("\nEvaluating KL vs sparsity...")
+    # sparsity levels and measure metric. Compare against random ordering.
+    print("\nEvaluating metric vs sparsity...")
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
     flat_scores = scores.data.clone()
     sorted_idx = flat_scores.argsort(descending=True)
@@ -105,15 +113,22 @@ def main():
     torch.manual_seed(0)
     random_idx = torch.randperm(total, device=device)
 
-    kl_learned = []
-    kl_random = []
+    eval_learned = []
+    eval_random = []
+
+    def eval_metric(logits):
+        if args.loss == "kl":
+            log_probs = F.log_softmax(logits, dim=-1)
+            return F.kl_div(log_probs, ref_probs, reduction="batchmean").item()
+        else:
+            return logits[top5_indices].sum().item()
 
     for frac in sparsities:
         k = max(1, int(frac * total))
 
-        for ordering, kl_list, label in [
-            (sorted_idx, kl_learned, "learned"),
-            (random_idx, kl_random, "random"),
+        for ordering, eval_list in [
+            (sorted_idx, eval_learned),
+            (random_idx, eval_random),
         ]:
             hard_mask = torch.zeros(total, device=device)
             hard_mask[ordering[:k]] = 1.0
@@ -121,12 +136,13 @@ def main():
 
             with torch.no_grad():
                 logits = model(input_ids).logits[0, -1].float()
-                log_probs = F.log_softmax(logits, dim=-1)
-                kl = F.kl_div(log_probs, ref_probs, reduction="batchmean").item()
-            kl_list.append(kl)
+                val = eval_metric(logits)
+            eval_list.append(val)
 
+        metric_name = "KL" if args.loss == "kl" else "top5_sum"
         print(f"  keep={frac:6.1%} ({k:>7d}/{total})  "
-              f"KL_learned={kl_learned[-1]:.6f}  KL_random={kl_random[-1]:.6f}")
+              f"{metric_name}_learned={eval_learned[-1]:.4f}  "
+              f"{metric_name}_random={eval_random[-1]:.4f}")
 
     # Remove hooks
     for h in hooks:
@@ -137,8 +153,8 @@ def main():
     torch.save({"scores": scores_3d, "tokens": tokens, "text": args.text,
                 "args": vars(args), "sparsity_eval": {
                     "sparsities": sparsities,
-                    "kl_learned": kl_learned,
-                    "kl_random": kl_random,
+                    "eval_learned": eval_learned,
+                    "eval_random": eval_random,
                 }}, f"{args.output}_scores.pt")
     print(f"\nSaved scores to {args.output}_scores.pt")
 
@@ -170,21 +186,25 @@ def main():
     plt.colorbar(im, ax=axes[0], shrink=0.8)
 
     # Loss curve
+    loss_label = "KL Divergence" if args.loss == "kl" else "-top5_logit_sum"
     axes[1].plot(loss_log, linewidth=0.8)
     axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("KL Divergence")
+    axes[1].set_ylabel(loss_label)
     axes[1].set_title("Training Loss")
-    axes[1].set_yscale("log")
+    if args.loss == "kl":
+        axes[1].set_yscale("log")
 
-    # KL vs sparsity
+    # Metric vs sparsity
     pct = [s * 100 for s in sparsities]
-    axes[2].plot(pct, kl_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
-    axes[2].plot(pct, kl_random, "o--", label="Random", markersize=4, linewidth=1.2)
+    metric_label = "KL Divergence" if args.loss == "kl" else "Top-5 Logit Sum"
+    axes[2].plot(pct, eval_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
+    axes[2].plot(pct, eval_random, "o--", label="Random", markersize=4, linewidth=1.2)
     axes[2].set_xlabel("% neurons kept")
-    axes[2].set_ylabel("KL Divergence")
-    axes[2].set_title("KL vs Sparsity")
-    axes[2].set_yscale("log")
+    axes[2].set_ylabel(metric_label)
+    axes[2].set_title(f"{metric_label} vs Sparsity")
     axes[2].set_xscale("log")
+    if args.loss == "kl":
+        axes[2].set_yscale("log")
     axes[2].legend()
 
     fig.suptitle(f"Sigmoid Top-K Attribution: {args.text!r}", fontsize=12)
