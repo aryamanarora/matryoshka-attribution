@@ -25,7 +25,7 @@ def main():
     print(f"Loading {args.model}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, torch_dtype=torch.bfloat16, device_map="auto",
+        args.model, dtype=torch.bfloat16, device_map="auto",
     )
     model.eval()
     for p in model.parameters():
@@ -94,6 +94,40 @@ def main():
         if (step + 1) % 50 == 0 or step == 0:
             print(f"  Step {step+1:>4d}/{args.steps}  KL={loss_val:.6f}  k={k:.0f}/{total}")
 
+    # === Sparsity evaluation ===
+    # Use learned scores to rank neurons, then apply hard top-k at various
+    # sparsity levels and measure KL divergence. Compare against random ordering.
+    print("\nEvaluating KL vs sparsity...")
+    sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
+    flat_scores = scores.data.clone()
+    sorted_idx = flat_scores.argsort(descending=True)
+
+    torch.manual_seed(0)
+    random_idx = torch.randperm(total, device=device)
+
+    kl_learned = []
+    kl_random = []
+
+    for frac in sparsities:
+        k = max(1, int(frac * total))
+
+        for ordering, kl_list, label in [
+            (sorted_idx, kl_learned, "learned"),
+            (random_idx, kl_random, "random"),
+        ]:
+            hard_mask = torch.zeros(total, device=device)
+            hard_mask[ordering[:k]] = 1.0
+            state["mask"] = hard_mask
+
+            with torch.no_grad():
+                logits = model(input_ids).logits[0, -1].float()
+                log_probs = F.log_softmax(logits, dim=-1)
+                kl = F.kl_div(log_probs, ref_probs, reduction="batchmean").item()
+            kl_list.append(kl)
+
+        print(f"  keep={frac:6.1%} ({k:>7d}/{total})  "
+              f"KL_learned={kl_learned[-1]:.6f}  KL_random={kl_random[-1]:.6f}")
+
     # Remove hooks
     for h in hooks:
         h.remove()
@@ -101,12 +135,16 @@ def main():
     # Save scores
     scores_3d = scores.data.view(num_layers, seq_len, intermediate_size).cpu()
     torch.save({"scores": scores_3d, "tokens": tokens, "text": args.text,
-                "args": vars(args)}, f"{args.output}_scores.pt")
+                "args": vars(args), "sparsity_eval": {
+                    "sparsities": sparsities,
+                    "kl_learned": kl_learned,
+                    "kl_random": kl_random,
+                }}, f"{args.output}_scores.pt")
     print(f"\nSaved scores to {args.output}_scores.pt")
 
     # Top-50 neurons
-    flat_scores = scores_3d.flatten()
-    top_vals, top_idxs = flat_scores.topk(50)
+    flat_scores_cpu = scores_3d.flatten()
+    top_vals, top_idxs = flat_scores_cpu.topk(50)
     print(f"\nTop-50 neurons (layer, pos, neuron_idx, score):")
     for rank, (val, idx) in enumerate(zip(top_vals, top_idxs)):
         idx = idx.item()
@@ -117,9 +155,9 @@ def main():
         tok = tokens[pos]
         print(f"  {rank+1:>3d}. L{layer:>2d} pos={pos:>2d} ({tok!r:>10s}) neuron={neuron:>5d}  score={val:.4f}")
 
-    # Visualization
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5),
-                             gridspec_kw={"width_ratios": [2, 1]})
+    # Visualization: 3 panels
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5),
+                             gridspec_kw={"width_ratios": [2, 1, 1]})
 
     # Heatmap: max score per (layer, position)
     heatmap = scores_3d.max(dim=-1).values.numpy()  # [num_layers, seq_len]
@@ -137,6 +175,17 @@ def main():
     axes[1].set_ylabel("KL Divergence")
     axes[1].set_title("Training Loss")
     axes[1].set_yscale("log")
+
+    # KL vs sparsity
+    pct = [s * 100 for s in sparsities]
+    axes[2].plot(pct, kl_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
+    axes[2].plot(pct, kl_random, "o--", label="Random", markersize=4, linewidth=1.2)
+    axes[2].set_xlabel("% neurons kept")
+    axes[2].set_ylabel("KL Divergence")
+    axes[2].set_title("KL vs Sparsity")
+    axes[2].set_yscale("log")
+    axes[2].set_xscale("log")
+    axes[2].legend()
 
     fig.suptitle(f"Sigmoid Top-K Attribution: {args.text!r}", fontsize=12)
     fig.tight_layout()
