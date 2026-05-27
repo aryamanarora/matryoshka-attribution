@@ -190,9 +190,11 @@ def main():
 
     eval_learned = []
     eval_random = []
-    # When --flip, also track KL to clean distribution
-    eval_learned_clean = []
-    eval_random_clean = []
+    # When cf_text provided, also track KL to the "other" distribution
+    eval_learned_other = []
+    eval_random_other = []
+
+    cf_probs = F.softmax(cf_logits, dim=-1) if args.cf_text else None
 
     def eval_metric(logits):
         if args.loss == "kl":
@@ -201,16 +203,18 @@ def main():
         else:
             return logits[top5_indices].sum().item()
 
-    def eval_kl_clean(logits):
+    def eval_kl_other(logits):
+        """KL to the non-target distribution (clean if flip, CF if non-flip)."""
         log_probs = F.log_softmax(logits, dim=-1)
-        return F.kl_div(log_probs, clean_probs, reduction="batchmean").item()
+        other_probs = clean_probs if args.flip else cf_probs
+        return F.kl_div(log_probs, other_probs, reduction="batchmean").item()
 
     for frac in sparsities:
         k = max(1, int(frac * total))
 
-        for ordering, eval_list, eval_list_clean in [
-            (sorted_idx, eval_learned, eval_learned_clean),
-            (random_idx, eval_random, eval_random_clean),
+        for ordering, eval_list, eval_list_other in [
+            (sorted_idx, eval_learned, eval_learned_other),
+            (random_idx, eval_random, eval_random_other),
         ]:
             hard_mask = torch.zeros(total, device=device)
             hard_mask[ordering[:k]] = 1.0
@@ -220,17 +224,17 @@ def main():
                 logits = model(input_ids).logits[0, -1].float()
                 val = eval_metric(logits)
             eval_list.append(val)
-            if args.flip and args.cf_text:
-                eval_list_clean.append(eval_kl_clean(logits))
+            if args.cf_text:
+                eval_list_other.append(eval_kl_other(logits))
 
         metric_name = "KL" if args.loss == "kl" else "top5_sum"
-        target_name = "CF" if (args.flip and args.cf_text) else "clean"
+        other_name = "KL_clean" if args.flip else "KL_cf"
         print(f"  keep={frac:6.1%} ({k:>7d}/{total})  "
               f"{metric_name}_learned={eval_learned[-1]:.4f}  "
               f"{metric_name}_random={eval_random[-1]:.4f}"
-              + (f"  KL_clean_L={eval_learned_clean[-1]:.4f}  "
-                 f"KL_clean_R={eval_random_clean[-1]:.4f}"
-                 if (args.flip and args.cf_text) else ""))
+              + (f"  {other_name}_L={eval_learned_other[-1]:.6f}  "
+                 f"{other_name}_R={eval_random_other[-1]:.6f}"
+                 if args.cf_text else ""))
 
     # Remove hooks
     for h in hooks:
@@ -245,9 +249,9 @@ def main():
                      "eval_learned": eval_learned,
                      "eval_random": eval_random,
                  }}
-    if args.flip and args.cf_text:
-        save_dict["sparsity_eval"]["eval_learned_clean"] = eval_learned_clean
-        save_dict["sparsity_eval"]["eval_random_clean"] = eval_random_clean
+    if args.cf_text:
+        save_dict["sparsity_eval"]["eval_learned_other"] = eval_learned_other
+        save_dict["sparsity_eval"]["eval_random_other"] = eval_random_other
     torch.save(save_dict, f"{args.output}_scores.pt")
     print(f"\nSaved scores to {args.output}_scores.pt")
 
@@ -289,15 +293,17 @@ def main():
 
     # Metric vs sparsity
     pct = [s * 100 for s in sparsities]
-    if args.flip and args.cf_text:
-        # Two-panel: KL to CF target (left) and KL to clean (right)
-        axes[2].plot(pct, eval_learned, "o-", label="Learned (→CF)", markersize=4, linewidth=1.2)
-        axes[2].plot(pct, eval_random, "o--", label="Random (→CF)", markersize=4, linewidth=1.2, alpha=0.6)
-        axes[2].plot(pct, eval_learned_clean, "s-", label="Learned (→Clean)", markersize=4, linewidth=1.2, color="C2")
-        axes[2].plot(pct, eval_random_clean, "s--", label="Random (→Clean)", markersize=4, linewidth=1.2, color="C3", alpha=0.6)
-        axes[2].set_xlabel("% neurons patched to CF")
+    if args.cf_text:
+        target_lbl = "→CF" if args.flip else "→Clean"
+        other_lbl = "→Clean" if args.flip else "→CF"
+        axes[2].plot(pct, eval_learned, "o-", label=f"Learned ({target_lbl})", markersize=4, linewidth=1.2)
+        axes[2].plot(pct, eval_random, "o--", label=f"Random ({target_lbl})", markersize=4, linewidth=1.2, alpha=0.6)
+        axes[2].plot(pct, eval_learned_other, "s-", label=f"Learned ({other_lbl})", markersize=4, linewidth=1.2, color="C2")
+        axes[2].plot(pct, eval_random_other, "s--", label=f"Random ({other_lbl})", markersize=4, linewidth=1.2, color="C3", alpha=0.6)
+        xlabel = "% neurons patched to CF" if args.flip else "% neurons kept (clean)"
+        axes[2].set_xlabel(xlabel)
         axes[2].set_ylabel("KL Divergence")
-        axes[2].set_title("KL vs Sparsity (→CF target, →Clean)")
+        axes[2].set_title(f"KL vs Sparsity ({target_lbl} target, {other_lbl})")
         axes[2].set_xscale("log")
         axes[2].set_yscale("log")
         axes[2].legend(fontsize=7)
