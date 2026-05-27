@@ -28,6 +28,8 @@ def main():
                         help="Seed the assistant response (e.g. 'Answer:')")
     args = parser.parse_args()
 
+    import os
+    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load model
