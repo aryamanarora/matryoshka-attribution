@@ -26,6 +26,9 @@ def main():
                         help="Use instruct chat template (Llama 3.1 format)")
     parser.add_argument("--seed_response", default=None,
                         help="Seed the assistant response (e.g. 'Answer:')")
+    parser.add_argument("--cf_text", default=None,
+                        help="Counterfactual text for interchange intervention. "
+                             "Must tokenize to same length as --text.")
     args = parser.parse_args()
 
     import os
@@ -43,26 +46,38 @@ def main():
         p.requires_grad_(False)
     model.gradient_checkpointing_enable()
 
-    # Tokenize
-    if args.chat:
-        messages = [{"role": "user", "content": args.text}]
-        if args.seed_response:
-            messages.append({"role": "assistant", "content": args.seed_response})
-        rendered = tokenizer.apply_chat_template(
-            messages,
-            add_generation_prompt=args.seed_response is None,
-            tokenize=False,
-        )
-        input_ids_list = tokenizer.encode(rendered, add_special_tokens=False)
-        if args.seed_response:
-            while input_ids_list and input_ids_list[-1] == tokenizer.eos_token_id:
-                input_ids_list.pop()
-        input_ids = torch.tensor([input_ids_list], dtype=torch.long, device=device)
-    else:
-        input_ids = tokenizer(args.text, return_tensors="pt").input_ids.to(device)
+    # Tokenize helper
+    def tokenize_text(text):
+        if args.chat:
+            messages = [{"role": "user", "content": text}]
+            if args.seed_response:
+                messages.append({"role": "assistant", "content": args.seed_response})
+            rendered = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=args.seed_response is None,
+                tokenize=False,
+            )
+            ids = tokenizer.encode(rendered, add_special_tokens=False)
+            if args.seed_response:
+                while ids and ids[-1] == tokenizer.eos_token_id:
+                    ids.pop()
+            return torch.tensor([ids], dtype=torch.long, device=device)
+        else:
+            return tokenizer(text, return_tensors="pt").input_ids.to(device)
+
+    input_ids = tokenize_text(args.text)
     seq_len = input_ids.shape[1]
     tokens = [tokenizer.decode(t) for t in input_ids[0]]
     print(f"Input: {args.text!r} -> {seq_len} tokens: {tokens}")
+
+    # Counterfactual setup
+    if args.cf_text:
+        cf_input_ids = tokenize_text(args.cf_text)
+        cf_tokens = [tokenizer.decode(t) for t in cf_input_ids[0]]
+        assert cf_input_ids.shape[1] == seq_len, (
+            f"Counterfactual must have same token length as input "
+            f"({cf_input_ids.shape[1]} vs {seq_len})")
+        print(f"CF:    {args.cf_text!r} -> {cf_input_ids.shape[1]} tokens: {cf_tokens}")
 
     # Model dimensions
     config = model.config
@@ -70,6 +85,25 @@ def main():
     intermediate_size = config.intermediate_size
     total = num_layers * seq_len * intermediate_size
     print(f"Neurons: {num_layers} layers x {seq_len} pos x {intermediate_size} dim = {total:,}")
+
+    # Cache counterfactual activations (input to down_proj per layer)
+    cf_acts = {}  # layer_idx -> [1, seq_len, intermediate_size]
+    if args.cf_text:
+        cf_hooks = []
+        def make_capture_hook(li):
+            def hook(module, hook_args):
+                cf_acts[li] = hook_args[0].detach()
+            return hook
+        for li in range(num_layers):
+            layer = model.model.layers[li]
+            cf_hooks.append(layer.mlp.down_proj.register_forward_pre_hook(make_capture_hook(li)))
+        with torch.no_grad():
+            cf_logits = model(cf_input_ids).logits[0, -1].float()
+        for h in cf_hooks:
+            h.remove()
+        cf_top5 = cf_logits.topk(5)
+        print(f"CF top-5: {[tokenizer.decode(t) for t in cf_top5.indices.tolist()]}")
+        print(f"Cached counterfactual activations for {len(cf_acts)} layers")
 
     # Cache reference logits
     with torch.no_grad():
@@ -87,6 +121,7 @@ def main():
     state = {"mask": None}
 
     # Register hooks on each layer's MLP down_proj
+    # m=1 keeps original, m=0 replaces with counterfactual (or zero if no cf)
     hooks = []
     for layer_idx in range(num_layers):
         def make_hook(li):
@@ -95,7 +130,11 @@ def main():
                 start = li * seq_len * intermediate_size
                 end = start + seq_len * intermediate_size
                 m = state["mask"][start:end].view(1, seq_len, intermediate_size)
-                return (x * m.to(x.dtype),)
+                m = m.to(x.dtype)
+                if li in cf_acts:
+                    return (x * m + cf_acts[li] * (1 - m),)
+                else:
+                    return (x * m,)
             return hook
         layer = model.model.layers[layer_idx]
         h = layer.mlp.down_proj.register_forward_pre_hook(make_hook(layer_idx))
@@ -172,6 +211,7 @@ def main():
     # Save scores
     scores_3d = scores.data.view(num_layers, seq_len, intermediate_size).cpu()
     torch.save({"scores": scores_3d, "tokens": tokens, "text": args.text,
+                "cf_text": args.cf_text,
                 "args": vars(args), "sparsity_eval": {
                     "sparsities": sparsities,
                     "eval_learned": eval_learned,
