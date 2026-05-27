@@ -29,6 +29,9 @@ def main():
     parser.add_argument("--cf_text", default=None,
                         help="Counterfactual text for interchange intervention. "
                              "Must tokenize to same length as --text.")
+    parser.add_argument("--flip", action="store_true",
+                        help="Flip intervention: top-k neurons get CF activation, "
+                             "target is CF distribution. Finds sufficient set for CF.")
     args = parser.parse_args()
 
     import os
@@ -105,13 +108,21 @@ def main():
         print(f"CF top-5: {[tokenizer.decode(t) for t in cf_top5.indices.tolist()]}")
         print(f"Cached counterfactual activations for {len(cf_acts)} layers")
 
-    # Cache reference logits
+    # Cache reference logits (clean)
     with torch.no_grad():
-        ref_logits = model(input_ids).logits[0, -1].float()
-        ref_probs = F.softmax(ref_logits, dim=-1)
-    top5_ref = ref_logits.topk(5)
-    top5_indices = top5_ref.indices
-    print(f"Reference top-5: {[tokenizer.decode(t) for t in top5_indices.tolist()]}")
+        clean_logits = model(input_ids).logits[0, -1].float()
+        clean_probs = F.softmax(clean_logits, dim=-1)
+    top5_clean = clean_logits.topk(5)
+    print(f"Clean top-5: {[tokenizer.decode(t) for t in top5_clean.indices.tolist()]}")
+
+    # Training target: CF distribution if --flip, else clean distribution
+    if args.flip and args.cf_text:
+        ref_probs = F.softmax(cf_logits, dim=-1)
+        top5_indices = cf_logits.topk(5).indices
+        print(f"Target: CF distribution (--flip)")
+    else:
+        ref_probs = clean_probs
+        top5_indices = top5_clean.indices
 
     # Score tensor (global flat, float32)
     scores = nn.Parameter(torch.zeros(total, device=device))
@@ -121,7 +132,8 @@ def main():
     state = {"mask": None}
 
     # Register hooks on each layer's MLP down_proj
-    # m=1 keeps original, m=0 replaces with counterfactual (or zero if no cf)
+    # Default: m=1 keeps clean, m=0 replaces with CF (or zero)
+    # --flip:  m=1 keeps CF,    m=0 keeps clean
     hooks = []
     for layer_idx in range(num_layers):
         def make_hook(li):
@@ -132,7 +144,10 @@ def main():
                 m = state["mask"][start:end].view(1, seq_len, intermediate_size)
                 m = m.to(x.dtype)
                 if li in cf_acts:
-                    return (x * m + cf_acts[li] * (1 - m),)
+                    if args.flip:
+                        return (x * (1 - m) + cf_acts[li] * m,)
+                    else:
+                        return (x * m + cf_acts[li] * (1 - m),)
                 else:
                     return (x * m,)
             return hook
@@ -175,6 +190,9 @@ def main():
 
     eval_learned = []
     eval_random = []
+    # When --flip, also track KL to clean distribution
+    eval_learned_clean = []
+    eval_random_clean = []
 
     def eval_metric(logits):
         if args.loss == "kl":
@@ -183,12 +201,16 @@ def main():
         else:
             return logits[top5_indices].sum().item()
 
+    def eval_kl_clean(logits):
+        log_probs = F.log_softmax(logits, dim=-1)
+        return F.kl_div(log_probs, clean_probs, reduction="batchmean").item()
+
     for frac in sparsities:
         k = max(1, int(frac * total))
 
-        for ordering, eval_list in [
-            (sorted_idx, eval_learned),
-            (random_idx, eval_random),
+        for ordering, eval_list, eval_list_clean in [
+            (sorted_idx, eval_learned, eval_learned_clean),
+            (random_idx, eval_random, eval_random_clean),
         ]:
             hard_mask = torch.zeros(total, device=device)
             hard_mask[ordering[:k]] = 1.0
@@ -198,11 +220,17 @@ def main():
                 logits = model(input_ids).logits[0, -1].float()
                 val = eval_metric(logits)
             eval_list.append(val)
+            if args.flip and args.cf_text:
+                eval_list_clean.append(eval_kl_clean(logits))
 
         metric_name = "KL" if args.loss == "kl" else "top5_sum"
+        target_name = "CF" if (args.flip and args.cf_text) else "clean"
         print(f"  keep={frac:6.1%} ({k:>7d}/{total})  "
               f"{metric_name}_learned={eval_learned[-1]:.4f}  "
-              f"{metric_name}_random={eval_random[-1]:.4f}")
+              f"{metric_name}_random={eval_random[-1]:.4f}"
+              + (f"  KL_clean_L={eval_learned_clean[-1]:.4f}  "
+                 f"KL_clean_R={eval_random_clean[-1]:.4f}"
+                 if (args.flip and args.cf_text) else ""))
 
     # Remove hooks
     for h in hooks:
@@ -210,13 +238,17 @@ def main():
 
     # Save scores
     scores_3d = scores.data.view(num_layers, seq_len, intermediate_size).cpu()
-    torch.save({"scores": scores_3d, "tokens": tokens, "text": args.text,
-                "cf_text": args.cf_text,
-                "args": vars(args), "sparsity_eval": {
-                    "sparsities": sparsities,
-                    "eval_learned": eval_learned,
-                    "eval_random": eval_random,
-                }}, f"{args.output}_scores.pt")
+    save_dict = {"scores": scores_3d, "tokens": tokens, "text": args.text,
+                 "cf_text": args.cf_text,
+                 "args": vars(args), "sparsity_eval": {
+                     "sparsities": sparsities,
+                     "eval_learned": eval_learned,
+                     "eval_random": eval_random,
+                 }}
+    if args.flip and args.cf_text:
+        save_dict["sparsity_eval"]["eval_learned_clean"] = eval_learned_clean
+        save_dict["sparsity_eval"]["eval_random_clean"] = eval_random_clean
+    torch.save(save_dict, f"{args.output}_scores.pt")
     print(f"\nSaved scores to {args.output}_scores.pt")
 
     # Top-50 neurons
@@ -257,16 +289,29 @@ def main():
 
     # Metric vs sparsity
     pct = [s * 100 for s in sparsities]
-    metric_label = "KL Divergence" if args.loss == "kl" else "Top-5 Logit Sum"
-    axes[2].plot(pct, eval_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
-    axes[2].plot(pct, eval_random, "o--", label="Random", markersize=4, linewidth=1.2)
-    axes[2].set_xlabel("% neurons kept")
-    axes[2].set_ylabel(metric_label)
-    axes[2].set_title(f"{metric_label} vs Sparsity")
-    axes[2].set_xscale("log")
-    if args.loss == "kl":
+    if args.flip and args.cf_text:
+        # Two-panel: KL to CF target (left) and KL to clean (right)
+        axes[2].plot(pct, eval_learned, "o-", label="Learned (→CF)", markersize=4, linewidth=1.2)
+        axes[2].plot(pct, eval_random, "o--", label="Random (→CF)", markersize=4, linewidth=1.2, alpha=0.6)
+        axes[2].plot(pct, eval_learned_clean, "s-", label="Learned (→Clean)", markersize=4, linewidth=1.2, color="C2")
+        axes[2].plot(pct, eval_random_clean, "s--", label="Random (→Clean)", markersize=4, linewidth=1.2, color="C3", alpha=0.6)
+        axes[2].set_xlabel("% neurons patched to CF")
+        axes[2].set_ylabel("KL Divergence")
+        axes[2].set_title("KL vs Sparsity (→CF target, →Clean)")
+        axes[2].set_xscale("log")
         axes[2].set_yscale("log")
-    axes[2].legend()
+        axes[2].legend(fontsize=7)
+    else:
+        metric_label = "KL Divergence" if args.loss == "kl" else "Top-5 Logit Sum"
+        axes[2].plot(pct, eval_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
+        axes[2].plot(pct, eval_random, "o--", label="Random", markersize=4, linewidth=1.2)
+        axes[2].set_xlabel("% neurons kept")
+        axes[2].set_ylabel(metric_label)
+        axes[2].set_title(f"{metric_label} vs Sparsity")
+        axes[2].set_xscale("log")
+        if args.loss == "kl":
+            axes[2].set_yscale("log")
+        axes[2].legend()
 
     fig.suptitle(f"Sigmoid Top-K Attribution: {args.text!r}", fontsize=12)
     fig.tight_layout()
