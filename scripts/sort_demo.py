@@ -1,90 +1,14 @@
+"""Sorting demo: learn a total ordering of random elements via adaptive sigmoid top-k."""
+
 import torch
 import torch.nn as nn
-from torch.autograd import Function
+import matplotlib.pyplot as plt
+from scipy.stats import spearmanr
 
-EPS = 1e-8
-
-
-class SigmoidTopK(Function):
-    """Differentiable top-k mask via sigmoid + bisection with implicit-diff backward."""
-
-    @staticmethod
-    def forward(ctx, scores, k, T, n_iters):
-        # scores: [..., d], k: float, T: float, n_iters: int
-        # Bracket for bisection: tau in [lo, hi] per batch element
-        lo = scores.min(dim=-1, keepdim=True).values - 10 * T
-        hi = scores.max(dim=-1, keepdim=True).values + 10 * T
-
-        # Bisection to find tau such that sum_i sigma((s_i - tau) / T) = k
-        with torch.no_grad():
-            for _ in range(n_iters):
-                mid = (lo + hi) / 2
-                f_mid = torch.special.expit((scores - mid) / T).sum(dim=-1, keepdim=True)
-                # f is strictly decreasing in tau:
-                #   f_mid > k  =>  tau too low, raise lo
-                #   f_mid <= k =>  tau too high, lower hi
-                lo = torch.where(f_mid > k, mid, lo)
-                hi = torch.where(f_mid > k, hi, mid)
-
-        tau = (lo + hi) / 2
-        mask = torch.special.expit((scores - tau) / T)
-
-        ctx.save_for_backward(mask)
-        ctx.T = T
-        return mask
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        (mask,) = ctx.saved_tensors
-        T = ctx.T
-
-        # Implicit differentiation of the constraint sum_i sigma((s_i - tau)/T) = k.
-        #
-        # Let z_i = (s_i - tau) / T, so m_i = sigma(z_i).
-        # sigma'(z_i) = m_i * (1 - m_i)  =: sp_i
-        #
-        # Differentiating the constraint w.r.t. s_j:
-        #   sum_i sp_i * (delta_{ij} - dtau/ds_j) / T = 0
-        #   => dtau/ds_j = sp_j / sum_i sp_i
-        #
-        # Jacobian of mask w.r.t. scores:
-        #   dm_i/ds_j = (sp_i / T) * (delta_{ij} - dtau/ds_j)
-        #             = (sp_i / T) * (delta_{ij} - sp_j / sum_l sp_l)
-        #
-        # Vector-Jacobian product with g = grad_output:
-        #   dL/ds_j = sum_i g_i * dm_i/ds_j
-        #           = (sp_j / T) * (g_j - sum_i g_i sp_i / sum_i sp_i)
-
-        sp = mask * (1.0 - mask)  # [..., d]
-        sp_sum = sp.sum(dim=-1, keepdim=True).clamp(min=EPS)  # [..., 1]
-        gsp = (grad_output * sp).sum(dim=-1, keepdim=True)  # [..., 1]
-
-        grad_scores = (sp / T) * (grad_output - gsp / sp_sum)
-        return grad_scores, None, None, None
-
-
-def sigmoid_topk(scores, k, T=1.0, n_iters=50):
-    return SigmoidTopK.apply(scores, k, T, n_iters)
-
-
-def test_gradcheck():
-    scores = torch.randn(3, 10, dtype=torch.float64, requires_grad=True)
-    k = 4.0
-    T = 1.0
-    n_iters = 100
-    assert torch.autograd.gradcheck(
-        lambda s: SigmoidTopK.apply(s, k, T, n_iters),
-        (scores,),
-        eps=1e-6,
-        atol=1e-4,
-        rtol=1e-3,
-    )
-    print("Gradient check passed!")
+from learning_to_attribute import sigmoid_topk
 
 
 def train_one(elements, T, num_steps=2000, lr=0.01, n_iters=50, eval_every=10, seed=0):
-    from scipy.stats import spearmanr
-
     torch.manual_seed(seed)
     num_elements = len(elements)
 
@@ -126,8 +50,6 @@ def train_one(elements, T, num_steps=2000, lr=0.01, n_iters=50, eval_every=10, s
 
 
 def main():
-    import matplotlib.pyplot as plt
-
     torch.manual_seed(42)
     num_elements = 100
     elements = torch.randn(num_elements)
@@ -170,10 +92,11 @@ def main():
 
     fig.suptitle("Temperature Sweep (d=100) — Adaptive Sigmoid Top-K", fontsize=13)
     fig.tight_layout()
-    fig.savefig("temp_sweep.png", dpi=150)
-    print("Saved temp_sweep.png")
+    fig.savefig("plots/temp_sweep.png", dpi=150)
+    print("Saved plots/temp_sweep.png")
 
 
 if __name__ == "__main__":
+    from learning_to_attribute import test_gradcheck
     test_gradcheck()
     main()

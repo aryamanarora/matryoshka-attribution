@@ -1,3 +1,5 @@
+"""Learn neuron importance scores for a language model via adaptive sigmoid top-k masking."""
+
 import argparse
 import torch
 import torch.nn as nn
@@ -5,7 +7,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from sigmoid_topk import sigmoid_topk
+from learning_to_attribute import sigmoid_topk
 
 
 def main():
@@ -16,7 +18,7 @@ def main():
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--n_iters", type=int, default=30)
-    parser.add_argument("--output", default="attribution")
+    parser.add_argument("--output", default="plots/attribution")
     parser.add_argument("--loss", choices=["kl", "top5"], default="kl",
                         help="kl: minimize KL to ref distribution. "
                              "top5: maximize sum of top-5 ref logits.")
@@ -44,20 +46,12 @@ def main():
         messages = [{"role": "user", "content": args.text}]
         if args.seed_response:
             messages.append({"role": "assistant", "content": args.seed_response})
-        input_ids_list = tokenizer.apply_chat_template(
+        rendered = tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=args.seed_response is None,
-            tokenize=True,
+            tokenize=False,
         )
-        if not isinstance(input_ids_list[0], int):
-            # Fallback: tokenize the rendered string
-            text_rendered = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=args.seed_response is None,
-                tokenize=False,
-            )
-            input_ids_list = tokenizer.encode(text_rendered)
-        # Strip trailing EOS if seed_response is set (we want to continue generation)
+        input_ids_list = tokenizer.encode(rendered, add_special_tokens=False)
         if args.seed_response:
             while input_ids_list and input_ids_list[-1] == tokenizer.eos_token_id:
                 input_ids_list.pop()
@@ -77,7 +71,7 @@ def main():
 
     # Cache reference logits
     with torch.no_grad():
-        ref_logits = model(input_ids).logits[0, -1].float()  # [vocab_size]
+        ref_logits = model(input_ids).logits[0, -1].float()
         ref_probs = F.softmax(ref_logits, dim=-1)
     top5_ref = ref_logits.topk(5)
     top5_indices = top5_ref.indices
@@ -130,8 +124,6 @@ def main():
             print(f"  Step {step+1:>4d}/{args.steps}  loss={loss_val:.6f}  k={k:.0f}/{total}")
 
     # === Sparsity evaluation ===
-    # Use learned scores to rank neurons, then apply hard top-k at various
-    # sparsity levels and measure metric. Compare against random ordering.
     print("\nEvaluating metric vs sparsity...")
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
     flat_scores = scores.data.clone()
@@ -203,7 +195,7 @@ def main():
                              gridspec_kw={"width_ratios": [2, 1, 1]})
 
     # Heatmap: max score per (layer, position)
-    heatmap = scores_3d.max(dim=-1).values.numpy()  # [num_layers, seq_len]
+    heatmap = scores_3d.max(dim=-1).values.numpy()
     im = axes[0].imshow(heatmap, aspect="auto", cmap="viridis")
     axes[0].set_xlabel("Token position")
     axes[0].set_ylabel("Layer")
