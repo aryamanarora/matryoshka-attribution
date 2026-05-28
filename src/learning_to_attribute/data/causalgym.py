@@ -170,8 +170,20 @@ class CausalGymDataset:
     def tokenize_pair(self, pair: SpanAlignedPair, tokenizer,
                       device: str = "cpu") -> TokenizedSpanPair:
         """Tokenize a pair and compute per-span token alignments."""
+        base_text = "".join(pair.base_spans)
+        src_text = "".join(pair.src_spans)
+        base_ids = tokenizer(base_text, return_tensors="pt").input_ids.to(device)
+        src_ids = tokenizer(src_text, return_tensors="pt").input_ids.to(device)
+
+        # The tokenizer may add a BOS token that tokenizer.tokenize() doesn't
+        # produce. Compute the offset by comparing lengths.
+        base_toks_flat = tokenizer.tokenize(base_text)
+        bos_offset_base = base_ids.shape[1] - len(base_toks_flat)
+        src_toks_flat = tokenizer.tokenize(src_text)
+        bos_offset_src = src_ids.shape[1] - len(src_toks_flat)
+
         base_alignment, src_alignment = [], []
-        pos_base, pos_src = 0, 0
+        pos_base, pos_src = bos_offset_base, bos_offset_src
 
         for i in range(len(pair.base_spans)):
             tok_base = tokenizer.tokenize(pair.base_spans[i])
@@ -180,11 +192,6 @@ class CausalGymDataset:
             src_alignment.append(list(range(pos_src, pos_src + len(tok_src))))
             pos_base += len(tok_base)
             pos_src += len(tok_src)
-
-        base_text = "".join(pair.base_spans)
-        src_text = "".join(pair.src_spans)
-        base_ids = tokenizer(base_text, return_tensors="pt").input_ids.to(device)
-        src_ids = tokenizer(src_text, return_tensors="pt").input_ids.to(device)
 
         base_label_id = tokenizer.encode(
             pair.base_label, add_special_tokens=False)[0]
