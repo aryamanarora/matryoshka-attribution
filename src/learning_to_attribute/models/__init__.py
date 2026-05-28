@@ -1,3 +1,3 @@
-from .llama import LlamaAttributionHooks
+from .llama import LlamaAttributionHooks, LlamaSpanAttributionHooks
 
-__all__ = ["LlamaAttributionHooks"]
+__all__ = ["LlamaAttributionHooks", "LlamaSpanAttributionHooks"]
