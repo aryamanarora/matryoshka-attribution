@@ -1,13 +1,14 @@
-"""Learn neuron importance scores for a language model via adaptive sigmoid top-k masking."""
+"""Learn importance scores for a language model via adaptive sigmoid top-k masking."""
 
 import argparse
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import sigmoid_topk
+from learning_to_attribute import sigmoid_topk, LlamaAttributionHooks
 
 
 def main():
@@ -22,6 +23,9 @@ def main():
     parser.add_argument("--loss", choices=["kl", "top5"], default="kl",
                         help="kl: minimize KL to ref distribution. "
                              "top5: maximize sum of top-5 ref logits.")
+    parser.add_argument("--mask", default="mlp",
+                        choices=list(LlamaAttributionHooks.MASK_TYPES),
+                        help="What to mask: mlp, attn_output, attn_head, mlp+attn_head")
     parser.add_argument("--chat", action="store_true",
                         help="Use instruct chat template (Llama 3.1 format)")
     parser.add_argument("--seed_response", default=None,
@@ -30,11 +34,10 @@ def main():
                         help="Counterfactual text for interchange intervention. "
                              "Must tokenize to same length as --text.")
     parser.add_argument("--flip", action="store_true",
-                        help="Flip intervention: top-k neurons get CF activation, "
-                             "target is CF distribution. Finds sufficient set for CF.")
+                        help="Flip intervention: top-k get CF activation, "
+                             "target is CF distribution.")
     args = parser.parse_args()
 
-    import os
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -74,6 +77,7 @@ def main():
     print(f"Input: {args.text!r} -> {seq_len} tokens: {tokens}")
 
     # Counterfactual setup
+    cf_logits = None
     if args.cf_text:
         cf_input_ids = tokenize_text(args.cf_text)
         cf_tokens = [tokenizer.decode(t) for t in cf_input_ids[0]]
@@ -82,85 +86,46 @@ def main():
             f"({cf_input_ids.shape[1]} vs {seq_len})")
         print(f"CF:    {args.cf_text!r} -> {cf_input_ids.shape[1]} tokens: {cf_tokens}")
 
-    # Model dimensions
-    config = model.config
-    num_layers = config.num_hidden_layers
-    intermediate_size = config.intermediate_size
-    total = num_layers * seq_len * intermediate_size
-    print(f"Neurons: {num_layers} layers x {seq_len} pos x {intermediate_size} dim = {total:,}")
+    # Set up hooks
+    hooker = LlamaAttributionHooks(model, args.mask, seq_len, flip=args.flip)
+    total = hooker.total
+    print(f"Scores: {hooker.describe()}")
 
-    # Cache counterfactual activations (input to down_proj per layer)
-    cf_acts = {}  # layer_idx -> [1, seq_len, intermediate_size]
+    # Cache counterfactual activations
     if args.cf_text:
-        cf_hooks = []
-        def make_capture_hook(li):
-            def hook(module, hook_args):
-                cf_acts[li] = hook_args[0].detach()
-            return hook
-        for li in range(num_layers):
-            layer = model.model.layers[li]
-            cf_hooks.append(layer.mlp.down_proj.register_forward_pre_hook(make_capture_hook(li)))
-        with torch.no_grad():
-            cf_logits = model(cf_input_ids).logits[0, -1].float()
-        for h in cf_hooks:
-            h.remove()
+        cf_logits = hooker.cache_cf_activations(cf_input_ids)
         cf_top5 = cf_logits.topk(5)
         print(f"CF top-5: {[tokenizer.decode(t) for t in cf_top5.indices.tolist()]}")
-        print(f"Cached counterfactual activations for {len(cf_acts)} layers")
 
-    # Cache reference logits (clean)
+    # Cache clean logits
     with torch.no_grad():
         clean_logits = model(input_ids).logits[0, -1].float()
         clean_probs = F.softmax(clean_logits, dim=-1)
     top5_clean = clean_logits.topk(5)
     print(f"Clean top-5: {[tokenizer.decode(t) for t in top5_clean.indices.tolist()]}")
 
-    # Training target: CF distribution if --flip, else clean distribution
+    # Training target
     if args.flip and args.cf_text:
         ref_probs = F.softmax(cf_logits, dim=-1)
         top5_indices = cf_logits.topk(5).indices
-        print(f"Target: CF distribution (--flip)")
+        print("Target: CF distribution (--flip)")
     else:
         ref_probs = clean_probs
         top5_indices = top5_clean.indices
 
-    # Score tensor (global flat, float32)
+    # Score tensor
     scores = nn.Parameter(torch.zeros(total, device=device))
     optimizer = torch.optim.Adam([scores], lr=args.lr)
 
-    # Mutable container for current mask, read by hooks
-    state = {"mask": None}
-
-    # Register hooks on each layer's MLP down_proj
-    # Default: m=1 keeps clean, m=0 replaces with CF (or zero)
-    # --flip:  m=1 keeps CF,    m=0 keeps clean
-    hooks = []
-    for layer_idx in range(num_layers):
-        def make_hook(li):
-            def hook(module, hook_args):
-                x = hook_args[0]  # [1, seq_len, intermediate_size]
-                start = li * seq_len * intermediate_size
-                end = start + seq_len * intermediate_size
-                m = state["mask"][start:end].view(1, seq_len, intermediate_size)
-                m = m.to(x.dtype)
-                if li in cf_acts:
-                    if args.flip:
-                        return (x * (1 - m) + cf_acts[li] * m,)
-                    else:
-                        return (x * m + cf_acts[li] * (1 - m),)
-                else:
-                    return (x * m,)
-            return hook
-        layer = model.model.layers[layer_idx]
-        h = layer.mlp.down_proj.register_forward_pre_hook(make_hook(layer_idx))
-        hooks.append(h)
+    # Register masking hooks
+    hooker.register_hooks()
 
     # Training loop
     loss_log = []
     print(f"\nTraining for {args.steps} steps...")
     for step in range(args.steps):
         k = 1.0 + (total - 1.0) * torch.rand(1).item()
-        state["mask"] = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
 
         logits = model(input_ids).logits[0, -1].float()
 
@@ -190,7 +155,6 @@ def main():
 
     eval_learned = []
     eval_random = []
-    # When cf_text provided, also track KL to the "other" distribution
     eval_learned_other = []
     eval_random_other = []
 
@@ -204,7 +168,6 @@ def main():
             return logits[top5_indices].sum().item()
 
     def eval_kl_other(logits):
-        """KL to the non-target distribution (clean if flip, CF if non-flip)."""
         log_probs = F.log_softmax(logits, dim=-1)
         other_probs = clean_probs if args.flip else cf_probs
         return F.kl_div(log_probs, other_probs, reduction="batchmean").item()
@@ -218,7 +181,7 @@ def main():
         ]:
             hard_mask = torch.zeros(total, device=device)
             hard_mask[ordering[:k]] = 1.0
-            state["mask"] = hard_mask
+            hooker.mask = hard_mask
 
             with torch.no_grad():
                 logits = model(input_ids).logits[0, -1].float()
@@ -236,14 +199,12 @@ def main():
                  f"{other_name}_R={eval_random_other[-1]:.6f}"
                  if args.cf_text else ""))
 
-    # Remove hooks
-    for h in hooks:
-        h.remove()
+    hooker.remove_hooks()
 
     # Save scores
-    scores_3d = scores.data.view(num_layers, seq_len, intermediate_size).cpu()
-    save_dict = {"scores": scores_3d, "tokens": tokens, "text": args.text,
-                 "cf_text": args.cf_text,
+    save_dict = {"scores": scores.data.cpu(), "tokens": tokens,
+                 "text": args.text, "cf_text": args.cf_text,
+                 "mask_type": args.mask,
                  "args": vars(args), "sparsity_eval": {
                      "sparsities": sparsities,
                      "eval_learned": eval_learned,
@@ -255,29 +216,32 @@ def main():
     torch.save(save_dict, f"{args.output}_scores.pt")
     print(f"\nSaved scores to {args.output}_scores.pt")
 
-    # Top-50 neurons
-    flat_scores_cpu = scores_3d.flatten()
+    # Top-50
+    flat_scores_cpu = scores.data.cpu()
     top_vals, top_idxs = flat_scores_cpu.topk(50)
-    print(f"\nTop-50 neurons (layer, pos, neuron_idx, score):")
+    print(f"\nTop-50 (component, layer, pos, neuron/head, score):")
     for rank, (val, idx) in enumerate(zip(top_vals, top_idxs)):
-        idx = idx.item()
-        layer = idx // (seq_len * intermediate_size)
-        rem = idx % (seq_len * intermediate_size)
-        pos = rem // intermediate_size
-        neuron = rem % intermediate_size
-        tok = tokens[pos]
-        print(f"  {rank+1:>3d}. L{layer:>2d} pos={pos:>2d} ({tok!r:>10s}) neuron={neuron:>5d}  score={val:.4f}")
+        info = hooker.decode_index(idx.item())
+        tok = tokens[info["pos"]]
+        if info["component"] == "mlp":
+            label = f"mlp n={info['neuron']:>5d}"
+        elif "head" in info:
+            label = f"attn h={info['head']:>2d}"
+        else:
+            label = "attn (full)"
+        print(f"  {rank+1:>3d}. L{info['layer']:>2d} pos={info['pos']:>2d} "
+              f"({tok!r:>10s}) {label}  score={val:.4f}")
 
     # Visualization: 3 panels
     fig, axes = plt.subplots(1, 3, figsize=(18, 5),
                              gridspec_kw={"width_ratios": [2, 1, 1]})
 
-    # Heatmap: max score per (layer, position)
-    heatmap = scores_3d.max(dim=-1).values.numpy()
+    # Heatmap
+    heatmap = hooker.scores_to_heatmap(flat_scores_cpu).numpy()
     im = axes[0].imshow(heatmap, aspect="auto", cmap="viridis")
     axes[0].set_xlabel("Token position")
     axes[0].set_ylabel("Layer")
-    axes[0].set_title("Max neuron importance per (layer, position)")
+    axes[0].set_title(f"Max importance per (layer, pos) [{args.mask}]")
     axes[0].set_xticks(range(seq_len))
     axes[0].set_xticklabels(tokens, rotation=45, ha="right", fontsize=7)
     plt.colorbar(im, ax=axes[0], shrink=0.8)
@@ -300,10 +264,10 @@ def main():
         axes[2].plot(pct, eval_random, "o--", label=f"Random ({target_lbl})", markersize=4, linewidth=1.2, alpha=0.6)
         axes[2].plot(pct, eval_learned_other, "s-", label=f"Learned ({other_lbl})", markersize=4, linewidth=1.2, color="C2")
         axes[2].plot(pct, eval_random_other, "s--", label=f"Random ({other_lbl})", markersize=4, linewidth=1.2, color="C3", alpha=0.6)
-        xlabel = "% neurons patched to CF" if args.flip else "% neurons kept (clean)"
+        xlabel = "% patched to CF" if args.flip else "% kept (clean)"
         axes[2].set_xlabel(xlabel)
         axes[2].set_ylabel("KL Divergence")
-        axes[2].set_title(f"KL vs Sparsity ({target_lbl} target, {other_lbl})")
+        axes[2].set_title(f"KL vs Sparsity ({target_lbl}, {other_lbl})")
         axes[2].set_xscale("log")
         axes[2].set_yscale("log")
         axes[2].legend(fontsize=7)
@@ -311,7 +275,7 @@ def main():
         metric_label = "KL Divergence" if args.loss == "kl" else "Top-5 Logit Sum"
         axes[2].plot(pct, eval_learned, "o-", label="Learned", markersize=4, linewidth=1.2)
         axes[2].plot(pct, eval_random, "o--", label="Random", markersize=4, linewidth=1.2)
-        axes[2].set_xlabel("% neurons kept")
+        axes[2].set_xlabel("% kept")
         axes[2].set_ylabel(metric_label)
         axes[2].set_title(f"{metric_label} vs Sparsity")
         axes[2].set_xscale("log")
@@ -319,7 +283,7 @@ def main():
             axes[2].set_yscale("log")
         axes[2].legend()
 
-    fig.suptitle(f"Sigmoid Top-K Attribution: {args.text!r}", fontsize=12)
+    fig.suptitle(f"Sigmoid Top-K Attribution [{args.mask}]: {args.text!r}", fontsize=12)
     fig.tight_layout()
     fig.savefig(f"{args.output}.png", dpi=150)
     print(f"Saved {args.output}.png")
