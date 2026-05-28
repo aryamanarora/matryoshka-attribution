@@ -371,7 +371,6 @@ def main():
     logger.info("Saved plot to %s.png", args.output)
 
     if wandb:
-        wandb.log({"plot": wandb.Image(f"{args.output}.png")})
         wandb.finish()
 
 
