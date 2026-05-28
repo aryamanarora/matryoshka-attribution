@@ -1,48 +1,83 @@
 """Learn importance scores for a language model via adaptive sigmoid top-k masking."""
 
 import argparse
+import json
+import logging
 import os
+import time
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import sigmoid_topk, LlamaAttributionHooks
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to YAML config (relative to scripts/ or absolute)")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B")
     parser.add_argument("--text", default="The capital of France is")
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--n_iters", type=int, default=30)
-    parser.add_argument("--output", default="plots/attribution")
-    parser.add_argument("--loss", choices=["kl", "top5"], default="kl",
-                        help="kl: minimize KL to ref distribution. "
-                             "top5: maximize sum of top-5 ref logits.")
+    parser.add_argument("--output", default="results/attribution")
+    parser.add_argument("--loss", choices=["kl", "top5"], default="kl")
     parser.add_argument("--mask", default="mlp",
-                        choices=list(LlamaAttributionHooks.MASK_TYPES),
-                        help="What to mask: mlp, attn_output, attn_head, mlp+attn_head")
-    parser.add_argument("--chat", action="store_true",
-                        help="Use instruct chat template (Llama 3.1 format)")
-    parser.add_argument("--seed_response", default=None,
-                        help="Seed the assistant response (e.g. 'Answer:')")
+                        choices=list(LlamaAttributionHooks.MASK_TYPES))
+    parser.add_argument("--chat", action="store_true")
+    parser.add_argument("--seed_response", default=None)
     parser.add_argument("--cf_text", default=None,
-                        help="Counterfactual text for interchange intervention. "
-                             "Must tokenize to same length as --text.")
+                        help="Counterfactual text (must tokenize to same length as --text)")
     parser.add_argument("--flip", action="store_true",
-                        help="Flip intervention: top-k get CF activation, "
-                             "target is CF distribution.")
+                        help="Top-k get CF activation; target is CF distribution")
+
+    # Load config YAML as defaults (CLI overrides)
+    temp_args, _ = parser.parse_known_args()
+    if temp_args.config:
+        config_path = Path(temp_args.config)
+        if not config_path.is_absolute():
+            config_path = Path(__file__).parent / config_path
+        logger.info("Loading config from %s", config_path)
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+        for key, value in config.items():
+            dest = key.replace("-", "_")
+            for action in parser._actions:
+                if action.dest == dest:
+                    if isinstance(value, bool) and action.const is not None:
+                        action.default = value
+                    else:
+                        action.default = value
+                    break
+
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+    # Output setup
+    output_dir = Path(args.output).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Log full config
+    logger.info("Config: %s", json.dumps(vars(args), indent=2, default=str))
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info("Device: %s", device)
 
     # Load model
-    print(f"Loading {args.model}...")
+    logger.info("Loading model %s...", args.model)
+    t0 = time.time()
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(
         args.model, dtype=torch.bfloat16, device_map="auto",
@@ -51,6 +86,7 @@ def main():
     for p in model.parameters():
         p.requires_grad_(False)
     model.gradient_checkpointing_enable()
+    logger.info("Model loaded in %.1fs", time.time() - t0)
 
     # Tokenize helper
     def tokenize_text(text):
@@ -74,7 +110,7 @@ def main():
     input_ids = tokenize_text(args.text)
     seq_len = input_ids.shape[1]
     tokens = [tokenizer.decode(t) for t in input_ids[0]]
-    print(f"Input: {args.text!r} -> {seq_len} tokens: {tokens}")
+    logger.info("Input: %r -> %d tokens: %s", args.text, seq_len, tokens)
 
     # Counterfactual setup
     cf_logits = None
@@ -84,31 +120,31 @@ def main():
         assert cf_input_ids.shape[1] == seq_len, (
             f"Counterfactual must have same token length as input "
             f"({cf_input_ids.shape[1]} vs {seq_len})")
-        print(f"CF:    {args.cf_text!r} -> {cf_input_ids.shape[1]} tokens: {cf_tokens}")
+        logger.info("CF: %r -> %d tokens: %s", args.cf_text, cf_input_ids.shape[1], cf_tokens)
 
     # Set up hooks
     hooker = LlamaAttributionHooks(model, args.mask, seq_len, flip=args.flip)
     total = hooker.total
-    print(f"Scores: {hooker.describe()}")
+    logger.info("Scores: %s", hooker.describe())
 
     # Cache counterfactual activations
     if args.cf_text:
         cf_logits = hooker.cache_cf_activations(cf_input_ids)
         cf_top5 = cf_logits.topk(5)
-        print(f"CF top-5: {[tokenizer.decode(t) for t in cf_top5.indices.tolist()]}")
+        logger.info("CF top-5: %s", [tokenizer.decode(t) for t in cf_top5.indices.tolist()])
 
     # Cache clean logits
     with torch.no_grad():
         clean_logits = model(input_ids).logits[0, -1].float()
         clean_probs = F.softmax(clean_logits, dim=-1)
     top5_clean = clean_logits.topk(5)
-    print(f"Clean top-5: {[tokenizer.decode(t) for t in top5_clean.indices.tolist()]}")
+    logger.info("Clean top-5: %s", [tokenizer.decode(t) for t in top5_clean.indices.tolist()])
 
     # Training target
     if args.flip and args.cf_text:
         ref_probs = F.softmax(cf_logits, dim=-1)
         top5_indices = cf_logits.topk(5).indices
-        print("Target: CF distribution (--flip)")
+        logger.info("Target: CF distribution (--flip)")
     else:
         ref_probs = clean_probs
         top5_indices = top5_clean.indices
@@ -122,7 +158,9 @@ def main():
 
     # Training loop
     loss_log = []
-    print(f"\nTraining for {args.steps} steps...")
+    logger.info("Training for %d steps (T=%.2f, lr=%.4f, mask=%s)...",
+                args.steps, args.T, args.lr, args.mask)
+    t0 = time.time()
     for step in range(args.steps):
         k = 1.0 + (total - 1.0) * torch.rand(1).item()
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
@@ -142,10 +180,17 @@ def main():
         loss_val = loss.item()
         loss_log.append(loss_val)
         if (step + 1) % 50 == 0 or step == 0:
-            print(f"  Step {step+1:>4d}/{args.steps}  loss={loss_val:.6f}  k={k:.0f}/{total}")
+            elapsed = time.time() - t0
+            rate = (step + 1) / elapsed
+            logger.info("Step %4d/%d  loss=%.6f  k=%.0f/%d  (%.1f step/s)",
+                        step + 1, args.steps, loss_val, k, total, rate)
+
+    train_time = time.time() - t0
+    logger.info("Training complete in %.1fs (%.2f step/s)",
+                train_time, args.steps / train_time)
 
     # === Sparsity evaluation ===
-    print("\nEvaluating metric vs sparsity...")
+    logger.info("Evaluating metric vs sparsity...")
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
     flat_scores = scores.data.clone()
     sorted_idx = flat_scores.argsort(descending=True)
@@ -192,12 +237,13 @@ def main():
 
         metric_name = "KL" if args.loss == "kl" else "top5_sum"
         other_name = "KL_clean" if args.flip else "KL_cf"
-        print(f"  keep={frac:6.1%} ({k:>7d}/{total})  "
-              f"{metric_name}_learned={eval_learned[-1]:.4f}  "
-              f"{metric_name}_random={eval_random[-1]:.4f}"
-              + (f"  {other_name}_L={eval_learned_other[-1]:.6f}  "
-                 f"{other_name}_R={eval_random_other[-1]:.6f}"
-                 if args.cf_text else ""))
+        logger.info("keep=%6.1f%% (%7d/%d)  %s_learned=%.4f  %s_random=%.4f%s",
+                     frac * 100, k, total,
+                     metric_name, eval_learned[-1],
+                     metric_name, eval_random[-1],
+                     f"  {other_name}_L={eval_learned_other[-1]:.6f}  "
+                     f"{other_name}_R={eval_random_other[-1]:.6f}"
+                     if args.cf_text else "")
 
     hooker.remove_hooks()
 
@@ -205,7 +251,10 @@ def main():
     save_dict = {"scores": scores.data.cpu(), "tokens": tokens,
                  "text": args.text, "cf_text": args.cf_text,
                  "mask_type": args.mask,
-                 "args": vars(args), "sparsity_eval": {
+                 "args": vars(args),
+                 "loss_log": loss_log,
+                 "train_time_s": train_time,
+                 "sparsity_eval": {
                      "sparsities": sparsities,
                      "eval_learned": eval_learned,
                      "eval_random": eval_random,
@@ -214,12 +263,12 @@ def main():
         save_dict["sparsity_eval"]["eval_learned_other"] = eval_learned_other
         save_dict["sparsity_eval"]["eval_random_other"] = eval_random_other
     torch.save(save_dict, f"{args.output}_scores.pt")
-    print(f"\nSaved scores to {args.output}_scores.pt")
+    logger.info("Saved scores to %s_scores.pt", args.output)
 
     # Top-50
     flat_scores_cpu = scores.data.cpu()
-    top_vals, top_idxs = flat_scores_cpu.topk(50)
-    print(f"\nTop-50 (component, layer, pos, neuron/head, score):")
+    top_vals, top_idxs = flat_scores_cpu.topk(min(50, total))
+    logger.info("Top-50 (component, layer, pos, neuron/head, score):")
     for rank, (val, idx) in enumerate(zip(top_vals, top_idxs)):
         info = hooker.decode_index(idx.item())
         tok = tokens[info["pos"]]
@@ -231,8 +280,8 @@ def main():
             label = f"attn h={info['head']:>2d}"
         else:
             label = "attn (full)"
-        print(f"  {rank+1:>3d}. L{info['layer']:>2d} pos={info['pos']:>2d} "
-              f"({tok!r:>10s}) {label}  score={val:.4f}")
+        logger.info("  %3d. L%2d pos=%2d (%10r) %s  score=%.4f",
+                     rank + 1, info["layer"], info["pos"], tok, label, val)
 
     # Visualization: 3 panels
     fig, axes = plt.subplots(1, 3, figsize=(18, 5),
@@ -288,7 +337,7 @@ def main():
     fig.suptitle(f"Sigmoid Top-K Attribution [{args.mask}]: {args.text!r}", fontsize=12)
     fig.tight_layout()
     fig.savefig(f"{args.output}.png", dpi=150)
-    print(f"Saved {args.output}.png")
+    logger.info("Saved plot to %s.png", args.output)
 
 
 if __name__ == "__main__":
