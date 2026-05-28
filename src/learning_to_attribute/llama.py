@@ -109,7 +109,8 @@ class LlamaAttributionHooks:
             if self.has_resid:
                 def _resid(idx):
                     def hook(mod, input, output):
-                        self.cf_acts_resid[idx] = output[0].detach()
+                        x = output[0] if isinstance(output, tuple) else output
+                        self.cf_acts_resid[idx] = x.detach()
                     return hook
                 hooks.append(layer.register_forward_hook(_resid(li)))
 
@@ -187,15 +188,20 @@ class LlamaAttributionHooks:
             if self.has_resid:
                 def make_resid_hook(li):
                     def hook(mod, input, output):
-                        # output[0] is hidden_states regardless of output type
-                        x = output[0]  # [1, seq_len, hidden_size]
+                        # Extract hidden_states from output (may be tensor or tuple)
+                        if isinstance(output, tuple):
+                            x = output[0]
+                        else:
+                            x = output
                         off = li * self.seq_len
                         m = self.mask[off:off + self.seq_len].view(
                             1, self.seq_len, 1)
                         cf = self.cf_acts_resid.get(li)
                         new_x = self._interpolate(x, m, cf)[0]
-                        # Model only reads output[0]; safe to return plain tuple
-                        return (new_x,)
+                        # Return same type as input
+                        if isinstance(output, tuple):
+                            return (new_x,) + output[1:]
+                        return new_x
                     return hook
                 self._hooks.append(
                     layer.register_forward_hook(make_resid_hook(layer_idx)))
