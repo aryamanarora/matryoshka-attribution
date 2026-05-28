@@ -468,6 +468,8 @@ class LlamaSpanAttributionHooks:
             if self.has_mlp:
                 def make_mlp_hook(li):
                     def hook(mod, hook_args):
+                        if self.mask is None:
+                            return
                         x = hook_args[0]
                         start = li * S * self.intermediate_size
                         end = start + S * self.intermediate_size
@@ -484,13 +486,14 @@ class LlamaSpanAttributionHooks:
             if self.has_attn:
                 def make_attn_hook(li):
                     def hook(mod, hook_args):
+                        if self.mask is None:
+                            return
                         x = hook_args[0]
                         cf = self.cf_acts_attn.get(li)
 
                         if self.mask_type == "attn_output":
                             off = li * S
-                            span_mask = self.mask[off:off + S]  # [S]
-                            # Expand scalar per-span to full hidden dim
+                            span_mask = self.mask[off:off + S]
                             out = self._span_intervene(
                                 x, cf, span_mask, li, component_dim=None)
                             return (out,)
@@ -503,7 +506,6 @@ class LlamaSpanAttributionHooks:
                         span_mask = self.mask[off:off + S * self.num_heads].view(
                             S, self.num_heads)
 
-                        # Reshape to per-head
                         x4d = x.view(1, x.shape[1], self.num_heads, self.head_dim)
                         cf4d = cf.view(1, cf.shape[1], self.num_heads, self.head_dim) if cf is not None else None
                         out4d = self._span_intervene(
@@ -517,6 +519,8 @@ class LlamaSpanAttributionHooks:
             if self.has_resid:
                 def make_resid_hook(li):
                     def hook(mod, inp, output):
+                        if self.mask is None:
+                            return
                         if isinstance(output, tuple):
                             x = output[0]
                         else:
