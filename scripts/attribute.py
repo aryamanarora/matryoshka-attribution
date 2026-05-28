@@ -43,6 +43,11 @@ def main():
                         help="Counterfactual text (must tokenize to same length as --text)")
     parser.add_argument("--flip", action="store_true",
                         help="Top-k get CF activation; target is CF distribution")
+    parser.add_argument("--wandb", action="store_true",
+                        help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb_project", default="learning-to-attribute")
+    parser.add_argument("--wandb_name", default=None,
+                        help="W&B run name (defaults to output basename)")
 
     # Load config YAML as defaults (CLI overrides)
     temp_args, _ = parser.parse_known_args()
@@ -68,6 +73,14 @@ def main():
     # Output setup
     output_dir = Path(args.output).parent
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # W&B init
+    if args.wandb:
+        import wandb
+        run_name = args.wandb_name or Path(args.output).name
+        wandb.init(project=args.wandb_project, name=run_name, config=vars(args))
+    else:
+        wandb = None
 
     # Log full config
     logger.info("Config: %s", json.dumps(vars(args), indent=2, default=str))
@@ -179,6 +192,8 @@ def main():
 
         loss_val = loss.item()
         loss_log.append(loss_val)
+        if wandb:
+            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
         if (step + 1) % 50 == 0 or step == 0:
             elapsed = time.time() - t0
             rate = (step + 1) / elapsed
@@ -188,6 +203,9 @@ def main():
     train_time = time.time() - t0
     logger.info("Training complete in %.1fs (%.2f step/s)",
                 train_time, args.steps / train_time)
+    if wandb:
+        wandb.log({"train_time_s": train_time,
+                    "steps_per_s": args.steps / train_time})
 
     # === Sparsity evaluation ===
     logger.info("Evaluating metric vs sparsity...")
@@ -246,6 +264,19 @@ def main():
                      if args.cf_text else "")
 
     hooker.remove_hooks()
+
+    # Log sparsity eval to wandb
+    if wandb:
+        for i, frac in enumerate(sparsities):
+            log_dict = {
+                "eval/sparsity": frac,
+                "eval/metric_learned": eval_learned[i],
+                "eval/metric_random": eval_random[i],
+            }
+            if args.cf_text:
+                log_dict["eval/other_learned"] = eval_learned_other[i]
+                log_dict["eval/other_random"] = eval_random_other[i]
+            wandb.log(log_dict)
 
     # Save scores
     save_dict = {"scores": scores.data.cpu(), "tokens": tokens,
@@ -338,6 +369,10 @@ def main():
     fig.tight_layout()
     fig.savefig(f"{args.output}.png", dpi=150)
     logger.info("Saved plot to %s.png", args.output)
+
+    if wandb:
+        wandb.log({"plot": wandb.Image(f"{args.output}.png")})
+        wandb.finish()
 
 
 if __name__ == "__main__":
