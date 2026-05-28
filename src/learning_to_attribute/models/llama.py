@@ -386,6 +386,7 @@ class LlamaSpanAttributionHooks:
 
     def cache_cf_activations(self, src_input_ids: torch.Tensor):
         """Cache src activations at hook points."""
+        self.mask = None  # disable masking hooks during CF forward
         hooks = []
         for li in range(self.num_layers):
             layer = self.model.model.layers[li]
