@@ -225,6 +225,8 @@ def main():
         tok = tokens[info["pos"]]
         if info["component"] == "mlp":
             label = f"mlp n={info['neuron']:>5d}"
+        elif info["component"] == "resid":
+            label = "resid"
         elif "head" in info:
             label = f"attn h={info['head']:>2d}"
         else:

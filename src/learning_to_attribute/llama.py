@@ -11,15 +11,17 @@ class LlamaAttributionHooks:
       - "attn_output": per-(layer, pos) scalar masking of full attention output
       - "attn_head": per-(layer, pos, head) masking of attention output
       - "mlp+attn_head": combined MLP neuron + attention head masking
+      - "resid": per-(layer, pos) scalar masking of full layer output (residual stream)
 
     Score layout (flat vector):
       - mlp:           [num_layers * seq_len * intermediate_size]
       - attn_output:   [num_layers * seq_len]
       - attn_head:     [num_layers * seq_len * num_heads]
       - mlp+attn_head: [mlp_scores | attn_head_scores]
+      - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid"}
 
     def __init__(self, model, mask_type, seq_len, flip=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -39,6 +41,7 @@ class LlamaAttributionHooks:
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
         self.attn_output_total = self.num_layers * seq_len
         self.attn_head_total = self.num_layers * seq_len * self.num_heads
+        self.resid_total = self.num_layers * seq_len
 
         if mask_type == "mlp":
             self.total = self.mlp_total
@@ -48,10 +51,13 @@ class LlamaAttributionHooks:
             self.total = self.attn_head_total
         elif mask_type == "mlp+attn_head":
             self.total = self.mlp_total + self.attn_head_total
+        elif mask_type == "resid":
+            self.total = self.resid_total
 
         self.mask = None
         self.cf_acts_mlp = {}
         self.cf_acts_attn = {}
+        self.cf_acts_resid = {}
         self._hooks = []
 
     @property
@@ -61,6 +67,10 @@ class LlamaAttributionHooks:
     @property
     def has_attn(self):
         return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head")
+
+    @property
+    def has_resid(self):
+        return self.mask_type == "resid"
 
     def describe(self):
         parts = []
@@ -74,6 +84,9 @@ class LlamaAttributionHooks:
             else:
                 parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
                              f"{self.num_heads}h = {self.attn_head_total:,}")
+        if self.has_resid:
+            parts.append(f"Resid: {self.num_layers}L x {self.seq_len}pos = "
+                         f"{self.resid_total:,}")
         return " + ".join(parts) + f" = {self.total:,} total"
 
     def cache_cf_activations(self, cf_input_ids):
@@ -93,6 +106,12 @@ class LlamaAttributionHooks:
                         self.cf_acts_attn[idx] = args[0].detach()
                     return hook
                 hooks.append(layer.self_attn.o_proj.register_forward_pre_hook(_attn(li)))
+            if self.has_resid:
+                def _resid(idx):
+                    def hook(mod, input, output):
+                        self.cf_acts_resid[idx] = output[0].detach()
+                    return hook
+                hooks.append(layer.register_forward_hook(_resid(li)))
 
         with torch.no_grad():
             cf_logits = self.model(cf_input_ids).logits[0, -1].float()
@@ -165,6 +184,20 @@ class LlamaAttributionHooks:
                     layer.self_attn.o_proj.register_forward_pre_hook(
                         make_attn_hook(layer_idx)))
 
+            if self.has_resid:
+                def make_resid_hook(li):
+                    def hook(mod, input, output):
+                        x = output[0]  # [1, seq_len, hidden_size]
+                        off = li * self.seq_len
+                        m = self.mask[off:off + self.seq_len].view(
+                            1, self.seq_len, 1)
+                        cf = self.cf_acts_resid.get(li)
+                        result = self._interpolate(x, m, cf)
+                        return (result[0],) + output[1:]
+                    return hook
+                self._hooks.append(
+                    layer.register_forward_hook(make_resid_hook(layer_idx)))
+
     def remove_hooks(self):
         for h in self._hooks:
             h.remove()
@@ -184,10 +217,11 @@ class LlamaAttributionHooks:
             return {"component": "mlp", "layer": layer, "pos": pos,
                     "neuron": neuron}
 
-        if self.mask_type == "attn_output":
+        if self.mask_type in ("attn_output", "resid"):
             layer = flat_idx // self.seq_len
             pos = flat_idx % self.seq_len
-            return {"component": "attn", "layer": layer, "pos": pos}
+            comp = "attn" if self.mask_type == "attn_output" else "resid"
+            return {"component": comp, "layer": layer, "pos": pos}
 
         # attn_head or attn part of mlp+attn_head
         if self.mask_type == "mlp+attn_head":
@@ -218,5 +252,9 @@ class LlamaAttributionHooks:
                 attn_scores = scores_flat[offset:offset + self.attn_head_total].view(
                     self.num_layers, self.seq_len, self.num_heads).max(dim=-1).values
             heatmap = torch.maximum(heatmap, attn_scores)
+
+        if self.has_resid:
+            resid_scores = scores_flat.view(self.num_layers, self.seq_len)
+            heatmap = torch.maximum(heatmap, resid_scores)
 
         return heatmap
