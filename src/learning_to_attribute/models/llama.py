@@ -23,7 +23,7 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "node"}
 
     def __init__(self, model, mask_type, seq_len, flip=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -44,6 +44,7 @@ class LlamaAttributionHooks:
         self.attn_output_total = self.num_layers * seq_len
         self.attn_head_total = self.num_layers * seq_len * self.num_heads
         self.resid_total = self.num_layers * seq_len
+        self.node_total = self.num_layers * self.num_heads + self.num_layers
 
         if mask_type == "mlp":
             self.total = self.mlp_total
@@ -55,6 +56,8 @@ class LlamaAttributionHooks:
             self.total = self.mlp_total + self.attn_head_total
         elif mask_type == "resid":
             self.total = self.resid_total
+        elif mask_type == "node":
+            self.total = self.node_total
 
         self.mask = None
         self.cf_acts_mlp = {}
@@ -64,15 +67,19 @@ class LlamaAttributionHooks:
 
     @property
     def has_mlp(self):
-        return self.mask_type in ("mlp", "mlp+attn_head")
+        return self.mask_type in ("mlp", "mlp+attn_head", "node")
 
     @property
     def has_attn(self):
-        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head")
+        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "node")
 
     @property
     def has_resid(self):
         return self.mask_type == "resid"
+
+    @property
+    def is_node(self):
+        return self.mask_type == "node"
 
     # Override these in subclasses for different model architectures
     def _get_layer(self, li):
@@ -86,19 +93,23 @@ class LlamaAttributionHooks:
 
     def describe(self):
         parts = []
-        if self.has_mlp:
-            parts.append(f"MLP: {self.num_layers}L x {self.seq_len}pos x "
-                         f"{self.intermediate_size}n = {self.mlp_total:,}")
-        if self.has_attn:
-            if self.mask_type == "attn_output":
-                parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos = "
-                             f"{self.attn_output_total:,}")
-            else:
-                parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
-                             f"{self.num_heads}h = {self.attn_head_total:,}")
-        if self.has_resid:
-            parts.append(f"Resid: {self.num_layers}L x {self.seq_len}pos = "
-                         f"{self.resid_total:,}")
+        if self.is_node:
+            parts.append(f"Node: {self.num_layers}L x ({self.num_heads}h + 1mlp) = "
+                         f"{self.node_total:,}")
+        else:
+            if self.has_mlp:
+                parts.append(f"MLP: {self.num_layers}L x {self.seq_len}pos x "
+                             f"{self.intermediate_size}n = {self.mlp_total:,}")
+            if self.has_attn:
+                if self.mask_type == "attn_output":
+                    parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos = "
+                                 f"{self.attn_output_total:,}")
+                else:
+                    parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
+                                 f"{self.num_heads}h = {self.attn_head_total:,}")
+            if self.has_resid:
+                parts.append(f"Resid: {self.num_layers}L x {self.seq_len}pos = "
+                             f"{self.resid_total:,}")
         return " + ".join(parts) + f" = {self.total:,} total"
 
     def cache_cf_activations(self, cf_input_ids):
@@ -152,10 +163,15 @@ class LlamaAttributionHooks:
                 def make_mlp_hook(li):
                     def hook(mod, hook_args):
                         x = hook_args[0]  # [1, seq_len, intermediate_size]
-                        start = li * self.seq_len * self.intermediate_size
-                        end = start + self.seq_len * self.intermediate_size
-                        m = self.mask[start:end].view(
-                            1, self.seq_len, self.intermediate_size)
+                        if self.is_node:
+                            # Node: one scalar per MLP per layer, broadcast
+                            attn_count = self.num_layers * self.num_heads
+                            m = self.mask[attn_count + li].view(1, 1, 1)
+                        else:
+                            start = li * self.seq_len * self.intermediate_size
+                            end = start + self.seq_len * self.intermediate_size
+                            m = self.mask[start:end].view(
+                                1, self.seq_len, self.intermediate_size)
                         return self._interpolate(x, m, self.cf_acts_mlp.get(li))
                     return hook
                 self._hooks.append(
@@ -167,6 +183,19 @@ class LlamaAttributionHooks:
                     def hook(mod, hook_args):
                         x = hook_args[0]  # [1, seq_len, hidden_size]
                         cf = self.cf_acts_attn.get(li)
+                        seq = x.shape[1]
+
+                        if self.is_node:
+                            # Node: [n_heads] per layer, broadcast over positions
+                            off = li * self.num_heads
+                            m = self.mask[off:off + self.num_heads].view(
+                                1, 1, self.num_heads, 1)
+                            x4d = x.view(1, seq, self.num_heads, self.head_dim)
+                            cf4d = (cf.view(1, cf.shape[1], self.num_heads,
+                                            self.head_dim) if cf is not None
+                                    else None)
+                            out = self._interpolate(x4d, m, cf4d)
+                            return (out[0].reshape(1, seq, self.hidden_size),)
 
                         if self.mask_type == "attn_output":
                             off = li * self.seq_len
@@ -227,6 +256,16 @@ class LlamaAttributionHooks:
         """Convert flat score index -> dict with layer, pos, and component info."""
         flat_idx = int(flat_idx)
 
+        if self.is_node:
+            attn_count = self.num_layers * self.num_heads
+            if flat_idx < attn_count:
+                layer = flat_idx // self.num_heads
+                head = flat_idx % self.num_heads
+                return {"component": "attn", "layer": layer, "head": head}
+            else:
+                layer = flat_idx - attn_count
+                return {"component": "mlp", "layer": layer}
+
         if self.mask_type == "mlp" or (
                 self.mask_type == "mlp+attn_head"
                 and flat_idx < self.mlp_total):
@@ -253,8 +292,16 @@ class LlamaAttributionHooks:
         return {"component": "attn", "layer": layer, "pos": pos, "head": head}
 
     def scores_to_heatmap(self, scores_flat):
-        """Reduce scores to [num_layers, seq_len] heatmap (max over neurons/heads)."""
+        """Reduce scores to [num_layers, N] heatmap. N=seq_len or n_heads+1 for node."""
         device = scores_flat.device
+
+        if self.is_node:
+            # Node: heatmap is [num_layers, n_heads+1] (heads then MLP)
+            attn_count = self.num_layers * self.num_heads
+            attn = scores_flat[:attn_count].view(self.num_layers, self.num_heads)
+            mlp = scores_flat[attn_count:].view(self.num_layers, 1)
+            return torch.cat([attn, mlp], dim=1)
+
         heatmap = torch.full((self.num_layers, self.seq_len), float("-inf"),
                              device=device)
 

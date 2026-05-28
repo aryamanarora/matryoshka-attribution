@@ -17,12 +17,16 @@ from learning_to_attribute import sigmoid_topk, CausalGymDataset
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
     GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks,
+    GPT2AttributionHooks, GPT2SpanAttributionHooks,
 )
 
 # Map model_type from config to hook classes
 HOOKS_REGISTRY = {
     "llama": (LlamaAttributionHooks, LlamaSpanAttributionHooks),
     "gpt_neox": (GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks),
+    "gpt2": (GPT2AttributionHooks, GPT2SpanAttributionHooks),
+    "qwen2": (LlamaAttributionHooks, LlamaSpanAttributionHooks),
+    "gemma2": (LlamaAttributionHooks, LlamaSpanAttributionHooks),
 }
 
 

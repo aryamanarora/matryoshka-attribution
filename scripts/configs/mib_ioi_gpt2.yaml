@@ -1,0 +1,8 @@
+model: gpt2
+task: ioi
+steps: 500
+T: 0.5
+lr: 0.01
+split: validation
+batch-size: 20
+output: results/mib/ioi_gpt2
