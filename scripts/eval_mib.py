@@ -231,7 +231,8 @@ def main():
     node_score_list = []
     for name in graph.nodes:
         if name == "input" or name == "logits":
-            node_score_list.append(float("inf"))
+            # NaN = always in graph, not counted as scored item
+            node_score_list.append(float("nan"))
         elif name.startswith("a"):
             parts = name.split(".")
             L = int(parts[0][1:])
@@ -241,9 +242,15 @@ def main():
             L = int(name[1:])
             node_score_list.append(mlp_scores[L].item())
         else:
-            node_score_list.append(0.0)
+            node_score_list.append(float("nan"))
 
     graph.nodes_scores = torch.tensor(node_score_list)
+    # input and logits should always be in graph
+    for name in ("input", "logits"):
+        if name in graph.nodes:
+            graph.nodes[name].in_graph = True
+    logger.info("Set node scores (%d scored, %d total)",
+                (~torch.isnan(graph.nodes_scores)).sum().item(), len(graph.nodes))
     logger.info("Set node scores on graph")
 
     # Reload dataset for eval (with TL tokenizer)
