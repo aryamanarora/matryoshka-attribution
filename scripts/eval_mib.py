@@ -263,8 +263,9 @@ def main():
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
     for pct, faith in zip(percentages, faithfulnesses):
-        logger.info("  %5.1f%% -> CPR=%.4f", pct * 100, faith)
-    logger.info("  AUC=%.4f  Avg=%.4f", area_under, average)
+        logger.info("  %5.1f%% -> CPR=%.4f  CMD=%.4f", pct * 100, faith, abs(1 - faith))
+    logger.info("  CPR AUC=%.4f  CMD AUC=%.4f  Avg CPR=%.4f",
+                area_under, area_from_1, average)
 
     # Save results
     output_dir = Path(args.output)
