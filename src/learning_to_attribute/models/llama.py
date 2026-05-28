@@ -114,6 +114,7 @@ class LlamaAttributionHooks:
 
     def cache_cf_activations(self, cf_input_ids):
         """Run CF input through model and cache activations at hook points."""
+        self.mask = None  # disable masking hooks during CF forward
         hooks = []
         for li in range(self.num_layers):
             layer = self._get_layer(li)
@@ -162,6 +163,8 @@ class LlamaAttributionHooks:
             if self.has_mlp:
                 def make_mlp_hook(li):
                     def hook(mod, hook_args):
+                        if self.mask is None:
+                            return
                         x = hook_args[0]  # [1, seq_len, intermediate_size]
                         if self.is_node:
                             # Node: one scalar per MLP per layer, broadcast
@@ -181,6 +184,8 @@ class LlamaAttributionHooks:
             if self.has_attn:
                 def make_attn_hook(li):
                     def hook(mod, hook_args):
+                        if self.mask is None:
+                            return
                         x = hook_args[0]  # [1, seq_len, hidden_size]
                         cf = self.cf_acts_attn.get(li)
                         seq = x.shape[1]
@@ -229,7 +234,8 @@ class LlamaAttributionHooks:
             if self.has_resid:
                 def make_resid_hook(li):
                     def hook(mod, input, output):
-                        # Extract hidden_states from output (may be tensor or tuple)
+                        if self.mask is None:
+                            return
                         if isinstance(output, tuple):
                             x = output[0]
                         else:
