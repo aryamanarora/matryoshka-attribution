@@ -13,10 +13,26 @@ import matplotlib.pyplot as plt
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import (
-    sigmoid_topk, LlamaAttributionHooks, LlamaSpanAttributionHooks,
-    CausalGymDataset,
+from learning_to_attribute import sigmoid_topk, CausalGymDataset
+from learning_to_attribute.models import (
+    LlamaAttributionHooks, LlamaSpanAttributionHooks,
+    GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks,
 )
+
+# Map model_type from config to hook classes
+HOOKS_REGISTRY = {
+    "llama": (LlamaAttributionHooks, LlamaSpanAttributionHooks),
+    "gpt_neox": (GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks),
+}
+
+
+def get_hooks_classes(model):
+    """Auto-detect model architecture and return (HooksCls, SpanHooksCls)."""
+    model_type = model.config.model_type
+    if model_type in HOOKS_REGISTRY:
+        return HOOKS_REGISTRY[model_type]
+    raise ValueError(f"Unsupported model_type: {model_type!r}. "
+                     f"Supported: {list(HOOKS_REGISTRY.keys())}")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +72,8 @@ def run_single(args, model, tokenizer, device, wandb):
             f"CF must have same token length ({cf_input_ids.shape[1]} vs {seq_len})")
         logger.info("CF: %r -> %d tokens", args.cf_text, cf_input_ids.shape[1])
 
-    hooker = LlamaAttributionHooks(model, args.mask, seq_len, flip=args.flip)
+    HooksCls, _ = get_hooks_classes(model)
+    hooker = HooksCls(model, args.mask, seq_len, flip=args.flip)
     total = hooker.total
     logger.info("Scores: %s", hooker.describe())
 
@@ -135,7 +152,8 @@ def run_dataset(args, model, tokenizer, device, wandb):
     logger.info("Dataset: %s (%d spans: %s)", args.dataset, dataset.num_spans,
                 dataset.span_names)
 
-    hooker = LlamaSpanAttributionHooks(
+    _, SpanHooksCls = get_hooks_classes(model)
+    hooker = SpanHooksCls(
         model, args.mask, dataset.num_spans,
         pos_strategy=args.pos_strategy, flip=args.flip)
     total = hooker.total

@@ -74,6 +74,16 @@ class LlamaAttributionHooks:
     def has_resid(self):
         return self.mask_type == "resid"
 
+    # Override these in subclasses for different model architectures
+    def _get_layer(self, li):
+        return self.model.model.layers[li]
+
+    def _get_mlp_module(self, layer):
+        return layer.mlp.down_proj
+
+    def _get_attn_module(self, layer):
+        return layer.self_attn.o_proj
+
     def describe(self):
         parts = []
         if self.has_mlp:
@@ -95,19 +105,19 @@ class LlamaAttributionHooks:
         """Run CF input through model and cache activations at hook points."""
         hooks = []
         for li in range(self.num_layers):
-            layer = self.model.model.layers[li]
+            layer = self._get_layer(li)
             if self.has_mlp:
                 def _mlp(idx):
                     def hook(mod, args):
                         self.cf_acts_mlp[idx] = args[0].detach()
                     return hook
-                hooks.append(layer.mlp.down_proj.register_forward_pre_hook(_mlp(li)))
+                hooks.append(self._get_mlp_module(layer).register_forward_pre_hook(_mlp(li)))
             if self.has_attn:
                 def _attn(idx):
                     def hook(mod, args):
                         self.cf_acts_attn[idx] = args[0].detach()
                     return hook
-                hooks.append(layer.self_attn.o_proj.register_forward_pre_hook(_attn(li)))
+                hooks.append(self._get_attn_module(layer).register_forward_pre_hook(_attn(li)))
             if self.has_resid:
                 def _resid(idx):
                     def hook(mod, input, output):
@@ -136,7 +146,7 @@ class LlamaAttributionHooks:
         self.remove_hooks()
 
         for layer_idx in range(self.num_layers):
-            layer = self.model.model.layers[layer_idx]
+            layer = self._get_layer(layer_idx)
 
             if self.has_mlp:
                 def make_mlp_hook(li):
@@ -149,7 +159,7 @@ class LlamaAttributionHooks:
                         return self._interpolate(x, m, self.cf_acts_mlp.get(li))
                     return hook
                 self._hooks.append(
-                    layer.mlp.down_proj.register_forward_pre_hook(
+                    self._get_mlp_module(layer).register_forward_pre_hook(
                         make_mlp_hook(layer_idx)))
 
             if self.has_attn:
@@ -184,7 +194,7 @@ class LlamaAttributionHooks:
                                                self.hidden_size),)
                     return hook
                 self._hooks.append(
-                    layer.self_attn.o_proj.register_forward_pre_hook(
+                    self._get_attn_module(layer).register_forward_pre_hook(
                         make_attn_hook(layer_idx)))
 
             if self.has_resid:
@@ -345,6 +355,16 @@ class LlamaSpanAttributionHooks:
     def has_resid(self):
         return self.mask_type == "resid"
 
+    # Override these in subclasses for different model architectures
+    def _get_layer(self, li):
+        return self.model.model.layers[li]
+
+    def _get_mlp_module(self, layer):
+        return layer.mlp.down_proj
+
+    def _get_attn_module(self, layer):
+        return layer.self_attn.o_proj
+
     def describe(self):
         S = self.num_spans
         parts = []
@@ -389,19 +409,19 @@ class LlamaSpanAttributionHooks:
         self.mask = None  # disable masking hooks during CF forward
         hooks = []
         for li in range(self.num_layers):
-            layer = self.model.model.layers[li]
+            layer = self._get_layer(li)
             if self.has_mlp:
                 def _mlp(idx):
                     def hook(mod, args):
                         self.cf_acts_mlp[idx] = args[0].detach()
                     return hook
-                hooks.append(layer.mlp.down_proj.register_forward_pre_hook(_mlp(li)))
+                hooks.append(self._get_mlp_module(layer).register_forward_pre_hook(_mlp(li)))
             if self.has_attn:
                 def _attn(idx):
                     def hook(mod, args):
                         self.cf_acts_attn[idx] = args[0].detach()
                     return hook
-                hooks.append(layer.self_attn.o_proj.register_forward_pre_hook(_attn(li)))
+                hooks.append(self._get_attn_module(layer).register_forward_pre_hook(_attn(li)))
             if self.has_resid:
                 def _resid(idx):
                     def hook(mod, inp, output):
@@ -464,7 +484,7 @@ class LlamaSpanAttributionHooks:
         S = self.num_spans
 
         for layer_idx in range(self.num_layers):
-            layer = self.model.model.layers[layer_idx]
+            layer = self._get_layer(layer_idx)
 
             if self.has_mlp:
                 def make_mlp_hook(li):
@@ -481,7 +501,7 @@ class LlamaSpanAttributionHooks:
                         return (out,)
                     return hook
                 self._hooks.append(
-                    layer.mlp.down_proj.register_forward_pre_hook(
+                    self._get_mlp_module(layer).register_forward_pre_hook(
                         make_mlp_hook(layer_idx)))
 
             if self.has_attn:
@@ -514,7 +534,7 @@ class LlamaSpanAttributionHooks:
                         return (out4d.reshape(1, x.shape[1], self.hidden_size),)
                     return hook
                 self._hooks.append(
-                    layer.self_attn.o_proj.register_forward_pre_hook(
+                    self._get_attn_module(layer).register_forward_pre_hook(
                         make_attn_hook(layer_idx)))
 
             if self.has_resid:
