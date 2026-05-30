@@ -299,7 +299,7 @@ def main():
     weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
-            level="node", absolute=True)
+            level="node", absolute=False)
 
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
