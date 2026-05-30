@@ -248,10 +248,11 @@ def main():
     max_score = max(attn_scores.abs().max().item(), mlp_scores.abs().max().item()) + 1.0
     node_scores_tensor = torch.full((graph.n_forward,), float("nan"))
     for name, node in graph.nodes.items():
-        try:
-            idx = graph.forward_index(node, attn_slice=False)
-        except Exception:
-            continue  # logits is backward-only
+        if name == "logits":
+            continue
+        idx = graph.forward_index(node, attn_slice=False)
+        if idx >= graph.n_forward:
+            continue
         if name == "input":
             node_scores_tensor[idx] = max_score
         elif name.startswith("a"):
