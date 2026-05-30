@@ -245,10 +245,7 @@ def main():
             node_score_list.append(float("nan"))
 
     graph.nodes_scores = torch.tensor(node_score_list)
-    # input and logits should always be in graph
-    for name in ("input", "logits"):
-        if name in graph.nodes:
-            graph.nodes[name].in_graph = True
+    # input and logits are always in graph (already set by Graph.from_model)
     logger.info("Set node scores (%d scored, %d total)",
                 (~torch.isnan(graph.nodes_scores)).sum().item(), len(graph.nodes))
     logger.info("Set node scores on graph")

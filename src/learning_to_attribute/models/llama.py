@@ -37,7 +37,7 @@ class LlamaAttributionHooks:
         self.num_layers = config.num_hidden_layers
         self.intermediate_size = config.intermediate_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.hidden_size = config.hidden_size
 
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
@@ -200,7 +200,7 @@ class LlamaAttributionHooks:
                                             self.head_dim) if cf is not None
                                     else None)
                             out = self._interpolate(x4d, m, cf4d)
-                            return (out[0].reshape(1, seq, self.hidden_size),)
+                            return (out[0].reshape(1, seq, -1),)
 
                         if self.mask_type == "attn_output":
                             off = li * self.seq_len
@@ -224,8 +224,7 @@ class LlamaAttributionHooks:
                                         self.head_dim) if cf is not None
                                 else None)
                         out = self._interpolate(x4d, m, cf4d)
-                        return (out[0].reshape(1, self.seq_len,
-                                               self.hidden_size),)
+                        return (out[0].reshape(1, self.seq_len, -1),)
                     return hook
                 self._hooks.append(
                     self._get_attn_module(layer).register_forward_pre_hook(
@@ -365,7 +364,7 @@ class LlamaSpanAttributionHooks:
         self.num_layers = config.num_hidden_layers
         self.intermediate_size = config.intermediate_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.hidden_size = config.hidden_size
 
         S = num_spans

@@ -14,12 +14,12 @@ COMBOS = [
     ("gemma2", "ioi", "64G"),
     ("gemma2", "mcqa", "64G"),
     ("gemma2", "arc_easy", "64G"),
-    ("llama3", "ioi", "80G"),
-    ("llama3", "mcqa", "80G"),
-    ("llama3", "arithmetic_addition", "80G"),
-    ("llama3", "arithmetic_subtraction", "80G"),
-    ("llama3", "arc_easy", "80G"),
-    ("llama3", "arc_challenge", "80G"),
+    ("llama3", "ioi", "96G"),
+    ("llama3", "mcqa", "96G"),
+    ("llama3", "arithmetic_addition", "96G"),
+    ("llama3", "arithmetic_subtraction", "96G"),
+    ("llama3", "arc_easy", "96G"),
+    ("llama3", "arc_challenge", "96G"),
 ]
 
 
