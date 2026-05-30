@@ -91,8 +91,8 @@ def main():
     parser.add_argument("--k-schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--absolute", action="store_true",
-                        help="Rank by |score| in MIB eval (default: False)")
+    parser.add_argument("--absolute", action="store_true", default=True,
+                        help="Rank by |score| in MIB eval (default: True for our method)")
     parser.add_argument("--eval-examples", type=int, default=500,
                         help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
