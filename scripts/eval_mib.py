@@ -17,6 +17,8 @@ import torch.nn.functional as F
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+import math
+
 from learning_to_attribute import sigmoid_topk
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
@@ -86,6 +88,9 @@ def main():
     parser.add_argument("--split", type=str, default="validation")
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--k-schedule", default="uniform",
+                        choices=["uniform", "log"],
+                        help="How to sample k: uniform or log-uniform")
     parser.add_argument("--output", type=str, default="results/mib")
 
     # Config YAML
@@ -174,7 +179,11 @@ def main():
         hooker.cache_cf_activations(src_ids)
 
         # Forward with mask
-        k = 1.0 + (total - 1.0) * torch.rand(1).item()
+        if args.k_schedule == "log":
+            log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
+            k = math.exp(log_k)
+        else:
+            k = 1.0 + (total - 1.0) * torch.rand(1).item()
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = hf_model(base_ids).logits[0, -1].float()
 

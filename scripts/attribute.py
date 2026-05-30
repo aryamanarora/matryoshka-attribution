@@ -45,6 +45,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def sample_k(total: int, schedule: str = "uniform") -> float:
+    """Sample k for sigmoid top-k masking.
+
+    Args:
+        total: total number of score parameters
+        schedule: "uniform" samples k ~ Uniform(1, total),
+                  "log" samples k ~ exp(Uniform(log(1), log(total)))
+                  so that 1-10 is as likely as 10-100 as 100-1000.
+    """
+    if schedule == "log":
+        import math
+        log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
+        return math.exp(log_k)
+    else:
+        return 1.0 + (total - 1.0) * torch.rand(1).item()
+
+
 def run_single(args, model, tokenizer, device, wandb):
     """Single text/cf_text pair mode (original behavior)."""
 
@@ -106,7 +123,7 @@ def run_single(args, model, tokenizer, device, wandb):
     logger.info("Training for %d steps...", args.steps)
     t0 = time.time()
     for step in range(args.steps):
-        k = 1.0 + (total - 1.0) * torch.rand(1).item()
+        k = sample_k(total, args.k_schedule)
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = model(input_ids).logits[0, -1].float()
 
@@ -184,7 +201,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
 
         # Forward with mask
-        k = 1.0 + (total - 1.0) * torch.rand(1).item()
+        k = sample_k(total, args.k_schedule)
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = model(tok.base_input_ids).logits[0, -1].float()
 
@@ -323,6 +340,9 @@ def main():
     parser.add_argument("--pos_strategy", default="last",
                         choices=["first", "last", "all"])
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--k_schedule", default="uniform",
+                        choices=["uniform", "log"],
+                        help="How to sample k: uniform or log-uniform")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)
