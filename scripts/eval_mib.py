@@ -95,6 +95,8 @@ def main():
                         help="Rank by |score| in MIB eval (default: True)")
     parser.add_argument("--negate-scores", action="store_true",
                         help="Negate scores before MIB eval (use with --no-absolute)")
+    parser.add_argument("--include-input", action="store_true",
+                        help="Learn a score for the input embedding node")
     parser.add_argument("--eval-examples", type=int, default=500,
                         help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
@@ -154,7 +156,8 @@ def main():
     # Set up node-level hooks
     # For node mask, seq_len doesn't matter (position-agnostic), but we need a dummy value
     HooksCls = get_hooks_class(hf_model)
-    hooker = HooksCls(hf_model, "node", seq_len=1, flip=True)
+    hooker = HooksCls(hf_model, "node", seq_len=1, flip=True,
+                       include_input=args.include_input)
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
 
@@ -240,8 +243,10 @@ def main():
     # Map our scores to MIB node scores
     n_layers = hooker.num_layers
     n_heads = hooker.num_heads
-    attn_scores = scores.data[:n_layers * n_heads].view(n_layers, n_heads).cpu()
-    mlp_scores = scores.data[n_layers * n_heads:].cpu()
+    off = 1 if args.include_input else 0
+    input_score_val = scores.data[0].item() if args.include_input else None
+    attn_scores = scores.data[off:off + n_layers * n_heads].view(n_layers, n_heads).cpu()
+    mlp_scores = scores.data[off + n_layers * n_heads:].cpu()
 
     # Map our scores to MIB graph node scores
     # nodes_scores has shape (n_forward,) — use forward_index to map
@@ -256,7 +261,7 @@ def main():
         if idx >= graph.n_forward:
             continue
         if name == "input":
-            node_scores_tensor[idx] = max_score
+            node_scores_tensor[idx] = input_score_val if input_score_val is not None else max_score
         elif name.startswith("a"):
             parts = name.split(".")
             L = int(parts[0][1:])
