@@ -91,8 +91,10 @@ def main():
     parser.add_argument("--k-schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--absolute", action="store_true", default=True,
-                        help="Rank by |score| in MIB eval (default: True for our method)")
+    parser.add_argument("--absolute", action=argparse.BooleanOptionalAction, default=True,
+                        help="Rank by |score| in MIB eval (default: True)")
+    parser.add_argument("--negate-scores", action="store_true",
+                        help="Negate scores before MIB eval (use with --no-absolute)")
     parser.add_argument("--eval-examples", type=int, default=500,
                         help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
@@ -263,6 +265,17 @@ def main():
         elif name.startswith("m"):
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
+
+    if args.negate_scores:
+        # Negate so highest importance → most positive for absolute=False ranking
+        scored = ~torch.isnan(node_scores_tensor)
+        node_scores_tensor[scored] = -node_scores_tensor[scored]
+        # Re-set input to max so it's always kept
+        for name, node in graph.nodes.items():
+            if name == "input":
+                idx = graph.forward_index(node, attn_slice=False)
+                node_scores_tensor[idx] = node_scores_tensor[scored].max().item() + 1.0
+                break
 
     graph.nodes_scores = node_scores_tensor
     logger.info("Set node scores (%d scored, %d forward nodes)",
