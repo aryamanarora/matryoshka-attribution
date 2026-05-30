@@ -25,13 +25,13 @@ class LlamaAttributionHooks:
 
     MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "node"}
 
-    def __init__(self, model, mask_type, seq_len, flip=False, include_input=False):
+    def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
 
         self.model = model
         self.mask_type = mask_type
         self.seq_len = seq_len
-        self.flip = flip
+        self.sufficient = sufficient
         self.include_input = include_input and (mask_type == "node")
 
         config = model.config
@@ -163,7 +163,7 @@ class LlamaAttributionHooks:
     def _interpolate(self, x, m, cf_act):
         m = m.to(x.dtype)
         if cf_act is not None:
-            if self.flip:
+            if self.sufficient:
                 return (x * (1 - m) + cf_act * m,)
             else:
                 return (x * m + cf_act * (1 - m),)
@@ -391,7 +391,7 @@ class LlamaSpanAttributionHooks:
         self.mask_type = mask_type
         self.num_spans = num_spans
         self.pos_strategy = pos_strategy
-        self.flip = flip
+        self.sufficient = sufficient
 
         config = model.config
         self.num_layers = config.num_hidden_layers
@@ -555,7 +555,7 @@ class LlamaSpanAttributionHooks:
                     m_expanded = m.view(1, 1)  # [1, 1] for broadcast
 
                 if cf_act is not None:
-                    if self.flip:
+                    if self.sufficient:
                         out[0, bp] = base_act[0, bp] * (1 - m_expanded) + cf_act[0, sp] * m_expanded
                     else:
                         out[0, bp] = base_act[0, bp] * m_expanded + cf_act[0, sp] * (1 - m_expanded)

@@ -94,7 +94,7 @@ def run_single(args, model, tokenizer, device, wandb):
         logger.info("CF: %r -> %d tokens", args.cf_text, cf_input_ids.shape[1])
 
     HooksCls, _ = get_hooks_classes(model)
-    hooker = HooksCls(model, args.mask, seq_len, flip=args.flip)
+    hooker = HooksCls(model, args.mask, seq_len, sufficient=args.sufficient)
     total = hooker.total
     logger.info("Scores: %s", hooker.describe())
 
@@ -107,7 +107,7 @@ def run_single(args, model, tokenizer, device, wandb):
         clean_probs = F.softmax(clean_logits, dim=-1)
     logger.info("Clean top-5: %s", [tokenizer.decode(t) for t in clean_logits.topk(5).indices.tolist()])
 
-    if args.flip and args.cf_text:
+    if args.sufficient and args.cf_text:
         ref_probs = F.softmax(cf_logits, dim=-1)
         top5_indices = cf_logits.topk(5).indices
     else:
@@ -152,8 +152,8 @@ def run_single(args, model, tokenizer, device, wandb):
     eval_results = _eval_sparsity(
         model, hooker, scores, input_ids, total, sparsities, device,
         ref_probs, args.loss, top5_indices,
-        other_probs=(clean_probs if args.flip else F.softmax(cf_logits, dim=-1)) if args.cf_text else None,
-        has_cf=bool(args.cf_text), flip=args.flip, wandb=wandb)
+        other_probs=(clean_probs if args.sufficient else F.softmax(cf_logits, dim=-1)) if args.cf_text else None,
+        has_cf=bool(args.cf_text), sufficient=args.sufficient, wandb=wandb)
 
     hooker.remove_hooks()
 
@@ -176,7 +176,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
     _, SpanHooksCls = get_hooks_classes(model)
     hooker = SpanHooksCls(
         model, args.mask, dataset.num_spans,
-        pos_strategy=args.pos_strategy, flip=args.flip)
+        pos_strategy=args.pos_strategy, sufficient=args.sufficient)
     total = hooker.total
     logger.info("Scores: %s", hooker.describe())
 
@@ -187,7 +187,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
     # Train
     loss_log = []
     logger.info("Training for %d steps (dataset=%s, loss=%s, pos=%s, flip=%s)...",
-                args.steps, args.dataset, args.loss, args.pos_strategy, args.flip)
+                args.steps, args.dataset, args.loss, args.pos_strategy, args.sufficient)
     t0 = time.time()
     for step in range(args.steps):
         # Sample a fresh pair
@@ -207,12 +207,12 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
         # Loss
         if args.loss == "ce":
-            target_id = tok.src_label_id if args.flip else tok.base_label_id
+            target_id = tok.src_label_id if args.sufficient else tok.base_label_id
             loss = F.cross_entropy(
                 logits.unsqueeze(0),
                 torch.tensor([target_id], device=device))
         elif args.loss == "kl":
-            ref_probs = F.softmax(src_logits if args.flip else logits.detach(), dim=-1)
+            ref_probs = F.softmax(src_logits if args.sufficient else logits.detach(), dim=-1)
             loss = F.kl_div(F.log_softmax(logits, dim=-1), ref_probs, reduction="batchmean")
 
         optimizer.zero_grad()
@@ -243,14 +243,14 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
     with torch.no_grad():
         clean_logits_eval = model(eval_tok.base_input_ids).logits[0, -1].float()
-    ref_probs = F.softmax(src_logits_eval if args.flip else clean_logits_eval, dim=-1)
-    other_probs = F.softmax(clean_logits_eval if args.flip else src_logits_eval, dim=-1)
+    ref_probs = F.softmax(src_logits_eval if args.sufficient else clean_logits_eval, dim=-1)
+    other_probs = F.softmax(clean_logits_eval if args.sufficient else src_logits_eval, dim=-1)
 
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
     eval_results = _eval_sparsity(
         model, hooker, scores, eval_tok.base_input_ids, total, sparsities, device,
         ref_probs, "kl", None, other_probs=other_probs, has_cf=True,
-        flip=args.flip, wandb=wandb)
+        sufficient=args.sufficient, wandb=wandb)
 
     hooker.remove_hooks()
 
@@ -267,7 +267,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
 def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
                    ref_probs, loss_type, top5_indices, other_probs=None,
-                   has_cf=False, flip=False, wandb=None):
+                   has_cf=False, sufficient=False, wandb=None):
     """Run sparsity evaluation sweep."""
     flat_scores = scores.data.clone()
     sorted_idx = flat_scores.argsort(descending=True)
@@ -295,7 +295,7 @@ def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
             if has_cf and other_probs is not None:
                 elo.append(F.kl_div(lp, other_probs, reduction="batchmean").item())
 
-        other_name = "KL_clean" if flip else "KL_cf"
+        other_name = "KL_clean" if sufficient else "KL_cf"
         line = f"keep={frac:6.1%} ({k:>7d}/{total})  KL_learned={eval_learned[-1]:.4f}  KL_random={eval_random[-1]:.4f}"
         if has_cf and other_probs is not None:
             line += f"  {other_name}_L={eval_learned_other[-1]:.6f}  {other_name}_R={eval_random_other[-1]:.6f}"
@@ -334,7 +334,9 @@ def main():
     parser.add_argument("--chat", action="store_true")
     parser.add_argument("--seed_response", default=None)
     parser.add_argument("--cf_text", default=None)
-    parser.add_argument("--flip", action="store_true")
+    parser.add_argument("--sufficient", action="store_true",
+                        help="Sufficient mode: top-k get CF, find what flips. "
+                             "Default (necessary): top-k stay clean, find what preserves.")
     parser.add_argument("--dataset", default=None,
                         help="CausalGym task, e.g. syntaxgym/agr_gender")
     parser.add_argument("--pos_strategy", default="last",

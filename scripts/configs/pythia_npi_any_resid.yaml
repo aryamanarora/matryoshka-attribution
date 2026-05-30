@@ -3,7 +3,7 @@ dataset: syntaxgym/npi_any_subj-relc
 mask: resid
 loss: ce
 pos_strategy: last
-flip: true
+sufficient: true
 steps: 300
 T: 0.5
 lr: 0.01

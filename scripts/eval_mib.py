@@ -91,10 +91,10 @@ def main():
     parser.add_argument("--k-schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--absolute", action=argparse.BooleanOptionalAction, default=True,
-                        help="Rank by |score| in MIB eval (default: True)")
-    parser.add_argument("--negate-scores", action="store_true",
-                        help="Negate scores before MIB eval (use with --no-absolute)")
+    parser.add_argument("--mode", default="necessary",
+                        choices=["necessary", "sufficient"],
+                        help="necessary: top-k stay clean (like EAP-IG). "
+                             "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--include-input", action="store_true",
                         help="Learn a score for the input embedding node")
     parser.add_argument("--eval-examples", type=int, default=500,
@@ -156,7 +156,9 @@ def main():
     # Set up node-level hooks
     # For node mask, seq_len doesn't matter (position-agnostic), but we need a dummy value
     HooksCls = get_hooks_class(hf_model)
-    hooker = HooksCls(hf_model, "node", seq_len=1, flip=True,
+    is_sufficient = args.mode == "sufficient"
+    hooker = HooksCls(hf_model, "node", seq_len=1,
+                       sufficient=is_sufficient,
                        include_input=args.include_input)
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
@@ -196,8 +198,12 @@ def main():
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = hf_model(base_ids).logits[0, -1].float()
 
-        # Loss: want patched model to predict CF answer (incorrect_idx)
-        loss = logits[correct_idx] - logits[incorrect_idx]
+        if is_sufficient:
+            # Sufficient: top-k patched to CF, minimize correct-incorrect
+            loss = logits[correct_idx] - logits[incorrect_idx]
+        else:
+            # Necessary: top-k stay clean, maximize correct-incorrect
+            loss = -(logits[correct_idx] - logits[incorrect_idx])
 
         optimizer.zero_grad()
         loss.backward()
@@ -271,8 +277,16 @@ def main():
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
 
-    if args.negate_scores:
-        # Negate so highest importance → most positive for absolute=False ranking
+    if is_sufficient:
+        # Sufficient mode: high score = important for flipping.
+        # MIB keeps highest scores clean, so negate: important nodes get
+        # most negative → patched by MIB → correctly tests sufficiency.
+        # Actually: we want MIB to KEEP the important nodes and patch rest.
+        # Negate so important-for-flipping nodes are ranked lowest → patched.
+        # No wait — MIB tests "does keeping top-k preserve clean behavior?"
+        # For sufficient scores, negate so MIB keeps the LEAST important
+        # nodes (most negative after negation = least important for flipping
+        # = most important for preserving clean behavior).
         scored = ~torch.isnan(node_scores_tensor)
         node_scores_tensor[scored] = -node_scores_tensor[scored]
         # Re-set input to max so it's always kept
@@ -302,7 +316,7 @@ def main():
     weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
-            level="node", absolute=args.absolute)
+            level="node", absolute=False)
 
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
