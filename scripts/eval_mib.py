@@ -91,6 +91,8 @@ def main():
     parser.add_argument("--k-schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
+    parser.add_argument("--absolute", action="store_true",
+                        help="Rank by |score| in MIB eval (default: raw score)")
     parser.add_argument("--output", type=str, default="results/mib")
 
     # Config YAML
@@ -272,7 +274,7 @@ def main():
     weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
-            level="node", absolute=True)
+            level="node", absolute=args.absolute)
 
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
