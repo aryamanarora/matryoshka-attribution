@@ -93,6 +93,8 @@ def main():
                         help="How to sample k: uniform or log-uniform")
     parser.add_argument("--absolute", action="store_true",
                         help="Rank by |score| in MIB eval (default: raw score)")
+    parser.add_argument("--eval-examples", type=int, default=500,
+                        help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
 
     # Config YAML
@@ -265,6 +267,9 @@ def main():
     # Reload dataset for eval (with TL tokenizer)
     eval_dataset = HFEAPDataset(hf_task_name, tl_model.tokenizer, split=args.split,
                                 task=args.task, model_name=args.model)
+    if args.eval_examples:
+        eval_dataset.head(args.eval_examples)
+        logger.info("Capped eval set to %d examples", len(eval_dataset))
     dataloader = eval_dataset.to_dataloader(batch_size=args.batch_size)
     metric = get_metric("logit_diff", args.task, tl_model.tokenizer, tl_model)
     attribution_metric = partial(metric, mean=False, loss=False)
