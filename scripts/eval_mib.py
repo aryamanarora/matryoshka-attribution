@@ -91,8 +91,8 @@ def main():
     parser.add_argument("--k-schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--absolute", action="store_true", default=True,
-                        help="Rank by |score| in MIB eval (default: True for our method)")
+    parser.add_argument("--absolute", action="store_true",
+                        help="Rank by |score| in MIB eval (default: False)")
     parser.add_argument("--eval-examples", type=int, default=500,
                         help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
@@ -243,13 +243,18 @@ def main():
 
     # Map our scores to MIB graph node scores
     # nodes_scores has shape (n_forward,) — use forward_index to map
+    # Use NaN for unscored nodes (they stay in graph), but give input
+    # a high score so it's always kept even with absolute=False
+    max_score = max(attn_scores.abs().max().item(), mlp_scores.abs().max().item()) + 1.0
     node_scores_tensor = torch.full((graph.n_forward,), float("nan"))
     for name, node in graph.nodes.items():
         try:
             idx = graph.forward_index(node, attn_slice=False)
         except Exception:
             continue  # logits is backward-only
-        if name.startswith("a"):
+        if name == "input":
+            node_scores_tensor[idx] = max_score
+        elif name.startswith("a"):
             parts = name.split(".")
             L = int(parts[0][1:])
             H = int(parts[1][1:])
@@ -257,7 +262,6 @@ def main():
         elif name.startswith("m"):
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
-        # input stays NaN (always in graph)
 
     graph.nodes_scores = node_scores_tensor
     logger.info("Set node scores (%d scored, %d forward nodes)",
