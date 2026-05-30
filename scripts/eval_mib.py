@@ -196,8 +196,8 @@ def main():
         hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = hf_model(base_ids).logits[0, -1].float()
 
-        # Loss: maximize logit_diff after patching (flip mode)
-        loss = -(logits[correct_idx] - logits[incorrect_idx])
+        # Loss: want patched model to predict CF answer (incorrect_idx)
+        loss = logits[correct_idx] - logits[incorrect_idx]
 
         optimizer.zero_grad()
         loss.backward()
