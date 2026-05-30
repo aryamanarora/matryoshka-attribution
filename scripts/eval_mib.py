@@ -228,26 +228,27 @@ def main():
     attn_scores = scores.data[:n_layers * n_heads].view(n_layers, n_heads).cpu()
     mlp_scores = scores.data[n_layers * n_heads:].cpu()
 
-    node_score_list = []
-    for name in graph.nodes:
-        if name == "input" or name == "logits":
-            # NaN = always in graph, not counted as scored item
-            node_score_list.append(float("nan"))
-        elif name.startswith("a"):
+    # Map our scores to MIB graph node scores
+    # nodes_scores has shape (n_forward,) — use forward_index to map
+    node_scores_tensor = torch.full((graph.n_forward,), float("nan"))
+    for name, node in graph.nodes.items():
+        try:
+            idx = graph.forward_index(node, attn_slice=False)
+        except Exception:
+            continue  # logits is backward-only
+        if name.startswith("a"):
             parts = name.split(".")
             L = int(parts[0][1:])
             H = int(parts[1][1:])
-            node_score_list.append(attn_scores[L, H].item())
+            node_scores_tensor[idx] = attn_scores[L, H].item()
         elif name.startswith("m"):
             L = int(name[1:])
-            node_score_list.append(mlp_scores[L].item())
-        else:
-            node_score_list.append(float("nan"))
+            node_scores_tensor[idx] = mlp_scores[L].item()
+        # input stays NaN (always in graph)
 
-    graph.nodes_scores = torch.tensor(node_score_list)
-    # input and logits are always in graph (already set by Graph.from_model)
-    logger.info("Set node scores (%d scored, %d total)",
-                (~torch.isnan(graph.nodes_scores)).sum().item(), len(graph.nodes))
+    graph.nodes_scores = node_scores_tensor
+    logger.info("Set node scores (%d scored, %d forward nodes)",
+                (~torch.isnan(graph.nodes_scores)).sum().item(), graph.n_forward)
     logger.info("Set node scores on graph")
 
     # Reload dataset for eval (with TL tokenizer)
