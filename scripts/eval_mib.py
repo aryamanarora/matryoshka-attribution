@@ -277,25 +277,8 @@ def main():
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
 
-    if is_sufficient:
-        # Sufficient mode: high score = important for flipping.
-        # MIB keeps highest scores clean, so negate: important nodes get
-        # most negative → patched by MIB → correctly tests sufficiency.
-        # Actually: we want MIB to KEEP the important nodes and patch rest.
-        # Negate so important-for-flipping nodes are ranked lowest → patched.
-        # No wait — MIB tests "does keeping top-k preserve clean behavior?"
-        # For sufficient scores, negate so MIB keeps the LEAST important
-        # nodes (most negative after negation = least important for flipping
-        # = most important for preserving clean behavior).
-        scored = ~torch.isnan(node_scores_tensor)
-        node_scores_tensor[scored] = -node_scores_tensor[scored]
-        # Re-set input to max so it's always kept
-        for name, node in graph.nodes.items():
-            if name == "input":
-                idx = graph.forward_index(node, attn_slice=False)
-                node_scores_tensor[idx] = node_scores_tensor[scored].max().item() + 1.0
-                break
-
+    # absolute=True in eval handles both necessary (positive = important)
+    # and sufficient (negative = important for flipping) correctly via |score|
     graph.nodes_scores = node_scores_tensor
     logger.info("Set node scores (%d scored, %d forward nodes)",
                 (~torch.isnan(graph.nodes_scores)).sum().item(), graph.n_forward)
@@ -316,7 +299,7 @@ def main():
     weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
-            level="node", absolute=False)
+            level="node", absolute=True)
 
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
