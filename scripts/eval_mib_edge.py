@@ -1,4 +1,7 @@
-"""Train sigmoid top-k edge scores and evaluate on MIB circuit track."""
+"""Train sigmoid top-k edge scores and evaluate on MIB circuit track.
+
+Uses live (grad-tracked) activations for stronger gradient signal.
+"""
 
 import argparse
 import json
@@ -67,15 +70,14 @@ def main():
     mib_path = Path(args.mib_path).resolve()
     sys.path.insert(0, str(mib_path))
 
-    # Now import TL and MIB
     from transformer_lens import HookedTransformer
     from eap.graph import Graph
-    from eap.utils import tokenize_plus, make_hooks_and_matrices
+    from eap.utils import tokenize_plus
     from MIB_circuit_track.dataset import HFEAPDataset
     from MIB_circuit_track.metrics import get_metric
     from MIB_circuit_track.evaluation import evaluate_area_under_curve
+    from einops import einsum
 
-    # Add sigmoid_topk to path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from learning_to_attribute import sigmoid_topk
 
@@ -83,9 +85,9 @@ def main():
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    # Load model via transformer_lens
+    # Load model
     tl_name = MODEL_FULLNAMES[args.model]
-    logger.info("Loading %s via transformer_lens...", tl_name)
+    logger.info("Loading %s...", tl_name)
     if args.model in ("gemma2", "llama3", "qwen2.5"):
         model = HookedTransformer.from_pretrained(tl_name, attn_implementation="eager",
                                                    torch_dtype=torch.bfloat16)
@@ -96,35 +98,59 @@ def main():
     model.cfg.use_hook_mlp_in = True
     model.cfg.ungroup_grouped_query_attention = True
 
-    # Create graph
+    n_layers = model.cfg.n_layers
+    n_heads = model.cfg.n_heads
+    d_model = model.cfg.d_model
+
+    # Create graph for structure
     graph = Graph.from_model(model)
-    n_edges = graph.real_edge_mask.sum().item()
-    logger.info("Graph: %d nodes, %d edges (%d real)", len(graph.nodes), len(graph.edges), int(n_edges))
+    n_real = int(graph.real_edge_mask.sum().item())
+    logger.info("Graph: %d nodes, %d edges (%d real)", len(graph.nodes), len(graph.edges), n_real)
+
+    # Precompute real edge index mapping for differentiable scatter
+    real_flat = graph.real_edge_mask.flatten().bool()
+    n_full = graph.n_forward * graph.n_backward
+    # cumsum trick: maps each full-matrix position to an index in the flat real-edge vector
+    cumsum = real_flat.float().cumsum(0).long() - 1
+    cumsum = cumsum.clamp(min=0).to(device)
+    real_flat_device = real_flat.float().to(device)
 
     # Load dataset
     hf_task = f"mib-bench/{TASKS_TO_HF[args.task]}"
     dataset = HFEAPDataset(hf_task, model.tokenizer, split=args.split,
                            task=args.task, model_name=args.model)
-    logger.info("Loaded %d examples from %s (%s)", len(dataset), args.task, args.split)
+    logger.info("Loaded %d examples", len(dataset))
 
-    # Score tensor: one score per real edge
-    # We'll work with the full (n_forward, n_backward) matrix but only optimize real edges
-    total = int(n_edges)
+    # Score tensor
+    total = n_real
     scores = nn.Parameter(torch.zeros(total, device=device))
     optimizer = torch.optim.Adam([scores], lr=args.lr)
     logger.info("Edge scores: %d parameters", total)
 
     is_sufficient = args.mode == "sufficient"
 
+    # Precompute source node info for hooks
+    # Sources: input, a{l}.h{h} for each layer/head, m{l} for each layer
+    source_hooks = []  # (hook_name, node_name, forward_index, is_attn)
+    input_node = graph.nodes['input']
+    source_hooks.append(('hook_embed', 'input', graph.forward_index(input_node), False))
+    for l in range(n_layers):
+        head0 = graph.nodes[f'a{l}.h0']
+        head0_idx = graph.forward_index(head0, attn_slice=False)
+        source_hooks.append((f'blocks.{l}.attn.hook_result', f'attn_{l}',
+                            head0_idx, True))
+        mlp_node = graph.nodes[f'm{l}']
+        mlp_idx = graph.forward_index(mlp_node)
+        source_hooks.append((f'blocks.{l}.hook_mlp_out', f'm{l}', mlp_idx, False))
+
     # Training loop
     loss_log = []
     n_examples = len(dataset)
-    logger.info("Training for %d steps (mode=%s, k_schedule=%s)...",
+    logger.info("Training for %d steps (mode=%s, k_schedule=%s, live activations)...",
                 args.steps, args.mode, args.k_schedule)
     t0 = time.time()
 
     for step in range(args.steps):
-        # Sample example
         idx = random.randint(0, n_examples - 1)
         clean, corrupted, labels = dataset[idx]
         correct_idx, incorrect_idx = labels[0], labels[1]
@@ -135,30 +161,33 @@ def main():
         if clean_tokens.shape[1] != corrupted_tokens.shape[1]:
             continue
 
-        # Get activation differences (corrupted - clean)
-        (fwd_hooks_corrupted, fwd_hooks_clean, _), activation_difference = \
-            make_hooks_and_matrices(model, graph, 1, n_pos, None)
+        # Step 1: Cache corrupted source outputs (no grad)
+        corrupted_acts = {}
 
+        def make_corrupted_hook(name, fwd_idx, is_attn):
+            def hook(act, hook):
+                if is_attn:
+                    # act: [batch, pos, n_heads, d_model] — store per head
+                    for h in range(n_heads):
+                        corrupted_acts[fwd_idx + h] = act[:, :, h].detach()
+                else:
+                    corrupted_acts[fwd_idx] = act.detach()
+            return hook
+
+        corrupted_fwd_hooks = [(hname, make_corrupted_hook(nname, fidx, is_a))
+                               for hname, nname, fidx, is_a in source_hooks]
         with torch.no_grad():
-            with model.hooks(fwd_hooks_corrupted):
-                _ = model(corrupted_tokens, attention_mask=attention_mask)
-            with model.hooks(fwd_hooks_clean):
-                _ = model(clean_tokens, attention_mask=attention_mask)
+            model.run_with_hooks(corrupted_tokens, fwd_hooks=corrupted_fwd_hooks,
+                                 attention_mask=attention_mask)
 
-        # Build soft edge mask: sigmoid_topk over real edges only
+        # Step 2: Build soft edge mask
         k = sample_k(total, args.k_schedule)
         soft_mask_flat = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
 
-        # Expand to full (n_forward, n_backward) matrix
-        # Real edges get the soft mask; non-real edges stay 0
-        real_mask = graph.real_edge_mask.to(device=device, dtype=torch.float32)
-        full_mask = torch.zeros_like(real_mask)
-        full_mask[real_mask.bool()] = soft_mask_flat
+        # Differentiable expansion to full [n_forward, n_backward] matrix
+        expanded = soft_mask_flat[cumsum]  # [n_full]
+        full_mask = (expanded * real_flat_device).view(graph.n_forward, graph.n_backward)
 
-        # In necessary mode: mask=1 means "corrupt this edge" (patch to CF)
-        # Top-k edges by score get mask≈1 → stay clean (NOT corrupted)
-        # So we invert: corruption_mask = 1 - full_mask
-        # In sufficient mode: top-k edges get mask≈1 → get corrupted
         if is_sufficient:
             corruption_mask = full_mask
         else:
@@ -166,54 +195,67 @@ def main():
 
         corruption_mask = corruption_mask.to(model.cfg.dtype)
 
-        # Build input construction hooks using our soft mask
-        # This replaces evaluate_graph's binary in_graph with our soft corruption_mask
-        from einops import einsum as eeinsum
+        # Step 3: Clean forward with live source capture + destination patching
+        clean_acts = {}
 
-        def make_soft_input_hook(act_diff, edge_weights):
+        def make_clean_hook(name, fwd_idx, is_attn):
+            def hook(act, hook):
+                if is_attn:
+                    for h in range(n_heads):
+                        clean_acts[fwd_idx + h] = act[:, :, h]  # LIVE, grad-tracked
+                else:
+                    clean_acts[fwd_idx] = act  # LIVE
+                return act
+            return hook
+
+        def make_dest_hook(dest_node, letter=None):
+            prev_idx = graph.prev_index(dest_node)
+            bwd_idx = graph.backward_index(dest_node, qkv=letter, attn_slice=True)
+            weights = corruption_mask[:prev_idx, bwd_idx]
+
             def hook(activations, hook):
-                update = eeinsum(act_diff[:, :, :len(edge_weights)], edge_weights,
-                                 'batch pos previous hidden, previous ... -> batch pos ... hidden')
+                update = torch.zeros_like(activations)
+                for src_fwd_i in range(prev_idx):
+                    if src_fwd_i not in corrupted_acts:
+                        continue
+                    w = weights[src_fwd_i]
+                    if isinstance(bwd_idx, slice):
+                        # Multiple backward indices (all heads in layer)
+                        pass  # w is a vector
+                    # delta uses live clean_acts for gradient flow
+                    delta = corrupted_acts[src_fwd_i] - clean_acts.get(src_fwd_i,
+                            torch.zeros_like(corrupted_acts[src_fwd_i]))
+                    update = update + w * delta
                 return activations + update
             return hook
 
-        input_hooks = []
-        for layer in range(model.cfg.n_layers):
-            # Attention heads Q/K/V
-            if any(graph.nodes[f'a{layer}.h{h}'].in_graph for h in range(model.cfg.n_heads)):
-                for i, letter in enumerate('qkv'):
-                    node = graph.nodes[f'a{layer}.h0']
-                    prev_idx = graph.prev_index(node)
-                    bwd_idx = graph.backward_index(node, qkv=letter, attn_slice=True)
-                    weights = corruption_mask[:prev_idx, bwd_idx]
-                    input_hooks.append((node.qkv_inputs[i],
-                                       make_soft_input_hook(activation_difference, weights)))
+        clean_fwd_hooks = [(hname, make_clean_hook(nname, fidx, is_a))
+                           for hname, nname, fidx, is_a in source_hooks]
 
-            # MLP
-            node = graph.nodes[f'm{layer}']
-            prev_idx = graph.prev_index(node)
-            bwd_idx = graph.backward_index(node)
-            weights = corruption_mask[:prev_idx, bwd_idx]
-            input_hooks.append((node.in_hook,
-                               make_soft_input_hook(activation_difference, weights)))
+        dest_hooks = []
+        for l in range(n_layers):
+            # Attention Q/K/V hooks
+            for i, letter in enumerate('qkv'):
+                node = graph.nodes[f'a{l}.h0']
+                dest_hooks.append((node.qkv_inputs[i],
+                                   make_dest_hook(node, letter=letter)))
+            # MLP hook
+            node = graph.nodes[f'm{l}']
+            dest_hooks.append((node.in_hook, make_dest_hook(node)))
 
-        # Logits
+        # Logits hook
         node = graph.nodes['logits']
-        prev_idx = graph.prev_index(node)
-        bwd_idx = graph.backward_index(node)
-        weights = corruption_mask[:prev_idx, bwd_idx]
-        input_hooks.append((node.in_hook,
-                           make_soft_input_hook(activation_difference, weights)))
+        dest_hooks.append((node.in_hook, make_dest_hook(node)))
 
-        # Forward with soft patching
-        logits = model.run_with_hooks(clean_tokens, fwd_hooks=input_hooks,
+        all_hooks = clean_fwd_hooks + dest_hooks
+        logits = model.run_with_hooks(clean_tokens, fwd_hooks=all_hooks,
                                       attention_mask=attention_mask)
-        logit_diff = logits[0, -1, correct_idx] - logits[0, -1, incorrect_idx]
 
+        logit_diff = logits[0, -1, correct_idx] - logits[0, -1, incorrect_idx]
         if is_sufficient:
-            loss = logit_diff  # minimize: want to flip
+            loss = logit_diff.float()
         else:
-            loss = -logit_diff  # maximize: want to preserve
+            loss = -logit_diff.float()
 
         optimizer.zero_grad()
         loss.backward()
@@ -232,15 +274,10 @@ def main():
     # === MIB Evaluation ===
     logger.info("Running MIB evaluation (edge level)...")
 
-    # Set edge scores on graph
+    graph.scores[:] = float('-inf')
     real_edges = graph.real_edge_mask.bool()
-    graph.scores[:] = float('-inf')  # non-real edges ranked last
     graph.scores[real_edges] = scores.data.cpu()
 
-    # For necessary: high score = keep clean = important. MIB keeps top-k.
-    # For sufficient: high score = important for flipping. Need to handle.
-
-    # Reload dataset for eval
     eval_dataset = HFEAPDataset(hf_task, model.tokenizer, split=args.split,
                                 task=args.task, model_name=args.model)
     if args.eval_examples:
@@ -253,7 +290,7 @@ def main():
         evaluate_area_under_curve(model, graph, dataloader, attribution_metric,
                                   level="edge", absolute=False)
 
-    logger.info("MIB Results (edge level):")
+    logger.info("MIB Results (edge level, live activations):")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
     for pct, faith in zip(percentages, faithfulnesses):
         logger.info("  %5.1f%% -> CPR=%.4f", pct * 100, faith)
