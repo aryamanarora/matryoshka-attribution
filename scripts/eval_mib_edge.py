@@ -234,6 +234,7 @@ def main():
 
     # Set edge scores on graph
     real_edges = graph.real_edge_mask.bool()
+    graph.scores[:] = float('-inf')  # non-real edges ranked last
     graph.scores[real_edges] = scores.data.cpu()
 
     # For necessary: high score = keep clean = important. MIB keeps top-k.
