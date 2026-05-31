@@ -211,21 +211,30 @@ def main():
         def make_dest_hook(dest_node, letter=None):
             prev_idx = graph.prev_index(dest_node)
             bwd_idx = graph.backward_index(dest_node, qkv=letter, attn_slice=True)
-            weights = corruption_mask[:prev_idx, bwd_idx]
+            weights = corruption_mask[:prev_idx, bwd_idx]  # [prev, ...] or [prev, n_heads]
 
             def hook(activations, hook):
-                update = torch.zeros_like(activations)
-                for src_fwd_i in range(prev_idx):
-                    if src_fwd_i not in corrupted_acts:
-                        continue
-                    w = weights[src_fwd_i]
-                    if isinstance(bwd_idx, slice):
-                        # Multiple backward indices (all heads in layer)
-                        pass  # w is a vector
-                    # delta uses live clean_acts for gradient flow
-                    delta = corrupted_acts[src_fwd_i] - clean_acts.get(src_fwd_i,
-                            torch.zeros_like(corrupted_acts[src_fwd_i]))
-                    update = update + w * delta
+                # Build activation difference matrix from live clean acts
+                # Shape: [batch, pos, prev_idx, d_model]
+                diffs = []
+                for src_i in range(prev_idx):
+                    if src_i in corrupted_acts:
+                        clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
+                        diffs.append(corrupted_acts[src_i] - clean)
+                    else:
+                        diffs.append(torch.zeros(1, activations.shape[1], d_model,
+                                                 device=device, dtype=activations.dtype))
+                diff_stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
+
+                if weights.dim() == 1:
+                    # Scalar per source (MLP/logits destination)
+                    update = einsum(diff_stack, weights,
+                                    'batch pos src hidden, src -> batch pos hidden')
+                else:
+                    # Per-head weights (attention QKV destination)
+                    # weights: [prev, n_heads], update: [batch, pos, n_heads, d_model]
+                    update = einsum(diff_stack, weights,
+                                    'batch pos src hidden, src heads -> batch pos heads hidden')
                 return activations + update
             return hook
 
