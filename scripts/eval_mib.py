@@ -95,6 +95,12 @@ def main():
                         choices=["necessary", "sufficient"],
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
+    parser.add_argument("--masking", default="topk",
+                        choices=["topk", "hard_concrete"],
+                        help="topk: sigmoid top-k with random k (ours). "
+                             "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style ablation).")
+    parser.add_argument("--l0-lambda", type=float, default=1e-3,
+                        help="L0 regularization weight for hard_concrete masking")
     parser.add_argument("--include-input", action="store_true",
                         help="Learn a score for the input embedding node")
     parser.add_argument("--eval-examples", type=int, default=500,
@@ -190,20 +196,31 @@ def main():
         hooker.cache_cf_activations(src_ids)
 
         # Forward with mask
-        if args.k_schedule == "log":
-            log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
-            k = math.exp(log_k)
+        if args.masking == "topk":
+            if args.k_schedule == "log":
+                log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
+                k = math.exp(log_k)
+            else:
+                k = 1.0 + (total - 1.0) * torch.rand(1).item()
+            hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         else:
-            k = 1.0 + (total - 1.0) * torch.rand(1).item()
-        hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+            # Hard concrete: Bernoulli(sigmoid(scores)) with straight-through
+            probs = torch.sigmoid(scores)
+            hard = torch.bernoulli(probs)
+            # Straight-through: hard values in forward, soft gradient in backward
+            hooker.mask = hard - probs.detach() + probs
+
         logits = hf_model(base_ids).logits[0, -1].float()
 
         if is_sufficient:
-            # Sufficient: top-k patched to CF, minimize correct-incorrect
             loss = logits[correct_idx] - logits[incorrect_idx]
         else:
-            # Necessary: top-k stay clean, maximize correct-incorrect
             loss = -(logits[correct_idx] - logits[incorrect_idx])
+
+        # L0 penalty for hard_concrete
+        if args.masking == "hard_concrete":
+            l0 = torch.sigmoid(scores).sum()
+            loss = loss + args.l0_lambda * l0
 
         optimizer.zero_grad()
         loss.backward()
