@@ -63,6 +63,11 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
     parser.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"])
+    parser.add_argument("--masking", default="topk",
+                        choices=["topk", "hard_topk", "hard_concrete"],
+                        help="topk: sigmoid top-k (ours). hard_topk: hard 0/1 + straight-through. "
+                             "hard_concrete: Bernoulli(sigmoid) + L0.")
+    parser.add_argument("--l0-lambda", type=float, default=1e-3)
     parser.add_argument("--eval-examples", type=int, default=500)
     parser.add_argument("--output", type=str, default="results/mib_edge")
     args = parser.parse_args()
@@ -180,12 +185,24 @@ def main():
             model.run_with_hooks(corrupted_tokens, fwd_hooks=corrupted_fwd_hooks,
                                  attention_mask=attention_mask)
 
-        # Step 2: Build soft edge mask
+        # Step 2: Build edge mask
         k = sample_k(total, args.k_schedule)
-        soft_mask_flat = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+
+        if args.masking == "topk":
+            mask_flat = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        elif args.masking == "hard_topk":
+            _, top_idx = scores.topk(int(k))
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+            mask_flat = hard - soft.detach() + soft
+        else:  # hard_concrete
+            probs = torch.sigmoid(scores)
+            hard = torch.bernoulli(probs)
+            mask_flat = hard - probs.detach() + probs
 
         # Differentiable expansion to full [n_forward, n_backward] matrix
-        expanded = soft_mask_flat[cumsum]  # [n_full]
+        expanded = mask_flat[cumsum]  # [n_full]
         full_mask = (expanded * real_flat_device).view(graph.n_forward, graph.n_backward)
 
         if is_sufficient:
@@ -265,6 +282,9 @@ def main():
             loss = logit_diff.float()
         else:
             loss = -logit_diff.float()
+
+        if args.masking == "hard_concrete":
+            loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
 
         optimizer.zero_grad()
         loss.backward()
