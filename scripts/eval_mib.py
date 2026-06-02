@@ -96,9 +96,10 @@ def main():
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "hard_concrete"],
+                        choices=["topk", "hard_topk", "hard_concrete"],
                         help="topk: sigmoid top-k with random k (ours). "
-                             "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style ablation).")
+                             "hard_topk: random k + hard 0/1 mask with straight-through. "
+                             "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
     parser.add_argument("--l0-lambda", type=float, default=1e-3,
                         help="L0 regularization weight for hard_concrete masking")
     parser.add_argument("--include-input", action="store_true",
@@ -196,18 +197,26 @@ def main():
         hooker.cache_cf_activations(src_ids)
 
         # Forward with mask
+        if args.k_schedule == "log":
+            log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
+            k = math.exp(log_k)
+        else:
+            k = 1.0 + (total - 1.0) * torch.rand(1).item()
+
         if args.masking == "topk":
-            if args.k_schedule == "log":
-                log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
-                k = math.exp(log_k)
-            else:
-                k = 1.0 + (total - 1.0) * torch.rand(1).item()
             hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        elif args.masking == "hard_topk":
+            # Hard 0/1 top-k with straight-through gradient
+            _, top_idx = scores.topk(int(k))
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            # Straight-through: use sigmoid_topk gradient, hard values in forward
+            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+            hooker.mask = hard - soft.detach() + soft
         else:
             # Hard concrete: Bernoulli(sigmoid(scores)) with straight-through
             probs = torch.sigmoid(scores)
             hard = torch.bernoulli(probs)
-            # Straight-through: hard values in forward, soft gradient in backward
             hooker.mask = hard - probs.detach() + probs
 
         logits = hf_model(base_ids).logits[0, -1].float()
