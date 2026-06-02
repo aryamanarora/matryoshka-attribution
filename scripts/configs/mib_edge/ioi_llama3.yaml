@@ -1,0 +1,8 @@
+model: llama3
+task: ioi
+steps: 5000
+k-schedule: log
+mode: necessary
+split: validation
+eval-examples: 500
+output: results/mib_edge
