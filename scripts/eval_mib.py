@@ -107,6 +107,9 @@ def main():
     parser.add_argument("--eval-examples", type=int, default=500,
                         help="Max examples for MIB eval (default 500, None=all)")
     parser.add_argument("--output", type=str, default="results/mib")
+    parser.add_argument("--wandb", action="store_true")
+    parser.add_argument("--wandb-project", default="circuits")
+    parser.add_argument("--wandb-name", default=None)
 
     # Config YAML
     temp_args, _ = parser.parse_known_args()
@@ -124,6 +127,14 @@ def main():
                     break
 
     args = parser.parse_args()
+
+    # W&B init
+    if args.wandb:
+        import wandb
+        run_name = args.wandb_name or f"{args.task}_{args.model}_{args.masking}_s{args.seed}"
+        wandb.init(project=args.wandb_project, name=run_name, config=vars(args))
+    else:
+        wandb = None
 
     # Add MIB to path
     mib_path = Path(args.mib_path).resolve()
@@ -237,6 +248,8 @@ def main():
 
         loss_val = loss.item()
         loss_log.append(loss_val)
+        if wandb:
+            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
         if (step + 1) % 50 == 0 or step == 0:
             rate = (step + 1) / (time.time() - t0)
             logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  (%.1f step/s)",
@@ -333,6 +346,14 @@ def main():
         logger.info("  %5.1f%% -> CPR=%.4f  CMD=%.4f", pct * 100, faith, abs(1 - faith))
     logger.info("  CPR AUC=%.4f  CMD AUC=%.4f  Avg CPR=%.4f",
                 area_under, area_from_1, average)
+
+    if wandb:
+        log_dict = {"cpr_auc": area_under, "cmd_auc": area_from_1, "avg_cpr": average,
+                    "train_time_s": train_time}
+        for pct, faith in zip(percentages, faithfulnesses):
+            log_dict[f"cpr_{pct}"] = faith
+        wandb.log(log_dict)
+        wandb.finish()
 
     # Save results
     output_dir = Path(args.output)
