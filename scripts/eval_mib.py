@@ -403,13 +403,14 @@ def main():
 
     # For edges: propagate node scores (edge score = min of src/dst node scores)
     edges_dict = {}
+    node_names = list(graph.nodes.keys())
     for edge_name in graph.edges:
         src, rest = edge_name.split("->")
         dst = rest.split("<")[0]
-        src_score = node_score_list[list(graph.nodes.keys()).index(src)] if src in graph.nodes else 0
-        dst_score = node_score_list[list(graph.nodes.keys()).index(dst)] if dst in graph.nodes else 0
-        s = min(src_score, dst_score) if src_score != float("inf") and dst_score != float("inf") else max(src_score, dst_score)
-        if s == float("inf"):
+        src_s = node_scores_tensor[node_names.index(src)].item() if src in graph.nodes and node_names.index(src) < len(node_scores_tensor) else 0
+        dst_s = node_scores_tensor[node_names.index(dst)].item() if dst in graph.nodes and node_names.index(dst) < len(node_scores_tensor) else 0
+        s = min(src_s, dst_s) if not (math.isnan(src_s) or math.isnan(dst_s)) else max(src_s, dst_s)
+        if math.isnan(s):
             s = 0.0
         edges_dict[edge_name] = {"score": s, "in_graph": False}
 
