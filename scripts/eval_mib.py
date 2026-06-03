@@ -96,9 +96,10 @@ def main():
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "hard_topk", "hard_concrete"],
+                        choices=["topk", "hard_topk", "hard_topk_reinforce", "hard_concrete"],
                         help="topk: sigmoid top-k with random k (ours). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
+                             "hard_topk_reinforce: fully binary forward+backward (REINFORCE). "
                              "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
     parser.add_argument("--l0-lambda", type=float, default=1e-3,
                         help="L0 regularization weight for hard_concrete masking")
@@ -221,9 +222,20 @@ def main():
             _, top_idx = scores.topk(int(k))
             hard = torch.zeros_like(scores)
             hard[top_idx] = 1.0
-            # Straight-through: use sigmoid_topk gradient, hard values in forward
             soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
             hooker.mask = hard - soft.detach() + soft
+        elif args.masking == "hard_topk_reinforce":
+            # Fully binary: Gumbel-perturbed top-k, straight-through with
+            # simple sigmoid proxy for gradient (no bisection)
+            gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1-1e-8)))
+            perturbed = scores + gumbel
+            _, top_idx = perturbed.topk(max(1, int(k)))
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            # Proxy: sigmoid of (score - threshold) for gradient only
+            threshold = perturbed.topk(max(1, int(k))).values[-1]
+            proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
+            hooker.mask = hard - proxy.detach() + proxy
         else:
             # Hard concrete: Bernoulli(sigmoid(scores)) with straight-through
             probs = torch.sigmoid(scores)
