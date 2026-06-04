@@ -45,8 +45,32 @@ SEED_DIRS = {
     "hard_topk": "mib_node_seeds/hard_topk",
 }
 
-# MIB baselines (from paper Table 1)
-BASELINES = {
+# MIB baselines (from paper Table 1), grouped by level
+NODE_BASELINES = {
+    "Random": {
+        ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
+        ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
+        ("mcqa", "qwen2.5"): 0.27, ("mcqa", "gemma2"): 0.32, ("mcqa", "llama3"): 0.26,
+        ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
+        ("arc_challenge", "llama3"): 0.25,
+    },
+    "NAP (CF)": {
+        ("ioi", "gpt2"): 0.28, ("ioi", "qwen2.5"): 0.30, ("ioi", "gemma2"): 0.30,
+        ("ioi", "llama3"): 0.26, ("arithmetic_subtraction", "llama3"): 0.27,
+        ("mcqa", "qwen2.5"): 0.38, ("mcqa", "gemma2"): 1.47, ("mcqa", "llama3"): 1.69,
+        ("arc_easy", "gemma2"): 1.01, ("arc_easy", "llama3"): 0.26,
+        ("arc_challenge", "llama3"): 0.26,
+    },
+    "NAP-IG (CF)": {
+        ("ioi", "gpt2"): 0.76, ("ioi", "qwen2.5"): 0.29, ("ioi", "gemma2"): 1.52,
+        ("ioi", "llama3"): 0.42, ("arithmetic_subtraction", "llama3"): 0.39,
+        ("mcqa", "qwen2.5"): 0.77, ("mcqa", "gemma2"): 1.71, ("mcqa", "llama3"): 1.87,
+        ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 0.26,
+        ("arc_challenge", "llama3"): 0.26,
+    },
+}
+
+EDGE_BASELINES = {
     "Random": {
         ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
         ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
@@ -60,13 +84,6 @@ BASELINES = {
         ("mcqa", "qwen2.5"): 1.16, ("mcqa", "gemma2"): 1.64, ("mcqa", "llama3"): 1.05,
         ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 1.04,
         ("arc_challenge", "llama3"): 0.98,
-    },
-    "NAP-IG (CF)": {
-        ("ioi", "gpt2"): 0.76, ("ioi", "qwen2.5"): 0.29, ("ioi", "gemma2"): 1.52,
-        ("ioi", "llama3"): 0.42, ("arithmetic_subtraction", "llama3"): 0.39,
-        ("mcqa", "qwen2.5"): 0.77, ("mcqa", "gemma2"): 1.71, ("mcqa", "llama3"): 1.87,
-        ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.26,
     },
     "UGS": {
         ("ioi", "gpt2"): 0.97, ("ioi", "qwen2.5"): 0.98,
@@ -90,7 +107,7 @@ def load_cpr_auc(results_dir, task, model):
 
 def fmt(v, bold=False):
     if v is None:
-        return "-"
+        return "---"
     s = f"{v:.2f}"
     if bold:
         s = f"\\textbf{{{s}}}"
@@ -110,16 +127,34 @@ def main():
                 data[(task, model)] = round(v, 2)
         all_results[key] = data
 
-    # Find best per column (across all methods including baselines)
-    best_per_col = {}
-    all_methods_data = {**BASELINES, **all_results}
-    for task, model, _ in COLUMNS:
-        best = -math.inf
-        for method_data in all_methods_data.values():
-            v = method_data.get((task, model))
-            if v is not None and v > best:
-                best = v
-        best_per_col[(task, model)] = best if best > -math.inf else None
+    # Find best per column per level
+    node_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "node"]
+    edge_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "edge"]
+
+    def best_in_col(level):
+        baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
+        our = {f"{n}_{l}": all_results.get(f"{n}_{l}", {}) for n, _, l in OUR_METHODS if l == level}
+        best = {}
+        for task, model, _ in COLUMNS:
+            vals = []
+            for data in list(baselines.values()) + list(our.values()):
+                v = data.get((task, model))
+                if v is not None:
+                    vals.append(v)
+            best[(task, model)] = max(vals) if vals else None
+        return best
+
+    best_node = best_in_col("node")
+    best_edge = best_in_col("edge")
+
+    def make_row(name, data, best_col, indent=False):
+        vals = []
+        for task, model, _ in COLUMNS:
+            v = data.get((task, model))
+            is_best = v is not None and best_col.get((task, model)) == v
+            vals.append(fmt(v, bold=is_best))
+        prefix = f"\\quad \\textbf{{{name}}}" if indent else name
+        return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
     ncols = len(COLUMNS)
@@ -131,44 +166,24 @@ def main():
     lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
     header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\"
     lines.append(header)
+
+    # === Node-level section ===
     lines.append("\\midrule")
-
-    # Baselines
-    for name, data in BASELINES.items():
-        vals = []
-        for task, model, _ in COLUMNS:
-            v = data.get((task, model))
-            is_best = v is not None and best_per_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best))
-        lines.append(f"{name} & " + " & ".join(vals) + " \\\\")
-    lines.append("\\midrule")
-
-    # Our node methods
-    node_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "node"]
-    edge_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "edge"]
-
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Ours (node-level)}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    for name, data in NODE_BASELINES.items():
+        lines.append(make_row(name, data, best_node))
     for method_name, _, _ in node_methods:
         key = f"{method_name}_node"
-        data = all_results.get(key, {})
-        vals = []
-        for task, model, _ in COLUMNS:
-            v = data.get((task, model))
-            is_best = v is not None and best_per_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best))
-        lines.append(f"\\quad \\textbf{{{method_name}}} & " + " & ".join(vals) + " \\\\")
-    lines.append("\\midrule")
+        lines.append(make_row(method_name, all_results.get(key, {}), best_node, indent=True))
 
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Ours (edge-level)}}}} \\\\")
+    # === Edge-level section ===
+    lines.append("\\midrule")
+    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    for name, data in EDGE_BASELINES.items():
+        lines.append(make_row(name, data, best_edge))
     for method_name, _, _ in edge_methods:
         key = f"{method_name}_edge"
-        data = all_results.get(key, {})
-        vals = []
-        for task, model, _ in COLUMNS:
-            v = data.get((task, model))
-            is_best = v is not None and best_per_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best))
-        lines.append(f"\\quad \\textbf{{{method_name}}} & " + " & ".join(vals) + " \\\\")
+        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, indent=True))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
