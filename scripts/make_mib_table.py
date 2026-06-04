@@ -27,16 +27,16 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama-3.1"),
 ]
 
-# Our result directories: (display_name, results_subdir)
+# Our result directories: (display_name, results_subdir, level)
 OUR_METHODS = [
     # Node level
-    ("Ours: node (sigmoid top-k)", "final_node"),
-    ("Ours: node (hard top-k + ST)", "mib_node_hard_topk"),
-    ("Ours: node (hard concrete + L0)", "mib_node_hard_concrete"),
+    ("Sigmoid top-$k$", "final_node", "node"),
+    ("Hard top-$k$ + ST", "mib_node_hard_topk", "node"),
+    ("Hard concrete + L0", "mib_node_hard_concrete", "node"),
     # Edge level
-    ("Ours: edge (sigmoid top-k)", "final_edge"),
-    ("Ours: edge (hard top-k + ST)", "mib_edge_hard_topk"),
-    ("Ours: edge (hard concrete + L0)", "mib_edge_hard_concrete"),
+    ("Sigmoid top-$k$", "final_edge", "edge"),
+    ("Hard top-$k$ + ST", "mib_edge_hard_topk", "edge"),
+    ("Hard concrete + L0", "mib_edge_hard_concrete", "edge"),
 ]
 
 # Seed run directories (for mean ± std)
@@ -101,13 +101,14 @@ def main():
     # Collect all our results
     all_results = {}  # method_name -> {(task, model): cpr_auc}
 
-    for method_name, results_dir in OUR_METHODS:
+    for method_name, results_dir, level in OUR_METHODS:
+        key = f"{method_name}_{level}"
         data = {}
         for task, model, _ in COLUMNS:
             v = load_cpr_auc(results_dir, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
-        all_results[method_name] = data
+        all_results[key] = data
 
     # Find best per column (across all methods including baselines)
     best_per_col = {}
@@ -121,8 +122,10 @@ def main():
         best_per_col[(task, model)] = best if best > -math.inf else None
 
     # Generate LaTeX
+    ncols = len(COLUMNS)
     lines = []
-    lines.append("\\begin{tabular}{l" + "r" * len(COLUMNS) + "}")
+    lines.append("\\begin{adjustbox}{max width=\\textwidth}")
+    lines.append("\\begin{tabular}{l" + "r" * ncols + "}")
     lines.append("\\toprule")
     lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\")
     lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
@@ -141,28 +144,35 @@ def main():
     lines.append("\\midrule")
 
     # Our node methods
-    for method_name in [n for n, d in OUR_METHODS[:3]]:
-        data = all_results[method_name]
+    node_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "node"]
+    edge_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "edge"]
+
+    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Ours (node-level)}}}} \\\\")
+    for method_name, _, _ in node_methods:
+        key = f"{method_name}_node"
+        data = all_results.get(key, {})
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_per_col.get((task, model)) == v
             vals.append(fmt(v, bold=is_best))
-        lines.append(f"{method_name} & " + " & ".join(vals) + " \\\\")
+        lines.append(f"\\quad \\textbf{{{method_name}}} & " + " & ".join(vals) + " \\\\")
     lines.append("\\midrule")
 
-    # Our edge methods
-    for method_name in [n for n, d in OUR_METHODS[3:]]:
-        data = all_results[method_name]
+    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Ours (edge-level)}}}} \\\\")
+    for method_name, _, _ in edge_methods:
+        key = f"{method_name}_edge"
+        data = all_results.get(key, {})
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_per_col.get((task, model)) == v
             vals.append(fmt(v, bold=is_best))
-        lines.append(f"{method_name} & " + " & ".join(vals) + " \\\\")
+        lines.append(f"\\quad \\textbf{{{method_name}}} & " + " & ".join(vals) + " \\\\")
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
+    lines.append("\\end{adjustbox}")
 
     table = "\n".join(lines) + "\n"
 
