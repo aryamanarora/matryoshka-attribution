@@ -68,7 +68,7 @@ def main():
                         help="topk: sigmoid top-k (ours). hard_topk: hard 0/1 + straight-through. "
                              "hard_concrete: Bernoulli(sigmoid) + L0.")
     parser.add_argument("--l0-lambda", type=float, default=1e-3)
-    parser.add_argument("--eval-examples", type=int, default=500)
+    parser.add_argument("--eval-examples", type=int, default=None)
     parser.add_argument("--output", type=str, default="results/mib_edge")
     args = parser.parse_args()
 
