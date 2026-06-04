@@ -73,6 +73,8 @@ NODE_BASELINES = {
 # NAP-IG reproduced: read from results/napig_repro_eval/
 NAPIG_REPRO_DIR = "napig_repro_eval"
 
+EAPIG_REPRO_DIR = "eapig_repro_eval"
+
 EDGE_BASELINES = {
     "Random": {
         ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
@@ -203,6 +205,22 @@ def main():
     # === Edge-level section ===
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+
+    # Load EAP-IG repro results
+    eapig_repro = {}
+    for task, model, _ in COLUMNS:
+        stask = task.replace("_", "-")
+        pkl = RESULTS_BASE / EAPIG_REPRO_DIR / f"EAP-IG-inputs_patching_edge" / f"{stask}_{model}_validation_abs-False.pkl"
+        if pkl.exists():
+            try:
+                with open(pkl, "rb") as f:
+                    d = pickle.load(f)
+                eapig_repro[(task, model)] = round(d["area_under"], 2)
+            except Exception:
+                pass
+    EDGE_BASELINES["EAP-IG-inputs (CF, repro)"] = eapig_repro
+    best_edge = best_in_col("edge")
+
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge))
     lines.append("Ours \\\\")
