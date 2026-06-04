@@ -70,6 +70,9 @@ NODE_BASELINES = {
     },
 }
 
+# NAP-IG reproduced: read from results/napig_repro_eval/
+NAPIG_REPRO_DIR = "napig_repro_eval"
+
 EDGE_BASELINES = {
     "Random": {
         ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
@@ -173,6 +176,23 @@ def main():
     # === Node-level section ===
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    # Load NAP-IG repro results
+    napig_repro = {}
+    for task, model, _ in COLUMNS:
+        stask = task.replace("_", "-")
+        pkl = RESULTS_BASE / NAPIG_REPRO_DIR / f"EAP-IG-inputs_patching_node" / f"{stask}_{model}_validation_abs-False.pkl"
+        if pkl.exists():
+            try:
+                with open(pkl, "rb") as f:
+                    d = pickle.load(f)
+                napig_repro[(task, model)] = round(d["area_under"], 2)
+            except Exception:
+                pass
+    NODE_BASELINES["NAP-IG (CF, repro)"] = napig_repro
+
+    # Recompute best after adding repro
+    best_node = best_in_col("node")
+
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node))
     lines.append("Ours \\\\")
