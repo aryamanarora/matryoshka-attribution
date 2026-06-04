@@ -105,8 +105,8 @@ def main():
                         help="L0 regularization weight for hard_concrete masking")
     parser.add_argument("--include-input", action="store_true",
                         help="Learn a score for the input embedding node")
-    parser.add_argument("--eval-examples", type=int, default=500,
-                        help="Max examples for MIB eval (default 500, None=all)")
+    parser.add_argument("--eval-examples", type=int, default=None,
+                        help="Max examples for MIB eval (default: all)")
     parser.add_argument("--train-batch-size", type=int, default=1,
                         help="Gradient accumulation batch size for training")
     parser.add_argument("--output", type=str, default="results/mib")
