@@ -30,11 +30,11 @@ COLUMNS = [
 # Our result directories: (display_name, results_subdir, level)
 OUR_METHODS = [
     # Node level
-    ("Sigmoid top-$k$", "final_node", "node"),
+    ("\\ourmethod{}", "final_node", "node"),
     ("Hard top-$k$ + ST", "mib_node_hard_topk", "node"),
     ("Hard concrete + L0", "mib_node_hard_concrete", "node"),
     # Edge level
-    ("Sigmoid top-$k$", "final_edge", "edge"),
+    ("\\ourmethod{}", "final_edge", "edge"),
     ("Hard top-$k$ + ST", "mib_edge_hard_topk", "edge"),
     ("Hard concrete + L0", "mib_edge_hard_concrete", "edge"),
 ]
@@ -153,7 +153,10 @@ def main():
             v = data.get((task, model))
             is_best = v is not None and best_col.get((task, model)) == v
             vals.append(fmt(v, bold=is_best))
-        prefix = f"\\quad \\textbf{{{name}}}" if indent else name
+        if indent:
+            prefix = f"\\quad {name}" if "\\our" in name else f"\\quad \\textbf{{{name}}}"
+        else:
+            prefix = name
         return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
