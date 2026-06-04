@@ -172,6 +172,7 @@ def main():
     lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node))
+    lines.append("Ours \\\\")
     for method_name, _, _ in node_methods:
         key = f"{method_name}_node"
         lines.append(make_row(method_name, all_results.get(key, {}), best_node, indent=True))
@@ -181,6 +182,7 @@ def main():
     lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge))
+    lines.append("Ours \\\\")
     for method_name, _, _ in edge_methods:
         key = f"{method_name}_edge"
         lines.append(make_row(method_name, all_results.get(key, {}), best_edge, indent=True))
