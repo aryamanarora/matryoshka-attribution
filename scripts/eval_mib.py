@@ -197,81 +197,102 @@ def main():
     B = args.train_batch_size
 
     for step in range(args.steps):
-        optimizer.zero_grad()
-        step_loss = 0.0
-        n_valid = 0
-
-        for _ in range(B):
-            # Sample a random example
+        # Sample B examples, keep only same-length pairs
+        cleans, corrupteds, correct_ids, incorrect_ids = [], [], [], []
+        attempts = 0
+        while len(cleans) < B and attempts < B * 3:
+            attempts += 1
             idx = random.randint(0, n_examples - 1)
             clean, corrupted, labels = dataset[idx]
-            correct_idx, incorrect_idx = labels[0], labels[1]
-
-            base_ids = tokenizer(clean, return_tensors="pt").input_ids.to(device)
-            src_ids = tokenizer(corrupted, return_tensors="pt").input_ids.to(device)
-
-            if base_ids.shape[1] != src_ids.shape[1]:
+            c_ids = tokenizer(clean, return_tensors="pt").input_ids
+            s_ids = tokenizer(corrupted, return_tensors="pt").input_ids
+            if c_ids.shape[1] != s_ids.shape[1]:
                 continue
+            cleans.append(clean)
+            corrupteds.append(corrupted)
+            correct_ids.append(labels[0])
+            incorrect_ids.append(labels[1])
 
-            # Cache CF activations
-            hooker.cache_cf_activations(src_ids)
+        if not cleans:
+            continue
+        actual_B = len(cleans)
 
-            # Unique k per batch item
-            if args.k_schedule == "log":
-                log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
-                k = math.exp(log_k)
-            else:
-                k = 1.0 + (total - 1.0) * torch.rand(1).item()
+        # Tokenize and pad batch
+        base_tok = tokenizer(cleans, return_tensors="pt", padding=True).to(device)
+        src_tok = tokenizer(corrupteds, return_tensors="pt", padding=True).to(device)
+        base_ids = base_tok.input_ids        # [B, max_len]
+        base_attn = base_tok.attention_mask   # [B, max_len]
+        src_ids = src_tok.input_ids
 
-            if args.masking == "topk":
-                hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-            elif args.masking == "hard_topk":
-                ki = max(1, int(k))
-                _, top_idx = scores.topk(ki)
-                hard = torch.zeros_like(scores)
-                hard[top_idx] = 1.0
-                soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-                hooker.mask = hard - soft.detach() + soft
-            elif args.masking == "hard_topk_reinforce":
-                gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1-1e-8)))
-                perturbed = scores + gumbel
-                ki = max(1, int(k))
-                _, top_idx = perturbed.topk(ki)
-                hard = torch.zeros_like(scores)
-                hard[top_idx] = 1.0
-                threshold = perturbed.topk(ki).values[-1]
-                proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
-                hooker.mask = hard - proxy.detach() + proxy
-            else:
-                probs = torch.sigmoid(scores)
-                hard = torch.bernoulli(probs)
-                hooker.mask = hard - probs.detach() + probs
+        # Find last real token position per item (for logit extraction)
+        last_pos = base_attn.sum(dim=1) - 1  # [B]
 
-            logits = hf_model(base_ids).logits[0, -1].float()
+        # Cache batched CF activations
+        hooker.cache_cf_activations(src_ids)
 
-            if is_sufficient:
-                item_loss = logits[correct_idx] - logits[incorrect_idx]
-            else:
-                item_loss = -(logits[correct_idx] - logits[incorrect_idx])
+        # Sample k (shared across batch)
+        if args.k_schedule == "log":
+            log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
+            k = math.exp(log_k)
+        else:
+            k = 1.0 + (total - 1.0) * torch.rand(1).item()
 
-            if args.masking == "hard_concrete":
-                item_loss = item_loss + args.l0_lambda * torch.sigmoid(scores).sum()
+        if args.masking == "topk":
+            hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        elif args.masking == "hard_topk":
+            ki = max(1, int(k))
+            _, top_idx = scores.topk(ki)
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+            hooker.mask = hard - soft.detach() + soft
+        elif args.masking == "hard_topk_reinforce":
+            gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1-1e-8)))
+            perturbed = scores + gumbel
+            ki = max(1, int(k))
+            _, top_idx = perturbed.topk(ki)
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            threshold = perturbed.topk(ki).values[-1]
+            proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
+            hooker.mask = hard - proxy.detach() + proxy
+        else:
+            probs = torch.sigmoid(scores)
+            hard = torch.bernoulli(probs)
+            hooker.mask = hard - probs.detach() + probs
 
-            # Accumulate gradient (divide by B for average)
-            (item_loss / B).backward()
-            step_loss += item_loss.item()
-            n_valid += 1
+        # Batched forward
+        logits = hf_model(base_ids, attention_mask=base_attn).logits.float()  # [B, seq_len, vocab]
 
-        if n_valid > 0:
-            optimizer.step()
-            avg_loss = step_loss / n_valid
-            loss_log.append(avg_loss)
-            if wandb:
-                wandb.log({"loss": avg_loss}, step=step)
-            if (step + 1) % 50 == 0 or step == 0:
-                rate = (step + 1) / (time.time() - t0)
-                logger.info("Step %4d/%d  loss=%.4f  batch=%d/%d  (%.1f step/s)",
-                            step + 1, args.steps, avg_loss, n_valid, B, rate)
+        # Extract last-token logits per item
+        last_logits = logits[torch.arange(actual_B, device=device), last_pos]  # [B, vocab]
+
+        # Per-item logit diff
+        correct_t = torch.tensor(correct_ids, device=device)
+        incorrect_t = torch.tensor(incorrect_ids, device=device)
+        logit_diffs = last_logits[torch.arange(actual_B, device=device), correct_t] - \
+                      last_logits[torch.arange(actual_B, device=device), incorrect_t]
+
+        if is_sufficient:
+            loss = logit_diffs.mean()
+        else:
+            loss = -logit_diffs.mean()
+
+        if args.masking == "hard_concrete":
+            loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        loss_val = loss.item()
+        loss_log.append(loss_val)
+        if wandb:
+            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
+        if (step + 1) % 50 == 0 or step == 0:
+            rate = (step + 1) / (time.time() - t0)
+            logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  B=%d  (%.1f step/s)",
+                        step + 1, args.steps, loss_val, k, total, actual_B, rate)
 
     train_time = time.time() - t0
     logger.info("Training complete in %.1fs", train_time)
