@@ -121,10 +121,10 @@ def make_latex_table(rows, output_path):
         "arc_challenge": "ARC (C)",
     }
     MODEL_LABELS = {
-        "gpt2": "GPT-2",
-        "qwen2.5": "Qwen-2.5",
-        "gemma2": "Gemma-2",
-        "llama3": "Llama-3.1",
+        "gpt2": "GPT",
+        "qwen2.5": "Qwen",
+        "gemma2": "Gemma",
+        "llama3": "Llama",
     }
 
     lines = []

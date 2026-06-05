@@ -122,7 +122,7 @@ def main():
 
 def generate_latex(results):
     TASK_LABELS = {"ioi": "IOI", "mcqa": "MCQA", "arc_easy": "ARC (E)"}
-    MODEL_LABELS = {"gpt2": "GPT-2", "qwen2.5": "Qwen-2.5", "gemma2": "Gemma-2", "llama3": "Llama-3.1"}
+    MODEL_LABELS = {"gpt2": "GPT", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": "Llama"}
     from collections import Counter
 
     task_order = []
