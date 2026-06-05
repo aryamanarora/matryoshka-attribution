@@ -27,16 +27,16 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama-3.1"),
 ]
 
-# Our result directories: (display_name, results_subdir, level)
+# Our method + ablation: (display_name, results_subdir, level, is_ours)
 OUR_METHODS = [
     # Node level
-    ("\\ourmethod{}", "final_node", "node"),
-    ("+ hard forward", "mib_node_hard_topk", "node"),
-    ("Hard concrete + L0", "mib_node_hard_concrete", "node"),
+    ("\\ourmethod{}", "final_node", "node", True),
+    ("+ hard fwd", "mib_node_hard_topk", "node", True),
+    ("Hard concrete + L0", "mib_node_hard_concrete", "node", False),
     # Edge level
-    ("\\ourmethod{}", "final_edge", "edge"),
-    ("+ hard forward", "mib_edge_hard_topk", "edge"),
-    ("Hard concrete + L0", "mib_edge_hard_concrete", "edge"),
+    ("\\ourmethod{}", "final_edge", "edge", True),
+    ("+ hard fwd", "mib_edge_hard_topk", "edge", True),
+    ("Hard concrete + L0", "mib_edge_hard_concrete", "edge", False),
 ]
 
 # Seed run directories (for mean ± std)
@@ -123,7 +123,7 @@ def main():
     # Collect all our results
     all_results = {}  # method_name -> {(task, model): cpr_auc}
 
-    for method_name, results_dir, level in OUR_METHODS:
+    for method_name, results_dir, level, is_ours in OUR_METHODS:
         key = f"{method_name}_{level}"
         data = {}
         for task, model, _ in COLUMNS:
@@ -133,12 +133,14 @@ def main():
         all_results[key] = data
 
     # Find best per column per level
-    node_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "node"]
-    edge_methods = [(n, d, l) for n, d, l in OUR_METHODS if l == "edge"]
+    node_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node" and o]
+    node_ablations = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node" and not o]
+    edge_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge" and o]
+    edge_ablations = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge" and not o]
 
     def best_in_col(level):
         baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
-        our = {f"{n}_{l}": all_results.get(f"{n}_{l}", {}) for n, _, l in OUR_METHODS if l == level}
+        our = {f"{n}_{l}": all_results.get(f"{n}_{l}", {}) for n, _, l, _ in OUR_METHODS if l == level}
         best = {}
         for task, model, _ in COLUMNS:
             vals = []
@@ -197,8 +199,12 @@ def main():
 
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node))
-    lines.append("Ours \\\\")
-    for method_name, _, _ in node_methods:
+    # Hard concrete as separate baseline
+    for method_name, _, _, _ in node_ablations:
+        key = f"{method_name}_node"
+        lines.append(make_row(method_name, all_results.get(key, {}), best_node))
+    lines.append("\\textbf{Ours} \\\\")
+    for method_name, _, _, _ in node_ours:
         key = f"{method_name}_node"
         lines.append(make_row(method_name, all_results.get(key, {}), best_node, indent=True))
 
@@ -223,8 +229,11 @@ def main():
 
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge))
-    lines.append("Ours \\\\")
-    for method_name, _, _ in edge_methods:
+    for method_name, _, _, _ in edge_ablations:
+        key = f"{method_name}_edge"
+        lines.append(make_row(method_name, all_results.get(key, {}), best_edge))
+    lines.append("\\textbf{Ours} \\\\")
+    for method_name, _, _, _ in edge_ours:
         key = f"{method_name}_edge"
         lines.append(make_row(method_name, all_results.get(key, {}), best_edge, indent=True))
 
