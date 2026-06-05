@@ -110,5 +110,90 @@ def main():
     print_table("NODE: Ours (hard top-k) vs + soft fwd, - c_k grad", rows)
 
 
+def make_latex_table(rows, output_path):
+    """Generate LaTeX table of Spearman correlations."""
+    # Group by task for column headers
+    TASK_LABELS = {
+        "ioi": "IOI",
+        "arithmetic_subtraction": "Arith.",
+        "mcqa": "MCQA",
+        "arc_easy": "ARC (E)",
+        "arc_challenge": "ARC (C)",
+    }
+    MODEL_LABELS = {
+        "gpt2": "GPT-2",
+        "qwen2.5": "Qwen-2.5",
+        "gemma2": "Gemma-2",
+        "llama3": "Llama-3.1",
+    }
+
+    lines = []
+    lines.append("\\begin{adjustbox}{max width=\\textwidth}")
+    lines.append("\\begin{tabular}{l" + "r" * len(rows) + "}")
+    lines.append("\\toprule")
+
+    # Task header row with multicolumn
+    from collections import Counter
+    task_order = []
+    for r in rows:
+        if r["task"] not in task_order:
+            task_order.append(r["task"])
+    task_counts = Counter(r["task"] for r in rows)
+
+    header_parts = []
+    col = 2
+    for task in task_order:
+        n = task_counts[task]
+        label = TASK_LABELS.get(task, task)
+        if n > 1:
+            header_parts.append(f"\\multicolumn{{{n}}}{{c}}{{{label}}}")
+        else:
+            header_parts.append(label)
+    lines.append("& " + " & ".join(header_parts) + " \\\\")
+
+    # Cmidrules
+    col = 2
+    cmr = []
+    for task in task_order:
+        n = task_counts[task]
+        cmr.append(f"\\cmidrule(lr){{{col}-{col + n - 1}}}")
+        col += n
+    lines.append(" ".join(cmr))
+
+    # Model header row
+    model_headers = [MODEL_LABELS.get(r["model"], r["model"]) for r in rows]
+    lines.append("& " + " & ".join(model_headers) + " \\\\")
+    lines.append("\\midrule")
+
+    def fmt(v):
+        if np.isnan(v):
+            return "---"
+        return f"{v:.2f}"
+
+    # Data rows
+    lines.append("$\\rho$ (all) & " + " & ".join(fmt(r["rho_all"]) for r in rows) + " \\\\")
+    lines.append("$\\rho$ (attn) & " + " & ".join(fmt(r["rho_attn"]) for r in rows) + " \\\\")
+    lines.append("$\\rho$ (MLP) & " + " & ".join(fmt(r["rho_mlp"]) for r in rows) + " \\\\")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{tabular}")
+    lines.append("\\end{adjustbox}")
+
+    table = "\n".join(lines) + "\n"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(table)
+    print(f"Wrote {output_path}")
+    print()
+    print(table)
+
+
 if __name__ == "__main__":
     main()
+
+    # Also generate LaTeX table for Ours vs NAP-IG
+    rows = compare_node_methods(
+        "mib_node_hard_topk",
+        "napig_repro/EAP-IG-inputs_patching_node",
+        baseline_is_mib_repro=True,
+    )
+    make_latex_table(rows, Path("paper/tabs/rank_correlations.tex"))
