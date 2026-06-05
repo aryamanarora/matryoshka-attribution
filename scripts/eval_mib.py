@@ -97,11 +97,12 @@ def main():
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_reinforce", "hard_concrete"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
                              "topk_detached: soft forward, detached tau (no coupling gradient). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
                              "hard_topk_reinforce: fully binary forward+backward (REINFORCE). "
+                             "bernoulli_reinforce: Bernoulli(sigmoid) fwd, REINFORCE bwd. "
                              "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
     parser.add_argument("--l0-lambda", type=float, default=1e-3,
                         help="L0 regularization weight for hard_concrete masking")
@@ -260,6 +261,12 @@ def main():
             threshold = perturbed.topk(ki).values[-1]
             proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
             hooker.mask = hard - proxy.detach() + proxy
+        elif args.masking == "bernoulli_reinforce":
+            # Bernoulli sampling, true REINFORCE gradient
+            probs = torch.sigmoid(scores)
+            hard = torch.bernoulli(probs).detach()
+            hooker.mask = hard
+            # We'll handle gradient manually after loss computation
         else:
             probs = torch.sigmoid(scores)
             hard = torch.bernoulli(probs)
@@ -286,7 +293,16 @@ def main():
             loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
 
         optimizer.zero_grad()
-        loss.backward()
+        if args.masking == "bernoulli_reinforce":
+            # REINFORCE: grad = loss * d/d_scores log P(mask | scores)
+            # log P = sum_i [mask_i * log sigma(s_i) + (1-mask_i) * log(1-sigma(s_i))]
+            # d log P / d s_i = mask_i - sigma(s_i)
+            with torch.no_grad():
+                probs = torch.sigmoid(scores)
+                log_prob_grad = hooker.mask - probs  # [total]
+                scores.grad = loss.item() * log_prob_grad
+        else:
+            loss.backward()
         optimizer.step()
 
         loss_val = loss.item()
