@@ -20,6 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import math
 
 from learning_to_attribute import sigmoid_topk
+from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
 )
@@ -96,8 +97,9 @@ def main():
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "hard_topk", "hard_topk_reinforce", "hard_concrete"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_reinforce", "hard_concrete"],
                         help="topk: sigmoid top-k with random k (ours). "
+                             "topk_detached: soft forward, detached tau (no coupling gradient). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
                              "hard_topk_reinforce: fully binary forward+backward (REINFORCE). "
                              "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
@@ -239,6 +241,8 @@ def main():
 
         if args.masking == "topk":
             hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        elif args.masking == "topk_detached":
+            hooker.mask = sigmoid_topk_detached_tau(scores, k=k, T=args.T, n_iters=args.n_iters)
         elif args.masking == "hard_topk":
             ki = max(1, int(k))
             _, top_idx = scores.topk(ki)

@@ -27,16 +27,16 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama-3.1"),
 ]
 
-# Our method + ablation: (display_name, results_subdir, level, is_ours)
+# Our method + ablations: (display_name, results_subdir, level, is_ours)
 OUR_METHODS = [
     # Node level
     ("\\ourmethod{}", "final_node", "node", True),
     ("+ hard fwd", "mib_node_hard_topk", "node", True),
-    ("Hard concrete + L0", "mib_node_hard_concrete", "node", False),
+    ("+ detached $\\tau$", "mib_node_detached_tau", "node", True),
     # Edge level
     ("\\ourmethod{}", "final_edge", "edge", True),
     ("+ hard fwd", "mib_edge_hard_topk", "edge", True),
-    ("Hard concrete + L0", "mib_edge_hard_concrete", "edge", False),
+    ("+ detached $\\tau$", "mib_edge_detached_tau", "edge", True),
 ]
 
 # Seed run directories (for mean ± std)
@@ -133,10 +133,8 @@ def main():
         all_results[key] = data
 
     # Find best per column per level
-    node_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node" and o]
-    node_ablations = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node" and not o]
-    edge_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge" and o]
-    edge_ablations = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge" and not o]
+    node_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node"]
+    edge_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge"]
 
     def best_in_col(level):
         baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
@@ -199,10 +197,6 @@ def main():
 
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node))
-    # Hard concrete as separate baseline
-    for method_name, _, _, _ in node_ablations:
-        key = f"{method_name}_node"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_node))
     lines.append("\\textbf{Ours} \\\\")
     for method_name, _, _, _ in node_ours:
         key = f"{method_name}_node"
@@ -229,9 +223,6 @@ def main():
 
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge))
-    for method_name, _, _, _ in edge_ablations:
-        key = f"{method_name}_edge"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_edge))
     lines.append("\\textbf{Ours} \\\\")
     for method_name, _, _, _ in edge_ours:
         key = f"{method_name}_edge"

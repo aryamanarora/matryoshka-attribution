@@ -66,6 +66,26 @@ def sigmoid_topk(scores, k, T=1.0, n_iters=50):
     return SigmoidTopK.apply(scores, k, T, n_iters)
 
 
+def sigmoid_topk_detached_tau(scores, k, T=1.0, n_iters=50):
+    """Same forward as sigmoid_topk, but tau is detached in backward.
+
+    Removes the cross-score coupling term from the gradient.
+    Each score gets independent sigmoid'(s_i - tau) gradient,
+    equivalent to independent sigmoid gates with a shared threshold.
+    """
+    # Bisection to find tau (same as SigmoidTopK.forward)
+    lo = scores.min(dim=-1, keepdim=True).values - 10 * T
+    hi = scores.max(dim=-1, keepdim=True).values + 10 * T
+    with torch.no_grad():
+        for _ in range(n_iters):
+            mid = (lo + hi) / 2
+            f_mid = torch.special.expit((scores - mid) / T).sum(dim=-1, keepdim=True)
+            lo = torch.where(f_mid > k, mid, lo)
+            hi = torch.where(f_mid > k, hi, mid)
+    tau = ((lo + hi) / 2).detach()  # DETACHED
+    return torch.special.expit((scores - tau) / T)
+
+
 def test_gradcheck():
     scores = torch.randn(3, 10, dtype=torch.float64, requires_grad=True)
     k = 4.0
