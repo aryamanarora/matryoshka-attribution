@@ -16,19 +16,14 @@ import numpy as np
 import torch
 from scipy.stats import spearmanr
 
+sys.path.insert(0, "")  # for local imports
+
 RESULTS_BASE = Path("results")
 
 COLUMNS = [
     ("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"),
     ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
 ]
-
-MODEL_FULLNAMES = {
-    "gpt2": "gpt2-small",
-    "qwen2.5": "Qwen/Qwen2.5-0.5B",
-    "gemma2": "google/gemma-2-2b",
-    "llama3": "meta-llama/Llama-3.1-8B",
-}
 
 
 def classify_edge(edge_name):
@@ -56,13 +51,13 @@ def rho_or_nan(x, y):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, required=True)
+    parser.add_argument("--mib-path", type=str, default=None,
+                        help="Path to MIB repo (for eap imports)")
     args = parser.parse_args()
 
-    mib_path = Path(args.mib_path).resolve()
-    sys.path.insert(0, str(mib_path))
+    if args.mib_path:
+        sys.path.insert(0, str(Path(args.mib_path).resolve()))
 
-    from transformer_lens import HookedTransformer
     from eap.graph import Graph
 
     results = []
@@ -70,48 +65,36 @@ def main():
     for task, model in COLUMNS:
         stask = task.replace("_", "-")
         ours_path = RESULTS_BASE / "mib_edge_hard_topk" / f"{task}_{model}_scores.pt"
-        eapig_path = RESULTS_BASE / "eapig_repro" / "EAP-IG-inputs_patching_edge" / f"{stask}_{model}" / "importances.json"
+        eapig_dir = RESULTS_BASE / "eapig_repro" / "EAP-IG-inputs_patching_edge" / f"{stask}_{model}"
+        eapig_json = eapig_dir / "importances.json"
 
-        if not ours_path.exists() or not eapig_path.exists():
+        if not ours_path.exists() or not eapig_json.exists():
             continue
 
         print(f"Processing {task}/{model}...")
 
-        # Load TL model and build graph
-        tl_name = MODEL_FULLNAMES[model]
-        if model in ("gemma2", "llama3", "qwen2.5"):
-            tl_model = HookedTransformer.from_pretrained(tl_name, attn_implementation="eager",
-                                                          torch_dtype=torch.bfloat16)
-        else:
-            tl_model = HookedTransformer.from_pretrained(tl_name)
-        tl_model.cfg.use_split_qkv_input = True
-        tl_model.cfg.use_attn_result = True
-        tl_model.cfg.use_hook_mlp_in = True
-        tl_model.cfg.ungroup_grouped_query_attention = True
-
-        graph = Graph.from_model(tl_model)
+        # Load graph from EAP-IG importances (no model needed)
+        graph = Graph.from_json(eapig_json)
         real_mask = graph.real_edge_mask.bool().flatten()
 
         # Load our scores
         ours_data = torch.load(ours_path, weights_only=False, map_location="cpu")
         ours_flat = ours_data["scores"].numpy()
 
-        # Map our flat scores to edge names
-        # graph.scores is [n_forward, n_backward], real_edge_mask selects valid entries
+        # Map our flat scores to full [n_forward, n_backward] matrix
         full_scores = np.full(graph.scores.shape, float("-inf"))
         flat_full = full_scores.flatten()
         flat_full[real_mask.numpy()] = ours_flat
         full_scores = flat_full.reshape(graph.scores.shape)
 
         # Load EAP-IG scores
-        eapig = json.load(open(eapig_path))
+        eapig = json.load(open(eapig_json))
         eapig_edges = eapig["edges"]
 
         # Build paired score vectors by edge name
-        paired = {}  # edge_name -> (ours_score, eapig_score)
+        paired = {}
         for edge_name, edge_info in eapig_edges.items():
             eapig_score = edge_info.get("score", 0)
-            # Find this edge in the graph to get indices
             if edge_name in graph.edges:
                 edge = graph.edges[edge_name]
                 fi = edge.forward_index
@@ -156,8 +139,7 @@ def main():
         for etype in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]:
             print(f"    {etype}: n={row[f'n_{etype}']} rho={row[f'rho_{etype}']:.3f}")
 
-        del tl_model, graph
-        torch.cuda.empty_cache()
+        del graph
 
     # Print summary
     print(f"\n{'='*100}")
