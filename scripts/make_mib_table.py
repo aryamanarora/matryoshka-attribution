@@ -32,12 +32,12 @@ OUR_METHODS = [
     # Node level
     ("\\ourmethod{}", "mib_node_hard_topk", "node", True),
     ("$+$ soft fwd", "final_node", "node", True),
-    ("$-$ grad via $c_k$", "mib_node_detached_tau", "node", True),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", True),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", True),
     # Edge level
     ("\\ourmethod{}", "mib_edge_hard_topk", "edge", True),
     ("$+$ soft fwd", "final_edge", "edge", True),
-    ("$-$ grad via $c_k$", "mib_edge_detached_tau", "edge", True),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", True),
 ]
 
 # Seed run directories (for mean ± std)
@@ -84,7 +84,7 @@ EDGE_BASELINES = {
         ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
         ("arc_challenge", "llama3"): 0.25,
     },
-    "EAP-IG-inputs (CF)$^\\dagger$": {
+    "EAP-IG-inp (CF)$^\\dagger$": {
         ("ioi", "gpt2"): 1.85, ("ioi", "qwen2.5"): 1.63, ("ioi", "gemma2"): 3.20,
         ("ioi", "llama3"): 2.08, ("arithmetic_subtraction", "llama3"): 0.99,
         ("mcqa", "qwen2.5"): 1.16, ("mcqa", "gemma2"): 1.64, ("mcqa", "llama3"): 1.05,
@@ -111,12 +111,14 @@ def load_cpr_auc(results_dir, task, model):
         return None
 
 
-def fmt(v, bold=False):
+def fmt(v, bold=False, underline=False):
     if v is None:
         return "---"
     s = f"{v:.2f}"
     if bold:
         s = f"\\textbf{{{s}}}"
+    elif underline:
+        s = f"\\underline{{{s}}}"
     return s
 
 
@@ -141,24 +143,32 @@ def main():
         baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
         our = {f"{n}_{l}": all_results.get(f"{n}_{l}", {}) for n, _, l, _ in OUR_METHODS if l == level}
         best = {}
+        second = {}
         for task, model, _ in COLUMNS:
             vals = []
             for data in list(baselines.values()) + list(our.values()):
                 v = data.get((task, model))
                 if v is not None:
                     vals.append(v)
-            best[(task, model)] = max(vals) if vals else None
-        return best
+            if vals:
+                sorted_vals = sorted(set(vals), reverse=True)
+                best[(task, model)] = sorted_vals[0]
+                second[(task, model)] = sorted_vals[1] if len(sorted_vals) > 1 else None
+            else:
+                best[(task, model)] = None
+                second[(task, model)] = None
+        return best, second
 
-    best_node = best_in_col("node")
-    best_edge = best_in_col("edge")
+    best_node, second_node = best_in_col("node")
+    best_edge, second_edge = best_in_col("edge")
 
-    def make_row(name, data, best_col, indent=False):
+    def make_row(name, data, best_col, second_col, indent=False):
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best))
+            is_second = v is not None and not is_best and second_col.get((task, model)) == v
+            vals.append(fmt(v, bold=is_best, underline=is_second))
         if indent:
             prefix = f"\\quad {name}" if "\\our" in name else f"\\quad \\textbf{{{name}}}"
         else:
@@ -194,14 +204,14 @@ def main():
     NODE_BASELINES["NAP-IG (CF, repro)"] = napig_repro
 
     # Recompute best after adding repro
-    best_node = best_in_col("node")
+    best_node, second_node = best_in_col("node")
 
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node))
+        lines.append(make_row(name, data, best_node, second_node))
     lines.append("\\textbf{Ours} \\\\")
     for method_name, _, _, _ in node_ours:
         key = f"{method_name}_node"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_node, indent=True))
+        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
 
     # === Edge-level section ===
     lines.append("\\midrule")
@@ -219,15 +229,15 @@ def main():
                 eapig_repro[(task, model)] = round(d["area_under"], 2)
             except Exception:
                 pass
-    EDGE_BASELINES["EAP-IG-inputs (CF, repro)"] = eapig_repro
-    best_edge = best_in_col("edge")
+    EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
+    best_edge, second_edge = best_in_col("edge")
 
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge))
+        lines.append(make_row(name, data, best_edge, second_edge))
     lines.append("\\textbf{Ours} \\\\")
     for method_name, _, _, _ in edge_ours:
         key = f"{method_name}_edge"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, indent=True))
+        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
