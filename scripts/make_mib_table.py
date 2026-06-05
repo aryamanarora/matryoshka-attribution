@@ -14,17 +14,17 @@ OUTPUT = Path("paper/tabs/mib_results.tex")
 
 # Column definitions: (task, model, col_header)
 COLUMNS = [
-    ("ioi", "gpt2", "GPT-2"),
-    ("ioi", "qwen2.5", "Qwen-2.5"),
-    ("ioi", "gemma2", "Gemma-2"),
-    ("ioi", "llama3", "Llama-3.1"),
-    ("arithmetic_subtraction", "llama3", "Llama-3.1"),
-    ("mcqa", "qwen2.5", "Qwen-2.5"),
-    ("mcqa", "gemma2", "Gemma-2"),
-    ("mcqa", "llama3", "Llama-3.1"),
-    ("arc_easy", "gemma2", "Gemma-2"),
-    ("arc_easy", "llama3", "Llama-3.1"),
-    ("arc_challenge", "llama3", "Llama-3.1"),
+    ("ioi", "gpt2", "GPT"),
+    ("ioi", "qwen2.5", "Qwen"),
+    ("ioi", "gemma2", "Gemma"),
+    ("ioi", "llama3", "Llama"),
+    ("arithmetic_subtraction", "llama3", "Llama"),
+    ("mcqa", "qwen2.5", "Qwen"),
+    ("mcqa", "gemma2", "Gemma"),
+    ("mcqa", "llama3", "Llama"),
+    ("arc_easy", "gemma2", "Gemma"),
+    ("arc_easy", "llama3", "Llama"),
+    ("arc_challenge", "llama3", "Llama"),
 ]
 
 # Our method + ablations: (display_name, results_subdir, level, is_ours)
