@@ -31,12 +31,12 @@ COLUMNS = [
 OUR_METHODS = [
     # Node level
     ("\\ourmethod{}", "final_node", "node", True),
-    ("+ hard fwd", "mib_node_hard_topk", "node", True),
-    ("+ detached $\\tau$", "mib_node_detached_tau", "node", True),
+    ("$-$ soft fwd", "mib_node_hard_topk", "node", True),
+    ("$-$ grad via $c_k$", "mib_node_detached_tau", "node", True),
     # Edge level
     ("\\ourmethod{}", "final_edge", "edge", True),
-    ("+ hard fwd", "mib_edge_hard_topk", "edge", True),
-    ("+ detached $\\tau$", "mib_edge_detached_tau", "edge", True),
+    ("$-$ soft fwd", "mib_edge_hard_topk", "edge", True),
+    ("$-$ grad via $c_k$", "mib_edge_detached_tau", "edge", True),
 ]
 
 # Seed run directories (for mean ± std)
