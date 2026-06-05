@@ -126,13 +126,26 @@ def main():
         dfs.append(sub)
     df = pd.concat(dfs, ignore_index=True)
 
+    # Compute nudge per method (5% of score range)
+    for method in df["method"].unique():
+        mask = df["method"] == method
+        smin, smax = df.loc[mask, "score"].min(), df.loc[mask, "score"].max()
+        span = smax - smin
+        df.loc[mask, "nudge"] = df.loc[mask, "score"].apply(
+            lambda x: span * 0.03 if x >= 0 else -span * 0.03
+        )
+        df.loc[mask, "ha"] = df.loc[mask, "score"].apply(
+            lambda x: "left" if x >= 0 else "right"
+        )
+
     p = (
         ggplot(df, aes(x="node_label", y="score", fill="category"))
         + geom_col(width=0.75)
         + geom_text(
-            aes(label="node_label"),
-            size=5.5, ha="left",
-            nudge_y=0.05,
+            aes(label="node_label", y="score"),
+            size=5, va="center",
+            nudge_y=df["nudge"].tolist(),
+            ha=df["ha"].tolist(),
         )
         + facet_grid("method ~ .", scales="free")
         + coord_flip()
