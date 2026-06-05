@@ -31,11 +31,11 @@ COLUMNS = [
 OUR_METHODS = [
     # Node level
     ("\\ourmethod{}", "final_node", "node"),
-    ("Hard top-$k$ + ST", "mib_node_hard_topk", "node"),
+    ("+ hard forward", "mib_node_hard_topk", "node"),
     ("Hard concrete + L0", "mib_node_hard_concrete", "node"),
     # Edge level
     ("\\ourmethod{}", "final_edge", "edge"),
-    ("Hard top-$k$ + ST", "mib_edge_hard_topk", "edge"),
+    ("+ hard forward", "mib_edge_hard_topk", "edge"),
     ("Hard concrete + L0", "mib_edge_hard_concrete", "edge"),
 ]
 
