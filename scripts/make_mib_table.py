@@ -30,13 +30,13 @@ COLUMNS = [
 # Our method + ablations: (display_name, results_subdir, level, is_ours)
 OUR_METHODS = [
     # Node level
-    ("\\ourmethod{}", "final_node", "node", True),
-    ("$-$ soft fwd", "mib_node_hard_topk", "node", True),
+    ("\\ourmethod{}", "mib_node_hard_topk", "node", True),
+    ("$+$ soft fwd", "final_node", "node", True),
     ("$-$ grad via $c_k$", "mib_node_detached_tau", "node", True),
-    ("$-$ soft fwd+bwd", "mib_node_bernoulli_reinforce", "node", True),
+    ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", True),
     # Edge level
-    ("\\ourmethod{}", "final_edge", "edge", True),
-    ("$-$ soft fwd", "mib_edge_hard_topk", "edge", True),
+    ("\\ourmethod{}", "mib_edge_hard_topk", "edge", True),
+    ("$+$ soft fwd", "final_edge", "edge", True),
     ("$-$ grad via $c_k$", "mib_edge_detached_tau", "edge", True),
 ]
 
