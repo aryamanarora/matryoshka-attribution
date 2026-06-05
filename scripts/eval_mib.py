@@ -262,11 +262,23 @@ def main():
             proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
             hooker.mask = hard - proxy.detach() + proxy
         elif args.masking == "bernoulli_reinforce":
-            # Bernoulli sampling, true REINFORCE gradient
-            probs = torch.sigmoid(scores)
+            # Bernoulli with k-adjusted threshold + REINFORCE gradient
+            # Find tau via bisection (same as sigmoid_topk) so E[active] ≈ k
+            lo = scores.min() - 10 * args.T
+            hi = scores.max() + 10 * args.T
+            with torch.no_grad():
+                for _ in range(args.n_iters):
+                    mid = (lo + hi) / 2
+                    f_mid = torch.sigmoid((scores - mid) / args.T).sum()
+                    if f_mid > k:
+                        lo = mid
+                    else:
+                        hi = mid
+                tau = ((lo + hi) / 2).detach()
+            probs = torch.sigmoid((scores - tau) / args.T)
             hard = torch.bernoulli(probs).detach()
             hooker.mask = hard
-            # We'll handle gradient manually after loss computation
+            # Gradient handled manually after loss computation
         else:
             probs = torch.sigmoid(scores)
             hard = torch.bernoulli(probs)
@@ -295,11 +307,11 @@ def main():
         optimizer.zero_grad()
         if args.masking == "bernoulli_reinforce":
             # REINFORCE: grad = loss * d/d_scores log P(mask | scores)
-            # log P = sum_i [mask_i * log sigma(s_i) + (1-mask_i) * log(1-sigma(s_i))]
-            # d log P / d s_i = mask_i - sigma(s_i)
+            # P(mask_i=1) = sigma((s_i - tau) / T)
+            # d log P / d s_i = (1/T) * (mask_i - sigma((s_i - tau) / T))
             with torch.no_grad():
-                probs = torch.sigmoid(scores)
-                log_prob_grad = hooker.mask - probs  # [total]
+                p = torch.sigmoid((scores - tau) / args.T)
+                log_prob_grad = (hooker.mask - p) / args.T
                 scores.grad = loss.item() * log_prob_grad
         else:
             loss.backward()
