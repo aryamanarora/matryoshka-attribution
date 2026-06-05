@@ -145,6 +145,7 @@ def main():
     # Add MIB to path
     mib_path = Path(args.mib_path).resolve()
     sys.path.insert(0, str(mib_path))
+    sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     random.seed(args.seed)

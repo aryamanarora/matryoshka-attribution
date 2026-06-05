@@ -75,6 +75,7 @@ def main():
 
     mib_path = Path(args.mib_path).resolve()
     sys.path.insert(0, str(mib_path))
+    sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 
     from transformer_lens import HookedTransformer
     from eap.graph import Graph
