@@ -56,7 +56,9 @@ def main():
     args = parser.parse_args()
 
     if args.mib_path:
-        sys.path.insert(0, str(Path(args.mib_path).resolve()))
+        mib = Path(args.mib_path).resolve()
+        sys.path.insert(0, str(mib))
+        sys.path.insert(0, str(mib / "EAP-IG" / "src"))
 
     from eap.graph import Graph
 
