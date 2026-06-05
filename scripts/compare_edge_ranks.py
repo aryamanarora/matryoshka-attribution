@@ -1,22 +1,18 @@
 """Spearman rank correlation for edge-level scores: Ours vs EAP-IG repro.
 
 Breaks down by edge type: attn->attn, attn->MLP, MLP->attn, MLP->MLP.
-Requires transformer_lens for graph construction (run on cluster).
+Uses the JSON edge ordering directly (no model loading needed).
 
 Usage:
-    uv run python scripts/compare_edge_ranks.py --mib-path /path/to/MIB-circuit-track
+    uv run python scripts/compare_edge_ranks.py
 """
 
-import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 from scipy.stats import spearmanr
-
-sys.path.insert(0, "")  # for local imports
 
 RESULTS_BASE = Path("results")
 
@@ -29,7 +25,6 @@ COLUMNS = [
 def classify_edge(edge_name):
     """Classify edge by source->dest type."""
     src, rest = edge_name.split("->")
-    # Strip qkv suffix from dest
     dest = rest.split("<")[0] if "<" in rest else rest
     src_is_mlp = src.startswith("m") or src == "input"
     dest_is_mlp = dest.startswith("m") or dest == "logits"
@@ -50,114 +45,71 @@ def rho_or_nan(x, y):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, default=None,
-                        help="Path to MIB repo (for eap imports)")
-    args = parser.parse_args()
-
-    if args.mib_path:
-        mib = Path(args.mib_path).resolve()
-        sys.path.insert(0, str(mib))
-        sys.path.insert(0, str(mib / "EAP-IG" / "src"))
-
-    from eap.graph import Graph
-
     results = []
 
     for task, model in COLUMNS:
         stask = task.replace("_", "-")
         ours_path = RESULTS_BASE / "mib_edge_hard_topk" / f"{task}_{model}_scores.pt"
-        eapig_dir = RESULTS_BASE / "eapig_repro" / "EAP-IG-inputs_patching_edge" / f"{stask}_{model}"
-        eapig_json = eapig_dir / "importances.json"
+        eapig_json = RESULTS_BASE / "eapig_repro" / "EAP-IG-inputs_patching_edge" / f"{stask}_{model}" / "importances.json"
 
         if not ours_path.exists() or not eapig_json.exists():
             continue
 
         print(f"Processing {task}/{model}...")
 
-        # Load graph from EAP-IG importances (no model needed)
-        graph = Graph.from_json(eapig_json)
-        real_mask = graph.real_edge_mask.bool().flatten()
-
-        # Load our scores
-        ours_data = torch.load(ours_path, weights_only=False, map_location="cpu")
-        ours_flat = ours_data["scores"].numpy()
-
-        # Map our flat scores to full [n_forward, n_backward] matrix
-        full_scores = np.full(graph.scores.shape, float("-inf"))
-        flat_full = full_scores.flatten()
-        flat_full[real_mask.numpy()] = ours_flat
-        full_scores = flat_full.reshape(graph.scores.shape)
-
-        # Load EAP-IG scores
         eapig = json.load(open(eapig_json))
         eapig_edges = eapig["edges"]
+        ours_data = torch.load(ours_path, weights_only=False, map_location="cpu")
+        ours_scores = ours_data["scores"].numpy()
 
-        # Build paired score vectors by edge name
-        paired = {}
-        for edge_name, edge_info in eapig_edges.items():
-            eapig_score = edge_info.get("score", 0)
-            if edge_name in graph.edges:
-                edge = graph.edges[edge_name]
-                fi = edge.forward_index
-                bi = edge.backward_index
-                if fi < full_scores.shape[0] and bi < full_scores.shape[1]:
-                    our_score = full_scores[fi, bi]
-                    if our_score > float("-inf"):
-                        paired[edge_name] = (our_score, eapig_score)
+        assert len(eapig_edges) == len(ours_scores), \
+            f"Size mismatch: {len(eapig_edges)} vs {len(ours_scores)}"
 
-        if len(paired) < 10:
-            print(f"  Only {len(paired)} matched edges, skipping")
-            continue
+        # Pair up: JSON dict order == flat tensor order
+        edge_names = list(eapig_edges.keys())
+        eapig_vals = np.array([eapig_edges[n]["score"] for n in edge_names])
 
-        # Classify edges
-        edge_types = {}
-        for ename in paired:
+        # Group by edge type
+        by_type = {}
+        for i, ename in enumerate(edge_names):
             etype = classify_edge(ename)
-            if etype not in edge_types:
-                edge_types[etype] = []
-            edge_types[etype].append(paired[ename])
+            if etype not in by_type:
+                by_type[etype] = ([], [])
+            by_type[etype][0].append(ours_scores[i])
+            by_type[etype][1].append(eapig_vals[i])
 
-        all_ours = [v[0] for v in paired.values()]
-        all_eapig = [v[1] for v in paired.values()]
-        rho_all = rho_or_nan(all_ours, all_eapig)
+        rho_all = rho_or_nan(ours_scores, eapig_vals)
+        row = {"task": task, "model": model, "n": len(ours_scores), "rho_all": rho_all}
 
-        row = {
-            "task": task, "model": model, "n": len(paired),
-            "rho_all": rho_all,
-        }
         for etype in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]:
-            pairs = edge_types.get(etype, [])
-            if pairs:
-                x, y = zip(*pairs)
-                row[f"rho_{etype}"] = rho_or_nan(list(x), list(y))
-                row[f"n_{etype}"] = len(pairs)
+            if etype in by_type:
+                x, y = by_type[etype]
+                row[f"rho_{etype}"] = rho_or_nan(x, y)
+                row[f"n_{etype}"] = len(x)
             else:
                 row[f"rho_{etype}"] = float("nan")
                 row[f"n_{etype}"] = 0
 
         results.append(row)
-        print(f"  n={len(paired)} rho_all={rho_all:.3f}")
+        print(f"  n={len(ours_scores)} rho_all={rho_all:.3f}")
         for etype in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]:
             print(f"    {etype}: n={row[f'n_{etype}']} rho={row[f'rho_{etype}']:.3f}")
 
-        del graph
-
     # Print summary
-    print(f"\n{'='*100}")
+    print(f"\n{'='*80}")
     print(f"  EDGE: Ours (hard top-k) vs EAP-IG (repro)")
-    print(f"{'='*100}")
+    print(f"{'='*80}")
     print(f"{'Task/Model':20s} {'n':>6s} {'all':>7s} {'a->a':>7s} {'a->M':>7s} {'M->a':>7s} {'M->M':>7s}")
     print("-" * 65)
     for r in results:
         label = f"{r['task']}/{r['model']}"
-        vals = [r["rho_all"]] + [r[f"rho_{t}"] for t in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]]
-        fmtd = [f"{v:7.3f}" if not np.isnan(v) else "    n/a" for v in vals]
+        fmtd = []
+        for col in ["rho_all"] + [f"rho_{t}" for t in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]]:
+            v = r[col]
+            fmtd.append(f"{v:7.3f}" if not np.isnan(v) else "    n/a")
         print(f"{label:20s} {r['n']:6d} " + " ".join(fmtd))
     if results:
         print("-" * 65)
-        for col in ["rho_all"] + [f"rho_{t}" for t in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]]:
-            vals = [r[col] for r in results if not np.isnan(r[col])]
         print(f"{'Mean':20s}        " + " ".join(
             f"{np.nanmean([r[c] for r in results]):7.3f}"
             for c in ["rho_all"] + [f"rho_{t}" for t in ["attn->attn", "attn->MLP", "MLP->attn", "MLP->MLP"]]
@@ -171,8 +123,8 @@ def main():
 def generate_latex(results):
     TASK_LABELS = {"ioi": "IOI", "mcqa": "MCQA", "arc_easy": "ARC (E)"}
     MODEL_LABELS = {"gpt2": "GPT-2", "qwen2.5": "Qwen-2.5", "gemma2": "Gemma-2", "llama3": "Llama-3.1"}
-
     from collections import Counter
+
     task_order = []
     for r in results:
         if r["task"] not in task_order:
@@ -180,9 +132,7 @@ def generate_latex(results):
     task_counts = Counter(r["task"] for r in results)
 
     def fmt(v):
-        if np.isnan(v):
-            return "---"
-        return f"{v:.2f}"
+        return "---" if np.isnan(v) else f"{v:.2f}"
 
     lines = []
     ncols = len(results)
@@ -191,14 +141,10 @@ def generate_latex(results):
     lines.append("\\toprule")
 
     header_parts = []
-    col = 2
     for task in task_order:
         n = task_counts[task]
         label = TASK_LABELS.get(task, task)
-        if n > 1:
-            header_parts.append(f"\\multicolumn{{{n}}}{{c}}{{{label}}}")
-        else:
-            header_parts.append(label)
+        header_parts.append(f"\\multicolumn{{{n}}}{{c}}{{{label}}}" if n > 1 else label)
     lines.append("& " + " & ".join(header_parts) + " \\\\")
 
     col = 2
@@ -209,8 +155,7 @@ def generate_latex(results):
         col += n
     lines.append(" ".join(cmr))
 
-    model_headers = [MODEL_LABELS.get(r["model"], r["model"]) for r in results]
-    lines.append("& " + " & ".join(model_headers) + " \\\\")
+    lines.append("& " + " & ".join(MODEL_LABELS.get(r["model"], r["model"]) for r in results) + " \\\\")
     lines.append("\\midrule")
 
     lines.append("$\\rho$ (all) & " + " & ".join(fmt(r["rho_all"]) for r in results) + " \\\\")
