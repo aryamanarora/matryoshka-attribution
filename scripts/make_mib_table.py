@@ -32,6 +32,7 @@ OUR_METHODS = [
     # Node level
     ("\\ourmethod{}", "mib_node_hard_topk", "node", True),
     ("$+$ soft fwd", "final_node", "node", True),
+    ("\\ourmethod{} (log $k$)", "mib_node_hard_topk_log", "node", True),
     ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", True),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", True),
     # Edge level
