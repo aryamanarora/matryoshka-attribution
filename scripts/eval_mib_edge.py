@@ -64,8 +64,9 @@ def main():
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
     parser.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"])
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "hard_topk", "hard_concrete"],
-                        help="topk: sigmoid top-k (ours). hard_topk: hard 0/1 + straight-through. "
+                        choices=["topk", "topk_detached", "hard_topk", "hard_concrete"],
+                        help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
+                             "hard_topk: hard 0/1 + straight-through. "
                              "hard_concrete: Bernoulli(sigmoid) + L0.")
     parser.add_argument("--l0-lambda", type=float, default=1e-3)
     parser.add_argument("--eval-examples", type=int, default=None)
@@ -85,6 +86,7 @@ def main():
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from learning_to_attribute import sigmoid_topk
+    from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     random.seed(args.seed)
@@ -190,6 +192,8 @@ def main():
 
         if args.masking == "topk":
             mask_flat = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        elif args.masking == "topk_detached":
+            mask_flat = sigmoid_topk_detached_tau(scores, k=k, T=args.T, n_iters=args.n_iters)
         elif args.masking == "hard_topk":
             _, top_idx = scores.topk(int(k))
             hard = torch.zeros_like(scores)
