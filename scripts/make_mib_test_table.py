@@ -51,13 +51,6 @@ NODE_BASELINES = {
 }
 
 EDGE_BASELINES = {
-    "Random": {
-        ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
-        ("mcqa", "qwen2.5"): 0.27, ("mcqa", "gemma2"): 0.32, ("mcqa", "llama3"): 0.26,
-        ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.25,
-    },
     "EAP-IG-inp (CF)": {
         ("ioi", "gpt2"): 1.85, ("ioi", "qwen2.5"): 1.63, ("ioi", "gemma2"): 3.20,
         ("ioi", "llama3"): 2.08, ("arithmetic_subtraction", "llama3"): 0.99,
