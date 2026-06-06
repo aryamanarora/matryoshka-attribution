@@ -52,56 +52,16 @@ SEED_DIRS = {
     "hard_topk": "mib_node_seeds/hard_topk",
 }
 
-# MIB baselines (from paper Table 1), grouped by level
-NODE_BASELINES = {
-    "Random$^\\dagger$": {
-        ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
-        ("mcqa", "qwen2.5"): 0.27, ("mcqa", "gemma2"): 0.32, ("mcqa", "llama3"): 0.26,
-        ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.25,
-    },
-    "NAP (CF)$^\\dagger$": {
-        ("ioi", "gpt2"): 0.28, ("ioi", "qwen2.5"): 0.30, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.26, ("arithmetic_subtraction", "llama3"): 0.27,
-        ("mcqa", "qwen2.5"): 0.38, ("mcqa", "gemma2"): 1.47, ("mcqa", "llama3"): 1.69,
-        ("arc_easy", "gemma2"): 1.01, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.26,
-    },
-    "NAP-IG (CF)$^\\dagger$": {
-        ("ioi", "gpt2"): 0.76, ("ioi", "qwen2.5"): 0.29, ("ioi", "gemma2"): 1.52,
-        ("ioi", "llama3"): 0.42, ("arithmetic_subtraction", "llama3"): 0.39,
-        ("mcqa", "qwen2.5"): 0.77, ("mcqa", "gemma2"): 1.71, ("mcqa", "llama3"): 1.87,
-        ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.26,
-    },
-}
+# Node baselines (reproduced on validation set)
+NODE_BASELINES = {}
 
 # NAP-IG reproduced: read from results/napig_repro_eval/
 NAPIG_REPRO_DIR = "napig_repro_eval"
 
 EAPIG_REPRO_DIR = "eapig_repro_eval"
 
-EDGE_BASELINES = {
-    "Random$^\\dagger$": {
-        ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
-        ("mcqa", "qwen2.5"): 0.27, ("mcqa", "gemma2"): 0.32, ("mcqa", "llama3"): 0.26,
-        ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
-        ("arc_challenge", "llama3"): 0.25,
-    },
-    "EAP-IG-inp (CF)$^\\dagger$": {
-        ("ioi", "gpt2"): 1.85, ("ioi", "qwen2.5"): 1.63, ("ioi", "gemma2"): 3.20,
-        ("ioi", "llama3"): 2.08, ("arithmetic_subtraction", "llama3"): 0.99,
-        ("mcqa", "qwen2.5"): 1.16, ("mcqa", "gemma2"): 1.64, ("mcqa", "llama3"): 1.05,
-        ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 1.04,
-        ("arc_challenge", "llama3"): 0.98,
-    },
-    "UGS$^\\dagger$": {
-        ("ioi", "gpt2"): 0.97, ("ioi", "qwen2.5"): 0.98,
-        ("mcqa", "qwen2.5"): 1.17,
-    },
-}
+# Edge baselines (reproduced on validation set)
+EDGE_BASELINES = {}
 
 
 def load_cpr_auc(results_dir, task, model):
