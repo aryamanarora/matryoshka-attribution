@@ -25,10 +25,11 @@ COLUMNS = [
 
 # Methods we have actual results for (not dagger baselines)
 NODE_METHODS = {
-    "Ours": "mib_node_hard_topk",
-    "+ soft fwd": "final_node",
-    "+ soft fwd, - c_k grad": "mib_node_detached_tau",
-    "+ hard bwd": "mib_node_bernoulli_reinforce",
+    "Ours": "mib_node_hard_topk_log",
+    "Ours (uniform k)": "mib_node_hard_topk",
+    "+ soft fwd": "mib_node_topk_log",
+    "+ soft fwd, - c_k grad": "mib_node_detached_tau_log",
+    "+ hard bwd": "mib_node_bernoulli_reinforce_log",
 }
 
 EDGE_METHODS = {
