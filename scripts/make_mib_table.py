@@ -176,7 +176,7 @@ def main():
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
             vals.append(fmt(v, bold=is_best, underline=is_second))
         if indent:
-            prefix = f"\\quad {name}" if "\\our" in name else f"\\quad \\textbf{{{name}}}"
+            prefix = f"\\quad {name}"
         else:
             prefix = name
         return f"{prefix} & " + " & ".join(vals) + " \\\\"
