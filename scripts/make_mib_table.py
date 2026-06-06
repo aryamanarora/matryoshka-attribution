@@ -29,17 +29,17 @@ COLUMNS = [
 
 # Our method + ablations: (display_name, results_subdir, level, is_ours)
 OUR_METHODS = [
-    # Node level (uniform k-schedule)
-    ("\\ourmethod{}", "mib_node_hard_topk", "node", True),
-    ("$+$ soft fwd", "final_node", "node", True),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", True),
-    ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", True),
-    # Node level (log k-schedule)
-    ("\\ourmethod{} (log $k$)", "mib_node_hard_topk_log", "node", True),
-    ("$+$ soft fwd (log $k$)", "mib_node_topk_log", "node", True),
-    ("$+$ soft fwd, $-$ $c_k$ grad (log $k$)", "mib_node_detached_tau_log", "node", True),
-    ("$+$ hard bwd (log $k$)", "mib_node_bernoulli_reinforce_log", "node", True),
-    # Edge level (note: edge default is already log k-schedule)
+    # Node level (log k-schedule = default)
+    ("\\ourmethod{}", "mib_node_hard_topk_log", "node", True),
+    ("$+$ soft fwd", "mib_node_topk_log", "node", True),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau_log", "node", True),
+    ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", True),
+    # Node level (uniform k-schedule = ablation)
+    ("\\ourmethod{} ($-$ log $k$)", "mib_node_hard_topk", "node", True),
+    ("$+$ soft fwd ($-$ log $k$)", "final_node", "node", True),
+    ("$+$ soft fwd, $-$ $c_k$ grad ($-$ log $k$)", "mib_node_detached_tau", "node", True),
+    ("$+$ hard bwd ($-$ log $k$)", "mib_node_bernoulli_reinforce", "node", True),
+    # Edge level (log k-schedule = default)
     ("\\ourmethod{}", "mib_edge_hard_topk", "edge", True),
     ("$+$ soft fwd", "final_edge", "edge", True),
     ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", True),
