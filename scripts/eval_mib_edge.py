@@ -64,10 +64,11 @@ def main():
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
     parser.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"])
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_concrete"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
                              "hard_topk: hard 0/1 + straight-through. "
-                             "hard_concrete: Bernoulli(sigmoid) + L0.")
+                             "hard_concrete: Bernoulli(sigmoid) + L0. "
+                             "bernoulli_reinforce: Bernoulli fwd + REINFORCE bwd.")
     parser.add_argument("--l0-lambda", type=float, default=1e-3)
     parser.add_argument("--eval-examples", type=int, default=None)
     parser.add_argument("--output", type=str, default="results/mib_edge")
@@ -201,6 +202,21 @@ def main():
             hard[top_idx] = 1.0
             soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
             mask_flat = hard - soft.detach() + soft
+        elif args.masking == "bernoulli_reinforce":
+            lo = scores.min() - 10 * args.T
+            hi = scores.max() + 10 * args.T
+            with torch.no_grad():
+                for _ in range(args.n_iters):
+                    mid = (lo + hi) / 2
+                    f_mid = torch.sigmoid((scores - mid) / args.T).sum()
+                    if f_mid > k:
+                        lo = mid
+                    else:
+                        hi = mid
+            tau = ((lo + hi) / 2).detach()
+            probs = torch.sigmoid((scores - tau) / args.T)
+            hard = torch.bernoulli(probs).detach()
+            mask_flat = hard
         else:  # hard_concrete
             probs = torch.sigmoid(scores)
             hard = torch.bernoulli(probs)
@@ -292,7 +308,13 @@ def main():
             loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
 
         optimizer.zero_grad()
-        loss.backward()
+        if args.masking == "bernoulli_reinforce":
+            with torch.no_grad():
+                p = torch.sigmoid((scores - tau) / args.T)
+                log_prob_grad = (mask_flat - p) / args.T
+                scores.grad = loss.item() * log_prob_grad
+        else:
+            loss.backward()
         optimizer.step()
 
         loss_val = loss.item()
