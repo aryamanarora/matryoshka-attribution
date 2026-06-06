@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--split", type=str, default="validation")
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--k-schedule", default="uniform",
+    parser.add_argument("--k-schedule", default="log",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
     parser.add_argument("--mode", default="necessary",
