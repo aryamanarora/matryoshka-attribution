@@ -28,22 +28,24 @@ COLUMNS = [
 ]
 
 # Our method + ablations: (display_name, results_subdir, level, is_ours)
+# (display_name, results_subdir, level, group)
+# group: "ours" = default, "uniform" = uniform k ablation
 OUR_METHODS = [
     # Node level (log k-schedule = default)
-    ("\\ourmethod{}", "mib_node_hard_topk_log", "node", True),
-    ("$+$ soft fwd", "mib_node_topk_log", "node", True),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau_log", "node", True),
-    ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", True),
+    ("\\ourmethod{}", "mib_node_hard_topk_log", "node", "ours"),
+    ("$+$ soft fwd", "mib_node_topk_log", "node", "ours"),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau_log", "node", "ours"),
+    ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
     # Node level (uniform k-schedule = ablation)
-    ("\\ourmethod{} , $-$ log $k$", "mib_node_hard_topk", "node", True),
-    ("$+$ soft fwd , $-$ log $k$", "final_node", "node", True),
-    ("$+$ soft fwd, $-$ $c_k$ grad , $-$ log $k$", "mib_node_detached_tau", "node", True),
-    ("$+$ hard bwd , $-$ log $k$", "mib_node_bernoulli_reinforce", "node", True),
+    ("\\ourmethod{}", "mib_node_hard_topk", "node", "uniform"),
+    ("$+$ soft fwd", "final_node", "node", "uniform"),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", "uniform"),
+    ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
     # Edge level (log k-schedule = default)
-    ("\\ourmethod{}", "mib_edge_hard_topk", "edge", True),
-    ("$+$ soft fwd", "final_edge", "edge", True),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", True),
-    ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", True),
+    ("\\ourmethod{}", "mib_edge_hard_topk", "edge", "ours"),
+    ("$+$ soft fwd", "final_edge", "edge", "ours"),
+    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", "ours"),
+    ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
 ]
 
 # Seed run directories (for mean ± std)
@@ -90,10 +92,10 @@ def fmt(v, bold=False, underline=False):
 
 def main():
     # Collect all our results
-    all_results = {}  # method_name -> {(task, model): cpr_auc}
+    all_results = {}  # method_key -> {(task, model): cpr_auc}
 
-    for method_name, results_dir, level, is_ours in OUR_METHODS:
-        key = f"{method_name}_{level}"
+    for method_name, results_dir, level, group in OUR_METHODS:
+        key = f"{method_name}_{level}_{group}"
         data = {}
         for task, model, _ in COLUMNS:
             v = load_cpr_auc(results_dir, task, model)
@@ -102,12 +104,13 @@ def main():
         all_results[key] = data
 
     # Find best per column per level
-    node_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "node"]
-    edge_ours = [(n, d, l, o) for n, d, l, o in OUR_METHODS if l == "edge"]
+    node_ours = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "node" and g == "ours"]
+    node_uniform = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "node" and g == "uniform"]
+    edge_ours = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge"]
 
     def best_in_col(level):
         baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
-        our = {f"{n}_{l}": all_results.get(f"{n}_{l}", {}) for n, _, l, _ in OUR_METHODS if l == level}
+        our = {f"{n}_{l}_{g}": all_results.get(f"{n}_{l}_{g}", {}) for n, _, l, g in OUR_METHODS if l == level}
         best = {}
         second = {}
         for task, model, _ in COLUMNS:
@@ -175,8 +178,12 @@ def main():
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node))
     lines.append("\\textbf{Ours} \\\\")
-    for method_name, _, _, _ in node_ours:
-        key = f"{method_name}_node"
+    for method_name, _, _, group in node_ours:
+        key = f"{method_name}_node_{group}"
+        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
+    lines.append("\\textbf{Ours} (uniform $k$) \\\\")
+    for method_name, _, _, group in node_uniform:
+        key = f"{method_name}_node_{group}"
         lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
 
     # === Edge-level section ===
@@ -201,8 +208,8 @@ def main():
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge))
     lines.append("\\textbf{Ours} \\\\")
-    for method_name, _, _, _ in edge_ours:
-        key = f"{method_name}_edge"
+    for method_name, _, _, group in edge_ours:
+        key = f"{method_name}_edge_{group}"
         lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
 
     lines.append("\\bottomrule")
