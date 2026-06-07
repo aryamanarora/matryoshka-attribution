@@ -45,6 +45,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def householder_product(V):
+    """Build orthogonal matrix from Householder vectors V: [k, d] -> [d, d]."""
+    k, d = V.shape
+    R = torch.eye(d, device=V.device, dtype=V.dtype)
+    for i in range(k):
+        v = V[i]  # [d]
+        v_norm_sq = v @ v
+        if v_norm_sq < 1e-12:
+            continue
+        R = R - (2.0 / v_norm_sq) * torch.outer(R @ v, v)
+    return R
+
+
 def sample_k(total: int, schedule: str = "uniform") -> float:
     """Sample k for sigmoid top-k masking.
 
@@ -182,16 +195,16 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
     scores = nn.Parameter(torch.zeros(total, device=device))
 
-    # DAS: initialize rotation matrices (Cayley parameterization)
-    das_W = {}
+    # DAS: initialize rotation matrices (Householder parameterization)
+    das_V = {}
     if args.mask == "das":
+        hk = args.householder_k or hooker.hidden_size
         for li in range(hooker.num_layers):
-            das_W[li] = nn.Parameter(torch.zeros(hooker.hidden_size, hooker.hidden_size,
-                                                  device=device))
+            das_V[li] = nn.Parameter(torch.randn(hk, hooker.hidden_size, device=device) * 0.01)
         lr_rot = args.lr_rotation if args.lr_rotation is not None else args.lr
         optimizer = torch.optim.Adam([
             {"params": [scores], "lr": args.lr},
-            {"params": list(das_W.values()), "lr": lr_rot},
+            {"params": list(das_V.values()), "lr": lr_rot},
         ])
     else:
         optimizer = torch.optim.Adam([scores], lr=args.lr)
@@ -214,13 +227,10 @@ def run_dataset(args, model, tokenizer, device, wandb):
             tok.base_input_ids.shape[1], tok.src_input_ids.shape[1])
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
 
-        # DAS: compute rotation matrices from Cayley params
+        # DAS: compute rotation matrices from Householder params
         if args.mask == "das":
             for li in range(hooker.num_layers):
-                W = das_W[li]
-                A = W.triu(1) - W.triu(1).T  # skew-symmetric
-                I = torch.eye(W.shape[0], device=device, dtype=W.dtype)
-                hooker.R[li] = torch.linalg.solve(I + A, I - A)
+                hooker.R[li] = householder_product(das_V[li])
 
         # Forward with mask
         k = sample_k(total, args.k_schedule)
@@ -276,10 +286,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
         # DAS: recompute rotations for eval
         if args.mask == "das":
             for li in range(hooker.num_layers):
-                W = das_W[li]
-                A = W.triu(1) - W.triu(1).T
-                I = torch.eye(W.shape[0], device=device, dtype=W.dtype)
-                hooker.R[li] = torch.linalg.solve(I + A, I - A)
+                hooker.R[li] = householder_product(das_V[li])
 
         src_logits_eval = hooker.cache_cf_activations(eval_tok.src_input_ids)
         with torch.no_grad():
@@ -326,7 +333,8 @@ def run_dataset(args, model, tokenizer, device, wandb):
         "sparsity_eval": eval_results, "sparsities": sparsities,
     }
     if args.mask == "das":
-        result["das_rotations"] = {li: W.data.cpu() for li, W in das_W.items()}
+        result["das_rotations"] = {li: householder_product(V).data.cpu() for li, V in das_V.items()}
+        result["das_householder_V"] = {li: V.data.cpu() for li, V in das_V.items()}
     return result
 
 
@@ -423,6 +431,8 @@ def main():
                         help="Number of examples for sparsity evaluation")
     parser.add_argument("--hard_fwd", action="store_true",
                         help="Hard binary mask in forward, straight-through gradient backward")
+    parser.add_argument("--householder_k", type=int, default=None,
+                        help="Number of Householder reflections for DAS rotation (default: full d_model)")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)
