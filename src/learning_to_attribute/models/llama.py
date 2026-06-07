@@ -383,7 +383,7 @@ class LlamaSpanAttributionHooks:
     MASK_TYPES = LlamaAttributionHooks.MASK_TYPES
 
     def __init__(self, model, mask_type: str, num_spans: int,
-                 pos_strategy: str = "last", flip: bool = False):
+                 pos_strategy: str = "last", sufficient: bool = False):
         assert mask_type in self.MASK_TYPES
         assert pos_strategy in ("first", "last", "all")
 
