@@ -19,15 +19,24 @@ COLUMNS = [
 ]
 
 METHODS = [
-    ("ours_only", "Ours"),
-    ("napig_only", "NAP-IG"),
+    ("ours", "Ours"),
+    ("napig", "NAP-IG"),
     ("napig_ours_mlp", "NAP-IG attn + our MLPs"),
     ("ours_napig_mlp", "Our attn + NAP-IG MLPs"),
 ]
 
+OURS_DIR = Path("results/mib_node_hard_topk_log")
+NAPIG_DIR = Path("results/napig_repro_eval/EAP-IG-inputs_patching_node")
 
-def load(task, model, hybrid):
-    p = RESULTS_BASE / f"{task}_{model}_{hybrid}_validation.pkl"
+
+def load(task, model, method):
+    stask = task.replace("_", "-")
+    if method == "ours":
+        p = OURS_DIR / f"{task}_{model}_validation.pkl"
+    elif method == "napig":
+        p = NAPIG_DIR / f"{stask}_{model}_validation_abs-False.pkl"
+    else:
+        p = RESULTS_BASE / f"{task}_{model}_{method}_validation.pkl"
     if not p.exists():
         return None
     with open(p, "rb") as f:

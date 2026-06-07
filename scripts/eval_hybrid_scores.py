@@ -93,15 +93,9 @@ def main():
         return result
 
     hybrids = {
-        # MLP swaps
+        # MLP swaps (only these need re-evaluation)
         "napig_ours_mlp": make_hybrid(napig_z, ours_z, swap_mlp=True),    # NAP-IG base + our MLPs
         "ours_napig_mlp": make_hybrid(ours_z, napig_z, swap_mlp=True),    # Ours base + NAP-IG MLPs
-        # Attn swaps
-        "napig_ours_attn": make_hybrid(napig_z, ours_z, swap_mlp=False),  # NAP-IG base + our attn
-        "ours_napig_attn": make_hybrid(ours_z, napig_z, swap_mlp=False),  # Ours base + NAP-IG attn
-        # Baselines
-        "napig_only": napig_z,
-        "ours_only": ours_z,
     }
 
     for name, scores in hybrids.items():
