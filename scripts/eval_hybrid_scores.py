@@ -81,13 +81,25 @@ def main():
     ours_z = {n: float((ours[n] - ours_vals.mean()) / ours_vals.std()) for n in common}
     napig_z = {n: float((napig[n] - napig_vals.mean()) / napig_vals.std()) for n in common}
 
-    def make_hybrid(base_z, donor_z):
-        """Use base scores for attn heads, donor scores for MLPs."""
-        return {n: donor_z[n] if n.startswith("m") else base_z[n] for n in common}
+    def make_hybrid(base_z, donor_z, swap_mlp=True):
+        """Swap MLPs (swap_mlp=True) or attn heads (swap_mlp=False) from donor into base."""
+        result = {}
+        for n in common:
+            is_mlp = n.startswith("m")
+            if (swap_mlp and is_mlp) or (not swap_mlp and not is_mlp):
+                result[n] = donor_z[n]
+            else:
+                result[n] = base_z[n]
+        return result
 
     hybrids = {
-        "napig_ours_mlp": make_hybrid(napig_z, ours_z),   # NAP-IG attn + our MLPs
-        "ours_napig_mlp": make_hybrid(ours_z, napig_z),   # Our attn + NAP-IG MLPs
+        # MLP swaps
+        "napig_ours_mlp": make_hybrid(napig_z, ours_z, swap_mlp=True),    # NAP-IG base + our MLPs
+        "ours_napig_mlp": make_hybrid(ours_z, napig_z, swap_mlp=True),    # Ours base + NAP-IG MLPs
+        # Attn swaps
+        "napig_ours_attn": make_hybrid(napig_z, ours_z, swap_mlp=False),  # NAP-IG base + our attn
+        "ours_napig_attn": make_hybrid(ours_z, napig_z, swap_mlp=False),  # Ours base + NAP-IG attn
+        # Baselines
         "napig_only": napig_z,
         "ours_only": ours_z,
     }
