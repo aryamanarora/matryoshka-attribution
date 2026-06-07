@@ -72,45 +72,29 @@ def main():
     napig = load_node_scores(napig_path)
     logger.info("Loaded %d ours scores, %d NAP-IG scores", len(ours), len(napig))
 
-    # Convert scores to ranks (0 = best, ties broken by score order)
+    # Z-score normalize each method's scores so they're on the same scale
+    import numpy as np
     common = sorted(set(ours) & set(napig))
-    n_total = len(common)
 
-    ours_ranked = sorted(common, key=lambda n: ours[n], reverse=True)
-    napig_ranked = sorted(common, key=lambda n: napig[n], reverse=True)
-    ours_rank = {n: i for i, n in enumerate(ours_ranked)}
-    napig_rank = {n: i for i, n in enumerate(napig_ranked)}
+    ours_vals = np.array([ours[n] for n in common])
+    napig_vals = np.array([napig[n] for n in common])
+    ours_z = {n: float((ours[n] - ours_vals.mean()) / ours_vals.std()) for n in common}
+    napig_z = {n: float((napig[n] - napig_vals.mean()) / napig_vals.std()) for n in common}
 
-    def make_hybrid(base_rank, donor_rank):
-        """Replace MLP ranks in base_rank with MLP ranks from donor_rank.
-
-        1. Start with base_rank for all nodes.
-        2. For MLPs, swap in the donor's rank.
-        3. Convert combined ranks to scores (higher = more important).
-           Ties are fine — MIB eval handles tiebreaking.
-        """
-        hybrid_rank = {}
-        for n in common:
-            if n.startswith("m"):
-                hybrid_rank[n] = donor_rank[n]
-            else:
-                hybrid_rank[n] = base_rank[n]
-        # Convert ranks to scores: score = n_total - rank
-        return {n: float(n_total - r) for n, r in hybrid_rank.items()}
-
-    def ranks_to_scores(rank_dict):
-        return {n: float(n_total - r) for n, r in rank_dict.items()}
+    def make_hybrid(base_z, donor_z):
+        """Use base scores for attn heads, donor scores for MLPs."""
+        return {n: donor_z[n] if n.startswith("m") else base_z[n] for n in common}
 
     hybrids = {
-        "napig_ours_mlp": make_hybrid(napig_rank, ours_rank),   # NAP-IG attn ranks + our MLP ranks
-        "ours_napig_mlp": make_hybrid(ours_rank, napig_rank),   # Our attn ranks + NAP-IG MLP ranks
-        "napig_only": ranks_to_scores(napig_rank),
-        "ours_only": ranks_to_scores(ours_rank),
+        "napig_ours_mlp": make_hybrid(napig_z, ours_z),   # NAP-IG attn + our MLPs
+        "ours_napig_mlp": make_hybrid(ours_z, napig_z),   # Our attn + NAP-IG MLPs
+        "napig_only": napig_z,
+        "ours_only": ours_z,
     }
 
     for name, scores in hybrids.items():
         top5 = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
-        logger.info("%s top-5: %s", name, [(n, int(s)) for n, s in top5])
+        logger.info("%s top-5: %s", name, [(n, round(s, 2)) for n, s in top5])
 
     # Load TL model
     tl_name = MODEL_FULLNAMES[model]
@@ -149,24 +133,17 @@ def main():
 
         # Set node scores on graph
         node_scores = torch.full((graph.n_forward,), float("nan"))
-        node_scores[0] = float("inf")  # input
-        node_scores[-1] = float("inf")  # logits
 
-        for node_name, score in scores_dict.items():
-            if node_name.startswith("a"):
-                parts = node_name.split(".")
-                L = int(parts[0][1:])
-                H = int(parts[1][1:])
-                node = graph.nodes.get(node_name)
-                if node:
-                    idx = graph.forward_index(node)
-                    node_scores[idx] = score
-            elif node_name.startswith("m"):
-                L = int(node_name[1:])
-                node = graph.nodes.get(node_name)
-                if node:
-                    idx = graph.forward_index(node)
-                    node_scores[idx] = score
+        for name, node in graph.nodes.items():
+            if name == "logits":
+                continue
+            idx = graph.forward_index(node, attn_slice=False)
+            if idx >= graph.n_forward:
+                continue
+            if name == "input":
+                node_scores[idx] = float("inf")
+            elif name in scores_dict:
+                node_scores[idx] = scores_dict[name]
 
         graph.nodes_scores = node_scores
 
