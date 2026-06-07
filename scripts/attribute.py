@@ -188,7 +188,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
         for li in range(hooker.num_layers):
             das_W[li] = nn.Parameter(torch.zeros(hooker.hidden_size, hooker.hidden_size,
                                                   device=device))
-        lr_rot = getattr(args, "lr_rotation", None) or args.lr
+        lr_rot = args.lr_rotation or args.lr
         optimizer = torch.optim.Adam([
             {"params": [scores], "lr": args.lr},
             {"params": list(das_W.values()), "lr": lr_rot},
