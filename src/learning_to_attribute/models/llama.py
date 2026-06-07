@@ -590,6 +590,7 @@ class LlamaSpanAttributionHooks:
         if R is None or cf_act is None:
             return base_act
 
+        R = R.to(base_act.dtype)
         out = base_act.clone()
         span_dim_mask = span_dim_mask.to(base_act.dtype)
 
