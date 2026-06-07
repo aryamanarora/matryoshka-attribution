@@ -181,7 +181,21 @@ def run_dataset(args, model, tokenizer, device, wandb):
     logger.info("Scores: %s", hooker.describe())
 
     scores = nn.Parameter(torch.zeros(total, device=device))
-    optimizer = torch.optim.Adam([scores], lr=args.lr)
+
+    # DAS: initialize rotation matrices (Cayley parameterization)
+    das_W = {}
+    if args.mask == "das":
+        for li in range(hooker.num_layers):
+            das_W[li] = nn.Parameter(torch.zeros(hooker.hidden_size, hooker.hidden_size,
+                                                  device=device))
+        lr_rot = getattr(args, "lr_rotation", None) or args.lr
+        optimizer = torch.optim.Adam([
+            {"params": [scores], "lr": args.lr},
+            {"params": list(das_W.values()), "lr": lr_rot},
+        ])
+    else:
+        optimizer = torch.optim.Adam([scores], lr=args.lr)
+
     hooker.register_hooks()
 
     # Train
@@ -199,6 +213,14 @@ def run_dataset(args, model, tokenizer, device, wandb):
             tok.base_alignment, tok.src_alignment,
             tok.base_input_ids.shape[1], tok.src_input_ids.shape[1])
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
+
+        # DAS: compute rotation matrices from Cayley params
+        if args.mask == "das":
+            for li in range(hooker.num_layers):
+                W = das_W[li]
+                A = W.triu(1) - W.triu(1).T  # skew-symmetric
+                I = torch.eye(W.shape[0], device=device, dtype=W.dtype)
+                hooker.R[li] = torch.linalg.solve(I + A, I - A)
 
         # Forward with mask
         k = sample_k(total, args.k_schedule)
@@ -254,7 +276,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
     hooker.remove_hooks()
 
-    return {
+    result = {
         "scores": scores.data.cpu(), "tokens": None,
         "text": args.dataset, "cf_text": None,
         "mask_type": args.mask, "dataset": args.dataset,
@@ -263,6 +285,9 @@ def run_dataset(args, model, tokenizer, device, wandb):
         "hooker": hooker, "x_labels": dataset.span_names,
         "sparsity_eval": eval_results, "sparsities": sparsities,
     }
+    if args.mask == "das":
+        result["das_rotations"] = {li: W.data.cpu() for li, W in das_W.items()}
+    return result
 
 
 def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
@@ -345,6 +370,8 @@ def main():
     parser.add_argument("--k_schedule", default="uniform",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
+    parser.add_argument("--lr_rotation", type=float, default=None,
+                        help="Learning rate for DAS rotation matrices (defaults to --lr)")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)
@@ -417,6 +444,8 @@ def main():
         save_dict["cf_text"] = result["cf_text"]
     if result.get("dataset"):
         save_dict["dataset"] = result["dataset"]
+    if result.get("das_rotations"):
+        save_dict["das_rotations"] = result["das_rotations"]
     torch.save(save_dict, f"{args.output}_scores.pt")
     logger.info("Saved scores to %s_scores.pt", args.output)
 

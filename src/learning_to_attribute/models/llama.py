@@ -23,7 +23,7 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "node"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "node", "das"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -415,8 +415,16 @@ class LlamaSpanAttributionHooks:
             self.total = self.mlp_total + self.attn_head_total
         elif mask_type == "resid":
             self.total = self.scalar_total
+        elif mask_type == "das":
+            # DAS: span scores + per-layer subspace dimension scores
+            # Layout: [num_layers * num_spans | num_layers * hidden_size]
+            self.das_span_total = self.num_layers * S
+            self.das_dim_total = self.num_layers * self.hidden_size
+            self.total = self.das_span_total + self.das_dim_total
 
         self.mask = None
+        # DAS rotation matrices (set externally per forward step)
+        self.R: dict[int, torch.Tensor] = {}  # layer_idx -> [d_model, d_model]
         self.cf_acts_mlp: dict[int, torch.Tensor] = {}
         self.cf_acts_attn: dict[int, torch.Tensor] = {}
         self.cf_acts_resid: dict[int, torch.Tensor] = {}
@@ -438,7 +446,11 @@ class LlamaSpanAttributionHooks:
 
     @property
     def has_resid(self):
-        return self.mask_type == "resid"
+        return self.mask_type in ("resid", "das")
+
+    @property
+    def has_das(self):
+        return self.mask_type == "das"
 
     # Override these in subclasses for different model architectures
     def _get_layer(self, li):
@@ -463,7 +475,11 @@ class LlamaSpanAttributionHooks:
             else:
                 parts.append(f"Attn: {self.num_layers}L x {S}spans x "
                              f"{self.num_heads}h = {self.attn_head_total:,}")
-        if self.has_resid:
+        if self.has_das:
+            parts.append(f"DAS: {self.num_layers}L x {S}spans + "
+                         f"{self.num_layers}L x {self.hidden_size}d = "
+                         f"{self.total:,}")
+        elif self.has_resid:
             parts.append(f"Resid: {self.num_layers}L x {S}spans = "
                          f"{self.scalar_total:,}")
         return " + ".join(parts) + f" = {self.total:,} total"
@@ -564,6 +580,53 @@ class LlamaSpanAttributionHooks:
 
         return out
 
+    def _das_intervene(self, base_act: torch.Tensor, cf_act: torch.Tensor | None,
+                       span_mask: torch.Tensor, dim_mask: torch.Tensor,
+                       layer_idx: int) -> torch.Tensor:
+        """DAS intervention: rotate, mask subspace dims, intervene, un-rotate.
+
+        base_act: [1, base_seq_len, d_model]
+        cf_act:   [1, src_seq_len, d_model] or None
+        span_mask: [num_spans] scalar per span
+        dim_mask:  [d_model] per-dimension mask in rotated space
+        """
+        R = self.R.get(layer_idx)
+        if R is None or cf_act is None:
+            return base_act
+
+        out = base_act.clone()
+        span_mask = span_mask.to(base_act.dtype)
+        dim_mask = dim_mask.to(base_act.dtype)
+
+        for span_i in range(self.num_spans):
+            base_positions = self.base_span_to_pos[span_i]
+            src_positions = self.src_span_to_pos[span_i]
+            if not base_positions:
+                continue
+
+            m_span = span_mask[span_i]
+
+            for j, bp in enumerate(base_positions):
+                sp = src_positions[min(j, len(src_positions) - 1)] if src_positions else bp
+
+                # Rotate into learned basis
+                rotated_base = R @ base_act[0, bp]  # [d_model]
+                rotated_cf = R @ cf_act[0, sp]       # [d_model]
+
+                # Combined mask: span gate * dimension mask
+                m = m_span * dim_mask  # [d_model]
+
+                # Interpolate in rotated space
+                if self.sufficient:
+                    interpolated = rotated_base * (1 - m) + rotated_cf * m
+                else:
+                    interpolated = rotated_base * m + rotated_cf * (1 - m)
+
+                # Un-rotate back
+                out[0, bp] = R.T @ interpolated
+
+        return out
+
     def register_hooks(self):
         self.remove_hooks()
         S = self.num_spans
@@ -622,7 +685,7 @@ class LlamaSpanAttributionHooks:
                     self._get_attn_module(layer).register_forward_pre_hook(
                         make_attn_hook(layer_idx)))
 
-            if self.has_resid:
+            if self.has_resid and not self.has_das:
                 def make_resid_hook(li):
                     def hook(mod, inp, output):
                         if self.mask is None:
@@ -642,6 +705,31 @@ class LlamaSpanAttributionHooks:
                     return hook
                 self._hooks.append(
                     layer.register_forward_hook(make_resid_hook(layer_idx)))
+
+            if self.has_das:
+                def make_das_hook(li):
+                    def hook(mod, inp, output):
+                        if self.mask is None:
+                            return
+                        if isinstance(output, tuple):
+                            x = output[0]
+                        else:
+                            x = output
+                        # Span scores: first das_span_total entries
+                        span_off = li * S
+                        span_mask = self.mask[span_off:span_off + S]
+                        # Dimension scores: after span scores
+                        dim_off = self.das_span_total + li * self.hidden_size
+                        dim_mask = self.mask[dim_off:dim_off + self.hidden_size]
+                        new_x = self._das_intervene(
+                            x, self.cf_acts_resid.get(li),
+                            span_mask, dim_mask, li)
+                        if isinstance(output, tuple):
+                            return (new_x,) + output[1:]
+                        return new_x
+                    return hook
+                self._hooks.append(
+                    layer.register_forward_hook(make_das_hook(layer_idx)))
 
     def remove_hooks(self):
         for h in self._hooks:
@@ -664,6 +752,20 @@ class LlamaSpanAttributionHooks:
             if span_names:
                 info["span_name"] = span_names[span]
             return info
+
+        if self.mask_type == "das":
+            if flat_idx < self.das_span_total:
+                layer = flat_idx // S
+                span = flat_idx % S
+                info = {"component": "das_span", "layer": layer, "span": span}
+                if span_names:
+                    info["span_name"] = span_names[span]
+                return info
+            else:
+                dim_idx = flat_idx - self.das_span_total
+                layer = dim_idx // self.hidden_size
+                dim = dim_idx % self.hidden_size
+                return {"component": "das_dim", "layer": layer, "dim": dim}
 
         if self.mask_type in ("attn_output", "resid"):
             layer = flat_idx // S
