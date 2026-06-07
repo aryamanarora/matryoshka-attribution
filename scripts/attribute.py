@@ -254,25 +254,57 @@ def run_dataset(args, model, tokenizer, device, wandb):
     logger.info("Training complete in %.1fs (%.2f step/s)",
                 train_time, args.steps / train_time)
 
-    # Sparsity eval on a fixed pair
-    logger.info("Evaluating sparsity on a fixed pair...")
-    eval_pair = dataset.sample_pair()
-    eval_tok = dataset.tokenize_pair(eval_pair, tokenizer, device=str(device))
-    hooker.set_alignment(
-        eval_tok.base_alignment, eval_tok.src_alignment,
-        eval_tok.base_input_ids.shape[1], eval_tok.src_input_ids.shape[1])
-    src_logits_eval = hooker.cache_cf_activations(eval_tok.src_input_ids)
-
-    with torch.no_grad():
-        clean_logits_eval = model(eval_tok.base_input_ids).logits[0, -1].float()
-    ref_probs = F.softmax(src_logits_eval if args.sufficient else clean_logits_eval, dim=-1)
-    other_probs = F.softmax(clean_logits_eval if args.sufficient else src_logits_eval, dim=-1)
-
+    # Sparsity eval averaged over multiple pairs
+    n_eval = getattr(args, "n_eval", 100) or 100
+    logger.info("Evaluating sparsity averaged over %d pairs...", n_eval)
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
-    eval_results = _eval_sparsity(
-        model, hooker, scores, eval_tok.base_input_ids, total, sparsities, device,
-        ref_probs, "kl", None, other_probs=other_probs, has_cf=True,
-        sufficient=args.sufficient, wandb=wandb)
+
+    # Accumulate results across eval examples
+    all_eval = []
+    for ei in range(n_eval):
+        eval_pair = dataset.sample_pair()
+        eval_tok = dataset.tokenize_pair(eval_pair, tokenizer, device=str(device))
+        hooker.set_alignment(
+            eval_tok.base_alignment, eval_tok.src_alignment,
+            eval_tok.base_input_ids.shape[1], eval_tok.src_input_ids.shape[1])
+
+        # DAS: recompute rotations for eval
+        if args.mask == "das":
+            for li in range(hooker.num_layers):
+                W = das_W[li]
+                A = W.triu(1) - W.triu(1).T
+                I = torch.eye(W.shape[0], device=device, dtype=W.dtype)
+                hooker.R[li] = torch.linalg.solve(I + A, I - A)
+
+        src_logits_eval = hooker.cache_cf_activations(eval_tok.src_input_ids)
+        with torch.no_grad():
+            clean_logits_eval = model(eval_tok.base_input_ids).logits[0, -1].float()
+        ref_probs = F.softmax(src_logits_eval if args.sufficient else clean_logits_eval, dim=-1)
+        other_probs = F.softmax(clean_logits_eval if args.sufficient else src_logits_eval, dim=-1)
+
+        ev = _eval_sparsity(
+            model, hooker, scores, eval_tok.base_input_ids, total, sparsities, device,
+            ref_probs, "kl", None, other_probs=other_probs, has_cf=True,
+            sufficient=args.sufficient, wandb=None)
+        all_eval.append(ev)
+        if (ei + 1) % 20 == 0:
+            logger.info("  eval %d/%d done", ei + 1, n_eval)
+
+    # Average across examples
+    import numpy as np
+    eval_results = {"sparsities": sparsities}
+    for key in ["eval_learned", "eval_random", "eval_learned_ce", "eval_random_ce",
+                "eval_learned_other", "eval_random_other"]:
+        vals = [e[key] for e in all_eval if key in e]
+        if vals:
+            eval_results[key] = np.mean(vals, axis=0).tolist()
+    logger.info("Averaged eval over %d examples:", n_eval)
+    for i, frac in enumerate(sparsities):
+        k = max(1, int(frac * total))
+        logger.info("  keep=%5.1f%% (%d/%d)  KL_L=%.4f  KL_R=%.4f  CE_L=%.4f",
+                     frac * 100, k, total,
+                     eval_results["eval_learned"][i], eval_results["eval_random"][i],
+                     eval_results.get("eval_learned_ce", [0]*len(sparsities))[i])
 
     hooker.remove_hooks()
 
@@ -379,6 +411,8 @@ def main():
                         help="How to sample k: uniform or log-uniform")
     parser.add_argument("--lr_rotation", type=float, default=None,
                         help="Learning rate for DAS rotation matrices (defaults to --lr)")
+    parser.add_argument("--n_eval", type=int, default=100,
+                        help="Number of examples for sparsity evaluation")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)
