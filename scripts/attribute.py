@@ -301,12 +301,13 @@ def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
 
     eval_learned, eval_random = [], []
     eval_learned_other, eval_random_other = [], []
+    eval_learned_ce, eval_random_ce = [], []
 
     for frac in sparsities:
         k = max(1, int(frac * total))
-        for ordering, el, elo in [
-            (sorted_idx, eval_learned, eval_learned_other),
-            (random_idx, eval_random, eval_random_other),
+        for ordering, el, elo, el_ce in [
+            (sorted_idx, eval_learned, eval_learned_other, eval_learned_ce),
+            (random_idx, eval_random, eval_random_other, eval_random_ce),
         ]:
             hard_mask = torch.zeros(total, device=device)
             hard_mask[ordering[:k]] = 1.0
@@ -316,12 +317,17 @@ def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
                 logits = model(input_ids).logits[0, -1].float()
                 lp = F.log_softmax(logits, dim=-1)
                 val = F.kl_div(lp, ref_probs, reduction="batchmean").item()
+                # CE on the target label
+                target_id = ref_probs.argmax().item()
+                ce_val = F.cross_entropy(logits.unsqueeze(0),
+                                         torch.tensor([target_id], device=device)).item()
             el.append(val)
+            el_ce.append(ce_val)
             if has_cf and other_probs is not None:
                 elo.append(F.kl_div(lp, other_probs, reduction="batchmean").item())
 
         other_name = "KL_clean" if sufficient else "KL_cf"
-        line = f"keep={frac:6.1%} ({k:>7d}/{total})  KL_learned={eval_learned[-1]:.4f}  KL_random={eval_random[-1]:.4f}"
+        line = f"keep={frac:6.1%} ({k:>7d}/{total})  KL_learned={eval_learned[-1]:.4f}  KL_random={eval_random[-1]:.4f}  CE_learned={eval_learned_ce[-1]:.4f}"
         if has_cf and other_probs is not None:
             line += f"  {other_name}_L={eval_learned_other[-1]:.6f}  {other_name}_R={eval_random_other[-1]:.6f}"
         logger.info(line)
@@ -336,7 +342,8 @@ def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
             wandb.log(d)
 
     result = {"sparsities": sparsities, "eval_learned": eval_learned,
-              "eval_random": eval_random}
+              "eval_random": eval_random,
+              "eval_learned_ce": eval_learned_ce, "eval_random_ce": eval_random_ce}
     if eval_learned_other:
         result["eval_learned_other"] = eval_learned_other
         result["eval_random_other"] = eval_random_other
@@ -473,8 +480,8 @@ def main():
                      rank + 1, info["layer"], pos_key, pos_val, pos_label, label, val)
 
     # Visualization
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5),
-                             gridspec_kw={"width_ratios": [2, 1, 1]})
+    fig, axes = plt.subplots(1, 4, figsize=(22, 5),
+                             gridspec_kw={"width_ratios": [2, 1, 1, 1]})
 
     heatmap = hooker.scores_to_heatmap(flat_scores_cpu).numpy()
     n_x = heatmap.shape[1]
@@ -505,6 +512,16 @@ def main():
     axes[2].set_xscale("log")
     axes[2].set_yscale("log")
     axes[2].legend(fontsize=7)
+
+    # CE vs sparsity
+    if "eval_learned_ce" in ev:
+        axes[3].plot(pct, ev["eval_learned_ce"], "o-", label="Learned", markersize=4, linewidth=1.2)
+        axes[3].plot(pct, ev["eval_random_ce"], "o--", label="Random", markersize=4, linewidth=1.2)
+        axes[3].set_xlabel("% kept/patched")
+        axes[3].set_ylabel("Cross-Entropy")
+        axes[3].set_title("CE vs Sparsity")
+        axes[3].set_xscale("log")
+        axes[3].legend(fontsize=7)
 
     title = f"[{args.mask}] {args.dataset or args.text!r}"
     fig.suptitle(title, fontsize=12)

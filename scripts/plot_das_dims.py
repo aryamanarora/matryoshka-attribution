@@ -106,7 +106,8 @@ def main():
         + geom_tile()
         + geom_text(aes(label="n_dims"), size=5, color="white")
         + facet_wrap("sparsity", ncol=3)
-        + scale_fill_gradient(low="#1a1a2e", high="#e94560")
+        + scale_fill_gradient(low="#1a1a2e", high="#e94560",
+                              trans="log1p")
         + labs(x="", y="Layer", fill="# dims")
         + theme(legend_position="right")
     )
