@@ -72,21 +72,62 @@ def main():
     napig = load_node_scores(napig_path)
     logger.info("Loaded %d ours scores, %d NAP-IG scores", len(ours), len(napig))
 
-    # Build hybrids
+    # Convert to ranks (1 = highest score = most important)
+    common = sorted(set(ours) & set(napig))
+    ours_ranked = sorted(common, key=lambda n: ours[n], reverse=True)
+    napig_ranked = sorted(common, key=lambda n: napig[n], reverse=True)
+    ours_rank = {n: i for i, n in enumerate(ours_ranked)}    # 0 = best
+    napig_rank = {n: i for i, n in enumerate(napig_ranked)}
+
+    # Build hybrids using ranks (lower rank = higher synthetic score)
+    n_total = len(common)
+
+    def ranks_to_scores(rank_dict):
+        """Convert rank dict to synthetic scores (higher = more important)."""
+        return {n: float(n_total - r) for n, r in rank_dict.items()}
+
+    def make_hybrid(attn_ranks, mlp_ranks):
+        """Merge attn and MLP rankings into a single ranking.
+
+        Strategy: interleave by rank. Attn heads and MLPs each have their own
+        rank order. We assign final ranks by: sort all nodes, attn by attn_rank
+        and MLPs by mlp_rank, interleaving so that rank-1 attn and rank-1 MLP
+        both get top positions.
+        """
+        attn_nodes = [(n, attn_ranks[n]) for n in common if not n.startswith("m")]
+        mlp_nodes = [(n, mlp_ranks[n]) for n in common if n.startswith("m")]
+
+        # Sort each group by their respective ranks
+        attn_sorted = sorted(attn_nodes, key=lambda x: x[1])
+        mlp_sorted = sorted(mlp_nodes, key=lambda x: x[1])
+
+        # Interleave: assign final rank proportionally
+        # Each attn head gets rank = attn_rank * (n_total / n_attn)
+        # Each MLP gets rank = mlp_rank * (n_total / n_mlp)
+        n_attn = len(attn_sorted)
+        n_mlp = len(mlp_sorted)
+
+        scored = {}
+        for i, (n, _) in enumerate(attn_sorted):
+            scored[n] = n_total - (i * n_total / n_attn)
+        for i, (n, _) in enumerate(mlp_sorted):
+            scored[n] = n_total - (i * n_total / n_mlp)
+        return scored
+
     hybrids = {
-        "napig_ours_mlp": {},      # NAP-IG attn + our MLPs
-        "ours_napig_mlp": {},      # Our attn + NAP-IG MLPs
-        "napig_only": {},          # Pure NAP-IG (for reference)
-        "ours_only": {},           # Pure ours (for reference)
+        "napig_ours_mlp": make_hybrid(napig_rank, ours_rank),   # NAP-IG attn + our MLPs
+        "ours_napig_mlp": make_hybrid(ours_rank, napig_rank),   # Our attn + NAP-IG MLPs
+        "napig_only": ranks_to_scores(napig_rank),
+        "ours_only": ranks_to_scores(ours_rank),
     }
 
-    common = sorted(set(ours) & set(napig))
-    for node in common:
-        is_mlp = node.startswith("m")
-        hybrids["napig_ours_mlp"][node] = ours[node] if is_mlp else napig[node]
-        hybrids["ours_napig_mlp"][node] = napig[node] if is_mlp else ours[node]
-        hybrids["napig_only"][node] = napig[node]
-        hybrids["ours_only"][node] = ours[node]
+    for name, scores in hybrids.items():
+        attn_top5 = sorted([(n, s) for n, s in scores.items() if not n.startswith("m")],
+                           key=lambda x: x[1], reverse=True)[:5]
+        mlp_top3 = sorted([(n, s) for n, s in scores.items() if n.startswith("m")],
+                          key=lambda x: x[1], reverse=True)[:3]
+        logger.info("%s top attn: %s  top MLP: %s", name,
+                    [n for n, _ in attn_top5], [n for n, _ in mlp_top3])
 
     # Load TL model
     tl_name = MODEL_FULLNAMES[model]
