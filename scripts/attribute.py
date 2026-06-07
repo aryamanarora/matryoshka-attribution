@@ -224,7 +224,12 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
         # Forward with mask
         k = sample_k(total, args.k_schedule)
-        hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        soft_mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+        if args.hard_fwd:
+            hard = (soft_mask > 0.5).float()
+            hooker.mask = hard + (soft_mask - soft_mask.detach())  # ST estimator
+        else:
+            hooker.mask = soft_mask
         logits = model(tok.base_input_ids).logits[0, -1].float()
 
         # Loss
@@ -290,14 +295,17 @@ def run_dataset(args, model, tokenizer, device, wandb):
         if (ei + 1) % 20 == 0:
             logger.info("  eval %d/%d done", ei + 1, n_eval)
 
-    # Average across examples
+    # Average across examples and save per-example data for CI
     import numpy as np
     eval_results = {"sparsities": sparsities}
     for key in ["eval_learned", "eval_random", "eval_learned_ce", "eval_random_ce",
                 "eval_learned_other", "eval_random_other"]:
         vals = [e[key] for e in all_eval if key in e]
         if vals:
-            eval_results[key] = np.mean(vals, axis=0).tolist()
+            arr = np.array(vals)
+            eval_results[key] = arr.mean(axis=0).tolist()
+            eval_results[key + "_std"] = arr.std(axis=0).tolist()
+            eval_results[key + "_all"] = arr.tolist()
     logger.info("Averaged eval over %d examples:", n_eval)
     for i, frac in enumerate(sparsities):
         k = max(1, int(frac * total))
@@ -413,6 +421,8 @@ def main():
                         help="Learning rate for DAS rotation matrices (defaults to --lr)")
     parser.add_argument("--n_eval", type=int, default=100,
                         help="Number of examples for sparsity evaluation")
+    parser.add_argument("--hard_fwd", action="store_true",
+                        help="Hard binary mask in forward, straight-through gradient backward")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)
