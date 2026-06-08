@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import sigmoid_topk, CausalGymDataset
+from learning_to_attribute import sigmoid_topk, sigmoid_topk_hard, householder_product, CausalGymDataset
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
     GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks,
@@ -43,19 +43,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
-def householder_product(V):
-    """Build orthogonal matrix from Householder vectors V: [k, d] -> [d, d]."""
-    k, d = V.shape
-    R = torch.eye(d, device=V.device, dtype=V.dtype)
-    for i in range(k):
-        v = V[i]  # [d]
-        v_norm_sq = v @ v
-        if v_norm_sq < 1e-12:
-            continue
-        R = R - (2.0 / v_norm_sq) * torch.outer(R @ v, v)
-    return R
 
 
 def sample_k(total: int, schedule: str = "uniform") -> float:
@@ -234,12 +221,8 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
         # Forward with mask
         k = sample_k(total, args.k_schedule)
-        soft_mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-        if args.hard_fwd:
-            hard = (soft_mask > 0.5).float()
-            hooker.mask = hard + (soft_mask - soft_mask.detach())  # ST estimator
-        else:
-            hooker.mask = soft_mask
+        mask_fn = sigmoid_topk_hard if args.hard_fwd else sigmoid_topk
+        hooker.mask = mask_fn(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = model(tok.base_input_ids).logits[0, -1].float()
 
         # Loss
