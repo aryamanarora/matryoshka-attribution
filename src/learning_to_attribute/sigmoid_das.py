@@ -22,6 +22,23 @@ class RotateLayer(nn.Module):
     def forward(self, x):
         return x.to(self.weight.dtype) @ self.weight
 
+    def intervene(self, base, cf, mask, sufficient=True):
+        """Apply masked intervention in the rotated subspace.
+
+        base: [..., d_model]
+        cf:   [..., d_model]
+        mask: [..., das_dim] values in [0, 1]
+        sufficient: if True, null space keeps base, mask=1 applies CF.
+                    if False (necessary), null space uses CF, mask=1 keeps base.
+        """
+        W = self.weight.to(base.dtype)
+        rotated_base = base @ W
+        rotated_cf = cf @ W
+        if sufficient:
+            return base + ((rotated_cf - rotated_base) * mask) @ W.T
+        else:
+            return cf + ((rotated_base - rotated_cf) * mask) @ W.T
+
 
 def make_rotate_layer(d_model, das_dim=None):
     layer = RotateLayer(d_model, das_dim)

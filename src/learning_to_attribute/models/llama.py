@@ -600,7 +600,6 @@ class LlamaSpanAttributionHooks:
 
         out = base_act.clone()
         span_dim_mask = span_dim_mask.to(base_act.dtype)
-        W = rotate_layer.weight.to(base_act.dtype)  # [d_model, das_dim]
 
         for span_i in range(self.num_spans):
             base_positions = self.base_span_to_pos[span_i]
@@ -612,16 +611,8 @@ class LlamaSpanAttributionHooks:
 
             for j, bp in enumerate(base_positions):
                 sp = src_positions[min(j, len(src_positions) - 1)] if src_positions else bp
-
-                rotated_base = base_act[0, bp] @ W  # [das_dim]
-                rotated_cf = cf_act[0, sp] @ W      # [das_dim]
-
-                if self.sufficient:
-                    diff = (rotated_cf - rotated_base) * m
-                else:
-                    diff = (rotated_cf - rotated_base) * (1 - m)
-
-                out[0, bp] = base_act[0, bp] + diff @ W.T
+                out[0, bp] = rotate_layer.intervene(
+                    base_act[0, bp], cf_act[0, sp], m, sufficient=self.sufficient)
 
         return out
 
