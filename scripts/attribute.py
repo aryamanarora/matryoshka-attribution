@@ -271,10 +271,11 @@ def run_dataset(args, model, tokenizer, device, wandb):
         ref_probs = F.softmax(src_logits_eval if args.sufficient else clean_logits_eval, dim=-1)
         other_probs = F.softmax(clean_logits_eval if args.sufficient else src_logits_eval, dim=-1)
 
+        ce_target = eval_tok.src_label_id if args.sufficient else eval_tok.base_label_id
         ev = _eval_sparsity(
             model, hooker, scores, eval_tok.base_input_ids, total, sparsities, device,
             ref_probs, "kl", None, other_probs=other_probs, has_cf=True,
-            sufficient=args.sufficient, wandb=None)
+            sufficient=args.sufficient, wandb=None, ce_target_id=ce_target)
         all_eval.append(ev)
         if (ei + 1) % 20 == 0:
             logger.info("  eval %d/%d done", ei + 1, n_eval)
@@ -316,7 +317,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
 def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
                    ref_probs, loss_type, top5_indices, other_probs=None,
-                   has_cf=False, sufficient=False, wandb=None):
+                   has_cf=False, sufficient=False, wandb=None, ce_target_id=None):
     """Run sparsity evaluation sweep."""
     flat_scores = scores.data.clone()
     sorted_idx = flat_scores.argsort(descending=True)
@@ -341,10 +342,9 @@ def _eval_sparsity(model, hooker, scores, input_ids, total, sparsities, device,
                 logits = model(input_ids).logits[0, -1].float()
                 lp = F.log_softmax(logits, dim=-1)
                 val = F.kl_div(lp, ref_probs, reduction="batchmean").item()
-                # CE on the target label
-                target_id = ref_probs.argmax().item()
+                tid = ce_target_id if ce_target_id is not None else ref_probs.argmax().item()
                 ce_val = F.cross_entropy(logits.unsqueeze(0),
-                                         torch.tensor([target_id], device=device)).item()
+                                         torch.tensor([tid], device=device)).item()
             el.append(val)
             el_ce.append(ce_val)
             if has_cf and other_probs is not None:
