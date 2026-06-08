@@ -23,7 +23,7 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "node", "das"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "resid_dim", "node", "das"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -415,6 +415,8 @@ class LlamaSpanAttributionHooks:
             self.total = self.mlp_total + self.attn_head_total
         elif mask_type == "resid":
             self.total = self.scalar_total
+        elif mask_type == "resid_dim":
+            self.total = self.num_layers * S * self.hidden_size
         elif mask_type == "das":
             # DAS: per (layer, span, das_dim) scores in rotated subspace
             # das_dim set externally via set_das_dim(); defaults to hidden_size
@@ -445,7 +447,7 @@ class LlamaSpanAttributionHooks:
 
     @property
     def has_resid(self):
-        return self.mask_type in ("resid", "das")
+        return self.mask_type in ("resid", "resid_dim", "das")
 
     @property
     def has_das(self):
@@ -477,6 +479,9 @@ class LlamaSpanAttributionHooks:
         if self.has_das:
             parts.append(f"DAS: {self.num_layers}L x {S}spans x "
                          f"{self.das_dim}d = {self.total:,}")
+        elif self.mask_type == "resid_dim":
+            parts.append(f"Resid-dim: {self.num_layers}L x {S}spans x "
+                         f"{self.hidden_size}d = {self.total:,}")
         elif self.has_resid:
             parts.append(f"Resid: {self.num_layers}L x {S}spans = "
                          f"{self.scalar_total:,}")
@@ -674,7 +679,7 @@ class LlamaSpanAttributionHooks:
                     self._get_attn_module(layer).register_forward_pre_hook(
                         make_attn_hook(layer_idx)))
 
-            if self.has_resid and not self.has_das:
+            if self.mask_type == "resid":
                 def make_resid_hook(li):
                     def hook(mod, inp, output):
                         if self.mask is None:
@@ -694,6 +699,28 @@ class LlamaSpanAttributionHooks:
                     return hook
                 self._hooks.append(
                     layer.register_forward_hook(make_resid_hook(layer_idx)))
+
+            if self.mask_type == "resid_dim":
+                def make_resid_dim_hook(li):
+                    def hook(mod, inp, output):
+                        if self.mask is None:
+                            return
+                        if isinstance(output, tuple):
+                            x = output[0]
+                        else:
+                            x = output
+                        off = li * S * self.hidden_size
+                        span_mask = self.mask[off:off + S * self.hidden_size].view(
+                            S, self.hidden_size)
+                        new_x = self._span_intervene(
+                            x, self.cf_acts_resid.get(li), span_mask, li,
+                            component_dim=self.hidden_size)
+                        if isinstance(output, tuple):
+                            return (new_x,) + output[1:]
+                        return new_x
+                    return hook
+                self._hooks.append(
+                    layer.register_forward_hook(make_resid_dim_hook(layer_idx)))
 
             if self.has_das:
                 def make_das_hook(li):
@@ -795,6 +822,9 @@ class LlamaSpanAttributionHooks:
         if self.has_das:
             heatmap = torch.maximum(
                 heatmap, scores_flat.view(self.num_layers, S, self.das_dim).max(dim=-1).values)
+        elif self.mask_type == "resid_dim":
+            heatmap = torch.maximum(
+                heatmap, scores_flat.view(self.num_layers, S, self.hidden_size).max(dim=-1).values)
         elif self.has_resid:
             heatmap = torch.maximum(
                 heatmap, scores_flat.view(self.num_layers, S))
