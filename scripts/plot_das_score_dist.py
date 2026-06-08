@@ -102,7 +102,7 @@ def main():
             + labs(x="Rank (most important →)", y="Score", color="Span", linetype="Run")
         )
 
-    out = Path(paths[0]).with_name("das_score_dist.png")
+    out = Path(paths[0]).with_name(Path(paths[0]).stem.replace("_scores", "") + "_score_dist.png")
     p.save(out, dpi=150)
     print(f"Saved {out}")
     p.save(out.with_suffix(".pdf"), dpi=300)
