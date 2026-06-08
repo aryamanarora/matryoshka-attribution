@@ -793,9 +793,8 @@ class LlamaSpanAttributionHooks:
             heatmap = torch.maximum(heatmap, attn)
 
         if self.has_das:
-            # DAS: [num_layers * num_spans * hidden_size] -> max over dims
             heatmap = torch.maximum(
-                heatmap, scores_flat.view(self.num_layers, S, self.hidden_size).max(dim=-1).values)
+                heatmap, scores_flat.view(self.num_layers, S, self.das_dim).max(dim=-1).values)
         elif self.has_resid:
             heatmap = torch.maximum(
                 heatmap, scores_flat.view(self.num_layers, S))
