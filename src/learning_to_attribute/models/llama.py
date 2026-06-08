@@ -416,13 +416,14 @@ class LlamaSpanAttributionHooks:
         elif mask_type == "resid":
             self.total = self.scalar_total
         elif mask_type == "das":
-            # DAS: per (layer, span, dim) scores — single flat vector
-            # Layout: [num_layers * num_spans * hidden_size]
-            self.total = self.num_layers * S * self.hidden_size
+            # DAS: per (layer, span, das_dim) scores in rotated subspace
+            # das_dim set externally via set_das_dim(); defaults to hidden_size
+            self.das_dim = self.hidden_size
+            self.total = self.num_layers * S * self.das_dim
 
         self.mask = None
-        # DAS rotation matrices (set externally per forward step)
-        self.R: dict[int, torch.Tensor] = {}  # layer_idx -> [d_model, d_model]
+        # DAS rotation layers (set externally via set_das_rotations)
+        self.R: dict[int, torch.nn.Module] = {}  # layer_idx -> RotateLayer
         self.cf_acts_mlp: dict[int, torch.Tensor] = {}
         self.cf_acts_attn: dict[int, torch.Tensor] = {}
         self.cf_acts_resid: dict[int, torch.Tensor] = {}
@@ -475,7 +476,7 @@ class LlamaSpanAttributionHooks:
                              f"{self.num_heads}h = {self.attn_head_total:,}")
         if self.has_das:
             parts.append(f"DAS: {self.num_layers}L x {S}spans x "
-                         f"{self.hidden_size}d = {self.total:,}")
+                         f"{self.das_dim}d = {self.total:,}")
         elif self.has_resid:
             parts.append(f"Resid: {self.num_layers}L x {S}spans = "
                          f"{self.scalar_total:,}")
@@ -501,6 +502,13 @@ class LlamaSpanAttributionHooks:
             else:  # all
                 self.base_span_to_pos.append(bt)
                 self.src_span_to_pos.append(st)
+
+    def set_das_dim(self, das_dim: int):
+        """Set DAS subspace dimension and recompute total score count."""
+        assert self.mask_type == "das"
+        self.das_dim = das_dim
+        S = self.num_spans
+        self.total = self.num_layers * S * das_dim
 
     def cache_cf_activations(self, src_input_ids: torch.Tensor):
         """Cache src activations at hook points."""
@@ -580,19 +588,19 @@ class LlamaSpanAttributionHooks:
     def _das_intervene(self, base_act: torch.Tensor, cf_act: torch.Tensor | None,
                        span_dim_mask: torch.Tensor,
                        layer_idx: int) -> torch.Tensor:
-        """DAS intervention: rotate, mask subspace dims per span, un-rotate.
+        """DAS intervention: project to learned subspace, mask, project back.
 
         base_act: [1, base_seq_len, d_model]
         cf_act:   [1, src_seq_len, d_model] or None
-        span_dim_mask: [num_spans, d_model] per-(span, dim) mask in rotated space
+        span_dim_mask: [num_spans, das_dim] per-(span, dim) mask in rotated space
         """
-        R = self.R.get(layer_idx)
-        if R is None or cf_act is None:
+        rotate_layer = self.R.get(layer_idx)
+        if rotate_layer is None or cf_act is None:
             return base_act
 
-        R = R.to(base_act.dtype)
         out = base_act.clone()
         span_dim_mask = span_dim_mask.to(base_act.dtype)
+        W = rotate_layer.weight.to(base_act.dtype)  # [d_model, das_dim]
 
         for span_i in range(self.num_spans):
             base_positions = self.base_span_to_pos[span_i]
@@ -600,23 +608,20 @@ class LlamaSpanAttributionHooks:
             if not base_positions:
                 continue
 
-            m = span_dim_mask[span_i]  # [d_model]
+            m = span_dim_mask[span_i]  # [das_dim]
 
             for j, bp in enumerate(base_positions):
                 sp = src_positions[min(j, len(src_positions) - 1)] if src_positions else bp
 
-                # Rotate into learned basis
-                rotated_base = R @ base_act[0, bp]  # [d_model]
-                rotated_cf = R @ cf_act[0, sp]       # [d_model]
+                rotated_base = base_act[0, bp] @ W  # [das_dim]
+                rotated_cf = cf_act[0, sp] @ W      # [das_dim]
 
-                # Interpolate in rotated space
                 if self.sufficient:
-                    interpolated = rotated_base * (1 - m) + rotated_cf * m
+                    diff = (rotated_cf - rotated_base) * m
                 else:
-                    interpolated = rotated_base * m + rotated_cf * (1 - m)
+                    diff = (rotated_cf - rotated_base) * (1 - m)
 
-                # Un-rotate back
-                out[0, bp] = R.T @ interpolated
+                out[0, bp] = base_act[0, bp] + diff @ W.T
 
         return out
 
@@ -708,11 +713,10 @@ class LlamaSpanAttributionHooks:
                             x = output[0]
                         else:
                             x = output
-                        # Mask layout: [num_layers * num_spans * hidden_size]
-                        # This layer's slice: [num_spans * hidden_size]
-                        off = li * S * self.hidden_size
-                        span_dim_mask = self.mask[off:off + S * self.hidden_size].view(
-                            S, self.hidden_size)
+                        # Mask layout: [num_layers * num_spans * das_dim]
+                        off = li * S * self.das_dim
+                        span_dim_mask = self.mask[off:off + S * self.das_dim].view(
+                            S, self.das_dim)
                         new_x = self._das_intervene(
                             x, self.cf_acts_resid.get(li),
                             span_dim_mask, li)

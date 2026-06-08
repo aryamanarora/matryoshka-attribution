@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import sigmoid_topk, sigmoid_topk_hard, householder_product, CausalGymDataset
+from learning_to_attribute import sigmoid_topk, sigmoid_topk_hard, make_rotate_layer, CausalGymDataset
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
     GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks,
@@ -177,21 +177,25 @@ def run_dataset(args, model, tokenizer, device, wandb):
     hooker = SpanHooksCls(
         model, args.mask, dataset.num_spans,
         pos_strategy=args.pos_strategy, sufficient=args.sufficient)
+    # DAS: set up low-rank rotation layers
+    das_rotations = {}
+    if args.mask == "das":
+        das_dim = args.das_dim or hooker.hidden_size
+        hooker.set_das_dim(das_dim)
+        for li in range(hooker.num_layers):
+            das_rotations[li] = make_rotate_layer(hooker.hidden_size, das_dim).to(device)
+            hooker.R[li] = das_rotations[li]
+
     total = hooker.total
     logger.info("Scores: %s", hooker.describe())
-
     scores = nn.Parameter(torch.zeros(total, device=device))
 
-    # DAS: initialize rotation matrices (Householder parameterization)
-    das_V = {}
     if args.mask == "das":
-        hk = args.householder_k or hooker.hidden_size
-        for li in range(hooker.num_layers):
-            das_V[li] = nn.Parameter(torch.randn(hk, hooker.hidden_size, device=device) * 0.01)
         lr_rot = args.lr_rotation if args.lr_rotation is not None else args.lr
+        rot_params = [p for rl in das_rotations.values() for p in rl.parameters()]
         optimizer = torch.optim.Adam([
             {"params": [scores], "lr": args.lr},
-            {"params": list(das_V.values()), "lr": lr_rot},
+            {"params": rot_params, "lr": lr_rot},
         ])
     else:
         optimizer = torch.optim.Adam([scores], lr=args.lr)
@@ -213,11 +217,6 @@ def run_dataset(args, model, tokenizer, device, wandb):
             tok.base_alignment, tok.src_alignment,
             tok.base_input_ids.shape[1], tok.src_input_ids.shape[1])
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
-
-        # DAS: compute rotation matrices from Householder params
-        if args.mask == "das":
-            for li in range(hooker.num_layers):
-                hooker.R[li] = householder_product(das_V[li])
 
         # Forward with mask
         k = sample_k(total, args.k_schedule)
@@ -266,11 +265,6 @@ def run_dataset(args, model, tokenizer, device, wandb):
             eval_tok.base_alignment, eval_tok.src_alignment,
             eval_tok.base_input_ids.shape[1], eval_tok.src_input_ids.shape[1])
 
-        # DAS: recompute rotations for eval
-        if args.mask == "das":
-            for li in range(hooker.num_layers):
-                hooker.R[li] = householder_product(das_V[li])
-
         src_logits_eval = hooker.cache_cf_activations(eval_tok.src_input_ids)
         with torch.no_grad():
             clean_logits_eval = model(eval_tok.base_input_ids).logits[0, -1].float()
@@ -316,8 +310,7 @@ def run_dataset(args, model, tokenizer, device, wandb):
         "sparsity_eval": eval_results, "sparsities": sparsities,
     }
     if args.mask == "das":
-        result["das_rotations"] = {li: householder_product(V).data.cpu() for li, V in das_V.items()}
-        result["das_householder_V"] = {li: V.data.cpu() for li, V in das_V.items()}
+        result["das_rotations"] = {li: rl.weight.data.cpu() for li, rl in das_rotations.items()}
     return result
 
 
@@ -414,8 +407,8 @@ def main():
                         help="Number of examples for sparsity evaluation")
     parser.add_argument("--hard_fwd", action="store_true",
                         help="Hard binary mask in forward, straight-through gradient backward")
-    parser.add_argument("--householder_k", type=int, default=None,
-                        help="Number of Householder reflections for DAS rotation (default: full d_model)")
+    parser.add_argument("--das_dim", type=int, default=None,
+                        help="DAS rotation subspace dimension (default: full d_model)")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb_project", default="learning-to-attribute")
     parser.add_argument("--wandb_name", default=None)

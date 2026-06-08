@@ -1,6 +1,31 @@
 """DAS (Distributed Alignment Search) rotation parameterizations."""
 
 import torch
+import torch.nn as nn
+
+
+class RotateLayer(nn.Module):
+    """Low-rank orthogonal projection for DAS.
+
+    Projects from d_model to das_dim via a semi-orthogonal matrix W: [d_model, das_dim].
+    Orthogonality (W^T W = I) is enforced by torch parametrizations.
+    """
+
+    def __init__(self, d_model, das_dim=None):
+        super().__init__()
+        if das_dim is None:
+            das_dim = d_model
+        weight = torch.empty(d_model, das_dim)
+        nn.init.orthogonal_(weight)
+        self.weight = nn.Parameter(weight)
+
+    def forward(self, x):
+        return x.to(self.weight.dtype) @ self.weight
+
+
+def make_rotate_layer(d_model, das_dim=None):
+    layer = RotateLayer(d_model, das_dim)
+    return nn.utils.parametrizations.orthogonal(layer)
 
 
 def householder_product(V):
