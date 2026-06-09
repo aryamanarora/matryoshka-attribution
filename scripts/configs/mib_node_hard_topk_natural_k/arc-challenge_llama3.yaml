@@ -1,5 +1,5 @@
 model: llama3
-task: arc-challenge
+task: arc_challenge
 steps: 500
 k-schedule: log
 masking: hard_topk
