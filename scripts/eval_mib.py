@@ -123,7 +123,7 @@ def main():
     temp_args, _ = parser.parse_known_args()
     if temp_args.config:
         config_path = Path(temp_args.config)
-        if not config_path.is_absolute():
+        if not config_path.exists() and not config_path.is_absolute():
             config_path = Path(__file__).parent / config_path
         with open(config_path) as f:
             config = yaml.safe_load(f)
