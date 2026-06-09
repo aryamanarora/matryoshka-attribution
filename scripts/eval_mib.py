@@ -76,7 +76,7 @@ def get_hooks_class(model):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=None)
-    parser.add_argument("--mib-path", type=str, required=True,
+    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track",
                         help="Path to cloned MIB-circuit-track repo")
     parser.add_argument("--model", type=str, required=True,
                         choices=list(MODEL_FULLNAMES.keys()))
