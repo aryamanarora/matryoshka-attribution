@@ -78,9 +78,9 @@ def main():
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--mib-path", type=str, default="MIB-circuit-track",
                         help="Path to cloned MIB-circuit-track repo")
-    parser.add_argument("--model", type=str, required=True,
+    parser.add_argument("--model", type=str, default=None,
                         choices=list(MODEL_FULLNAMES.keys()))
-    parser.add_argument("--task", type=str, required=True,
+    parser.add_argument("--task", type=str, default=None,
                         choices=list(TASKS_TO_HF.keys()))
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--T", type=float, default=0.5)
@@ -135,6 +135,8 @@ def main():
                     break
 
     args = parser.parse_args()
+    if args.model is None or args.task is None:
+        parser.error("--model and --task are required (via CLI or config)")
 
     # W&B init
     if args.wandb:
