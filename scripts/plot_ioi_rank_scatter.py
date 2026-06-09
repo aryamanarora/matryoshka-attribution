@@ -47,16 +47,16 @@ PALETTE = {
 CAT_ORDER = [cat for cat, _ in CATEGORIES] + ["Other heads", "MLP"]
 
 theme_set(
-    theme_bw(base_size=10)
+    theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
         figure_size=(1.83, 2.5),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
-        legend_text=element_text(size=5),
+        legend_text=element_text(size=5.5),
         legend_title=element_text(size=6),
         legend_key_size=8,
-        legend_position="none",
+        legend_position="bottom",
         panel_grid_major=element_line(size=0.3, color="#dddddd"),
         panel_grid_minor=element_blank(),
     )
@@ -131,16 +131,17 @@ def main():
         + geom_point(aes(size="is_highlight", shape="type"), alpha=0.7)
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn head": "o", "MLP": "s"})
-        + scale_size_manual(values={False: 1.5, True: 3.5}, guide=None)
+        + scale_size_manual(values={False: 1.0, True: 2.5}, guide=None)
         + labs(
             x="Rank (Ours)",
-            y="Rank (NAP-IG repro)",
-            color="Circuit role",
-            title=f"IOI / GPT-2 node ranks (Spearman ρ = {rho:.2f})",
+            y="Rank (NAP-IG)",
+            color="",
+            title=f"IOI / GPT-2 (ρ = {rho:.2f})",
         )
-        + guides(color=guide_legend(ncol=1), shape=guide_legend(ncol=1))
+        + guides(color=guide_legend(ncol=2), shape=guide_legend(ncol=1))
         + theme(
-            legend_position="right",
+            legend_position="bottom",
+            legend_box="vertical",
             plot_title=element_text(size=7),
         )
     )

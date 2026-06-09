@@ -50,20 +50,21 @@ OURS_CLUSTER = Path("results/mib_node_hard_topk_log")
 NAPIG_CLUSTER = Path("results/napig_repro_eval/EAP-IG-inputs_patching_node")
 
 theme_set(
-    theme_bw(base_size=10)
+    theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
         figure_size=(3.67, 2.5),
-        axis_title=element_text(size=8),
+        axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         axis_text_x=element_text(rotation=45, hjust=1, vjust=1),
-        legend_text=element_text(size=6),
+        legend_text=element_text(size=5.5),
         legend_title=element_blank(),
-        panel_grid_major=element_line(size=0.5, color="#dddddd"),
+        legend_key_size=8,
+        panel_grid_major=element_line(size=0.3, color="#dddddd"),
         panel_grid_minor=element_blank(),
         panel_grid_major_x=element_blank(),
         strip_background=element_blank(),
-        strip_text=element_text(size=9, face="plain"),
+        strip_text=element_text(size=7, face="plain"),
     )
 )
 
@@ -96,13 +97,13 @@ def main():
     method_order = [m[1] for m in METHODS]
 
     for task, model, label in COLUMNS:
-        has_any = False
+        task_rows = []
         for hybrid, name in METHODS:
             v = load(task, model, hybrid)
             if v is not None:
-                rows.append({"task": label, "method": name, "cpr_auc": round(v, 2)})
-                has_any = True
-        if has_any:
+                task_rows.append({"task": label, "method": name, "cpr_auc": round(v, 2)})
+        if len(task_rows) == len(METHODS):
+            rows.extend(task_rows)
             task_order.append(label)
 
     df = pd.DataFrame(rows)
