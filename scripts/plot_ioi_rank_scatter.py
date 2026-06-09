@@ -136,7 +136,6 @@ def main():
             x="Rank (Ours)",
             y="Rank (NAP-IG)",
             color="",
-            title=f"IOI / GPT-2 (ρ = {rho:.2f})",
         )
         + guides(color=guide_legend(ncol=2), shape=guide_legend(ncol=1))
         + theme(
