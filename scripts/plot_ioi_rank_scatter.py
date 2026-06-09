@@ -51,11 +51,13 @@ theme_set(
     + theme(
         text=element_text(color="#000", family="Inter"),
         figure_size=(1.83, 2.5),
-        axis_title=element_text(size=10),
-        axis_text=element_text(size=8),
-        legend_text=element_text(size=8),
-        legend_title=element_text(size=9),
-        panel_grid_major=element_line(size=0.5, color="#dddddd"),
+        axis_title=element_text(size=7),
+        axis_text=element_text(size=6),
+        legend_text=element_text(size=5),
+        legend_title=element_text(size=6),
+        legend_key_size=8,
+        legend_position="none",
+        panel_grid_major=element_line(size=0.3, color="#dddddd"),
         panel_grid_minor=element_blank(),
     )
 )
@@ -139,7 +141,7 @@ def main():
         + guides(color=guide_legend(ncol=1), shape=guide_legend(ncol=1))
         + theme(
             legend_position="right",
-            plot_title=element_text(size=10),
+            plot_title=element_text(size=7),
         )
     )
 
@@ -152,9 +154,9 @@ def main():
     texts = []
     for _, row in labeled.iterrows():
         texts.append(ax.text(row["ours_rank"], row["napig_rank"], row["label"],
-                             fontsize=6, fontfamily="Inter", color="#333333"))
-    adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.5),
-                expand=(1.5, 1.5))
+                             fontsize=4, fontfamily="Inter", color="#333333"))
+    adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.3),
+                expand=(1.3, 1.3))
 
     out = Path("paper/figs/ioi_gpt2_rank_scatter.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)

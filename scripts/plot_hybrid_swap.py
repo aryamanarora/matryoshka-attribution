@@ -54,9 +54,10 @@ theme_set(
     + theme(
         text=element_text(color="#000", family="Inter"),
         figure_size=(3.67, 2.5),
-        axis_title=element_text(size=10),
-        axis_text=element_text(size=8),
-        legend_text=element_text(size=8),
+        axis_title=element_text(size=8),
+        axis_text=element_text(size=6),
+        axis_text_x=element_text(rotation=45, hjust=1, vjust=1),
+        legend_text=element_text(size=6),
         legend_title=element_blank(),
         panel_grid_major=element_line(size=0.5, color="#dddddd"),
         panel_grid_minor=element_blank(),
@@ -115,7 +116,7 @@ def main():
         + geom_text(
             aes(label="cpr_auc"),
             position=position_dodge(width=0.8),
-            size=6, va="bottom",
+            size=4, va="bottom",
             format_string="{:.2f}",
         )
         + scale_fill_manual(values=PALETTE)
