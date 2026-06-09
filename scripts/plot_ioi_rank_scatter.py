@@ -130,14 +130,14 @@ def main():
         + geom_abline(slope=1, intercept=0, linetype="dashed", color="#999999", size=0.4)
         + geom_point(aes(size="is_highlight", shape="type"), alpha=0.7)
         + scale_color_manual(values=PALETTE)
-        + scale_shape_manual(values={"Attn head": "o", "MLP": "s"})
+        + scale_shape_manual(values={"Attn head": "o", "MLP": "s"}, guide=None)
         + scale_size_manual(values={False: 1.0, True: 2.5}, guide=None)
         + labs(
             x="Rank (Ours)",
             y="Rank (NAP-IG)",
             color="",
         )
-        + guides(color=guide_legend(ncol=2), shape=guide_legend(ncol=1))
+        + guides(color=guide_legend(ncol=2))
         + theme(
             legend_position="bottom",
             legend_box="vertical",
