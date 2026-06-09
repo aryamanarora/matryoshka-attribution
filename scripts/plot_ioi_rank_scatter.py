@@ -128,41 +128,27 @@ def main():
     p = (
         ggplot(df, aes(x="ours_rank", y="napig_rank", color="category"))
         + geom_abline(slope=1, intercept=0, linetype="dashed", color="#999999", size=0.4)
-        + geom_point(aes(size="is_highlight", shape="type"), alpha=0.7)
+        + geom_point(aes(shape="type"), alpha=0.7, size=1.2)
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn head": "o", "MLP": "s"}, guide=None)
-        + scale_size_manual(values={False: 1.0, True: 2.5}, guide=None)
         + labs(
             x="Rank (Ours)",
             y="Rank (NAP-IG)",
             color="",
         )
-        + guides(color=guide_legend(ncol=2))
+        + guides(color=guide_legend(ncol=3, override_aes={"size": 2}))
         + theme(
             legend_position="bottom",
-            legend_box="vertical",
-            plot_title=element_text(size=7),
+            legend_margin=-5,
+            legend_box_spacing=0.1,
         )
     )
 
-    # Draw to get matplotlib figure, then add adjusted labels
-    fig = p.draw()
-    ax = fig.axes[0]
-
-    from adjustText import adjust_text
-    labeled = df[df["label"] != ""]
-    texts = []
-    for _, row in labeled.iterrows():
-        texts.append(ax.text(row["ours_rank"], row["napig_rank"], row["label"],
-                             fontsize=4, fontfamily="Inter", color="#333333"))
-    adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.3),
-                expand=(1.3, 1.3))
-
     out = Path("paper/figs/ioi_gpt2_rank_scatter.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=300, bbox_inches="tight")
+    p.save(out, dpi=300)
     print(f"Saved {out}")
-    fig.savefig(out.with_suffix(".png"), dpi=150, bbox_inches="tight")
+    p.save(out.with_suffix(".png"), dpi=150)
     print(f"Saved {out.with_suffix('.png')}")
     print(f"Spearman rho={rho:.3f}, p={pval:.2e}")
 
