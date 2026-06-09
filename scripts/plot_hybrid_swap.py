@@ -20,8 +20,14 @@ RESULTS_BASE = LOCAL if LOCAL.exists() else CLUSTER
 
 COLUMNS = [
     ("ioi", "gpt2", "IOI / GPT"),
+    ("ioi", "qwen2.5", "IOI / Qwen"),
+    ("ioi", "gemma2", "IOI / Gemma"),
+    ("arithmetic_subtraction", "llama3", "Arith / Llama"),
     ("mcqa", "qwen2.5", "MCQA / Qwen"),
     ("mcqa", "gemma2", "MCQA / Gemma"),
+    ("arc_easy", "gemma2", "ARC-E / Gemma"),
+    ("arc_easy", "llama3", "ARC-E / Llama"),
+    ("arc_challenge", "llama3", "ARC-C / Llama"),
 ]
 
 METHODS = [
@@ -47,7 +53,7 @@ theme_set(
     theme_bw(base_size=10)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(7, 3.5),
+        figure_size=(3.67, 2.5),
         axis_title=element_text(size=10),
         axis_text=element_text(size=8),
         legend_text=element_text(size=8),

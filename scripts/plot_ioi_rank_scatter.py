@@ -50,7 +50,7 @@ theme_set(
     theme_bw(base_size=10)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 5),
+        figure_size=(1.83, 2.5),
         axis_title=element_text(size=10),
         axis_text=element_text(size=8),
         legend_text=element_text(size=8),
