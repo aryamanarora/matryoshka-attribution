@@ -219,7 +219,10 @@ def run_dataset(args, model, tokenizer, device, wandb):
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
 
         # Forward with mask
-        k = sample_k(total, args.k_schedule)
+        if args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac:
+            k = max(1, (scores.detach() >= 0).sum().item())
+        else:
+            k = sample_k(total, args.k_schedule)
         mask_fn = sigmoid_topk_hard if args.hard_fwd else sigmoid_topk
         hooker.mask = mask_fn(scores, k=k, T=args.T, n_iters=args.n_iters)
         logits = model(tok.base_input_ids).logits[0, -1].float()
@@ -407,6 +410,8 @@ def main():
                         help="Number of examples for sparsity evaluation")
     parser.add_argument("--hard_fwd", action="store_true",
                         help="Hard binary mask in forward, straight-through gradient backward")
+    parser.add_argument("--natural_k_frac", type=float, default=0.0,
+                        help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--das_dim", type=int, default=None,
                         help="DAS rotation subspace dimension (default: full d_model)")
     parser.add_argument("--wandb", action="store_true")

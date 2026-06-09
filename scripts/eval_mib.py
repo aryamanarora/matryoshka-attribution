@@ -112,6 +112,8 @@ def main():
                         help="Max examples for MIB eval (default: all)")
     parser.add_argument("--train-batch-size", type=int, default=1,
                         help="Gradient accumulation batch size for training")
+    parser.add_argument("--natural-k-frac", type=float, default=0.0,
+                        help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--output", type=str, default="results/mib")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb-project", default="circuits")
@@ -235,7 +237,9 @@ def main():
         hooker.cache_cf_activations(src_ids)
 
         # Sample k (shared across batch)
-        if args.k_schedule == "log":
+        if args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac:
+            k = float(max(1, (scores.detach() >= 0).sum().item()))
+        elif args.k_schedule == "log":
             log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
             k = math.exp(log_k)
         else:
