@@ -51,7 +51,7 @@ def sample_k(total, schedule="uniform"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, required=True)
+    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track")
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True, choices=list(TASKS_TO_HF.keys()))
     parser.add_argument("--steps", type=int, default=500)
