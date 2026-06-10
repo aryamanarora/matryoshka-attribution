@@ -15,16 +15,18 @@ from plotnine import (
 )
 
 RESULTS_BASE = Path("results")
-LOCAL_DIR = Path("/tmp/mib_scores")
+LOCAL_BASE = Path("/tmp/mib_pkls/results")
 
 CATEGORIES = [
-    ("Previous token", ["a2.h2", "a4.h11"]),
-    ("Duplicate token", ["a0.h1", "a3.h0", "a0.h10"]),
-    ("Induction", ["a5.h5", "a6.h9", "a5.h8", "a5.h9"]),
-    ("S-inhibition", ["a7.h3", "a7.h9", "a8.h6", "a8.h10"]),
-    ("Neg. name mover", ["a10.h7", "a11.h10"]),
-    ("Name mover", ["a9.h9", "a9.h6", "a10.h0"]),
-    ("Backup name mover", ["a9.h0", "a9.h7", "a10.h1", "a10.h2", "a10.h6", "a10.h10", "a11.h2", "a11.h9"]),
+    ("Known heads", [
+        "a9.h9", "a9.h6", "a10.h0",  # name mover
+        "a10.h7", "a11.h10",          # neg name mover
+        "a2.h2", "a4.h11",            # previous token
+        "a0.h1", "a3.h0", "a0.h10",   # duplicate token
+        "a5.h5", "a6.h9", "a5.h8", "a5.h9",  # induction
+        "a7.h3", "a7.h9", "a8.h6", "a8.h10",  # s-inhibition
+        "a9.h0", "a9.h7", "a10.h1", "a10.h2", "a10.h6", "a10.h10", "a11.h2", "a11.h9",  # backup name mover
+    ]),
 ]
 
 NODE_TO_CAT = {}
@@ -33,29 +35,23 @@ for cat, nodes in CATEGORIES:
         NODE_TO_CAT[n] = cat
 
 PALETTE = {
-    "Previous token": "#e41a1c",
-    "Duplicate token": "#377eb8",
-    "Induction": "#4daf4a",
-    "S-inhibition": "#984ea3",
-    "Neg. name mover": "#ff7f00",
-    "Name mover": "#a65628",
-    "Backup name mover": "#f781bf",
-    "Other heads": "#bbbbbb",
-    "MLP": "#e6ab02",
+    "Known heads": "#377eb8",
+    "Other hd.": "#bbbbbb",
+    "MLP": "#e41a1c",
 }
 
-CAT_ORDER = [cat for cat, _ in CATEGORIES] + ["Other heads", "MLP"]
+CAT_ORDER = [cat for cat, _ in CATEGORIES] + ["Other hd.", "MLP"]
 
 theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(1.83, 2.5),
+        figure_size=(1.83, 1.9),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
-        legend_text=element_text(size=5.5),
-        legend_title=element_text(size=6),
-        legend_key_size=8,
+        legend_text=element_text(size=5),
+        legend_title=element_text(size=5),
+        legend_key_size=5,
         legend_position="bottom",
         panel_grid_major=element_line(size=0.3, color="#dddddd"),
         panel_grid_minor=element_blank(),
@@ -71,15 +67,19 @@ def load_scores(path):
 
 
 def load_our_scores():
-    if LOCAL_DIR.exists():
-        return load_scores(LOCAL_DIR / "ours.json")
-    return load_scores(RESULTS_BASE / "mib_node_hard_topk" / "ioi_gpt2_importances.json")
+    rel = Path("mib_node_hard_topk_log") / "ioi_gpt2_importances.json"
+    for base in (LOCAL_BASE, RESULTS_BASE):
+        if (base / rel).exists():
+            return load_scores(base / rel)
+    return load_scores(RESULTS_BASE / rel)
 
 
 def load_napig_scores():
-    if LOCAL_DIR.exists():
-        return load_scores(LOCAL_DIR / "napig.json")
-    return load_scores(RESULTS_BASE / "napig_repro" / "EAP-IG-inputs_patching_node" / "ioi_gpt2" / "importances.json")
+    rel = Path("napig_repro") / "EAP-IG-inputs_patching_node" / "ioi_gpt2" / "importances.json"
+    for base in (LOCAL_BASE, RESULTS_BASE):
+        if (base / rel).exists():
+            return load_scores(base / rel)
+    return load_scores(RESULTS_BASE / rel)
 
 
 def main():
@@ -99,7 +99,7 @@ def main():
     for node in common:
         cat = NODE_TO_CAT.get(node, None)
         if cat is None:
-            cat = "MLP" if node.startswith("m") else "Other heads"
+            cat = "MLP" if node.startswith("m") else "Other hd."
         rows.append({
             "node": node,
             "ours_rank": ours_rank[node],
@@ -132,15 +132,15 @@ def main():
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn head": "o", "MLP": "s"}, guide=None)
         + labs(
-            x="Rank (Ours)",
+            x="Rank (L2A)",
             y="Rank (NAP-IG)",
             color="",
         )
         + guides(color=guide_legend(ncol=3, override_aes={"size": 2}))
         + theme(
-            legend_position="bottom",
-            legend_margin=-5,
-            legend_box_spacing=0.1,
+            legend_position="top",
+            legend_margin=2,
+            legend_box_spacing=0.05,
         )
     )
 
