@@ -38,12 +38,14 @@ METHODS = [
     ("L2A", "mib_node_hard_topk_log"),
     ("L2A + natural $k$ (0.2)", "mib_node_natural_k"),
     ("L2A + natural $k$ (0.1)", "mib_node_natural_k10"),
+    ("L2A + learned bias (0.1)", "mib_node_bias_k10"),
 ]
 
 PALETTE = {
     "L2A": "#000000",
     "L2A + natural $k$ (0.2)": "#e41a1c",
     "L2A + natural $k$ (0.1)": "#377eb8",
+    "L2A + learned bias (0.1)": "#4daf4a",
 }
 
 theme_set(
