@@ -165,6 +165,7 @@ def main():
     logger.info("Loading HF model %s for training...", hf_model_name)
     t0 = time.time()
     tokenizer = AutoTokenizer.from_pretrained(hf_model_name)
+    tokenizer.padding_side = "right"  # last_pos = attn_mask.sum()-1 assumes right padding
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     hf_model = AutoModelForCausalLM.from_pretrained(
