@@ -193,7 +193,10 @@ def main():
     logger.info("Node scores: %s", hooker.describe())
 
     scores = nn.Parameter(torch.zeros(total, device=device))
-    optimizer = torch.optim.Adam([scores], lr=args.lr)
+    # Global scalar bias for zero-point calibration. Only trained on "bias steps"
+    # (natural_k_frac fraction); rank-preserving since it shifts all scores equally.
+    bias = nn.Parameter(torch.zeros(1, device=device))
+    optimizer = torch.optim.Adam([scores, bias], lr=args.lr)
     hooker.register_hooks()
 
     # Training loop
@@ -238,16 +241,25 @@ def main():
         # Cache batched CF activations
         hooker.cache_cf_activations(src_ids)
 
-        # Sample k (shared across batch)
-        if args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac:
-            k = float(max(1, (scores.detach() >= 0).sum().item()))
-        elif args.k_schedule == "log":
+        # Decide step type. On a "bias step" (natural_k_frac fraction) we train ONLY
+        # the global bias; otherwise we train the scores normally (bias not involved).
+        bias_step = args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac
+
+        # Sample k (shared across batch) for normal score-training steps.
+        if args.k_schedule == "log":
             log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
             k = math.exp(log_k)
         else:
             k = 1.0 + (total - 1.0) * torch.rand(1).item()
 
-        if args.masking == "topk":
+        if bias_step:
+            # Selection by thresholding (scores + bias) at 0; scores detached so the
+            # ranking is untouched and only `bias` receives gradient (via the soft mask).
+            x = scores.detach() + bias
+            soft = torch.sigmoid(x / args.T)
+            hard = (x >= 0).float()
+            hooker.mask = hard - soft.detach() + soft
+        elif args.masking == "topk":
             hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
         elif args.masking == "topk_detached":
             hooker.mask = sigmoid_topk_detached_tau(scores, k=k, T=args.T, n_iters=args.n_iters)
@@ -312,7 +324,7 @@ def main():
             loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
 
         optimizer.zero_grad()
-        if args.masking == "bernoulli_reinforce":
+        if args.masking == "bernoulli_reinforce" and not bias_step:
             # REINFORCE: grad = loss * d/d_scores log P(mask | scores)
             # P(mask_i=1) = sigma((s_i - tau) / T)
             # d log P / d s_i = (1/T) * (mask_i - sigma((s_i - tau) / T))
@@ -330,11 +342,21 @@ def main():
             wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
         if (step + 1) % 50 == 0 or step == 0:
             rate = (step + 1) / (time.time() - t0)
-            logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  B=%d  (%.1f step/s)",
-                        step + 1, args.steps, loss_val, k, total, actual_B, rate)
+            n_pos = int((scores.detach() + bias.detach() >= 0).sum().item())
+            logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  B=%d  bias=%.3f  n>=0=%d  (%.1f step/s)",
+                        step + 1, args.steps, loss_val, k, total, actual_B,
+                        bias.item(), n_pos, rate)
 
     train_time = time.time() - t0
     logger.info("Training complete in %.1fs", train_time)
+    if args.natural_k_frac > 0:
+        n_pos = int((scores.detach() + bias.detach() >= 0).sum().item())
+        logger.info("Learned bias=%.4f -> %d/%d nodes have (score+bias)>=0",
+                    bias.item(), n_pos, total)
+        # Rank-preserving calibration: shift scores so that >=0 means "in circuit".
+        # Does NOT change CPR (global shift preserves the ranking / top-x%).
+        with torch.no_grad():
+            scores.data.add_(bias.data)
     hooker.remove_hooks()
 
     # Delete HF model to free memory
