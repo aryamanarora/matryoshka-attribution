@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import spearmanr
 
-RESULTS_BASE = Path("results")
+_LOCAL = Path("/tmp/mib_pkls/results")
+RESULTS_BASE = _LOCAL if _LOCAL.exists() else Path("results")
 
 COLUMNS = [
     ("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
@@ -95,18 +96,18 @@ def print_table(title, rows):
 def main():
     # Node level: Ours vs NAP-IG repro
     rows = compare_node_methods(
-        "mib_node_hard_topk",
+        "mib_node_hard_topk_log",
         "napig_repro/EAP-IG-inputs_patching_node",
         baseline_is_mib_repro=True,
     )
     print_table("NODE: Ours (hard top-k) vs NAP-IG (repro)", rows)
 
     # Node level: Ours vs soft fwd (our ablation)
-    rows = compare_node_methods("mib_node_hard_topk", "final_node")
+    rows = compare_node_methods("mib_node_hard_topk_log", "final_node")
     print_table("NODE: Ours (hard top-k) vs + soft fwd", rows)
 
     # Node level: Ours vs detached tau
-    rows = compare_node_methods("mib_node_hard_topk", "mib_node_detached_tau")
+    rows = compare_node_methods("mib_node_hard_topk_log", "mib_node_detached_tau")
     print_table("NODE: Ours (hard top-k) vs + soft fwd, - c_k grad", rows)
 
 
@@ -160,9 +161,9 @@ def make_latex_table(rows, output_path):
         col += n
     lines.append(" ".join(cmr))
 
-    # Model header row
+    # Model header row with rho label
     model_headers = [MODEL_LABELS.get(r["model"], r["model"]) for r in rows]
-    lines.append("& " + " & ".join(model_headers) + " \\\\")
+    lines.append("$\\rho$ & " + " & ".join(model_headers) + " \\\\")
     lines.append("\\midrule")
 
     def fmt(v):
@@ -171,9 +172,9 @@ def make_latex_table(rows, output_path):
         return f"{v:.2f}"
 
     # Data rows
-    lines.append("$\\rho$ (all) & " + " & ".join(fmt(r["rho_all"]) for r in rows) + " \\\\")
-    lines.append("$\\rho$ (attn) & " + " & ".join(fmt(r["rho_attn"]) for r in rows) + " \\\\")
-    lines.append("$\\rho$ (MLP) & " + " & ".join(fmt(r["rho_mlp"]) for r in rows) + " \\\\")
+    lines.append("All & " + " & ".join(fmt(r["rho_all"]) for r in rows) + " \\\\")
+    lines.append("Attn. & " + " & ".join(fmt(r["rho_attn"]) for r in rows) + " \\\\")
+    lines.append("MLP & " + " & ".join(fmt(r["rho_mlp"]) for r in rows) + " \\\\")
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
@@ -192,7 +193,7 @@ if __name__ == "__main__":
 
     # Also generate LaTeX table for Ours vs NAP-IG
     rows = compare_node_methods(
-        "mib_node_hard_topk",
+        "mib_node_hard_topk_log",
         "napig_repro/EAP-IG-inputs_patching_node",
         baseline_is_mib_repro=True,
     )
