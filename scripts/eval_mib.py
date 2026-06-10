@@ -86,7 +86,10 @@ def main():
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--n_iters", type=int, default=30)
-    parser.add_argument("--split", type=str, default="validation")
+    parser.add_argument("--split", type=str, default="validation",
+                        help="Split to EVALUATE the circuit on (held out)")
+    parser.add_argument("--train-split", type=str, default="train",
+                        help="Split to TRAIN scores on (must differ from --split to avoid leakage)")
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log",
@@ -180,9 +183,9 @@ def main():
     # Load MIB dataset for training examples
     from MIB_circuit_track.dataset import HFEAPDataset
     hf_task_name = f"mib-bench/{TASKS_TO_HF[args.task]}"
-    dataset = HFEAPDataset(hf_task_name, tokenizer, split=args.split,
+    dataset = HFEAPDataset(hf_task_name, tokenizer, split=args.train_split,
                            task=args.task, model_name=args.model)
-    logger.info("Loaded %d examples from %s (%s)", len(dataset), args.task, args.split)
+    logger.info("Loaded %d TRAIN examples from %s (%s)", len(dataset), args.task, args.train_split)
 
     # Set up node-level hooks
     # For node mask, seq_len doesn't matter (position-agnostic), but we need a dummy value
