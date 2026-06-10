@@ -115,6 +115,8 @@ def main():
     parser.add_argument("--natural-k-frac", type=float, default=0.0,
                         help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--output", type=str, default="results/mib")
+    parser.add_argument("--skip-eval", action="store_true",
+                        help="Skip the MIB eval; just train and save the train log (for convergence diagnostics)")
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--wandb-project", default="circuits")
     parser.add_argument("--wandb-name", default=None)
@@ -201,6 +203,7 @@ def main():
 
     # Training loop
     loss_log = []
+    train_log = []  # (step, k, k_frac, loss, bias_step) for k-adjusted convergence plots
     logger.info("Training for %d steps on %s/%s...", args.steps, args.task, args.model)
     t0 = time.time()
     n_examples = len(dataset)
@@ -338,6 +341,7 @@ def main():
 
         loss_val = loss.item()
         loss_log.append(loss_val)
+        train_log.append((step, float(k), float(k) / total, loss_val, int(bias_step)))
         if wandb:
             wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
         if (step + 1) % 50 == 0 or step == 0:
@@ -349,6 +353,22 @@ def main():
 
     train_time = time.time() - t0
     logger.info("Training complete in %.1fs", train_time)
+
+    # Save per-step train log (step, k, k_frac, loss, bias_step) for convergence plots
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / f"{args.task}_{args.model}_trainlog.csv"
+    with open(log_path, "w") as f:
+        f.write("step,k,k_frac,loss,bias_step\n")
+        for row in train_log:
+            f.write("%d,%.6g,%.6g,%.6g,%d\n" % row)
+    logger.info("Saved train log to %s", log_path)
+
+    if args.skip_eval:
+        logger.info("Skipping MIB eval (--skip-eval)")
+        hooker.remove_hooks()
+        return
+
     if args.natural_k_frac > 0:
         n_pos = int((scores.detach() + bias.detach() >= 0).sum().item())
         logger.info("Learned bias=%.4f -> %d/%d nodes have (score+bias)>=0",
