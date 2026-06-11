@@ -19,29 +19,29 @@ CLUSTER = Path("results/hybrid_eval")
 RESULTS_BASE = LOCAL if LOCAL.exists() else CLUSTER
 
 COLUMNS = [
-    ("ioi", "gpt2", "IOI / GPT"),
-    ("ioi", "qwen2.5", "IOI / Qwen"),
-    ("ioi", "gemma2", "IOI / Gemma"),
-    ("arithmetic_subtraction", "llama3", "Arith / Llama"),
-    ("mcqa", "qwen2.5", "MCQA / Qwen"),
-    ("mcqa", "gemma2", "MCQA / Gemma"),
-    ("arc_easy", "gemma2", "ARC-E / Gemma"),
-    ("arc_easy", "llama3", "ARC-E / Llama"),
-    ("arc_challenge", "llama3", "ARC-C / Llama"),
+    ("ioi", "gpt2", "IOI\nGPT-2"),
+    ("ioi", "qwen2.5", "IOI\nQwen"),
+    ("ioi", "gemma2", "IOI\nGemma"),
+    ("arithmetic_subtraction", "llama3", "Arith\nLlama"),
+    ("mcqa", "qwen2.5", "MCQA\nQwen"),
+    ("mcqa", "gemma2", "MCQA\nGemma"),
+    ("arc_easy", "gemma2", "ARC-E\nGemma"),
+    ("arc_easy", "llama3", "ARC-E\nLlama"),
+    ("arc_challenge", "llama3", "ARC-C\nLlama"),
 ]
 
 METHODS = [
-    ("ours", "Ours"),
-    ("napig_ours_mlp", "NAP-IG + our MLPs"),
-    ("ours_napig_mlp", "Ours + NAP-IG MLPs"),
+    ("ours", "L2A"),
+    ("napig_ours_mlp", "NAP-IG + L2A MLPs"),
+    ("ours_napig_mlp", "L2A + NAP-IG MLPs"),
     ("napig", "NAP-IG"),
 ]
 
 PALETTE = {
-    "Ours": "#e41a1c",
-    "NAP-IG + our MLPs": "#ff7f00",
-    "Ours + NAP-IG MLPs": "#984ea3",
-    "NAP-IG": "#377eb8",
+    "L2A": "#bbbbbb",
+    "NAP-IG + L2A MLPs": "#e41a1c",
+    "L2A + NAP-IG MLPs": "#377eb8",
+    "NAP-IG": "#888888",
 }
 
 OURS_DIR = Path("/tmp/mib_pkls/results/mib_node_hard_topk_log")
@@ -53,10 +53,10 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(3.67, 2.5),
+        figure_size=(3.67, 1.9),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
-        axis_text_x=element_text(rotation=45, hjust=1, vjust=1),
+        axis_text_x=element_text(size=6, ha="center"),
         legend_text=element_text(size=5.5),
         legend_title=element_blank(),
         legend_key_size=8,
@@ -117,12 +117,12 @@ def main():
         + geom_text(
             aes(label="cpr_auc"),
             position=position_dodge(width=0.8),
-            size=4, va="bottom",
+            size=3, va="bottom",
             format_string="{:.2f}",
         )
         + scale_fill_manual(values=PALETTE)
         + labs(x="", y="CPR AUC")
-        + theme(legend_position="bottom")
+        + theme(legend_position="top")
     )
 
     out = Path("paper/figs/hybrid_swap.pdf")
