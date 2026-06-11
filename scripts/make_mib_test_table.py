@@ -64,14 +64,13 @@ EDGE_BASELINES = {
     },
 }
 
-# Our method: train on train, score on validation (test set is private; per protocol
-# decision the L2A row here uses the honest train->val numbers, no leak).
-OUR_NODE_DIR = "mib_node_hard_topk_log"
-OUR_EDGE_DIR = "mib_edge_hard_topk"
+# Our method on test set: uniform-k hard-fwd, train on train, eval on test.
+OUR_NODE_DIR = "test_node_hard_topk_uniform"
+OUR_EDGE_DIR = "test_edge_hard_topk_uniform"
 
 
 def load_cpr_auc(results_dir, task, model):
-    pkl_path = RESULTS_BASE / results_dir / f"{task}_{model}_validation.pkl"
+    pkl_path = RESULTS_BASE / results_dir / f"{task}_{model}_test.pkl"
     if not pkl_path.exists():
         return None
     try:
