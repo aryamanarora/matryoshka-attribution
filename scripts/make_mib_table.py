@@ -41,6 +41,7 @@ OUR_METHODS = [
     ("$+$ soft fwd", "final_node", "node", "uniform"),
     ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", "uniform"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
+    ("$+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     # Edge level (log k-schedule = default)
     ("\\ourmethod{}", "mib_edge_hard_topk", "edge", "ours"),
     ("$+$ soft fwd", "final_edge", "edge", "ours"),
