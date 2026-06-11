@@ -126,13 +126,17 @@ def main():
     best_node, second_node = find_best(NODE_BASELINES, ours_node)
     best_edge, second_edge = find_best(EDGE_BASELINES, ours_edge)
 
-    def make_row(name, data, best_col, second_col):
+    def make_row(name, data, best_col, second_col, dagger=None):
+        dcells = dagger or set()
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_col.get((task, model)) == v
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best, underline=is_second))
+            cell = fmt(v, bold=is_best, underline=is_second)
+            if v is not None and (task, model) in dcells:
+                cell = cell + "$^\\dagger$"
+            vals.append(cell)
         return f"{name} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
@@ -158,7 +162,9 @@ def main():
     lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge))
-    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge))
+    # llama3 edge-test jobs OOM'd at full eval -> reduced subset, mark with dagger.
+    EDGE_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
+    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")

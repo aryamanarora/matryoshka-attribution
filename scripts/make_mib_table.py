@@ -135,13 +135,23 @@ def main():
     best_node, second_node = best_in_col("node")
     best_edge, second_edge = best_in_col("edge")
 
+    # Cells evaluated on a reduced subset (OOM fallback) -> mark with a dagger.
+    DAGGER = {
+        "NAP-IG (CF, repro)": {("mcqa", "llama3")},
+        "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
+    }
+
     def make_row(name, data, best_col, second_col, indent=False):
+        dcells = DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_col.get((task, model)) == v
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
-            vals.append(fmt(v, bold=is_best, underline=is_second))
+            cell = fmt(v, bold=is_best, underline=is_second)
+            if v is not None and (task, model) in dcells:
+                cell = cell + "$^\\dagger$"
+            vals.append(cell)
         if indent:
             prefix = f"\\quad {name}"
         else:
