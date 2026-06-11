@@ -37,7 +37,7 @@ def load_node_scores(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, required=True)
+    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track")
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--split", type=str, default="validation")
