@@ -100,7 +100,7 @@ def main():
                         help="necessary: top-k stay clean (like EAP-IG). "
                              "sufficient: top-k get CF (find what flips).")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
                              "topk_detached: soft forward, detached tau (no coupling gradient). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
@@ -273,6 +273,17 @@ def main():
         elif args.masking == "hard_topk":
             ki = max(1, int(k))
             _, top_idx = scores.topk(ki)
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+            hooker.mask = hard - soft.detach() + soft
+        elif args.masking == "hard_topk_gumbel":
+            # Add Gumbel(0,1) noise per score, then hard top-k on the perturbed scores
+            # (forward selection is randomized); straight-through grad via clean-score soft.
+            gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1 - 1e-8)))
+            perturbed = scores + gumbel
+            ki = max(1, int(k))
+            _, top_idx = perturbed.topk(ki)
             hard = torch.zeros_like(scores)
             hard[top_idx] = 1.0
             soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
