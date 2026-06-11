@@ -46,6 +46,8 @@ OUR_METHODS = [
     ("$+$ soft fwd", "final_edge", "edge", "ours"),
     ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
+    # Edge level (uniform k-schedule)
+    ("\\ourmethod{}", "mib_edge_hard_topk_uniform", "edge", "uniform"),
 ]
 
 # Seed run directories (for mean ± std)
@@ -106,7 +108,8 @@ def main():
     # Find best per column per level
     node_ours = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "node" and g == "ours"]
     node_uniform = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "node" and g == "uniform"]
-    edge_ours = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge"]
+    edge_ours = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge" and g == "ours"]
+    edge_uniform = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge" and g == "uniform"]
 
     def best_in_col(level):
         baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
@@ -211,6 +214,11 @@ def main():
     for method_name, _, _, group in edge_ours:
         key = f"{method_name}_edge_{group}"
         lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
+    if edge_uniform:
+        lines.append("\\textbf{Ours} (uniform $k$) \\\\")
+        for method_name, _, _, group in edge_uniform:
+            key = f"{method_name}_edge_{group}"
+            lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
