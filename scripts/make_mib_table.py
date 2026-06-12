@@ -141,8 +141,8 @@ def main():
         "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
     }
 
-    def make_row(name, data, best_col, second_col, indent=False):
-        dcells = DAGGER.get(name, set())
+    def make_row(name, data, best_col, second_col, indent=False, dagger=None):
+        dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
@@ -219,17 +219,19 @@ def main():
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
     best_edge, second_edge = best_in_col("edge")
 
+    # L2A edge llama3 cells use a reduced eval subset (sphinx 80GB rerun) -> dagger.
+    EDGE_LLAMA_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge))
     lines.append("\\textbf{Ours} \\\\")
     for method_name, _, _, group in edge_ours:
         key = f"{method_name}_edge_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
+        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
     if edge_uniform:
         lines.append("\\textbf{Ours} (uniform $k$) \\\\")
         for method_name, _, _, group in edge_uniform:
             key = f"{method_name}_edge_{group}"
-            lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True))
+            lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
