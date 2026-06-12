@@ -59,7 +59,7 @@ def main():
     stask = task.replace("_", "-")
 
     # Load scores from both methods
-    ours_path = RESULTS_BASE / "mib_node_hard_topk_log" / f"{task}_{model}_importances.json"
+    ours_path = RESULTS_BASE / "mib_node_hard_topk" / f"{task}_{model}_importances.json"
     if not ours_path.exists():
         ours_path = RESULTS_BASE / "mib_node_hard_topk" / f"{task}_{model}_importances.json"
     napig_path = RESULTS_BASE / "napig_repro" / "EAP-IG-inputs_patching_node" / f"{stask}_{model}" / "importances.json"

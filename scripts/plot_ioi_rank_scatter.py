@@ -67,7 +67,7 @@ def load_scores(path):
 
 
 def load_our_scores():
-    rel = Path("mib_node_hard_topk_log") / "ioi_gpt2_importances.json"
+    rel = Path("mib_node_hard_topk") / "ioi_gpt2_importances.json"
     for base in (LOCAL_BASE, RESULTS_BASE):
         if (base / rel).exists():
             return load_scores(base / rel)

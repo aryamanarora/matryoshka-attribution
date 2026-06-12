@@ -192,13 +192,14 @@ def main():
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node))
     lines.append("\\textbf{Ours} \\\\")
-    for method_name, _, _, group in node_ours:
-        key = f"{method_name}_node_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
-    lines.append("\\textbf{Ours} (uniform $k$) \\\\")
+    # uniform-k = main method
     for method_name, _, _, group in node_uniform:
         key = f"{method_name}_node_{group}"
         lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
+    # log-k variants, annotated (no separate section)
+    for method_name, _, _, group in node_ours:
+        key = f"{method_name}_node_{group}"
+        lines.append(make_row(method_name + " ($+$ log $k$)", all_results.get(key, {}), best_node, second_node, indent=True))
 
     # === Edge-level section ===
     lines.append("\\midrule")
@@ -224,14 +225,14 @@ def main():
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge))
     lines.append("\\textbf{Ours} \\\\")
-    for method_name, _, _, group in edge_ours:
+    # uniform-k = main method
+    for method_name, _, _, group in edge_uniform:
         key = f"{method_name}_edge_{group}"
         lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
-    if edge_uniform:
-        lines.append("\\textbf{Ours} (uniform $k$) \\\\")
-        for method_name, _, _, group in edge_uniform:
-            key = f"{method_name}_edge_{group}"
-            lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
+    # log-k variants, annotated (no separate section)
+    for method_name, _, _, group in edge_ours:
+        key = f"{method_name}_edge_{group}"
+        lines.append(make_row(method_name + " ($+$ log $k$)", all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
