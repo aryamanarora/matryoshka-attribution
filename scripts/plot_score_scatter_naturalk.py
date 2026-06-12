@@ -1,4 +1,4 @@
-"""Full-width facetted scatter plot of raw node scores: L2A vs natural-k L2A across all tasks."""
+"""Full-width facetted scatter plot of raw node scores: MAttr vs natural-k MAttr across all tasks."""
 
 import json
 from pathlib import Path
@@ -12,9 +12,9 @@ from plotnine import (
     scale_color_manual, scale_shape_manual, guides, guide_legend,
 )
 
-LOCAL_L2A = Path("/tmp/mib_pkls/results/mib_node_hard_topk_log")
+LOCAL_MAttr = Path("/tmp/mib_pkls/results/mib_node_hard_topk_log")
 LOCAL_NK = Path("/tmp/mib_pkls/results/mib_node_natural_k")
-CLUSTER_L2A = Path("results/mib_node_hard_topk_log")
+CLUSTER_MAttr = Path("results/mib_node_hard_topk_log")
 CLUSTER_NK = Path("results/mib_node_natural_k")
 
 TASKS = [
@@ -72,7 +72,7 @@ def main():
     task_order = []
 
     for task, model, label in TASKS:
-        l2a = load_one(task, model, LOCAL_L2A, CLUSTER_L2A)
+        l2a = load_one(task, model, LOCAL_MAttr, CLUSTER_MAttr)
         nk = load_one(task, model, LOCAL_NK, CLUSTER_NK)
         if l2a is None or nk is None:
             continue
@@ -106,7 +106,7 @@ def main():
         + facet_wrap("facet", ncol=5, scales="free")
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn": "o", "MLP": "s"}, guide=None)
-        + labs(x="Score (L2A)", y="Score (L2A, natural $k$)", color="")
+        + labs(x="Score (MAttr)", y="Score (MAttr, natural $k$)", color="")
         + guides(color=guide_legend(override_aes={"size": 2}))
         + theme(
             legend_position="top",

@@ -219,7 +219,7 @@ def main():
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
     best_edge, second_edge = best_in_col("edge")
 
-    # L2A edge llama3 cells use a reduced eval subset (sphinx 80GB rerun) -> dagger.
+    # MAttr edge llama3 cells use a reduced eval subset (sphinx 80GB rerun) -> dagger.
     EDGE_LLAMA_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge))

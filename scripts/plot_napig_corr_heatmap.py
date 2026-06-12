@@ -21,11 +21,11 @@ RB = R if R.exists() else Path("results")
 
 # (label, results-dir)
 METHODS = [
-    ("L2A (log)", "mib_node_hard_topk_log"),
+    ("MAttr (log)", "mib_node_hard_topk_log"),
     ("+soft (log)", "mib_node_topk_log"),
     ("+soft -ck (log)", "mib_node_detached_tau_log"),
     ("+hard bwd (log)", "mib_node_bernoulli_reinforce_log"),
-    ("L2A (unif)", "mib_node_hard_topk"),
+    ("MAttr (unif)", "mib_node_hard_topk"),
     ("+soft (unif)", "final_node"),
     ("+soft -ck (unif)", "mib_node_detached_tau"),
     ("+hard bwd (unif)", "mib_node_bernoulli_reinforce"),

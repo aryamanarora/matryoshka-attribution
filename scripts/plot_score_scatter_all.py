@@ -1,4 +1,4 @@
-"""Full-width facetted scatter plot of raw node scores: L2A vs NAP-IG across all tasks."""
+"""Full-width facetted scatter plot of raw node scores: MAttr vs NAP-IG across all tasks."""
 
 import json
 from pathlib import Path
@@ -12,9 +12,9 @@ from plotnine import (
     scale_color_manual, scale_shape_manual, guides, guide_legend,
 )
 
-LOCAL_OURS = Path("/tmp/mib_pkls/results/mib_node_hard_topk_log")
+LOCAL_OURS = Path("/tmp/mib_pkls/results/mib_node_hard_topk")
 LOCAL_NAPIG = Path("/tmp/mib_pkls/results/napig_repro/EAP-IG-inputs_patching_node")
-CLUSTER_OURS = Path("results/mib_node_hard_topk_log")
+CLUSTER_OURS = Path("results/mib_node_hard_topk")
 CLUSTER_NAPIG = Path("results/napig_repro/EAP-IG-inputs_patching_node")
 
 TASKS = [
@@ -115,7 +115,7 @@ def main():
         + facet_wrap("facet", ncol=5, scales="free")
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn": "o", "MLP": "s"}, guide=None)
-        + labs(x="Score (L2A)", y="Score (NAP-IG)", color="")
+        + labs(x="Score (MAttr)", y="Score (NAP-IG)", color="")
         + guides(color=guide_legend(override_aes={"size": 2}))
         + theme(
             legend_position="top",

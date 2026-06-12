@@ -1,4 +1,4 @@
-"""CPR curves comparing L2A vs natural-k (0.1, 0.2) across all tasks.
+"""CPR curves comparing MAttr vs natural-k (0.1, 0.2) across all tasks.
 
 Usage:
     uv run python scripts/plot_cpr_curves_naturalk.py
@@ -35,17 +35,17 @@ SPARSITIES = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
 
 # Methods: (display_name, results_subdir)
 METHODS = [
-    ("L2A", "mib_node_hard_topk_log"),
-    ("L2A + natural $k$ (0.2)", "mib_node_natural_k"),
-    ("L2A + natural $k$ (0.1)", "mib_node_natural_k10"),
-    ("L2A + learned bias (0.1)", "mib_node_bias_k10"),
+    ("MAttr", "mib_node_hard_topk_log"),
+    ("MAttr + natural $k$ (0.2)", "mib_node_natural_k"),
+    ("MAttr + natural $k$ (0.1)", "mib_node_natural_k10"),
+    ("MAttr + learned bias (0.1)", "mib_node_bias_k10"),
 ]
 
 PALETTE = {
-    "L2A": "#000000",
-    "L2A + natural $k$ (0.2)": "#e41a1c",
-    "L2A + natural $k$ (0.1)": "#377eb8",
-    "L2A + learned bias (0.1)": "#4daf4a",
+    "MAttr": "#000000",
+    "MAttr + natural $k$ (0.2)": "#e41a1c",
+    "MAttr + natural $k$ (0.1)": "#377eb8",
+    "MAttr + learned bias (0.1)": "#4daf4a",
 }
 
 theme_set(

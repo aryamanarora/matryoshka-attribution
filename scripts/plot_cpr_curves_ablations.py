@@ -33,8 +33,8 @@ SPARSITIES = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
 
 # (base, schedule, dir, is_napig)
 METHODS = [
-    ("L2A", "log", "mib_node_hard_topk_log", False),
-    ("L2A", "uniform", "mib_node_hard_topk", False),
+    ("MAttr", "log", "mib_node_hard_topk_log", False),
+    ("MAttr", "uniform", "mib_node_hard_topk", False),
     ("+soft fwd", "log", "mib_node_topk_log", False),
     ("+soft fwd", "uniform", "final_node", False),
     ("+soft -ck", "log", "mib_node_detached_tau_log", False),
@@ -44,10 +44,10 @@ METHODS = [
     ("+Gumbel", "uniform", "mib_node_hard_topk_gumbel", False),
     ("NAP-IG", "log", "napig_repro_eval/EAP-IG-inputs_patching_node", True),
 ]
-BASE_ORDER = ["L2A", "+Gumbel", "+soft fwd", "+soft -ck", "+hard bwd", "NAP-IG"]
+BASE_ORDER = ["MAttr", "+Gumbel", "+soft fwd", "+soft -ck", "+hard bwd", "NAP-IG"]
 
 PALETTE = {
-    "L2A": "#e41a1c", "+Gumbel": "#ff7f00", "+soft fwd": "#984ea3",
+    "MAttr": "#e41a1c", "+Gumbel": "#ff7f00", "+soft fwd": "#984ea3",
     "+soft -ck": "#4daf4a", "+hard bwd": "#a65628", "NAP-IG": "#377eb8",
 }
 

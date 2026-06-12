@@ -19,11 +19,11 @@ RB = R if R.exists() else Path("results")
 # (short label, kind, dir). kind: 'napig' or 'node'
 METHODS = [
     ("NAP-IG", "napig", "napig_repro/EAP-IG-inputs_patching_node"),
-    ("L2A", "node", "mib_node_hard_topk_log"),
+    ("MAttr", "node", "mib_node_hard_topk_log"),
     ("soft", "node", "mib_node_topk_log"),
     ("soft-ck", "node", "mib_node_detached_tau_log"),
     ("hard", "node", "mib_node_bernoulli_reinforce_log"),
-    ("L2A-u", "node", "mib_node_hard_topk"),
+    ("MAttr-u", "node", "mib_node_hard_topk"),
     ("soft-u", "node", "final_node"),
     ("sck-u", "node", "mib_node_detached_tau"),
     ("hard-u", "node", "mib_node_bernoulli_reinforce"),

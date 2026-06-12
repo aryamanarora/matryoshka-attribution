@@ -31,16 +31,16 @@ COLUMNS = [
 ]
 
 METHODS = [
-    ("ours", "L2A"),
-    ("napig_ours_mlp", "NAP-IG + L2A MLPs"),
-    ("ours_napig_mlp", "L2A + NAP-IG MLPs"),
+    ("ours", "MAttr"),
+    ("napig_ours_mlp", "NAP-IG + MAttr MLPs"),
+    ("ours_napig_mlp", "MAttr + NAP-IG MLPs"),
     ("napig", "NAP-IG"),
 ]
 
 PALETTE = {
-    "L2A": "#bbbbbb",
-    "NAP-IG + L2A MLPs": "#e41a1c",
-    "L2A + NAP-IG MLPs": "#377eb8",
+    "MAttr": "#bbbbbb",
+    "NAP-IG + MAttr MLPs": "#e41a1c",
+    "MAttr + NAP-IG MLPs": "#377eb8",
     "NAP-IG": "#888888",
 }
 

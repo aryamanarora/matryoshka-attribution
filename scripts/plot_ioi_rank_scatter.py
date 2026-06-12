@@ -132,7 +132,7 @@ def main():
         + scale_color_manual(values=PALETTE)
         + scale_shape_manual(values={"Attn head": "o", "MLP": "s"}, guide=None)
         + labs(
-            x="Rank (L2A)",
+            x="Rank (MAttr)",
             y="Rank (NAP-IG)",
             color="",
         )
