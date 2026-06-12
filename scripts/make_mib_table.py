@@ -142,10 +142,10 @@ def main():
     }
 
     def logk(name):
-        # "+ log k" precedes other attributes (no parens)
+        # "+ log k" precedes other attributes, comma-separated; main row drops \ourmethod
         if name.startswith("\\ourmethod"):
-            return name + " $+$ log $k$"
-        return "$+$ log $k$ " + name
+            return "$+$ log $k$"
+        return "$+$ log $k$, " + name
 
     def make_row(name, data, best_col, second_col, indent=False, dagger=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
