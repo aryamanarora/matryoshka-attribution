@@ -141,6 +141,12 @@ def main():
         "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
     }
 
+    def logk(name):
+        # "+ log k" precedes other attributes (no parens)
+        if name.startswith("\\ourmethod"):
+            return name + " $+$ log $k$"
+        return "$+$ log $k$ " + name
+
     def make_row(name, data, best_col, second_col, indent=False, dagger=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
@@ -199,7 +205,7 @@ def main():
     # log-k variants, annotated (no separate section)
     for method_name, _, _, group in node_ours:
         key = f"{method_name}_node_{group}"
-        lines.append(make_row(method_name + " ($+$ log $k$)", all_results.get(key, {}), best_node, second_node, indent=True))
+        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_node, second_node, indent=True))
 
     # === Edge-level section ===
     lines.append("\\midrule")
@@ -232,7 +238,7 @@ def main():
     # log-k variants, annotated (no separate section)
     for method_name, _, _, group in edge_ours:
         key = f"{method_name}_edge_{group}"
-        lines.append(make_row(method_name + " ($+$ log $k$)", all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
+        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
