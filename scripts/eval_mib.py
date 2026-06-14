@@ -523,8 +523,12 @@ def main():
     # Save importances.json for MIB submission format
     nodes_dict = {}
     for name in graph.nodes:
-        if name == "input" or name == "logits":
+        if name == "logits":
             nodes_dict[name] = {"in_graph": True}
+        elif name == "input":
+            nodes_dict[name] = {"in_graph": True}
+            if input_score_val is not None:
+                nodes_dict[name]["score"] = input_score_val
         elif name.startswith("a"):
             parts = name.split(".")
             L = int(parts[0][1:])
