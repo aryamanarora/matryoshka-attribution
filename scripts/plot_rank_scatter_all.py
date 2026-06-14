@@ -32,6 +32,7 @@ TASKS = [
 PALETTE = {
     "Attn": "#bbbbbb",
     "MLP": "#e41a1c",
+    "Input": "#ff7f00",
 }
 
 theme_set(
@@ -55,7 +56,7 @@ def load_scores(path):
     d = json.load(open(path))
     nodes = d["nodes"] if "nodes" in d else d
     return {n: info["score"] for n, info in nodes.items()
-            if n not in ("input", "logits")}
+            if n != "logits" and "score" in info}
 
 
 def load_ours(task, model):
@@ -104,7 +105,7 @@ def main():
         task_order.append(facet_label)
 
         for node in common:
-            cat = "MLP" if node.startswith("m") else "Attn"
+            cat = "Input" if node == "input" else ("MLP" if node.startswith("m") else "Attn")
             all_rows.append({
                 "ours_rank": ours_rank[node],
                 "napig_rank": napig_rank[node],
@@ -114,7 +115,7 @@ def main():
             })
 
     df = pd.DataFrame(all_rows)
-    df["category"] = pd.Categorical(df["category"], categories=["Attn", "MLP"], ordered=True)
+    df["category"] = pd.Categorical(df["category"], categories=["Attn", "MLP", "Input"], ordered=True)
     df["facet"] = pd.Categorical(df["facet"], categories=task_order, ordered=True)
     df = df.sort_values("category", ascending=True).reset_index(drop=True)
 
@@ -124,7 +125,7 @@ def main():
         + geom_point(aes(shape="type"), alpha=0.6, size=0.8)
         + facet_wrap("facet", ncol=5, scales="free")
         + scale_color_manual(values=PALETTE)
-        + scale_shape_manual(values={"Attn": "o", "MLP": "s"}, guide=None)
+        + scale_shape_manual(values={"Attn": "o", "MLP": "s", "Input": "D"}, guide=None)
         + labs(x="Rank (MAttr)", y="Rank (NAP-IG)", color="")
         + guides(color=guide_legend(override_aes={"size": 2}))
         + theme(

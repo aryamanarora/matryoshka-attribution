@@ -38,9 +38,10 @@ PALETTE = {
     "Known heads": "#377eb8",
     "Other hd.": "#bbbbbb",
     "MLP": "#e41a1c",
+    "Input": "#ff7f00",
 }
 
-CAT_ORDER = [cat for cat, _ in CATEGORIES] + ["Other hd.", "MLP"]
+CAT_ORDER = [cat for cat, _ in CATEGORIES] + ["Other hd.", "MLP", "Input"]
 
 theme_set(
     theme_bw(base_size=8)
@@ -63,7 +64,7 @@ def load_scores(path):
     d = json.load(open(path))
     nodes = d["nodes"] if "nodes" in d else d
     return {name: info["score"] for name, info in nodes.items()
-            if name not in ("input", "logits")}
+            if name != "logits" and "score" in info}
 
 
 def load_our_scores():
@@ -97,16 +98,19 @@ def main():
 
     rows = []
     for node in common:
-        cat = NODE_TO_CAT.get(node, None)
-        if cat is None:
-            cat = "MLP" if node.startswith("m") else "Other hd."
+        if node == "input":
+            cat = "Input"
+        else:
+            cat = NODE_TO_CAT.get(node, None)
+            if cat is None:
+                cat = "MLP" if node.startswith("m") else "Other hd."
         rows.append({
             "node": node,
             "ours_rank": ours_rank[node],
             "napig_rank": napig_rank[node],
             "category": cat,
             "rank_diff": abs(ours_rank[node] - napig_rank[node]),
-            "type": "MLP" if node.startswith("m") else "Attn head",
+            "type": "Input" if node == "input" else ("MLP" if node.startswith("m") else "Attn head"),
         })
     df = pd.DataFrame(rows)
     df["category"] = pd.Categorical(df["category"], categories=CAT_ORDER, ordered=True)
@@ -130,7 +134,7 @@ def main():
         + geom_abline(slope=1, intercept=0, linetype="dashed", color="#999999", size=0.4)
         + geom_point(aes(shape="type"), alpha=0.7, size=1.2)
         + scale_color_manual(values=PALETTE)
-        + scale_shape_manual(values={"Attn head": "o", "MLP": "s"}, guide=None)
+        + scale_shape_manual(values={"Attn head": "o", "MLP": "s", "Input": "D"}, guide=None)
         + labs(
             x="Rank (MAttr)",
             y="Rank (NAP-IG)",
