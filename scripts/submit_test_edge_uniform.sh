@@ -16,7 +16,7 @@ for p in "${PAIRS[@]}"; do
     llama3)       res="-c 5 -r 128G";;
   esac
   nlprun -g 1 -q jag -d a6000 $res -n "teu-${task}-${model}" \
-    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split test --train-split train --batch-size 5 --eval-examples 0 --output results/test_edge_hard_topk_uniform"
+    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split test --train-split train --batch-size 5 --eval-examples 0 --output results/test_edge_hard_topk_uniform"
   sleep 1
 done
 echo "ALL TEST-EDGE-UNIFORM JOBS SUBMITTED"

@@ -3,7 +3,7 @@ task: arc_easy
 steps: 500
 masking: hard_concrete
 l0-lambda: 1e-3
-mode: necessary
+mode: sufficient
 split: validation
 eval-examples: 500
 output: results/mib_node_hard_concrete

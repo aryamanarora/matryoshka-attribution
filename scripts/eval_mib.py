@@ -95,10 +95,12 @@ def main():
     parser.add_argument("--k-schedule", default="log",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--mode", default="necessary",
+    parser.add_argument("--mode", default="sufficient",
                         choices=["necessary", "sufficient"],
-                        help="necessary: top-k stay clean (like EAP-IG). "
-                             "sufficient: top-k get CF (find what flips).")
+                        help="sufficient (denoising): top-k stay clean, complement "
+                             "corrupted; maximize retained clean behavior (this is "
+                             "what MIB CPR measures, and what all our runs use). "
+                             "necessary (noising): top-k get CF; find what breaks behavior.")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "hard_topk", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
@@ -191,9 +193,11 @@ def main():
     # Set up node-level hooks
     # For node mask, seq_len doesn't matter (position-agnostic), but we need a dummy value
     HooksCls = get_hooks_class(hf_model)
-    is_sufficient = args.mode == "sufficient"
+    # "necessary" (noising) corrupts the top-k; the hooker's `sufficient` flag patches
+    # CF into the selected/top-k components, i.e. that IS the noising intervention.
+    corrupt_topk = args.mode == "necessary"
     hooker = HooksCls(hf_model, "node", seq_len=1,
-                       sufficient=is_sufficient,
+                       sufficient=corrupt_topk,
                        include_input=args.include_input)
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
@@ -333,9 +337,11 @@ def main():
         logit_diffs = last_logits[torch.arange(actual_B, device=device), correct_t] - \
                       last_logits[torch.arange(actual_B, device=device), incorrect_t]
 
-        if is_sufficient:
+        if corrupt_topk:
+            # necessary/noising: corrupting the circuit should break behavior
             loss = logit_diffs.mean()
         else:
+            # sufficient/denoising: circuit alone should retain clean behavior
             loss = -logit_diffs.mean()
 
         if args.masking == "hard_concrete":
@@ -451,8 +457,8 @@ def main():
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
 
-    # absolute=True in eval handles both necessary (positive = important)
-    # and sufficient (negative = important for flipping) correctly via |score|
+    # eval ranks by score; sufficient/denoising (our runs) => positive = important
+    # to keep; necessary/noising => negative = important for breaking behavior.
     graph.nodes_scores = node_scores_tensor
     logger.info("Set node scores (%d scored, %d forward nodes)",
                 (~torch.isnan(graph.nodes_scores)).sum().item(), graph.n_forward)

@@ -20,7 +20,7 @@ for p in "${PAIRS[@]}"; do
   esac
   name="reu-eht-${task}-${model}"
   nlprun -g 1 -q jag -d a6000 $res -n "$name" \
-    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split validation --train-split train --batch-size 5 --eval-examples 0 --output results/mib_edge_hard_topk_uniform"
+    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split validation --train-split train --batch-size 5 --eval-examples 0 --output results/mib_edge_hard_topk_uniform"
   sleep 1
 done
 echo "ALL UNIFORM-K EDGE JOBS SUBMITTED"

@@ -2,7 +2,7 @@ model: llama3
 task: arc_easy
 steps: 500
 k-schedule: uniform
-mode: necessary
+mode: sufficient
 split: validation
 eval-examples: 500
 output: results/mib_node

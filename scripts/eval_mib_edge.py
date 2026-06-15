@@ -65,7 +65,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
-    parser.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"])
+    parser.add_argument("--mode", default="sufficient", choices=["necessary", "sufficient"],
+                        help="sufficient (denoising): corrupt the complement of the top-k, "
+                             "maximize retained clean behavior (MIB CPR; all our runs). "
+                             "necessary (noising): corrupt the top-k, find what breaks behavior.")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "hard_topk", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
@@ -139,7 +142,9 @@ def main():
     optimizer = torch.optim.Adam([scores], lr=args.lr)
     logger.info("Edge scores: %d parameters", total)
 
-    is_sufficient = args.mode == "sufficient"
+    # "necessary" (noising) corrupts the top-k edges; "sufficient" (denoising) corrupts
+    # the complement (our runs / MIB CPR).
+    corrupt_topk = args.mode == "necessary"
 
     # Precompute source node info for hooks
     # Sources: input, a{l}.h{h} for each layer/head, m{l} for each layer
@@ -229,7 +234,7 @@ def main():
         expanded = mask_flat[cumsum]  # [n_full]
         full_mask = (expanded * real_flat_device).view(graph.n_forward, graph.n_backward)
 
-        if is_sufficient:
+        if corrupt_topk:
             corruption_mask = full_mask
         else:
             corruption_mask = 1 - full_mask
@@ -302,7 +307,7 @@ def main():
                                       attention_mask=attention_mask)
 
         logit_diff = logits[0, -1, correct_idx] - logits[0, -1, incorrect_idx]
-        if is_sufficient:
+        if corrupt_topk:
             loss = logit_diff.float()
         else:
             loss = -logit_diff.float()

@@ -3,7 +3,7 @@ task: arc_challenge
 steps: 500
 k-schedule: log
 masking: hard_topk
-mode: necessary
+mode: sufficient
 split: validation
 eval-examples: 500
 output: results/mib_node_bias_k10

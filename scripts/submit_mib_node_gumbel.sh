@@ -20,7 +20,7 @@ for p in "${PAIRS[@]}"; do
   esac
   name="reg-${task}-${model}"
   nlprun -g 1 -q jag -d a6000 $res -n "$name" \
-    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform --masking hard_topk_gumbel --mode necessary --split validation --train-split train --include-input $bs --output results/mib_node_hard_topk_gumbel"
+    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform --masking hard_topk_gumbel --mode sufficient --split validation --train-split train --include-input $bs --output results/mib_node_hard_topk_gumbel"
   sleep 1
 done
 echo "ALL GUMBEL NODE JOBS SUBMITTED"

@@ -8,13 +8,13 @@ cd $ABS
 EXP=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # edge L2A (eval_mib_edge), subset 200, batch 2
 nlprun -g 1 -q sphinx -d h100 -r 128G -n se-log-ioi-llama3 \
-  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task ioi --steps 5000 --k-schedule log --masking hard_topk --mode necessary --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk"
+  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task ioi --steps 5000 --k-schedule log --masking hard_topk --mode sufficient --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk"
 sleep 1
 nlprun -g 1 -q sphinx -d h100 -r 128G -n se-uni-ioi-llama3 \
-  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task ioi --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk_uniform"
+  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task ioi --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk_uniform"
 sleep 1
 nlprun -g 1 -q sphinx -d h100 -r 128G -n se-tst-mcqa-llama3 \
-  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task mcqa --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split test --train-split train --batch-size 2 --eval-examples 200 --output results/test_edge_hard_topk_uniform"
+  "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task mcqa --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split test --train-split train --batch-size 2 --eval-examples 200 --output results/test_edge_hard_topk_uniform"
 sleep 1
 # baselines (head 200)
 nlprun -g 1 -q sphinx -d h100 -r 128G -n se-eap-arcc-llama3 \

@@ -12,15 +12,15 @@ EXP=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 for t in ioi arithmetic_subtraction mcqa; do
   # val log
   nlprun -g 1 -q sphinx -r 128G -n se-log-${t}-llama3 \
-    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule log --masking hard_topk --mode necessary --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk"
+    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule log --masking hard_topk --mode sufficient --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk"
   sleep 1
   # val uniform
   nlprun -g 1 -q sphinx -r 128G -n se-uni-${t}-llama3 \
-    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk_uniform"
+    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/mib_edge_hard_topk_uniform"
   sleep 1
   # test uniform
   nlprun -g 1 -q sphinx -r 128G -n se-tst-${t}-llama3 \
-    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split test --train-split train --batch-size 2 --eval-examples 200 --output results/test_edge_hard_topk_uniform"
+    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split test --train-split train --batch-size 2 --eval-examples 200 --output results/test_edge_hard_topk_uniform"
   sleep 1
 done
 

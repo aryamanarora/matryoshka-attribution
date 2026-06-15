@@ -19,7 +19,7 @@ sleep 1
 # Test-edge uniform (our method): llama3 ioi/arith/mcqa (eval subset 200, batch 2)
 for t in ioi arithmetic_subtraction mcqa; do
   nlprun -g 1 -q jag -d a6000 -c 5 -r 128G -n teu-${t}-llama3 \
-    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode necessary --split test --train-split train --batch-size 1 --eval-examples 50 --output results/test_edge_hard_topk_uniform"
+    "$EXP uv run python scripts/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule uniform --masking hard_topk --mode sufficient --split test --train-split train --batch-size 1 --eval-examples 50 --output results/test_edge_hard_topk_uniform"
   sleep 1
 done
 echo "OOM REDUCED RESUBMITS DONE"
