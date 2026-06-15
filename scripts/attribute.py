@@ -393,9 +393,11 @@ def main():
     parser.add_argument("--chat", action="store_true")
     parser.add_argument("--seed_response", default=None)
     parser.add_argument("--cf_text", default=None)
-    parser.add_argument("--sufficient", action="store_true",
-                        help="Sufficient mode: top-k get CF, find what flips. "
-                             "Default (necessary): top-k stay clean, find what preserves.")
+    parser.add_argument("--sufficient", action=argparse.BooleanOptionalAction, default=True,
+                        help="Sufficient/denoising (default): top-k stay CLEAN, complement "
+                             "corrupted; recover clean behavior. Use --no-sufficient for "
+                             "necessary/noising (top-k get CF, find what flips). "
+                             "Matches eval_mib.py's convention.")
     parser.add_argument("--dataset", default=None,
                         help="CausalGym task, e.g. syntaxgym/agr_gender")
     parser.add_argument("--pos_strategy", default="last",
@@ -438,6 +440,11 @@ def main():
                     break
 
     args = parser.parse_args()
+    # `--sufficient`/`sufficient:` (CLI + config) uses the consistent convention shared
+    # with eval_mib.py: True = top-k stay CLEAN, complement corrupted (denoising /
+    # sufficiency). The code below + sigmoid_das.intervene use the legacy convention
+    # (True = top-k get CF / noising), so translate once here.
+    args.sufficient = not args.sufficient
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
     if args.wandb:

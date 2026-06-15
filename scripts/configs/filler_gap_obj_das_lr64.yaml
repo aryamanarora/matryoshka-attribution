@@ -3,7 +3,7 @@ dataset: syntaxgym/filler_gap_obj
 mask: das
 loss: ce
 pos_strategy: last
-sufficient: false
+sufficient: true
 steps: 5000
 T: 0.5
 lr: 0.01
