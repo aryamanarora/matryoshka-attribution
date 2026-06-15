@@ -1,5 +1,26 @@
 # Project notes for Claude
 
+## CRITICAL: `sufficient` vs `necessary` convention (don't re-flip it)
+
+Unified rule across the whole repo: **`sufficient` = top-k stays CLEAN, complement
+corrupted (denoising)**; **`necessary` = top-k corrupted, complement clean (noising)**.
+This matches standard interp terminology (denoising tests sufficiency, noising tests
+necessity) and is what MIB's CPR measures — so all our MIB runs are the *sufficient*
+(denoising) intervention.
+
+- MIB scripts (`eval_mib.py`, `eval_mib_edge.py`): `--mode sufficient` (now the default)
+  = denoising = our runs. `--mode necessary` = noising.
+- DAS / CausalGym (`scripts/attribute.py`): config key / flag `sufficient: true` = denoising
+  = top-k clean, matching MIB. **Gotcha:** the *internal* legacy flag (and
+  `sigmoid_das.intervene`'s `sufficient=` param) use the OPPOSITE sense (`True` = top-k get
+  CF / noising); `attribute.py` inverts once right after `parse_args` (`args.sufficient =
+  not args.sufficient`). Don't "fix" that inversion — it's load-bearing.
+
+Both `--mode`/`sufficient:` labels were originally flipped and were corrected (commits on
+2026-06-15). Behavior of all existing runs was preserved (config values flipped to match).
+If you add a new config/script, follow the unified rule above; if a number looks like the
+wrong intervention, check this first.
+
 ## CRITICAL: which results dir is the "L2A" / "Ours" baseline
 
 The paper's headline method (**L2A**, the bold "Ours" row in `paper/tabs/mib_results.tex`)

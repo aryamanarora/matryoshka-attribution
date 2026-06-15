@@ -5,4 +5,4 @@ mask: mlp
 loss: kl
 steps: 300
 sufficient: false
-output: results/months_interchange_sufficient
+output: results/months_interchange_necessary

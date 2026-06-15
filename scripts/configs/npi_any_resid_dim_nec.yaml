@@ -9,4 +9,4 @@ T: 0.5
 lr: 0.01
 k_schedule: log
 hard_fwd: true
-output: results/pythia1b_npi_any_resid_dim_suff
+output: results/pythia1b_npi_any_resid_dim_nec

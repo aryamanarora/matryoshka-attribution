@@ -11,4 +11,4 @@ lr_rotation: 0.001
 k_schedule: log
 hard_fwd: true
 das_dim: 64
-output: results/pythia1b_npi_any_das_lr64_suff
+output: results/pythia1b_npi_any_das_lr64_nec
