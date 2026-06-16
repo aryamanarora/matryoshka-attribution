@@ -147,7 +147,16 @@ def main():
             return "$+$ log $k$"
         return "$+$ log $k$, " + name
 
-    def make_row(name, data, best_col, second_col, indent=False, dagger=None):
+    def row_avg(data):
+        vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
+        return round(sum(vs) / len(vs), 2) if vs else None
+
+    def section_avg_best(data_dicts):
+        avs = sorted({a for a in (row_avg(d) for d in data_dicts) if a is not None}, reverse=True)
+        return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
+
+    def make_row(name, data, best_col, second_col, indent=False, dagger=None,
+                 avg_best=None, avg_second=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
@@ -158,26 +167,26 @@ def main():
             if v is not None and (task, model) in dcells:
                 cell = "$^{\\dagger}$" + cell
             vals.append(cell)
-        if indent:
-            prefix = f"\\quad {name}"
-        else:
-            prefix = name
+        a = row_avg(data)
+        vals.append(fmt(a, bold=(a is not None and a == avg_best),
+                        underline=(a is not None and a != avg_best and a == avg_second)))
+        prefix = f"\\quad {name}" if indent else name
         return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
     ncols = len(COLUMNS)
     lines = []
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
-    lines.append("\\begin{tabular}{l" + "r" * ncols + "}")
+    lines.append("\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}")
     lines.append("\\toprule")
-    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\")
+    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
     lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
-    header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\"
+    header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"
     lines.append(header)
 
     # === Node-level section ===
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     # Load NAP-IG repro results
     napig_repro = {}
     for task, model, _ in COLUMNS:
@@ -219,22 +228,26 @@ def main():
 
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
+    node_dicts = list(NODE_BASELINES.values()) \
+        + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_uniform] \
+        + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_ours]
+    avb, avs = section_avg_best(node_dicts)
 
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node))
+        lines.append(make_row(name, data, best_node, second_node, avg_best=avb, avg_second=avs))
     lines.append("\\textbf{Ours} \\\\")
     # uniform-k = main method
     for method_name, _, _, group in node_uniform:
         key = f"{method_name}_node_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True))
+        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
     # log-k variants, annotated (no separate section)
     for method_name, _, _, group in node_ours:
         key = f"{method_name}_node_{group}"
-        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_node, second_node, indent=True))
+        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
 
     # === Edge-level section ===
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
 
     # Load EAP-IG repro results
     eapig_repro = {}
@@ -250,20 +263,24 @@ def main():
                 pass
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
     best_edge, second_edge = best_in_col("edge")
+    edge_dicts = list(EDGE_BASELINES.values()) \
+        + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_uniform] \
+        + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_ours]
+    eavb, eavs = section_avg_best(edge_dicts)
 
     # MAttr edge llama3 cells use a reduced eval subset (sphinx 80GB rerun) -> dagger.
     EDGE_LLAMA_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge))
+        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
     lines.append("\\textbf{Ours} \\\\")
     # uniform-k = main method
     for method_name, _, _, group in edge_uniform:
         key = f"{method_name}_edge_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
+        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER, avg_best=eavb, avg_second=eavs))
     # log-k variants, annotated (no separate section)
     for method_name, _, _, group in edge_ours:
         key = f"{method_name}_edge_{group}"
-        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER))
+        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER, avg_best=eavb, avg_second=eavs))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
