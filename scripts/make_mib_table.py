@@ -156,7 +156,7 @@ def main():
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
             cell = fmt(v, bold=is_best, underline=is_second)
             if v is not None and (task, model) in dcells:
-                cell = cell + "$^\\dagger$"
+                cell = "$^{\\dagger}$" + cell
             vals.append(cell)
         if indent:
             prefix = f"\\quad {name}"
