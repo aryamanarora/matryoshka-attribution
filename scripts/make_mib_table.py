@@ -192,6 +192,28 @@ def main():
                 pass
     NODE_BASELINES["NAP-IG (CF, repro)"] = napig_repro
 
+    # Additional baselines fetched from Tilde (node-level); each dir has one method subfolder
+    EXTRA_NODE_BASELINES = [
+        ("NAP-IG (ref)",     "napig_ref_eval",   "EAP-IG-inputs_patching_node"),
+        ("NAP-IG (local)",   "napig_local_eval", "EAP-IG-inputs-local_patching_node"),
+        ("EAP-IG ($n{=}1$)", "ig1_eval",         "EAP-IG-inputs_patching_node"),
+        ("RelP",             "relp_eval",        "RelP_patching_node"),
+        ("RelP (QK grad)",   "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
+    ]
+    for disp, dirn, sub in EXTRA_NODE_BASELINES:
+        data = {}
+        for task, model, _ in COLUMNS:
+            stask = task.replace("_", "-")
+            pkl = RESULTS_BASE / dirn / sub / f"{stask}_{model}_validation_abs-False.pkl"
+            if pkl.exists():
+                try:
+                    with open(pkl, "rb") as f:
+                        d = pickle.load(f)
+                    data[(task, model)] = round(d["area_under"], 2)
+                except Exception:
+                    pass
+        NODE_BASELINES[disp] = data
+
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
 
