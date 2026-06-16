@@ -200,6 +200,8 @@ def main():
         ("RelP",             "relp_eval",        "RelP_patching_node"),
         ("RelP (QK grad)",   "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
     ]
+    # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those.
+    TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     for disp, dirn, sub in EXTRA_NODE_BASELINES:
         data = {}
         for task, model, _ in COLUMNS:
@@ -213,6 +215,7 @@ def main():
                 except Exception:
                     pass
         NODE_BASELINES[disp] = data
+        DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
