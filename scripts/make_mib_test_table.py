@@ -166,31 +166,19 @@ def main():
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     navb, navs = section_avg_best(list(NODE_BASELINES.values()) + [ours_node])
-    if "Random" in NODE_BASELINES:
-        lines.append(make_row("Random", NODE_BASELINES["Random"], best_node, second_node, avg_best=navb, avg_second=navs))
-    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
-        if name == "Random":
-            continue
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs, indent=True))
-    lines.append("\\textbf{Ours} \\\\")
-    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs, indent=True))
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs))
 
     # Edge level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
     eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + [ours_edge])
-    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
-        if name == "UGS":
-            continue
-        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs, indent=True))
-    if "UGS" in EDGE_BASELINES:
-        lines.append(make_row("UGS", EDGE_BASELINES["UGS"], best_edge, second_edge, avg_best=eavb, avg_second=eavs))
-    lines.append("\\textbf{Ours} \\\\")
+        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
     # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
     EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
-    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs, indent=True))
+    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
