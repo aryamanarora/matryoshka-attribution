@@ -54,12 +54,12 @@ def fmt(v, bold=False):
 def main():
     ncols = len(COLUMNS)
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
-             "\\begin{tabular}{l" + "r" * ncols + "}", "\\toprule",
-             "& \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
+             "\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "}", "\\toprule",
+             "& & \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
              "\\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\",
-             "\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} "
-             "\\cmidrule(lr){10-11} \\cmidrule(lr){12-12}",
-             "\\textbf{Method / lr} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
+             "\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} "
+             "\\cmidrule(lr){11-12} \\cmidrule(lr){13-13}",
+             "\\textbf{Method / LR} & \\textbf{Avg} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
              "\\midrule"]
 
     for mi, (method, lrs) in enumerate(METHODS):
@@ -70,12 +70,14 @@ def main():
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
-        lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{{method}}}}} \\\\")
+        lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
         for lr, _ in lrs:
+            present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
+            avg = f"{sum(present) / len(present):.2f}" if present else "---"
             cells = [fmt(data[lr][(t, m)], bold=(data[lr][(t, m)] is not None and
                                                  data[lr][(t, m)] == best[(t, m)]))
                      for t, m, _ in COLUMNS]
-            lines.append(f"\\quad lr$=${lr} & " + " & ".join(cells) + " \\\\")
+            lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
     lines.append("\\bottomrule")
     lines += ["\\end{tabular}", "\\end{adjustbox}"]
