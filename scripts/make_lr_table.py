@@ -24,6 +24,7 @@ METHODS = [
     ("\\ourmethod{} (hard fwd)", [
         ("0.005", "htk_lr_0.005"), ("0.01", "mib_node_hard_topk"),
         ("0.05", "htk_lr_0.05"), ("0.1", "htk_lr_0.1"), ("0.3", "htk_lr_0.3"),
+        ("0.01, 2k", "htk_lr_0.01_2k"),
     ]),
     ("$+$ hard bwd (REINFORCE)", [
         ("0.01", "bern_lr_0.01"),                  # baseline (orig dir was overwritten by lr0.1 rerun)
