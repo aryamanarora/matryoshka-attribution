@@ -34,18 +34,18 @@ OUR_METHODS = [
     # Node level (log k-schedule = default)
     ("\\ourmethod{}", "mib_node_hard_topk_log", "node", "ours"),
     ("$+$ soft fwd", "mib_node_topk_log", "node", "ours"),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau_log", "node", "ours"),
+    ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
     # Node level (uniform k-schedule = ablation)
     ("\\ourmethod{}", "mib_node_hard_topk", "node", "uniform"),
     ("$+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     ("$+$ soft fwd", "final_node", "node", "uniform"),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_node_detached_tau", "node", "uniform"),
+    ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
     # Edge level (log k-schedule = default)
     ("\\ourmethod{}", "mib_edge_hard_topk", "edge", "ours"),
     ("$+$ soft fwd", "final_edge", "edge", "ours"),
-    ("$+$ soft fwd, $-$ $c_k$ grad", "mib_edge_detached_tau", "edge", "ours"),
+    ("$+$ soft fwd, $-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
     # Edge level (uniform k-schedule)
     ("\\ourmethod{}", "mib_edge_hard_topk_uniform", "edge", "uniform"),
