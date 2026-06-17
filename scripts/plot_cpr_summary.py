@@ -5,7 +5,7 @@ import pickle
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from plotnine import (ggplot, aes, geom_col, geom_errorbar, geom_hline, labs, facet_grid,
+from plotnine import (ggplot, aes, geom_col, geom_errorbar, geom_hline, labs, facet_wrap,
                       scale_fill_brewer, scale_x_discrete, theme_bw, theme_set,
                       theme, element_text, element_line, element_blank)
 
@@ -14,14 +14,15 @@ theme_set(
     theme_bw(base_size=10)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(7, 2.5),
+        figure_size=(7, 4.8),
         axis_title=element_text(size=10),
         axis_text=element_text(size=8),
-        axis_text_x=element_text(rotation=90, hjust=0.5, vjust=0.5),
+        axis_text_x=element_text(size=7, ha="center"),
         legend_text=element_text(size=8),
         legend_title=element_text(size=9),
         panel_grid_major=element_line(size=0.5, color="#dddddd"),
         panel_grid_minor=element_blank(),
+        panel_grid_major_x=element_blank(),
         strip_background=element_blank(),
         legend_margin=0,
         legend_key_size=12,
@@ -101,10 +102,10 @@ p = (ggplot(df, aes("ml", "mean", fill="group"))
      + geom_col(width=0.75)
      + geom_errorbar(aes(ymin="lo", ymax="hi"), width=0.25, size=0.4)
      + geom_hline(yintercept=1, linetype="dotted", color="#999999", size=0.4)
-     + facet_grid(". ~ level", scales="free", space="free_x")
+     + facet_wrap("level", scales="free", ncol=1)
      + scale_fill_brewer(type="qual", palette="Set1")
      + scale_x_discrete(labels=lambda xs: [s.split(" | ", 1)[1] for s in xs])
-     + labs(x="", y="mean CPR AUC (avg over tasks, 95% CI)", fill="")
+     + labs(x="", y="Mean CPR (95% CI)", fill="")
      + theme(legend_position="top"))
 p.save(OUT / "cpr_summary.pdf"); p.save(OUT / "cpr_summary.png", dpi=150)
 print("Saved cpr_summary")
