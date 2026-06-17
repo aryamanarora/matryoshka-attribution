@@ -207,6 +207,8 @@ def main():
         ("I$\\times$G", "ig1_eval",         "EAP-IG-inputs_patching_node"),
         ("RelP",        "relp_eval",        "RelP_patching_node"),
         ("RelP+QK",     "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
+        ("AttnRLP",     "attnrlp_eval",     "AttnRLP_patching_node"),
+        ("GIM",         "gim_eval",         "GIM_patching_node"),
     ]
     # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those.
     TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
