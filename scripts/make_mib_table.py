@@ -233,8 +233,9 @@ def main():
         + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_ours]
     avb, avs = section_avg_best(node_dicts)
 
+    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node, avg_best=avb, avg_second=avs))
+        lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
     lines.append("\\textbf{Ours} \\\\")
     # uniform-k = main method
     for method_name, _, _, group in node_uniform:
@@ -268,10 +269,11 @@ def main():
         + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_ours]
     eavb, eavs = section_avg_best(edge_dicts)
 
-    # MAttr edge llama3 cells use a reduced eval subset (sphinx 80GB rerun) -> dagger.
-    EDGE_LLAMA_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
+    # MAttr edge llama3 cells use a reduced eval subset (sphinx rerun) -> dagger.
+    EDGE_LLAMA_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
+        lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb, avg_second=eavs))
     lines.append("\\textbf{Ours} \\\\")
     # uniform-k = main method
     for method_name, _, _, group in edge_uniform:

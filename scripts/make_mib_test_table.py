@@ -134,7 +134,7 @@ def main():
         avs = sorted({a for a in (row_avg(d) for d in data_dicts) if a is not None}, reverse=True)
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
-    def make_row(name, data, best_col, second_col, dagger=None, avg_best=None, avg_second=None):
+    def make_row(name, data, best_col, second_col, dagger=None, avg_best=None, avg_second=None, indent=False):
         dcells = dagger or set()
         vals = []
         for task, model, _ in COLUMNS:
@@ -148,7 +148,8 @@ def main():
         a = row_avg(data)
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
-        return f"{name} & " + " & ".join(vals) + " \\\\"
+        prefix = f"\\quad {name}" if indent else name
+        return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
     ncols = len(COLUMNS)
@@ -165,19 +166,31 @@ def main():
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     navb, navs = section_avg_best(list(NODE_BASELINES.values()) + [ours_node])
+    if "Random" in NODE_BASELINES:
+        lines.append(make_row("Random", NODE_BASELINES["Random"], best_node, second_node, avg_best=navb, avg_second=navs))
+    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
-    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs))
+        if name == "Random":
+            continue
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs, indent=True))
+    lines.append("\\textbf{Ours} \\\\")
+    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs, indent=True))
 
     # Edge level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
     eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + [ours_edge])
+    lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
-    # llama3 edge-test jobs OOM'd at full eval -> reduced subset, mark with dagger.
-    EDGE_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
-    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
+        if name == "UGS":
+            continue
+        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs, indent=True))
+    if "UGS" in EDGE_BASELINES:
+        lines.append(make_row("UGS", EDGE_BASELINES["UGS"], best_edge, second_edge, avg_best=eavb, avg_second=eavs))
+    lines.append("\\textbf{Ours} \\\\")
+    # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
+    EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs, indent=True))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
