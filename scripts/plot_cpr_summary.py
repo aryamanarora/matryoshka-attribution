@@ -5,12 +5,31 @@ import pickle
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from plotnine import (ggplot, aes, geom_col, geom_errorbar, geom_hline, labs, facet_wrap,
-                      scale_fill_manual, scale_x_discrete, coord_flip, theme_bw, theme_set,
-                      theme, element_text)
+from plotnine import (ggplot, aes, geom_col, geom_errorbar, geom_hline, labs, facet_grid,
+                      scale_fill_brewer, scale_x_discrete, theme_bw, theme_set,
+                      theme, element_text, element_line, element_blank)
 
 R = Path("results"); OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
-theme_set(theme_bw(base_size=9) + theme(text=element_text(family="Inter")))
+theme_set(
+    theme_bw(base_size=10)
+    + theme(
+        text=element_text(color="#000", family="Inter"),
+        figure_size=(7, 2.5),
+        axis_title=element_text(size=10),
+        axis_text=element_text(size=8),
+        axis_text_x=element_text(rotation=90, hjust=0.5, vjust=0.5),
+        legend_text=element_text(size=8),
+        legend_title=element_text(size=9),
+        panel_grid_major=element_line(size=0.5, color="#dddddd"),
+        panel_grid_minor=element_blank(),
+        strip_background=element_blank(),
+        legend_margin=0,
+        legend_key_size=12,
+        legend_entry_spacing_y=2,
+        plot_title=element_text(size=11, face='plain'),
+        strip_text=element_text(size=10, face='plain'),
+    )
+)
 
 COLUMNS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
            ("arithmetic_subtraction", "llama3"), ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
@@ -27,14 +46,19 @@ METHODS = [
     ("AttnRLP", "Gradient", "node", ("attnrlp_eval", "AttnRLP_patching_node")),
     ("GIM", "Gradient", "node", ("gim_eval", "GIM_patching_node")),
     ("MAttr", "Ours", "node", ("mib_node_hard_topk",)),
+    ("MAttr (log)", "Ours", "node", ("mib_node_hard_topk_log",)),
     ("+Gumbel", "Ours", "node", ("mib_node_hard_topk_gumbel",)),
     ("+soft", "Ours", "node", ("final_node",)),
-    ("+soft −c_k", "Ours", "node", ("mib_node_detached_tau",)),
+    ("+soft (log)", "Ours", "node", ("mib_node_topk_log",)),
+    ("$-c_k$", "Ours", "node", ("mib_node_detached_tau",)),
+    ("$-c_k$ (log)", "Ours", "node", ("mib_node_detached_tau_log",)),
     ("+hard", "Ours", "node", ("mib_node_bernoulli_reinforce",)),
+    ("+hard (log)", "Ours", "node", ("mib_node_bernoulli_reinforce_log",)),
     ("EAP-IG-inp", "Gradient", "edge", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),
     ("MAttr", "Ours", "edge", ("mib_edge_hard_topk_uniform",)),
+    ("MAttr (log)", "Ours", "edge", ("mib_edge_hard_topk",)),
     ("+soft", "Ours", "edge", ("final_edge",)),
-    ("+soft −c_k", "Ours", "edge", ("mib_edge_detached_tau",)),
+    ("$-c_k$", "Ours", "edge", ("mib_edge_detached_tau",)),
     ("+hard", "Ours", "edge", ("mib_edge_bernoulli_reinforce",)),
 ]
 
@@ -64,25 +88,24 @@ for label, group, level, spec in METHODS:
                  "mean": mean, "lo": mean - ci, "hi": mean + ci, "n": len(a)})
 df = pd.DataFrame(rows)
 df["level"] = df["level"].map({"node": "Node-level", "edge": "Edge-level"})
+df["lvl"] = df["level"].map({"Node-level": 0, "Edge-level": 1})
 # order within facet: Gradient first, then Ours, each by descending mean
 df["key"] = df["group"].map({"Gradient": 0, "Ours": 1}) * 1e6 - df["mean"]
-order = df.sort_values(["level", "key"])["method"].tolist()
-# unique ordered labels (method names repeat across facets) -> use a composite for ordering
 df["ml"] = df["level"] + " | " + df["method"]
-ml_order = df.sort_values(["level", "key"])["ml"].tolist()
-df["ml"] = pd.Categorical(df["ml"], categories=ml_order[::-1], ordered=True)
+ml_order = df.sort_values(["lvl", "key"])["ml"].tolist()
+df["ml"] = pd.Categorical(df["ml"], categories=ml_order, ordered=True)
+df["level"] = pd.Categorical(df["level"], categories=["Node-level", "Edge-level"], ordered=True)
+df["group"] = pd.Categorical(df["group"], categories=["Gradient", "Ours"], ordered=True)
 
 p = (ggplot(df, aes("ml", "mean", fill="group"))
-     + geom_col(width=0.7)
-     + geom_errorbar(aes(ymin="lo", ymax="hi"), width=0.3, size=0.4)
+     + geom_col(width=0.75)
+     + geom_errorbar(aes(ymin="lo", ymax="hi"), width=0.25, size=0.4)
      + geom_hline(yintercept=1, linetype="dotted", color="#999999", size=0.4)
-     + coord_flip()
-     + facet_wrap("level", scales="free", ncol=1)
-     + scale_fill_manual(values={"Gradient": "#9ecae1", "Ours": "#e41a1c"})
+     + facet_grid(". ~ level", scales="free", space="free_x")
+     + scale_fill_brewer(type="qual", palette="Set1")
      + scale_x_discrete(labels=lambda xs: [s.split(" | ", 1)[1] for s in xs])
-     + labs(x="", y="mean CPR AUC (avg over tasks, 95% CI)", fill="",
-            title="MIB CPR: gradient attribution vs. MAttr")
-     + theme(figure_size=(5, 5.5), legend_position="top", axis_text_y=element_text(size=7)))
-p.save(OUT / "cpr_summary.png", dpi=150); p.save(OUT / "cpr_summary.pdf")
+     + labs(x="", y="mean CPR AUC (avg over tasks, 95% CI)", fill="")
+     + theme(legend_position="top"))
+p.save(OUT / "cpr_summary.pdf"); p.save(OUT / "cpr_summary.png", dpi=150)
 print("Saved cpr_summary")
 print(df[["level", "group", "method", "mean", "n"]].to_string(index=False))
