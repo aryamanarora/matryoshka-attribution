@@ -137,7 +137,7 @@ def main():
 
     # Cells evaluated on a reduced subset (OOM fallback) -> mark with a dagger.
     DAGGER = {
-        "NAP-IG (CF, repro)": {("mcqa", "llama3")},
+        "NAP-IG": {("mcqa", "llama3")},
         "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
     }
 
@@ -199,15 +199,14 @@ def main():
                 napig_repro[(task, model)] = round(d["area_under"], 2)
             except Exception:
                 pass
-    NODE_BASELINES["NAP-IG (CF, repro)"] = napig_repro
+    NODE_BASELINES["NAP-IG"] = napig_repro
 
     # Additional baselines fetched from Tilde (node-level); each dir has one method subfolder
     EXTRA_NODE_BASELINES = [
-        ("NAP-IG (ref)",     "napig_ref_eval",   "EAP-IG-inputs_patching_node"),
-        ("NAP-IG (local)",   "napig_local_eval", "EAP-IG-inputs-local_patching_node"),
-        ("EAP-IG ($n{=}1$)", "ig1_eval",         "EAP-IG-inputs_patching_node"),
-        ("RelP",             "relp_eval",        "RelP_patching_node"),
-        ("RelP (QK grad)",   "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
+        ("Conductance", "napig_local_eval", "EAP-IG-inputs-local_patching_node"),
+        ("I$\\times$G", "ig1_eval",         "EAP-IG-inputs_patching_node"),
+        ("RelP",        "relp_eval",        "RelP_patching_node"),
+        ("RelP+QK",     "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
     ]
     # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those.
     TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
