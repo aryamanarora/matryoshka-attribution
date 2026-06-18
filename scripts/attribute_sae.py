@@ -160,7 +160,7 @@ def main():
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=0.05)
     ap.add_argument("--T", type=float, default=0.5)
-    ap.add_argument("--k-schedule", default="log")
+    ap.add_argument("--k-schedule", default="uniform")  # uniform > log in our results
     ap.add_argument("--n-eval", type=int, default=50)
     ap.add_argument("--error-mode", default="cf", choices=["cf", "clean", "node"])
     ap.add_argument("--output", default="results/sae_npi_subj_relc")

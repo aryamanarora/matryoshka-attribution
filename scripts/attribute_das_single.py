@@ -122,7 +122,7 @@ def main():
         tok = ds.tokenize_pair(strip_bos(ds.sample_pair()), tokenizer, device)
         bp, cp = pos_map(tok)
         if not bp: continue
-        mask = sigmoid_topk_hard(scores, k=sample_k(total, "log"), T=args.T)
+        mask = sigmoid_topk_hard(scores, k=sample_k(total, "uniform"), T=args.T)  # uniform > log
         lg = run_intervened(model, tok, hook, mask, bp, cp)
         loss = F.cross_entropy(lg.unsqueeze(0), torch.tensor([tok.base_label_id], device=device))
         opt.zero_grad(); loss.backward(); opt.step(); losses.append(loss.item())
