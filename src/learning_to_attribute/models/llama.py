@@ -649,7 +649,8 @@ class LlamaSpanAttributionHooks:
             m = span_feat_mask[span_i].float()                # [d_sae]
             for j, bp in enumerate(bps):
                 sp = sps[min(j, len(sps) - 1)] if sps else bp
-                b = base_act[0, bp]; c = cf_act[0, sp]   # keep model dtype (bf16) for SAE encode
+                wdt = sae.W_enc.dtype                      # SAE compute dtype (float32)
+                b = base_act[0, bp].to(wdt); c = cf_act[0, sp].to(wdt)
                 fb, fc = sae.encode(b), sae.encode(c)
                 # Error held at BASE so keeping all base features is lossless
                 # (out = b + decode(masked_features - f_base)); avoids compounding
@@ -658,6 +659,16 @@ class LlamaSpanAttributionHooks:
                     new = b + sae.decode_delta(m * (fc - fb))
                 else:                  # denoising/sufficient: mask=1 -> base, rest cf
                     new = b + sae.decode_delta((1.0 - m) * (fc - fb))
+                # Numerical guard: a near-full feature swap injects SAE reconstruction
+                # error that can compound/overflow across all 32 layers. The intended
+                # result is bounded by a real activation (base/cf), so cap the norm at a
+                # generous 8x max(|base|,|cf|) -- only triggers on true runaway.
+                cap = 8.0 * c.norm()        # c = clean cached cf act, always a sane anchor
+                nn_ = new.norm()
+                if torch.isfinite(nn_) and nn_ > cap:
+                    new = new * (cap / nn_)
+                elif not torch.isfinite(nn_):
+                    new = c  # degenerate: fall back to the clean cf act rather than NaN
                 out[0, bp] = new.to(base_act.dtype)
         return out
 

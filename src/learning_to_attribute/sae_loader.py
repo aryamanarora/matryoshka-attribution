@@ -28,5 +28,7 @@ class LlamaScopeSAE:
         return (g.to(self.W_dec.dtype) @ self.W_dec.T) / self.s
 
 
-def load_llama_scope_saes(repo, n_layers, device, dtype=torch.bfloat16):
+def load_llama_scope_saes(repo, n_layers, device, dtype=torch.float32):
+    # float32 by default: the bf16 interchange overflowed to NaN when feature
+    # deltas are injected across all 32 layers during training.
     return {li: LlamaScopeSAE(repo, li, device, dtype) for li in range(n_layers)}

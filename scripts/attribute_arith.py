@@ -105,6 +105,8 @@ def main():
         for t in tasks:
             loss, hooker = train_step(model, datasets[t], hookers[t], scores_by_task[t],
                                       tokenizer, device, args, legacy_sufficient)
+            if step < 3 and not torch.isfinite(loss):
+                logger.warning("NONFINITE loss task=%s step=%d loss=%s", t, step, loss.item())
             loss.backward()
             hooker.remove_hooks()
             running[t].append(loss.item())
