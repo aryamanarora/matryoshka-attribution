@@ -23,7 +23,7 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "resid_dim", "node", "das"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "resid_dim", "node", "das", "sae"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -422,6 +422,11 @@ class LlamaSpanAttributionHooks:
             # das_dim set externally via set_das_dim(); defaults to hidden_size
             self.das_dim = self.hidden_size
             self.total = self.num_layers * S * self.das_dim
+        elif mask_type == "sae":
+            # per (layer, span, sae feature); saes + total set externally via set_saes()
+            self.saes = {}
+            self.d_sae = None
+            self.total = 0
 
         self.mask = None
         # DAS rotation layers (set externally via set_das_rotations)
@@ -447,7 +452,7 @@ class LlamaSpanAttributionHooks:
 
     @property
     def has_resid(self):
-        return self.mask_type in ("resid", "resid_dim", "das")
+        return self.mask_type in ("resid", "resid_dim", "das", "sae")
 
     @property
     def has_das(self):
@@ -514,6 +519,13 @@ class LlamaSpanAttributionHooks:
         self.das_dim = das_dim
         S = self.num_spans
         self.total = self.num_layers * S * das_dim
+
+    def set_saes(self, saes: dict):
+        """Provide per-layer frozen SAEs (objects with .encode/.decode/.W_dec, d_sae)."""
+        assert self.mask_type == "sae"
+        self.saes = saes
+        self.d_sae = next(iter(saes.values())).d_sae
+        self.total = self.num_layers * self.num_spans * self.d_sae
 
     def cache_cf_activations(self, src_input_ids: torch.Tensor):
         """Cache src activations at hook points."""
@@ -619,6 +631,34 @@ class LlamaSpanAttributionHooks:
                 out[0, bp] = rotate_layer.intervene(
                     base_act[0, bp], cf_act[0, sp], m, sufficient=self.sufficient)
 
+        return out
+
+    def _sae_intervene(self, base_act, cf_act, span_feat_mask, layer_idx):
+        """SAE feature interchange (denoising when self.sufficient is False):
+        out = a_cf + (mask ⊙ (f_base − f_cf)) @ W_dec   (top-k features keep base, rest cf).
+        span_feat_mask: [num_spans, d_sae]. Error held at cf (cancels)."""
+        sae = self.saes.get(layer_idx)
+        if sae is None or cf_act is None:
+            return base_act
+        out = base_act.clone()
+        for span_i in range(self.num_spans):
+            bps = self.base_span_to_pos[span_i]
+            sps = self.src_span_to_pos[span_i]
+            if not bps:
+                continue
+            m = span_feat_mask[span_i].float()                # [d_sae]
+            for j, bp in enumerate(bps):
+                sp = sps[min(j, len(sps) - 1)] if sps else bp
+                b = base_act[0, bp]; c = cf_act[0, sp]   # keep model dtype (bf16) for SAE encode
+                fb, fc = sae.encode(b), sae.encode(c)
+                # Error held at BASE so keeping all base features is lossless
+                # (out = b + decode(masked_features - f_base)); avoids compounding
+                # SAE reconstruction error across all 32 layers.
+                if self.sufficient:    # noising: mask=1 (top-k) -> cf, rest base
+                    new = b + sae.decode_delta(m * (fc - fb))
+                else:                  # denoising/sufficient: mask=1 -> base, rest cf
+                    new = b + sae.decode_delta((1.0 - m) * (fc - fb))
+                out[0, bp] = new.to(base_act.dtype)
         return out
 
     def register_hooks(self):
@@ -744,6 +784,22 @@ class LlamaSpanAttributionHooks:
                     return hook
                 self._hooks.append(
                     layer.register_forward_hook(make_das_hook(layer_idx)))
+
+            if self.mask_type == "sae":
+                def make_sae_hook(li):
+                    def hook(mod, inp, output):
+                        if self.mask is None:
+                            return
+                        x = output[0] if isinstance(output, tuple) else output
+                        off = li * S * self.d_sae
+                        span_feat_mask = self.mask[off:off + S * self.d_sae].view(S, self.d_sae)
+                        new_x = self._sae_intervene(x, self.cf_acts_resid.get(li),
+                                                    span_feat_mask, li)
+                        if isinstance(output, tuple):
+                            return (new_x,) + output[1:]
+                        return new_x
+                    return hook
+                self._hooks.append(layer.register_forward_hook(make_sae_hook(layer_idx)))
 
     def remove_hooks(self):
         for h in self._hooks:
