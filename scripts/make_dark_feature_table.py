@@ -42,33 +42,27 @@ def tokfmt(toks):
     return " ".join(out)
 
 
-feat = defaultdict(lambda: {"tasks": [], "top": None, "bot": None,
-                            "top_e": None, "bot_e": None})
+feat = defaultdict(lambda: {"tasks": [], "top": None, "bot": None})
 for task, entries in d.items():
     for e in entries:
         k = (e["layer"], e["dim"])
         feat[k]["tasks"].append(task)
         feat[k]["top"] = e["top5"]
         feat[k]["bot"] = e["bottom5"]
-        feat[k]["top_e"] = e["top5_embed"]
-        feat[k]["bot_e"] = e["bottom5_embed"]
 
 rows = sorted(feat.items(), key=lambda kv: (kv[0][0], -len(kv[1]["tasks"]), kv[0][1]))
 
 L = [r"{\small",
-     r"\begin{longtable}{@{}r r r l p{2.55cm} p{2.55cm} p{2.55cm} p{2.55cm}@{}}",
+     r"\begin{longtable}{@{}r r r l p{3.6cm} p{3.6cm}@{}}",
      r"\toprule",
-     r"& & & & \multicolumn{2}{c}{Unembed (logit lens)} & \multicolumn{2}{c}{Embed} \\",
-     r"\cmidrule(lr){5-6}\cmidrule(lr){7-8}",
-     r"Layer & Dim & \# & Cat. & Top-5 & Bottom-5 & Top-5 & Bottom-5 \\",
+     r"Layer & Dim & \# & Cat. & Top-5 logits & Bottom-5 logits \\",
      r"\midrule \endhead"]
-for (lyr, dim), v in rows:
+for i, ((lyr, dim), v) in enumerate(rows):
     cats = [c for c in CATS if c in {CAT[t] for t in v["tasks"]}]
     tags = "".join(TAG[c] for c in cats)
-    L.append("%d & %d & %d & %s & %s & %s & %s & %s \\\\" % (
-        lyr, dim, len(v["tasks"]), tags,
-        tokfmt(v["top"]), tokfmt(v["bot"]),
-        tokfmt(v["top_e"]), tokfmt(v["bot_e"])))
+    shade = r"\rowcolor{rowgray}" if i % 2 else ""
+    L.append("%s%d & %d & %d & %s & %s & %s \\\\" % (
+        shade, lyr, dim, len(v["tasks"]), tags, tokfmt(v["top"]), tokfmt(v["bot"])))
 L += [r"\bottomrule", r"\end{longtable}", r"}"]
 open("paper/tabs/dark_feature_logitlens.tex", "w").write("\n".join(L) + "\n")
 print("rows:", len(rows), "| multi-task:", sum(1 for _, v in rows if len(v["tasks"]) > 1))
