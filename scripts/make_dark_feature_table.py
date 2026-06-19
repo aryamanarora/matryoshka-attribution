@@ -38,8 +38,8 @@ def tokfmt(toks):
         s = s.replace(" ", "_")          # visible space marker (GPT-style)
         if len(s) > 14:
             s = s[:13] + ".."
-        out.append(r"\texttt{" + esc(s) + "}")
-    return ", ".join(out)
+        out.append(r"\toktag{" + esc(s) + "}")   # little cell per token
+    return " ".join(out)
 
 
 feat = defaultdict(lambda: {"tasks": [], "top": None, "bot": None})
@@ -53,15 +53,15 @@ for task, entries in d.items():
 rows = sorted(feat.items(), key=lambda kv: (-len(kv[1]["tasks"]), -kv[0][0]))
 
 L = [r"{\small",
-     r"\begin{longtable}{@{}l l l p{4.1cm} p{4.1cm}@{}}",
+     r"\begin{longtable}{@{}r r r l p{3.6cm} p{3.6cm}@{}}",
      r"\toprule",
-     r"Layer & Dim & Tasks & Top-5 logits & Bottom-5 logits \\",
+     r"Layer & Dim & \# & Cat. & Top-5 logits & Bottom-5 logits \\",
      r"\midrule \endhead"]
 for (lyr, dim), v in rows:
     cats = [c for c in CATS if c in {CAT[t] for t in v["tasks"]}]
     tags = "".join(TAG[c] for c in cats)
-    tcell = "%d\\,%s" % (len(v["tasks"]), tags)
-    L.append("%d & %d & %s & %s & %s \\\\" % (lyr, dim, tcell, tokfmt(v["top"]), tokfmt(v["bot"])))
+    L.append("%d & %d & %d & %s & %s & %s \\\\" % (
+        lyr, dim, len(v["tasks"]), tags, tokfmt(v["top"]), tokfmt(v["bot"])))
 L += [r"\bottomrule", r"\end{longtable}", r"}"]
 open("paper/tabs/dark_feature_logitlens.tex", "w").write("\n".join(L) + "\n")
 print("rows:", len(rows), "| multi-task:", sum(1 for _, v in rows if len(v["tasks"]) > 1))
