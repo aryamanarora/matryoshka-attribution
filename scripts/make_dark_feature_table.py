@@ -1,10 +1,24 @@
-"""LaTeX longtable: one row per unique (layer,dim) dark-red DAS feature, listing the tasks
-it tops (most-important in its layer) and its top-5 / bottom-5 logit-lens tokens.
-Writes paper/tabs/dark_feature_logitlens.tex. Run on sc from repo root."""
+"""LaTeX longtable: one row per unique (layer,dim) dark-red DAS feature, with the number
+of tasks it tops + a coloured category tag per category it appears in, and its top-5 /
+bottom-5 logit-lens tokens. Writes paper/tabs/dark_feature_logitlens.tex.
+Needs in the preamble: \\usepackage{tikz}, \\usepackage{longtable}, \\methodtag + cat tags."""
 import json
 from collections import defaultdict
 
 d = json.load(open("results/mtdas_dark_feature_logitlens.json"))
+
+CATS = ["Agreement", "Licensing", "Garden", "GSS", "Long"]
+TAG = {"Agreement": r"\agtag", "Licensing": r"\litag", "Garden": r"\gatag",
+       "GSS": r"\gstag", "Long": r"\lotag"}
+CAT = {}
+for t in ["agr_gender", "agr_sv_num_subj-relc", "agr_sv_num_obj-relc", "agr_sv_num_pp",
+          "agr_refl_num_subj-relc", "agr_refl_num_obj-relc", "agr_refl_num_pp"]: CAT[t] = "Agreement"
+for t in ["npi_any_subj-relc", "npi_any_obj-relc", "npi_ever_subj-relc", "npi_ever_obj-relc"]: CAT[t] = "Licensing"
+for t in ["garden_mvrr", "garden_mvrr_mod", "garden_npz_obj", "garden_npz_obj_mod",
+          "garden_npz_v-trans", "garden_npz_v-trans_mod"]: CAT[t] = "Garden"
+for t in ["gss_subord", "gss_subord_subj-relc", "gss_subord_obj-relc", "gss_subord_pp"]: CAT[t] = "GSS"
+for t in ["cleft", "cleft_mod", "filler_gap_embed_3", "filler_gap_embed_4",
+          "filler_gap_hierarchy", "filler_gap_obj", "filler_gap_pp", "filler_gap_subj"]: CAT[t] = "Long"
 
 SPECIAL = [("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"), ("$", r"\$"),
            ("#", r"\#"), ("_", r"\_"), ("{", r"\{"), ("}", r"\}"),
@@ -36,18 +50,18 @@ for task, entries in d.items():
         feat[k]["top"] = e["top5"]
         feat[k]["bot"] = e["bottom5"]
 
-# most-shared first, then later layers
 rows = sorted(feat.items(), key=lambda kv: (-len(kv[1]["tasks"]), -kv[0][0]))
 
-L = [r"\begin{longtable}{@{}l l p{3.6cm} p{3.4cm} p{3.4cm}@{}}",
+L = [r"{\small",
+     r"\begin{longtable}{@{}l l l p{4.1cm} p{4.1cm}@{}}",
      r"\toprule",
-     r"Layer & Dim & Tasks (\# top) & Top-5 logits & Bottom-5 logits \\",
+     r"Layer & Dim & Tasks & Top-5 logits & Bottom-5 logits \\",
      r"\midrule \endhead"]
 for (lyr, dim), v in rows:
-    tasks = ", ".join(esc(t) for t in v["tasks"])
-    tcell = "(%d) %s" % (len(v["tasks"]), tasks)
+    cats = [c for c in CATS if c in {CAT[t] for t in v["tasks"]}]
+    tags = "".join(TAG[c] for c in cats)
+    tcell = "%d\\,%s" % (len(v["tasks"]), tags)
     L.append("%d & %d & %s & %s & %s \\\\" % (lyr, dim, tcell, tokfmt(v["top"]), tokfmt(v["bot"])))
-L += [r"\bottomrule", r"\end{longtable}"]
+L += [r"\bottomrule", r"\end{longtable}", r"}"]
 open("paper/tabs/dark_feature_logitlens.tex", "w").write("\n".join(L) + "\n")
-print("rows (unique features):", len(rows),
-      "| multi-task rows:", sum(1 for _, v in rows if len(v["tasks"]) > 1))
+print("rows:", len(rows), "| multi-task:", sum(1 for _, v in rows if len(v["tasks"]) > 1))
