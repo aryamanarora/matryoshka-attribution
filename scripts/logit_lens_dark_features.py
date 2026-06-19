@@ -19,7 +19,8 @@ N=32
 
 f=glob.glob('/nlp/scr/aryaman/.cache/huggingface/hub/models--EleutherAI--pythia-1b/snapshots/*/model.safetensors')[0]
 with safe_open(f, framework='pt') as st:
-    WU=st.get_tensor('embed_out.weight').float()   # [vocab, 2048]
+    WU=st.get_tensor('embed_out.weight').float()           # unembed [vocab, 2048]
+    WE=st.get_tensor('gpt_neox.embed_in.weight').float()   # input embed [vocab, 2048]
 tok=AutoTokenizer.from_pretrained('EleutherAI/pythia-1b')
 decode=lambda idxs:[tok.decode([int(i)]) for i in idxs]
 
@@ -36,11 +37,15 @@ for t in tasks:
     entries=[]
     for L in sorted(bylayer):
         fi=bylayer[L]; dim=fi%dd
-        lg=WU@rots[L][:,dim]
+        direction=rots[L][:,dim]
+        lg=WU@direction          # logit lens (unembed)
+        le=WE@direction          # embed lens (input embeddings)
         entries.append({'layer':L,'dim':int(dim),'rank_in_task':int(rank[fi]),
                         'score':float(fv[fi]),
                         'top5':decode(lg.topk(5).indices.tolist()),
-                        'bottom5':decode(lg.topk(5,largest=False).indices.tolist())})
+                        'bottom5':decode(lg.topk(5,largest=False).indices.tolist()),
+                        'top5_embed':decode(le.topk(5).indices.tolist()),
+                        'bottom5_embed':decode(le.topk(5,largest=False).indices.tolist())})
     out[t.replace('syntaxgym/','')]=entries
 json.dump(out, open(f'{R}/mtdas_dark_feature_logitlens.json','w'), indent=2)
 print('saved', f'{R}/mtdas_dark_feature_logitlens.json',
