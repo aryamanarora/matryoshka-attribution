@@ -50,7 +50,7 @@ for task, entries in d.items():
         feat[k]["top"] = e["top5"]
         feat[k]["bot"] = e["bottom5"]
 
-rows = sorted(feat.items(), key=lambda kv: (-len(kv[1]["tasks"]), -kv[0][0]))
+rows = sorted(feat.items(), key=lambda kv: (kv[0][0], -len(kv[1]["tasks"]), kv[0][1]))
 
 L = [r"{\small",
      r"\begin{longtable}{@{}r r r l p{3.6cm} p{3.6cm}@{}}",
