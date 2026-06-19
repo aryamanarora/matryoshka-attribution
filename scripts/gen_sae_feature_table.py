@@ -80,14 +80,14 @@ def main():
 
     json.dump(cache, open(args.cache, "w"), indent=0)
 
-    # emit LaTeX (booktabs + tabularx; feature id hyperlinks to Neuronpedia)
+    # emit LaTeX (booktabs + hyperref only; feature id hyperlinks to Neuronpedia)
     sae_set = rows[0][1] if rows else "12-gemmascope-res-16k"
     lines = [
-        "% Requires \\usepackage{booktabs, tabularx, hyperref} in the preamble.",
+        "% Requires \\usepackage{booktabs} and \\usepackage{hyperref} in the preamble.",
         "\\begin{table}[t]",
         "\\centering",
-        "\\small",
-        "\\begin{tabularx}{\\linewidth}{@{}llX@{}}",
+        "\\footnotesize",
+        "\\begin{tabular}{@{}l l p{0.55\\linewidth}@{}}",
         "\\toprule",
         "Subtask & Feature & Description \\\\",
         "\\midrule",
@@ -97,7 +97,7 @@ def main():
         lines.append(f"\\texttt{{{tex_escape(task)}}} & {feat_link} & {tex_escape(desc)} \\\\")
     lines += [
         "\\bottomrule",
-        "\\end{tabularx}",
+        "\\end{tabular}",
         ("\\caption{Top Gemma Scope SAE feature (gemma-2-2b, "
          f"{tex_escape(sae_set)}) per CausalGym subtask by sufficient-MAttr importance. "
          "Feature IDs link to Neuronpedia; descriptions are Neuronpedia auto-interp labels.}"),
