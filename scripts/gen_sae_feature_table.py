@@ -24,6 +24,9 @@ def sae_set_from_id(sae_id):
     return f"{layer}-gemmascope-res-{width}"
 
 
+N_LOGITS = 4  # top / bottom logit tokens to show per feature
+
+
 def tex_escape(s):
     repl = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#",
             "_": r"\_", "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}",
@@ -31,28 +34,51 @@ def tex_escape(s):
     return "".join(repl.get(c, c) for c in s)
 
 
+def _latin_ok(t):
+    # ASCII-only so the table compiles under pdflatex (drops multilingual tokens and
+    # Latin-Extended glyphs like long-s that aren't in standard T1). Meaningful tokens
+    # for these features are ASCII anyway.
+    return t != "" and all(ord(c) < 128 for c in t)
+
+
+def toktags(strs, n=N_LOGITS):
+    """Clean SentencePiece tokens, drop non-Latin/blank, wrap survivors in \\toktag{}."""
+    out = []
+    for t in strs:
+        t = t.replace("▁", "").strip()   # leading-space marker -> drop
+        if t and _latin_ok(t):
+            out.append("\\toktag{" + tex_escape(t) + "}")
+        if len(out) >= n:
+            break
+    return " ".join(out) if out else "--"
+
+
 def load_cache(path):
     return json.load(open(path)) if os.path.exists(path) else {}
 
 
-def fetch_description(model, sae, idx, cache):
+def fetch_feature(model, sae, idx, cache):
+    """Return dict {desc, pos, neg} for a feature; cache full info (re-fetch stale
+    string-only cache entries from the description-only version of this script)."""
     key = f"{model}/{sae}/{idx}"
-    if key in cache:
+    if isinstance(cache.get(key), dict):
         return cache[key]
     url = NP_API.format(model=model, sae=sae, idx=idx)
-    desc = "(no description)"
+    info = {"desc": "(no description)", "pos": [], "neg": []}
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "research-script"})
         with urllib.request.urlopen(req, timeout=40) as f:
             d = json.load(f)
         exps = d.get("explanations") or []
         if exps:
-            desc = exps[0].get("description", desc).strip()
+            info["desc"] = exps[0].get("description", info["desc"]).strip()
+        info["pos"] = d.get("pos_str") or []   # top (promoted) logit tokens
+        info["neg"] = d.get("neg_str") or []   # bottom (suppressed) logit tokens
     except Exception as e:
-        desc = f"(fetch error: {e})"
-    cache[key] = desc
+        info["desc"] = f"(fetch error: {e})"
+    cache[key] = info
     time.sleep(0.3)
-    return desc
+    return info
 
 
 def main():
@@ -73,34 +99,36 @@ def main():
         # exclude trailing error-node score (error_mode == "node" adds one extra entry)
         n_feat = sc.numel() - (1 if meta.get("error_mode") == "node" else 0)
         feat = int(torch.argmax(sc[:n_feat]))
-        desc = fetch_description(MODEL, sae_set, feat, cache)
+        info = fetch_feature(MODEL, sae_set, feat, cache)
         url = NP_URL.format(model=MODEL, sae=sae_set, idx=feat)
-        rows.append((task, sae_set, feat, desc, url))
-        print(f"{task:28s} feat {feat:6d}  {desc}")
+        rows.append((task, sae_set, feat, info["desc"], info["pos"], info["neg"], url))
+        print(f"{task:28s} feat {feat:6d}  +[{', '.join(info['pos'][:3])}]  {info['desc']}")
 
     json.dump(cache, open(args.cache, "w"), indent=0)
 
     # emit LaTeX (booktabs + hyperref only; feature id hyperlinks to Neuronpedia)
     sae_set = rows[0][1] if rows else "12-gemmascope-res-16k"
     lines = [
-        "% Requires \\usepackage{booktabs} and \\usepackage{hyperref} in the preamble.",
+        "% Requires \\usepackage{booktabs}, \\usepackage{hyperref}, and \\toktag{} (token chip).",
         "\\begin{table}[t]",
         "\\centering",
-        "\\footnotesize",
-        "\\begin{tabular}{@{}l l p{0.55\\linewidth}@{}}",
+        "\\scriptsize",
+        "\\begin{tabular}{@{}l l p{0.28\\linewidth} p{0.22\\linewidth} p{0.22\\linewidth}@{}}",
         "\\toprule",
-        "Subtask & Feature & Description \\\\",
+        "Subtask & Feat. & Description & Top logits & Bottom logits \\\\",
         "\\midrule",
     ]
-    for task, sset, feat, desc, url in rows:
+    for task, sset, feat, desc, pos, neg, url in rows:
         feat_link = f"\\href{{{url}}}{{{feat}}}"
-        lines.append(f"\\texttt{{{tex_escape(task)}}} & {feat_link} & {tex_escape(desc)} \\\\")
+        lines.append(f"\\texttt{{{tex_escape(task)}}} & {feat_link} & {tex_escape(desc)} "
+                      f"& {toktags(pos)} & {toktags(neg)} \\\\")
     lines += [
         "\\bottomrule",
         "\\end{tabular}",
         ("\\caption{Top Gemma Scope SAE feature (gemma-2-2b, "
          f"{tex_escape(sae_set)}) per CausalGym subtask by sufficient-MAttr importance. "
-         "Feature IDs link to Neuronpedia; descriptions are Neuronpedia auto-interp labels.}"),
+         "Feature IDs link to Neuronpedia; descriptions are Neuronpedia auto-interp labels; "
+         "top/bottom logits are the most promoted/suppressed output tokens.}"),
         "\\label{tab:sae-top-features}",
         "\\end{table}",
     ]
