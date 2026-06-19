@@ -1,7 +1,9 @@
-"""Pairwise Wilcoxon signed-rank tests comparing CPR AUC across methods.
+"""Wilcoxon signed-rank tests comparing MAttr against every baseline / ablation
+on validation-set CPR AUC, over the matched task/model columns.
 
-For each level (node, edge), compares all pairs of replicated methods
-on their matched task/model columns. Applies Holm-Bonferroni correction.
+We test the family "MAttr vs each other method" (not all C(k,2) pairs): that's the
+question of interest and keeps Holm-Bonferroni powerful (correcting over ~14 pairs
+instead of ~100). Two-sided Wilcoxon; mean_diff > 0 and wins favour MAttr.
 
 Usage:
     uv run python scripts/compare_methods.py
@@ -9,12 +11,12 @@ Usage:
 
 import pickle
 from pathlib import Path
-from itertools import combinations
 
 import numpy as np
 from scipy.stats import wilcoxon
 
 RESULTS_BASE = Path("results")
+REFERENCE = "MAttr"
 
 COLUMNS = [
     ("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
@@ -23,184 +25,128 @@ COLUMNS = [
     ("arc_easy", "gemma2"), ("arc_easy", "llama3"), ("arc_challenge", "llama3"),
 ]
 
-# Methods we have actual results for (not dagger baselines)
-NODE_METHODS = {
-    "Ours": "mib_node_hard_topk_log",
-    "+ soft fwd": "mib_node_topk_log",
-    "+ soft fwd, - c_k grad": "mib_node_detached_tau_log",
-    "+ hard bwd": "mib_node_bernoulli_reinforce_log",
-    "Ours (uni k)": "mib_node_hard_topk",
-    "+ soft fwd (uni k)": "final_node",
-    "+ soft fwd, - c_k (uni k)": "mib_node_detached_tau",
-    "+ hard bwd (uni k)": "mib_node_bernoulli_reinforce",
-}
+# Each method: (name, kind, spec).
+#   kind "flat":   spec = dir            -> results/<dir>/{task}_{model}_validation.pkl
+#   kind "nested": spec = (evaldir, sub) -> results/<evaldir>/<sub>/{stask}_{model}_validation_abs-False.pkl
+# MAttr default = uniform-k (mib_node_hard_topk); log-k is the "+ log k" ablation.
+NODE_METHODS = [
+    ("MAttr",                   "flat", "mib_node_hard_topk"),
+    ("+ log k",                 "flat", "mib_node_hard_topk_log"),
+    ("+ Gumbel",                "flat", "mib_node_hard_topk_gumbel"),
+    ("+ soft fwd",              "flat", "final_node"),
+    ("+ soft fwd, log k",       "flat", "mib_node_topk_log"),
+    ("+ soft fwd, -c_k",        "flat", "mib_node_detached_tau"),
+    ("+ soft fwd, -c_k, log k", "flat", "mib_node_detached_tau_log"),
+    ("+ hard bwd",              "flat", "mib_node_bernoulli_reinforce"),
+    ("+ hard bwd, log k",       "flat", "mib_node_bernoulli_reinforce_log"),
+    # gradient-attribution baselines
+    ("NAP-IG",      "nested", ("napig_repro_eval", "EAP-IG-inputs_patching_node")),
+    ("Conductance", "nested", ("napig_local_eval", "EAP-IG-inputs-local_patching_node")),
+    ("IxG",         "nested", ("ig1_eval", "EAP-IG-inputs_patching_node")),
+    ("RelP",        "nested", ("relp_eval", "RelP_patching_node")),
+    ("RelP+QK",     "nested", ("relp_qkgrad_eval", "RelP-qkgrad_patching_node")),
+    ("AttnRLP",     "nested", ("attnrlp_eval", "AttnRLP_patching_node")),
+    ("GIM",         "nested", ("gim_eval", "GIM_patching_node")),
+]
 
-EDGE_METHODS = {
-    "Ours": "mib_edge_hard_topk",
-    "+ soft fwd": "final_edge",
-    "+ soft fwd, - c_k grad": "mib_edge_detached_tau",
-}
-
-# Add repro baselines
-NAPIG_REPRO_DIR = "napig_repro_eval"
-EAPIG_REPRO_DIR = "eapig_repro_eval"
-
-
-def load_cpr_auc(results_dir, task, model):
-    pkl_path = RESULTS_BASE / results_dir / f"{task}_{model}_validation.pkl"
-    if not pkl_path.exists():
-        return None
-    try:
-        with open(pkl_path, "rb") as f:
-            d = pickle.load(f)
-        return d["area_under"]
-    except Exception:
-        return None
+EDGE_METHODS = [
+    ("MAttr",                   "flat", "mib_edge_hard_topk_uniform"),
+    ("+ log k",                 "flat", "mib_edge_hard_topk"),
+    ("+ soft fwd, log k",       "flat", "final_edge"),
+    ("+ soft fwd, -c_k, log k", "flat", "mib_edge_detached_tau"),
+    ("+ hard bwd, log k",       "flat", "mib_edge_bernoulli_reinforce"),
+    ("EAP-IG-inp", "nested", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),
+]
 
 
-def load_repro(level, task, model):
-    stask = task.replace("_", "-")
-    if level == "node":
-        pkl = RESULTS_BASE / NAPIG_REPRO_DIR / "EAP-IG-inputs_patching_node" / f"{stask}_{model}_validation_abs-False.pkl"
+def load(kind, spec, task, model):
+    if kind == "flat":
+        p = RESULTS_BASE / spec / f"{task}_{model}_validation.pkl"
     else:
-        pkl = RESULTS_BASE / EAPIG_REPRO_DIR / "EAP-IG-inputs_patching_edge" / f"{stask}_{model}_validation_abs-False.pkl"
-    if not pkl.exists():
+        evaldir, sub = spec
+        p = RESULTS_BASE / evaldir / sub / f"{task.replace('_', '-')}_{model}_validation_abs-False.pkl"
+    if not p.exists():
         return None
     try:
-        with open(pkl, "rb") as f:
-            d = pickle.load(f)
-        return d["area_under"]
+        v = pickle.load(open(p, "rb"))["area_under"]
+        return float(v) if np.isfinite(v) else None
     except Exception:
         return None
 
 
-def collect_results(methods, level):
+def collect_results(methods):
     """Return {method_name: {(task, model): cpr_auc}}."""
     data = {}
-    for name, results_dir in methods.items():
+    for name, kind, spec in methods:
         vals = {}
         for task, model in COLUMNS:
-            v = load_cpr_auc(results_dir, task, model)
+            v = load(kind, spec, task, model)
             if v is not None:
                 vals[(task, model)] = v
         data[name] = vals
-
-    # Add repro baseline
-    repro_name = "NAP-IG (repro)" if level == "node" else "EAP-IG (repro)"
-    vals = {}
-    for task, model in COLUMNS:
-        v = load_repro(level, task, model)
-        if v is not None:
-            vals[(task, model)] = v
-    data[repro_name] = vals
-
     return data
 
 
-def pairwise_wilcoxon(data):
-    """Run Wilcoxon signed-rank on all pairs, return results."""
-    names = list(data.keys())
+def vs_reference(data, methods):
+    """Wilcoxon: REFERENCE vs each other method, on matched columns."""
     results = []
-
-    for a, b in combinations(names, 2):
-        # Find matched columns
-        matched = []
-        for col in COLUMNS:
-            va = data[a].get(col)
-            vb = data[b].get(col)
-            if va is not None and vb is not None:
-                matched.append((va, vb))
-
+    ref = data[REFERENCE]
+    for name, _, _ in methods:
+        if name == REFERENCE:
+            continue
+        other = data[name]
+        matched = [(ref[c], other[c]) for c in COLUMNS if c in ref and c in other]
         n = len(matched)
         if n < 4:
-            results.append((a, b, n, None, None, None))
+            results.append((name, n, None, None, None))
             continue
-
-        x = np.array([m[0] for m in matched])
-        y = np.array([m[1] for m in matched])
+        x = np.array([m[0] for m in matched]); y = np.array([m[1] for m in matched])
         diff = x - y
-        mean_diff = diff.mean()
-        wins_a = (diff > 0).sum()
-        wins_b = (diff < 0).sum()
-
-        # Wilcoxon signed-rank (two-sided)
         try:
-            stat, p = wilcoxon(x, y, alternative="two-sided")
+            _, p = wilcoxon(x, y, alternative="two-sided")
         except ValueError:
-            # All differences are zero
-            stat, p = 0, 1.0
-
-        results.append((a, b, n, mean_diff, p, f"{wins_a}-{wins_b}"))
-
+            p = 1.0
+        results.append((name, n, diff.mean(), p, f"{(diff > 0).sum()}-{(diff < 0).sum()}"))
     return results
 
 
 def holm_bonferroni(results):
-    """Apply Holm-Bonferroni correction to p-values."""
-    # Get indices of results with valid p-values
-    valid = [(i, r[4]) for i, r in enumerate(results) if r[4] is not None]
-    if not valid:
-        return results
-
-    # Sort by p-value
-    valid.sort(key=lambda x: x[1])
+    """Holm-Bonferroni over the family of comparisons with a valid p-value."""
+    valid = sorted([(i, r[3]) for i, r in enumerate(results) if r[3] is not None],
+                   key=lambda x: x[1])
     m = len(valid)
-
-    corrected = {}
+    corrected, running = {}, 0.0
     for rank, (idx, p) in enumerate(valid):
-        corrected[idx] = min(p * (m - rank), 1.0)
-
-    # Build output with corrected p-values
-    out = []
-    for i, r in enumerate(results):
-        if i in corrected:
-            out.append((*r, corrected[i]))
-        else:
-            out.append((*r, None))
-    return out
+        running = max(running, min(p * (m - rank), 1.0))  # enforce monotonicity
+        corrected[idx] = running
+    return [(*r, corrected.get(i)) for i, r in enumerate(results)]
 
 
 def print_results(level, results):
-    print(f"\n{'='*70}")
-    print(f"  {level.upper()}-LEVEL pairwise Wilcoxon signed-rank tests")
-    print(f"{'='*70}")
-    print(f"{'Method A':>30s}  vs  {'Method B':<30s}  n   mean_diff   wins   p-val   p-corr")
-    print("-" * 120)
-
+    print(f"\n{'='*78}")
+    print(f"  {level.upper()}-LEVEL: {REFERENCE} vs each method (Wilcoxon signed-rank, Holm-corrected)")
+    print(f"{'='*78}")
+    print(f"  {REFERENCE} vs {'Method':<24s} n   mean_diff   wins(M-O)   p-val    p-corr")
+    print("-" * 78)
     for r in results:
-        if len(r) == 7:
-            a, b, n, mean_diff, p, wins, p_corr = r
-        else:
-            a, b, n, mean_diff, p, wins = r
-            p_corr = None
-
+        name, n, mean_diff, p, wins, p_corr = r
         if p is None:
-            print(f"{a:>30s}  vs  {b:<30s}  {n:2d}   {'(too few pairs)':>40s}")
-        else:
-            sig = ""
-            if p_corr is not None and p_corr < 0.05:
-                sig = " *"
-            if p_corr is not None and p_corr < 0.01:
-                sig = " **"
-            p_str = f"{p:.4f}"
-            pc_str = f"{p_corr:.4f}" if p_corr is not None else "  n/a"
-            print(f"{a:>30s}  vs  {b:<30s}  {n:2d}   {mean_diff:+.4f}   {wins:>5s}   {p_str}   {pc_str}{sig}")
-
+            print(f"  {REFERENCE} vs {name:<24s} {n:2d}   (too few matched columns)")
+            continue
+        sig = " **" if (p_corr is not None and p_corr < 0.01) else (
+              " *" if (p_corr is not None and p_corr < 0.05) else "")
+        print(f"  {REFERENCE} vs {name:<24s} {n:2d}   {mean_diff:+.4f}    {wins:>7s}   "
+              f"{p:.4f}   {p_corr:.4f}{sig}")
     print()
 
 
 def main():
     for level, methods in [("node", NODE_METHODS), ("edge", EDGE_METHODS)]:
-        data = collect_results(methods, level)
-
-        # Print available data summary
-        print(f"\n{level.upper()}-level results available:")
-        for name, vals in data.items():
-            cols = [f"{t[:3]}/{m[:3]}" for (t, m) in vals.keys()]
-            print(f"  {name}: {len(vals)} columns")
-
-        results = pairwise_wilcoxon(data)
-        results = holm_bonferroni(results)
+        data = collect_results(methods)
+        print(f"\n{level.upper()}-level columns available:")
+        for name, _, _ in methods:
+            print(f"  {name:<26s} {len(data[name])} cols")
+        results = holm_bonferroni(vs_reference(data, methods))
         print_results(level, results)
 
 

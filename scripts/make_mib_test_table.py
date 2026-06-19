@@ -126,7 +126,15 @@ def main():
     best_node, second_node = find_best(NODE_BASELINES, ours_node)
     best_edge, second_edge = find_best(EDGE_BASELINES, ours_edge)
 
-    def make_row(name, data, best_col, second_col, dagger=None):
+    def row_avg(data):
+        vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
+        return round(sum(vs) / len(vs), 2) if vs else None
+
+    def section_avg_best(data_dicts):
+        avs = sorted({a for a in (row_avg(d) for d in data_dicts) if a is not None}, reverse=True)
+        return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
+
+    def make_row(name, data, best_col, second_col, dagger=None, avg_best=None, avg_second=None, indent=False):
         dcells = dagger or set()
         vals = []
         for task, model, _ in COLUMNS:
@@ -135,36 +143,42 @@ def main():
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
             cell = fmt(v, bold=is_best, underline=is_second)
             if v is not None and (task, model) in dcells:
-                cell = cell + "$^\\dagger$"
+                cell = "$^{\\dagger}$" + cell
             vals.append(cell)
-        return f"{name} & " + " & ".join(vals) + " \\\\"
+        a = row_avg(data)
+        vals.append(fmt(a, bold=(a is not None and a == avg_best),
+                        underline=(a is not None and a != avg_best and a == avg_second)))
+        prefix = f"\\quad {name}" if indent else name
+        return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
     # Generate LaTeX
     ncols = len(COLUMNS)
     lines = []
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
-    lines.append("\\begin{tabular}{l" + "r" * ncols + "}")
+    lines.append("\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}")
     lines.append("\\toprule")
-    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\")
+    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
     lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
-    header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\"
+    header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"
     lines.append(header)
 
     # Node level
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + [ours_node])
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node))
-    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node))
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs))
 
     # Edge level
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 1}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + [ours_edge])
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge))
-    # llama3 edge-test jobs OOM'd at full eval -> reduced subset, mark with dagger.
-    EDGE_DAGGER = {("ioi", "llama3"), ("arithmetic_subtraction", "llama3"), ("mcqa", "llama3")}
-    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER))
+        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
+    # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
+    EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
