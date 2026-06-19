@@ -86,9 +86,9 @@ def main():
                "(Llama-3.1-8B-Instruct).")
     lines = [
         "% Requires \\usepackage{booktabs}, \\usepackage{hyperref}, \\usepackage{longtable}.",
+        "\\begingroup\\scriptsize",
         "\\begin{longtable}{@{}r l p{0.36\\linewidth} p{0.36\\linewidth}@{}}",
         f"\\caption{{{caption}}}\\label{{tab:arith-mlp-neurons}}\\\\",
-        "\\scriptsize",
         "\\toprule",
         header,
         "\\midrule",
@@ -113,6 +113,7 @@ def main():
     if lines[-1] == "\\midrule":
         lines.pop()
     lines.append("\\end{longtable}")
+    lines.append("\\endgroup")
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     open(args.out, "w").write("\n".join(lines) + "\n")
     print(f"\nwrote {args.out}")
