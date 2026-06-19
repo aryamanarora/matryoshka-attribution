@@ -31,7 +31,7 @@ for t in ['cleft','cleft_mod','filler_gap_embed_3','filler_gap_embed_4','filler_
 
 R=Path('results')
 d=pickle.load(open(R/'pythia1b_multitask_das.pkl','rb'))
-EXCLUDE={'syntaxgym/filler_gap_embed_4','syntaxgym/agr_gender'}
+EXCLUDE=set()  # include the 2 outlier tasks
 tasks=[t for t in d['tasks'] if t not in EXCLUDE]   # CausalGym order
 feats=d['feature_vectors']; short=lambda t: t.replace('syntaxgym/','')
 N=32
