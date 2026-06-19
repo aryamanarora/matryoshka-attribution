@@ -78,33 +78,41 @@ def main():
 
     json.dump(cache, open(args.cache, "w"), indent=0)
 
+    header = "Layer & Neuron & Positive-activation description & Negative-activation description \\\\"
+    caption = ("Top-10 MLP neurons per arithmetic-wild task (Llama-3.1-8B) by "
+               "sufficient-MAttr importance at the last token, ranked over all layers. "
+               "Neuron IDs link to Transluce; positive/negative descriptions are Transluce "
+               "auto-generated labels for the neuron's positive/negative activation "
+               "(Llama-3.1-8B-Instruct).")
     lines = [
-        "% Requires \\usepackage{booktabs} and \\usepackage{hyperref}.",
-        "\\begin{table}[t]",
-        "\\centering",
+        "% Requires \\usepackage{booktabs}, \\usepackage{hyperref}, \\usepackage{longtable}.",
+        "\\begin{longtable}{@{}r l p{0.36\\linewidth} p{0.36\\linewidth}@{}}",
+        f"\\caption{{{caption}}}\\label{{tab:arith-mlp-neurons}}\\\\",
         "\\scriptsize",
-        "\\begin{tabular}{@{}r l p{0.36\\linewidth} p{0.36\\linewidth}@{}}",
         "\\toprule",
-        "Layer & Neuron & Positive-activation description & Negative-activation description \\\\",
+        header,
+        "\\midrule",
+        "\\endfirsthead",
+        "\\multicolumn{4}{c}{{\\tablename\\ \\thetable{} -- continued}} \\\\",
+        "\\toprule",
+        header,
+        "\\midrule",
+        "\\endhead",
+        "\\midrule \\multicolumn{4}{r}{\\textit{continued on next page}} \\\\",
+        "\\endfoot",
+        "\\bottomrule",
+        "\\endlastfoot",
     ]
     for t, rows in groups:
-        lines.append("\\midrule")
         lines.append(f"\\multicolumn{{4}}{{@{{}}l}}{{\\textbf{{{tex_escape(t)}}}}} \\\\")
         for layer, neuron, pos, neg, url in rows:
             link = f"\\href{{{url}}}{{{neuron}}}"
             lines.append(f"{layer} & {link} & {tex_escape(ascii_clean(pos))} "
                          f"& {tex_escape(ascii_clean(neg))} \\\\")
-    lines += [
-        "\\bottomrule",
-        "\\end{tabular}",
-        ("\\caption{Top-10 MLP neurons per arithmetic-wild task (Llama-3.1-8B) by "
-         "sufficient-MAttr importance at the last token, ranked over all layers. "
-         "Neuron IDs link to Transluce; positive/negative descriptions are Transluce "
-         "auto-generated labels for the neuron's positive/negative activation "
-         "(Llama-3.1-8B-Instruct).}"),
-        "\\label{tab:arith-mlp-neurons}",
-        "\\end{table}",
-    ]
+        lines.append("\\midrule")
+    if lines[-1] == "\\midrule":
+        lines.pop()
+    lines.append("\\end{longtable}")
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     open(args.out, "w").write("\n".join(lines) + "\n")
     print(f"\nwrote {args.out}")
