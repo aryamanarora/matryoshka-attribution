@@ -634,9 +634,12 @@ class LlamaSpanAttributionHooks:
         return out
 
     def _sae_intervene(self, base_act, cf_act, span_feat_mask, layer_idx):
-        """SAE feature interchange (denoising when self.sufficient is False):
-        out = a_cf + (mask ⊙ (f_base − f_cf)) @ W_dec   (top-k features keep base, rest cf).
-        span_feat_mask: [num_spans, d_sae]. Error held at cf (cancels)."""
+        """SAE feature interchange. Update = base + decode(masked feature delta), so the SAE
+        reconstruction ERROR is held at BASE: mask=0 -> exactly base (lossless); mask=1 ->
+        decode(f_cf)+err_base, NOT a clean cf activation. A full feature swap is thus lossy
+        (cf features carry base's error, compounded across layers) -- the 100% edge of a
+        sufficiency/necessity curve is not a clean cf reference.
+        span_feat_mask: [num_spans, d_sae]."""
         sae = self.saes.get(layer_idx)
         if sae is None or cf_act is None:
             return base_act
