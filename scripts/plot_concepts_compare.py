@@ -1,5 +1,6 @@
-"""Necessity vs sufficiency per-concept accuracy vs % features, facet_grid(mode ~ task)."""
-import pickle
+"""Necessity vs sufficiency per-concept accuracy vs % nodes, facet_grid(mode ~ task).
+Usage: plot_concepts_compare.py [nec.pkl suf.pkl out.pdf]"""
+import pickle, sys
 import pandas as pd
 from plotnine import (
     ggplot, aes, geom_line, facet_grid, labs, scale_x_log10, scale_y_continuous,
@@ -18,8 +19,11 @@ theme_set(
             legend_key_size=6, legend_position="top", legend_direction="horizontal",
             legend_box_margin=0))
 
-SRC = {"Necessity": "results/arith_sae_concepts.pkl",
-       "Sufficiency": "results/arith_sae_concepts_sufficient.pkl"}
+_a = sys.argv[1:] if len(sys.argv) > 3 else ["results/arith_sae_concepts.pkl",
+                                             "results/arith_sae_concepts_sufficient.pkl",
+                                             "plots/arith_concepts_compare.pdf"]
+SRC = {"Necessity": _a[0], "Sufficiency": _a[1]}
+OUT = _a[2]
 rows = []
 for mode, fn in SRC.items():
     r = pickle.load(open(fn, "rb"))
@@ -41,5 +45,5 @@ p = (ggplot(df, aes("pct", "acc", color="Concept"))
      + scale_color_brewer(type="qual", palette="Set1")
      + labs(x="SAE features in mask (%)", y="Accuracy")
      + theme(figure_size=(5.5, 2.7)))
-p.save("plots/arith_concepts_compare.pdf", verbose=False)
-print("wrote plots/arith_concepts_compare.pdf")
+p.save(OUT, verbose=False)
+print("wrote", OUT)
