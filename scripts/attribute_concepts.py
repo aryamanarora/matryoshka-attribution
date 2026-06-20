@@ -27,9 +27,9 @@ logger = logging.getLogger("concepts")
 ARITH_DIR = "/home/guests/aryaman/arithmetic-wild/datasets/Llama-3.1-8B"
 
 
-def make_dataset(kind, task, seed):
+def make_dataset(kind, task, seed, mode="necessary"):
     if kind == "arith":
-        return ArithmeticWildDataset(task, ARITH_DIR, seed=seed)
+        return ArithmeticWildDataset(task, ARITH_DIR, seed=seed, target_mode=mode)
     return CausalGymDataset(task, seed=seed)
 
 
@@ -44,6 +44,9 @@ def main():
     p.add_argument("--model", default="meta-llama/Llama-3.1-8B")
     p.add_argument("--dataset", default="arith", choices=["arith", "causalgym"])
     p.add_argument("--mask", default="sae", choices=["das", "mlp", "sae"])
+    p.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"],
+                   help="necessary: top-k->cf, target=V-swapped; sufficient: top-k base, "
+                        "complement->cf, target=everything-except-V swapped")
     p.add_argument("--tasks", default="months,weekdays,hours,addition")
     p.add_argument("--sae_repo", default="fnlp/Llama3_1-8B-Base-LXR-8x")
     p.add_argument("--das_dim", type=int, default=32)
@@ -77,10 +80,11 @@ def main():
 
     tasks = args.tasks.split(",")
     datasets, hookers, scores = {}, {}, {}     # scores[task][concept] = Parameter
+    # necessary -> noising (top-k -> cf, hooker.sufficient=True); sufficient -> denoising
+    hooker_suf = (args.mode == "necessary")
     for t in tasks:
-        ds = make_dataset(args.dataset, t, args.seed)
-        # interchange = noising: top-k patched to cf -> hooker sufficient=True
-        hooker = SpanHooks(model, args.mask, ds.num_spans, pos_strategy=args.pos_strategy, sufficient=True)
+        ds = make_dataset(args.dataset, t, args.seed, mode=args.mode)
+        hooker = SpanHooks(model, args.mask, ds.num_spans, pos_strategy=args.pos_strategy, sufficient=hooker_suf)
         if args.mask == "sae":
             hooker.set_saes(shared["sae"])
         elif args.mask == "das":

@@ -41,15 +41,27 @@ def _offset_val(task, ex):
     return ex["premod"] - TASK_MODELS[task]["inp_idx"](ex["input"])
 
 
-def concept_target_strings(task, base_ex, cf_ex):
-    """Interchange target surface strings for patching each causal variable from cf into base:
-      input  -> use cf's input, base's offset;  offset -> base's input, cf's offset;
-      output -> cf's whole answer. Matches a per-variable interchange intervention."""
+def concept_target_strings(task, base_ex, cf_ex, mode="necessary"):
+    """Per-variable interchange target surface strings, on the same (random) cf distribution.
+
+    necessary  (noising, top-k -> cf): target = f(V from cf, rest from base) i.e. V swapped in.
+    sufficient (denoising, top-k base, rest -> cf): target = f(V from base, rest from cf) i.e.
+               everything *except* V swapped in (output concept -> base answer).
+    The two modes just mirror which side each variable is read from."""
     m = TASK_MODELS[task]
-    p_input = m["inp_idx"](cf_ex["input"]) + _offset_val(task, base_ex)
-    p_offset = m["inp_idx"](base_ex["input"]) + _offset_val(task, cf_ex)
-    return {"input": m["out"](p_input), "offset": m["out"](p_offset),
-            "output": cf_ex["raw_output"]}
+
+    def out(inp_ex, off_ex):   # compute answer reading input from inp_ex, offset from off_ex
+        return m["out"](m["inp_idx"](inp_ex["input"]) + _offset_val(task, off_ex))
+
+    if mode == "necessary":     # V from cf
+        return {"input":  out(cf_ex, base_ex),     # input<-cf, offset<-base
+                "offset": out(base_ex, cf_ex),     # input<-base, offset<-cf
+                "output": cf_ex["raw_output"]}      # both<-cf  == cf answer
+    elif mode == "sufficient":  # everything except V from cf
+        return {"input":  out(base_ex, cf_ex),     # input<-base, offset<-cf
+                "offset": out(cf_ex, base_ex),     # input<-cf, offset<-base
+                "output": base_ex["raw_output"]}    # answer features kept base == base answer
+    raise ValueError(mode)
 
 
 @dataclass
@@ -83,9 +95,10 @@ def _slot_char_spans(template, filled):
 
 
 class ArithmeticWildDataset:
-    def __init__(self, task_name, data_dir, seed=42):
+    def __init__(self, task_name, data_dir, seed=42, target_mode="necessary"):
         # task_name like "arith/months" or "months"
         self.task_name = task_name
+        self.target_mode = target_mode   # "necessary" | "sufficient" (concept targets)
         key = task_name.split("/")[-1]
         self.key = key
         self.template = TEMPLATES[key]
@@ -122,7 +135,7 @@ class ArithmeticWildDataset:
         base, cf = pair
         b_ids, b_align, b_lab = self._spans_and_label(base, tokenizer, device)
         s_ids, s_align, s_lab = self._spans_and_label(cf, tokenizer, device)
-        tgt_str = concept_target_strings(self.key, base, cf)
+        tgt_str = concept_target_strings(self.key, base, cf, self.target_mode)
         targets = {c: tokenizer.encode(s, add_special_tokens=False)[0]
                    for c, s in tgt_str.items()}   # {input, offset, output} -> token id
         return ArithTokenizedPair(
