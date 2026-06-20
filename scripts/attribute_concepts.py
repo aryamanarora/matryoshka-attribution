@@ -43,7 +43,10 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="meta-llama/Llama-3.1-8B")
     p.add_argument("--dataset", default="arith", choices=["arith", "causalgym"])
-    p.add_argument("--mask", default="sae", choices=["das", "mlp", "sae"])
+    p.add_argument("--mask", default="sae", choices=["das", "mlp", "sae", "resid", "resid_dim"])
+    p.add_argument("--per_token", action="store_true",
+                   help="arith: each token gets its own span (operands grouped); covers all "
+                        "positions. Required for a layer x position scalar (resid) map.")
     p.add_argument("--mode", default="necessary", choices=["necessary", "sufficient"],
                    help="necessary: top-k->cf, target=V-swapped; sufficient: top-k base, "
                         "complement->cf, target=everything-except-V swapped")
@@ -82,9 +85,14 @@ def main():
     datasets, hookers, scores = {}, {}, {}     # scores[task][concept] = Parameter
     # necessary -> noising (top-k -> cf, hooker.sufficient=True); sufficient -> denoising
     hooker_suf = (args.mode == "necessary")
+    pos_strategy = "all" if args.per_token else args.pos_strategy   # cover all operand tokens
     for t in tasks:
         ds = make_dataset(args.dataset, t, args.seed, mode=args.mode)
-        hooker = SpanHooks(model, args.mask, ds.num_spans, pos_strategy=args.pos_strategy, sufficient=hooker_suf)
+        if args.per_token and args.dataset == "arith":
+            ds.build_schema(tokenizer)
+            logger.info("  %-10s per-token: %d spans, %d/%d valid examples",
+                        t, ds.num_spans, len(ds._valid), len(ds.bases))
+        hooker = SpanHooks(model, args.mask, ds.num_spans, pos_strategy=pos_strategy, sufficient=hooker_suf)
         if args.mask == "sae":
             hooker.set_saes(shared["sae"])
         elif args.mask == "das":

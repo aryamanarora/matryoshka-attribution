@@ -108,17 +108,63 @@ class ArithmeticWildDataset:
         self.bases = data["input"]
         self.cfs = [c[0] for c in data["counterfactual_inputs"]]
         self.rng = random.Random(seed)
+        self._schema = None      # per-token mode off until build_schema() is called
+        self._roles = None
+        self._valid = None
 
     @property
     def num_spans(self):
-        return 3
+        return len(self._roles) if self._schema is not None else 3
+
+    # ---- per-token span mode (opt-in) ----------------------------------------
+    def _classify(self, ex, tokenizer, device="cpu"):
+        """Tokenize and assign each token to a span: each literal token is its own span;
+        consecutive operand tokens are grouped into one span (input / offset)."""
+        raw = ex["raw_input"]
+        enc = tokenizer(raw, return_tensors="pt", return_offsets_mapping=True)
+        offs = enc["offset_mapping"][0].tolist()
+        ids = enc["input_ids"].to(device)
+        cs = _slot_char_spans(self.template, raw)
+        spans, roles = [], []
+        for ti, (ts, te) in enumerate(offs):
+            slot = None
+            if te > ts:
+                for name in ("input", "offset"):
+                    a, b = cs[name]
+                    if ts < b and te > a:
+                        slot = name
+                        break
+            if slot and roles and roles[-1] == slot:
+                spans[-1].append(ti)                      # extend operand run
+            else:
+                spans.append([ti])
+                roles.append(slot or "L")                 # literal/special -> own span
+        return ids, spans, roles
+
+    def build_schema(self, tokenizer):
+        """Enable per-token spans. Fixes the span schema from a reference example and keeps
+        only examples whose base & cf tokenize to the same role sequence (handles operand
+        length / boundary variation). Returns self."""
+        _, _, roles = self._classify(self.bases[0], tokenizer)
+        self._roles = roles
+        self._schema = tuple(roles)
+        self._valid = [i for i in range(len(self.bases))
+                       if tuple(self._classify(self.bases[i], tokenizer)[2]) == self._schema
+                       and tuple(self._classify(self.cfs[i], tokenizer)[2]) == self._schema]
+        self.span_names = list(roles)
+        return self
 
     def sample_pair(self):
-        i = self.rng.randrange(len(self.bases))
+        pool = self._valid if self._schema is not None else range(len(self.bases))
+        i = self.rng.choice(list(pool))
         return (self.bases[i], self.cfs[i])
 
     def _spans_and_label(self, ex, tokenizer, device):
         raw = ex["raw_input"]
+        label_id = tokenizer.encode(ex["raw_output"], add_special_tokens=False)[0]
+        if self._schema is not None:                      # per-token span mode
+            ids, spans, _ = self._classify(ex, tokenizer, device)
+            return ids, spans, label_id
         ids = tokenizer(raw, return_tensors="pt", return_offsets_mapping=True)
         offsets = ids["offset_mapping"][0].tolist()
         input_ids = ids["input_ids"].to(device)
@@ -128,7 +174,6 @@ class ArithmeticWildDataset:
             a, b = cspan
             return [t for t, (ts, te) in enumerate(offsets) if te > ts and ts < b and te > a]
         align = [toks_for(cs["input"]), toks_for(cs["offset"]), [n - 1]]  # last_token
-        label_id = tokenizer.encode(ex["raw_output"], add_special_tokens=False)[0]
         return input_ids, align, label_id
 
     def tokenize_pair(self, pair, tokenizer, device="cpu"):
