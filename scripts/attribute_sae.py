@@ -170,7 +170,8 @@ def main():
     ap.add_argument("--T", type=float, default=0.5)
     ap.add_argument("--k-schedule", default="uniform")  # uniform > log in our results
     ap.add_argument("--n-eval", type=int, default=50)
-    ap.add_argument("--error-mode", default="cf", choices=["cf", "clean", "node"])
+    ap.add_argument("--error-mode", default="node", choices=["cf", "clean", "node"],
+                    help="default node: error term is always a scored node (consistent w/ arith SAE)")
     ap.add_argument("--output", default="results/sae_npi_subj_relc")
     args = ap.parse_args()
 

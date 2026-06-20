@@ -525,7 +525,8 @@ class LlamaSpanAttributionHooks:
         assert self.mask_type == "sae"
         self.saes = saes
         self.d_sae = next(iter(saes.values())).d_sae
-        self.total = self.num_layers * self.num_spans * self.d_sae
+        self.sae_width = self.d_sae + 1   # +1 per-span scored error-term node (always learned)
+        self.total = self.num_layers * self.num_spans * self.sae_width
 
     def cache_cf_activations(self, src_input_ids: torch.Tensor):
         """Cache src activations at hook points."""
@@ -649,19 +650,22 @@ class LlamaSpanAttributionHooks:
             sps = self.src_span_to_pos[span_i]
             if not bps:
                 continue
-            m = span_feat_mask[span_i].float()                # [d_sae]
+            sm = span_feat_mask[span_i].float()               # [d_sae + 1]
+            m = sm[:sae.d_sae]                                 # feature mask [d_sae]
+            m_err = sm[sae.d_sae]                              # scalar: error-term node score
             for j, bp in enumerate(bps):
                 sp = sps[min(j, len(sps) - 1)] if sps else bp
                 wdt = sae.W_enc.dtype                      # SAE compute dtype (float32)
                 b = base_act[0, bp].to(wdt); c = cf_act[0, sp].to(wdt)
                 fb, fc = sae.encode(b), sae.encode(c)
-                # Error held at BASE so keeping all base features is lossless
-                # (out = b + decode(masked_features - f_base)); avoids compounding
-                # SAE reconstruction error across all 32 layers.
+                # The SAE reconstruction ERROR is a SCORED node (m_err), like every feature:
+                # err_diff = err_cf - err_base = (c-b) - decode(f_cf - f_base). With both the
+                # features and the error node selected, a full swap reaches the *clean* cf.
+                err_diff = (c - b) - sae.decode_delta(fc - fb)
                 if self.sufficient:    # noising: mask=1 (top-k) -> cf, rest base
-                    new = b + sae.decode_delta(m * (fc - fb))
+                    new = b + sae.decode_delta(m * (fc - fb)) + m_err * err_diff
                 else:                  # denoising/sufficient: mask=1 -> base, rest cf
-                    new = b + sae.decode_delta((1.0 - m) * (fc - fb))
+                    new = b + sae.decode_delta((1.0 - m) * (fc - fb)) + (1.0 - m_err) * err_diff
                 # Numerical guard: a near-full feature swap injects SAE reconstruction
                 # error that can compound/overflow across all 32 layers. The intended
                 # result is bounded by a real activation (base/cf), so cap the norm at a
@@ -805,8 +809,9 @@ class LlamaSpanAttributionHooks:
                         if self.mask is None:
                             return
                         x = output[0] if isinstance(output, tuple) else output
-                        off = li * S * self.d_sae
-                        span_feat_mask = self.mask[off:off + S * self.d_sae].view(S, self.d_sae)
+                        w = self.d_sae + 1   # features + scored error node
+                        off = li * S * w
+                        span_feat_mask = self.mask[off:off + S * w].view(S, w)
                         new_x = self._sae_intervene(x, self.cf_acts_resid.get(li),
                                                     span_feat_mask, li)
                         if isinstance(output, tuple):
