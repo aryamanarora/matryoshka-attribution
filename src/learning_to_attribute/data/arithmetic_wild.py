@@ -18,6 +18,39 @@ TEMPLATES = {
 }
 SPAN_NAMES = ["input", "offset", "last_token"]
 
+# Per-task causal model (faithful to goodfire-ai/arithmetic-wild tasks/*/causal_models.py).
+# output = compute(premod), premod = idx(input) + idx(offset); interchange targets for the
+# three causal variables {input, offset, output} are derived generically from these.
+_MONTHS = ["January", "February", "March", "April", "May", "June",
+           "July", "August", "September", "October", "November", "December"]
+_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+TASK_MODELS = {
+    "months":   {"inp_idx": lambda s: _MONTHS.index(s) + 1,
+                 "out": lambda p: " " + _MONTHS[(p % 12) - 1]},
+    "weekdays": {"inp_idx": lambda s: _DAYS.index(s) + 1,
+                 "out": lambda p: " " + _DAYS[(p % 7) - 1]},
+    "hours":    {"inp_idx": lambda s: int(s),
+                 "out": lambda p: f"{p % 24:02d}:00"},
+    "addition": {"inp_idx": lambda s: int(s),
+                 "out": lambda p: str(p)},
+}
+
+
+def _offset_val(task, ex):
+    """idx(offset) recovered from premod (premod = idx(input) + idx(offset))."""
+    return ex["premod"] - TASK_MODELS[task]["inp_idx"](ex["input"])
+
+
+def concept_target_strings(task, base_ex, cf_ex):
+    """Interchange target surface strings for patching each causal variable from cf into base:
+      input  -> use cf's input, base's offset;  offset -> base's input, cf's offset;
+      output -> cf's whole answer. Matches a per-variable interchange intervention."""
+    m = TASK_MODELS[task]
+    p_input = m["inp_idx"](cf_ex["input"]) + _offset_val(task, base_ex)
+    p_offset = m["inp_idx"](base_ex["input"]) + _offset_val(task, cf_ex)
+    return {"input": m["out"](p_input), "offset": m["out"](p_offset),
+            "output": cf_ex["raw_output"]}
+
 
 @dataclass
 class ArithTokenizedPair:
@@ -30,6 +63,7 @@ class ArithTokenizedPair:
     num_spans: int = 3
     span_names: tuple = ("input", "offset", "last_token")
     label_span_indices: list = field(default_factory=lambda: [2])  # last_token
+    targets: dict = field(default_factory=dict)   # {concept: token_id} interchange targets
 
 
 def _slot_char_spans(template, filled):
@@ -88,10 +122,13 @@ class ArithmeticWildDataset:
         base, cf = pair
         b_ids, b_align, b_lab = self._spans_and_label(base, tokenizer, device)
         s_ids, s_align, s_lab = self._spans_and_label(cf, tokenizer, device)
+        tgt_str = concept_target_strings(self.key, base, cf)
+        targets = {c: tokenizer.encode(s, add_special_tokens=False)[0]
+                   for c, s in tgt_str.items()}   # {input, offset, output} -> token id
         return ArithTokenizedPair(
             base_input_ids=b_ids, src_input_ids=s_ids,
             base_alignment=b_align, src_alignment=s_align,
-            base_label_id=b_lab, src_label_id=s_lab,
+            base_label_id=b_lab, src_label_id=s_lab, targets=targets,
         )
 
     @staticmethod

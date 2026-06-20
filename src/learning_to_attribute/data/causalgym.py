@@ -37,6 +37,7 @@ class TokenizedSpanPair:
     num_spans: int
     span_names: list[str]
     label_span_indices: list[int]
+    targets: dict = field(default_factory=dict)   # {concept: token_id} interchange targets
 
 
 class CausalGymDataset:
@@ -208,6 +209,7 @@ class CausalGymDataset:
             num_spans=len(pair.base_spans),
             span_names=pair.span_names,
             label_span_indices=pair.label_span_indices,
+            targets={"src": src_label_id},   # interchange target = source label
         )
 
     @staticmethod
