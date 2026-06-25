@@ -102,7 +102,7 @@ def main():
                              "what MIB CPR measures, and what all our runs use). "
                              "necessary (noising): top-k get CF; find what breaks behavior.")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
                              "topk_detached: soft forward, detached tau (no coupling gradient). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
@@ -281,6 +281,14 @@ def main():
             hard[top_idx] = 1.0
             soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
             hooker.mask = hard - soft.detach() + soft
+        elif args.masking == "hard_topk_identity":
+            # hard top-k forward, IDENTITY straight-through backward (dm/ds = 1): the score
+            # gradient is purely g*delta for every node (no sigmoid gate-slope, no temperature).
+            ki = max(1, int(k))
+            _, top_idx = scores.topk(ki)
+            hard = torch.zeros_like(scores)
+            hard[top_idx] = 1.0
+            hooker.mask = hard.detach() + (scores - scores.detach())
         elif args.masking == "hard_topk_gumbel":
             # Add Gumbel(0,1) noise per score, then hard top-k on the perturbed scores
             # (forward selection is randomized); straight-through grad via clean-score soft.

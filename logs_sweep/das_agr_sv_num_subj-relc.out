@@ -1,0 +1,54 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:00<03:17,  1.46it/s]Loading weights:  28%|██▊       | 80/288 [00:00<00:01, 130.27it/s]Loading weights:  40%|████      | 116/288 [00:01<00:01, 137.69it/s]Loading weights:  50%|████▉     | 143/288 [00:01<00:01, 141.38it/s]Loading weights:  57%|█████▋    | 165/288 [00:01<00:00, 126.71it/s]Loading weights:  64%|██████▎   | 183/288 [00:01<00:00, 116.81it/s]Loading weights:  69%|██████▉   | 198/288 [00:01<00:00, 121.25it/s]Loading weights:  74%|███████▍  | 213/288 [00:01<00:00, 117.35it/s]Loading weights:  80%|████████  | 231/288 [00:02<00:00, 123.98it/s]Loading weights:  85%|████████▌ | 246/288 [00:02<00:00, 116.43it/s]Loading weights:  93%|█████████▎| 267/288 [00:02<00:00, 136.55it/s]Loading weights: 100%|██████████| 288/288 [00:02<00:00, 121.88it/s]
+DAS-64 single-layer L12 task=syntaxgym/agr_sv_num_subj-relc
+step 0 loss 9.6189
+step 100 loss 4.0915
+step 200 loss 3.8412
+step 300 loss 3.3566
+step 400 loss 3.5519
+step 500 loss 3.2398
+step 600 loss 2.8400
+step 700 loss 2.9382
+step 800 loss 2.9280
+step 900 loss 2.9653
+step 1000 loss 2.8473
+step 1100 loss 2.6855
+step 1200 loss 2.7240
+step 1300 loss 2.8752
+step 1400 loss 2.8462
+step 1500 loss 2.7007
+step 1600 loss 2.7180
+step 1700 loss 2.9367
+step 1800 loss 2.3699
+step 1900 loss 2.8792
+step 2000 loss 2.8309
+step 2100 loss 2.7148
+step 2200 loss 2.7401
+step 2300 loss 2.4072
+step 2400 loss 2.8297
+step 2500 loss 2.6505
+step 2600 loss 2.7602
+step 2700 loss 2.5470
+step 2800 loss 2.5579
+step 2900 loss 2.5807
+step 3000 loss 2.6703
+step 3100 loss 2.6414
+step 3200 loss 2.6583
+step 3300 loss 2.6312
+step 3400 loss 2.5036
+step 3500 loss 2.5538
+step 3600 loss 2.7358
+step 3700 loss 2.6706
+step 3800 loss 2.5499
+step 3900 loss 2.6455
+=== DAS-64 SUFFICIENCY ===
+k=  1 learned acc=0.887 pd=+2.073 random acc=0.013
+k=  2 learned acc=0.887 pd=+2.123 random acc=0.013
+k=  4 learned acc=0.912 pd=+2.672 random acc=0.013
+k=  8 learned acc=0.912 pd=+2.980 random acc=0.000
+k= 12 learned acc=0.963 pd=+3.247 random acc=0.000
+k= 16 learned acc=0.975 pd=+3.495 random acc=0.000
+k= 24 learned acc=0.988 pd=+3.678 random acc=0.025
+k= 32 learned acc=0.988 pd=+3.770 random acc=0.013
+k= 48 learned acc=0.988 pd=+3.906 random acc=0.013
+k= 64 learned acc=1.000 pd=+3.931 random acc=1.000

@@ -1,0 +1,54 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:01<07:56,  1.66s/it]Loading weights:  32%|███▏      | 91/288 [00:01<00:02, 71.50it/s]Loading weights:  49%|████▉     | 141/288 [00:02<00:02, 69.52it/s]Loading weights:  59%|█████▉    | 171/288 [00:02<00:01, 67.64it/s]Loading weights:  67%|██████▋   | 192/288 [00:03<00:01, 65.74it/s]Loading weights:  72%|███████▏  | 208/288 [00:03<00:01, 66.23it/s]Loading weights:  77%|███████▋  | 221/288 [00:03<00:00, 70.16it/s]Loading weights:  81%|████████  | 233/288 [00:03<00:00, 65.80it/s]Loading weights:  84%|████████▍ | 243/288 [00:04<00:00, 66.56it/s]Loading weights:  88%|████████▊ | 252/288 [00:04<00:00, 66.97it/s]Loading weights:  91%|█████████ | 261/288 [00:04<00:00, 67.82it/s]Loading weights:  93%|█████████▎| 269/288 [00:04<00:00, 59.02it/s]Loading weights: 100%|██████████| 288/288 [00:04<00:00, 62.71it/s]
+DAS-64 single-layer L12 task=syntaxgym/garden_npz_v-trans
+step 0 loss 6.3659
+step 100 loss 3.3661
+step 200 loss 2.1561
+step 300 loss 1.8792
+step 400 loss 1.8596
+step 500 loss 1.7456
+step 600 loss 1.7542
+step 700 loss 1.8914
+step 800 loss 1.5570
+step 900 loss 1.5093
+step 1000 loss 1.4238
+step 1100 loss 1.4845
+step 1200 loss 1.3253
+step 1300 loss 1.3682
+step 1400 loss 1.4396
+step 1500 loss 1.3590
+step 1600 loss 1.4590
+step 1700 loss 1.4911
+step 1800 loss 1.4395
+step 1900 loss 1.3995
+step 2000 loss 1.4280
+step 2100 loss 1.4227
+step 2200 loss 1.3206
+step 2300 loss 1.1914
+step 2400 loss 1.5132
+step 2500 loss 1.3348
+step 2600 loss 1.4186
+step 2700 loss 1.4193
+step 2800 loss 1.4937
+step 2900 loss 1.2512
+step 3000 loss 1.3699
+step 3100 loss 1.4578
+step 3200 loss 1.4860
+step 3300 loss 1.5244
+step 3400 loss 1.0793
+step 3500 loss 1.4723
+step 3600 loss 1.4913
+step 3700 loss 1.3658
+step 3800 loss 1.3815
+step 3900 loss 1.2919
+=== DAS-64 SUFFICIENCY ===
+k=  1 learned acc=0.650 pd=+0.980 random acc=0.138
+k=  2 learned acc=0.887 pd=+2.963 random acc=0.150
+k=  4 learned acc=0.975 pd=+4.175 random acc=0.400
+k=  8 learned acc=1.000 pd=+5.167 random acc=0.412
+k= 12 learned acc=1.000 pd=+5.661 random acc=0.438
+k= 16 learned acc=1.000 pd=+6.308 random acc=0.412
+k= 24 learned acc=1.000 pd=+6.779 random acc=0.450
+k= 32 learned acc=1.000 pd=+7.042 random acc=0.463
+k= 48 learned acc=1.000 pd=+7.209 random acc=0.812
+k= 64 learned acc=1.000 pd=+7.195 random acc=1.000

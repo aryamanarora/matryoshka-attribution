@@ -1,0 +1,66 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:02<09:50,  2.06s/it]Loading weights:  31%|███       | 89/288 [00:02<00:03, 55.71it/s]Loading weights:  43%|████▎     | 124/288 [00:02<00:02, 56.65it/s]Loading weights:  51%|█████     | 146/288 [00:03<00:02, 53.36it/s]Loading weights:  56%|█████▌    | 161/288 [00:03<00:02, 54.09it/s]Loading weights:  60%|██████    | 173/288 [00:03<00:02, 56.49it/s]Loading weights:  64%|██████▎   | 183/288 [00:03<00:01, 54.43it/s]Loading weights:  67%|██████▋   | 192/288 [00:04<00:01, 51.59it/s]Loading weights:  69%|██████▉   | 199/288 [00:04<00:01, 53.18it/s]Loading weights:  72%|███████▏  | 207/288 [00:04<00:01, 55.98it/s]Loading weights:  74%|███████▍  | 214/288 [00:04<00:01, 55.57it/s]Loading weights:  77%|███████▋  | 221/288 [00:04<00:01, 57.64it/s]Loading weights:  79%|███████▉  | 228/288 [00:04<00:01, 56.63it/s]Loading weights:  82%|████████▏ | 235/288 [00:04<00:01, 49.81it/s]Loading weights:  84%|████████▎ | 241/288 [00:05<00:01, 46.65it/s]Loading weights:  86%|████████▌ | 247/288 [00:05<00:00, 45.96it/s]Loading weights:  90%|████████▉ | 258/288 [00:05<00:00, 52.17it/s]Loading weights:  93%|█████████▎| 269/288 [00:05<00:00, 54.42it/s]Loading weights:  97%|█████████▋| 279/288 [00:05<00:00, 61.14it/s]Loading weights: 100%|██████████| 288/288 [00:05<00:00, 50.47it/s]
+task=syntaxgym/garden_npz_obj_mod num_spans=9 d_sae=16384 layer=12
+step 0  loss 7.2539  k~2107
+step 100  loss 3.1285  k~10490
+step 200  loss 2.9972  k~3309
+step 300  loss 3.1863  k~10541
+step 400  loss 3.4707  k~2438
+step 500  loss 3.1300  k~14728
+step 600  loss 3.0016  k~1036
+step 700  loss 3.2843  k~16219
+step 800  loss 3.1192  k~13244
+step 900  loss 3.1937  k~15179
+step 1000  loss 3.0880  k~810
+step 1100  loss 3.1888  k~2838
+step 1200  loss 2.9674  k~2519
+step 1300  loss 3.0978  k~1322
+step 1400  loss 3.4322  k~13685
+step 1500  loss 3.0007  k~6087
+step 1600  loss 2.8329  k~13876
+step 1700  loss 2.9937  k~14041
+step 1800  loss 3.1845  k~11435
+step 1900  loss 3.2508  k~10287
+step 2000  loss 3.0702  k~9005
+step 2100  loss 3.1768  k~5973
+step 2200  loss 3.3662  k~6193
+step 2300  loss 3.1185  k~10272
+step 2400  loss 2.8955  k~13679
+step 2500  loss 3.4169  k~889
+step 2600  loss 3.2361  k~15939
+step 2700  loss 2.8874  k~5958
+step 2800  loss 3.2844  k~5220
+step 2900  loss 3.0642  k~1732
+step 3000  loss 3.1785  k~4604
+step 3100  loss 3.2051  k~5375
+step 3200  loss 3.2363  k~7607
+step 3300  loss 3.2985  k~3034
+step 3400  loss 3.4342  k~8557
+step 3500  loss 3.2669  k~279
+step 3600  loss 3.2645  k~8477
+step 3700  loss 3.0255  k~406
+step 3800  loss 3.3456  k~14018
+step 3900  loss 3.0272  k~12684
+evaluating sufficiency curve...
+ERROR NODE: score=7.422 rank=6/16384 (max feat score 7.712)
+=== SUFFICIENCY CURVE (prob-diff base-src; higher=more sufficient) ===
+k=    1  learned acc=0.138 pd=-2.523   random acc=0.138 pd=-2.659
+k=    2  learned acc=0.138 pd=-2.394   random acc=0.138 pd=-2.658
+k=    4  learned acc=0.163 pd=-1.730   random acc=0.138 pd=-2.658
+k=    8  learned acc=0.438 pd=-0.113   random acc=0.138 pd=-2.658
+k=   12  learned acc=0.500 pd=+0.222   random acc=0.138 pd=-2.656
+k=   16  learned acc=0.537 pd=+0.533   random acc=0.138 pd=-2.659
+k=   24  learned acc=0.550 pd=+0.820   random acc=0.138 pd=-2.658
+k=   32  learned acc=0.600 pd=+0.981   random acc=0.138 pd=-2.659
+k=   48  learned acc=0.625 pd=+1.319   random acc=0.138 pd=-2.658
+k=   64  learned acc=0.625 pd=+1.436   random acc=0.138 pd=-2.647
+k=   96  learned acc=0.675 pd=+1.588   random acc=0.138 pd=-2.642
+k=  128  learned acc=0.713 pd=+1.867   random acc=0.138 pd=-2.639
+k=  192  learned acc=0.725 pd=+2.045   random acc=0.138 pd=-2.652
+k=  256  learned acc=0.738 pd=+2.146   random acc=0.138 pd=-2.613
+k=  384  learned acc=0.800 pd=+2.524   random acc=0.138 pd=-2.586
+k=  512  learned acc=0.800 pd=+2.590   random acc=0.138 pd=-2.569
+k=  768  learned acc=0.800 pd=+2.721   random acc=0.138 pd=-2.559
+k= 1024  learned acc=0.825 pd=+2.737   random acc=0.138 pd=-2.553
+k= 2048  learned acc=0.838 pd=+2.863   random acc=0.163 pd=-2.052
+k= 4096  learned acc=0.838 pd=+2.913   random acc=0.350 pd=-0.808

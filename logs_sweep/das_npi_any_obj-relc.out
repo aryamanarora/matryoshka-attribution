@@ -1,0 +1,54 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:00<02:45,  1.74it/s]Loading weights:  47%|████▋     | 135/288 [00:00<00:00, 257.65it/s]Loading weights:  70%|██████▉   | 201/288 [00:00<00:00, 283.97it/s]Loading weights:  88%|████████▊ | 252/288 [00:01<00:00, 295.76it/s]Loading weights: 100%|██████████| 288/288 [00:01<00:00, 254.21it/s]
+DAS-64 single-layer L12 task=syntaxgym/npi_any_obj-relc
+step 0 loss 12.4709
+step 100 loss 4.4167
+step 200 loss 2.4602
+step 300 loss 1.9236
+step 400 loss 1.8502
+step 500 loss 1.1001
+step 600 loss 1.1127
+step 700 loss 0.9134
+step 800 loss 1.2442
+step 900 loss 0.8472
+step 1000 loss 0.7730
+step 1100 loss 0.5743
+step 1200 loss 0.5965
+step 1300 loss 0.7868
+step 1400 loss 1.8663
+step 1500 loss 0.7822
+step 1600 loss 0.7568
+step 1700 loss 0.6240
+step 1800 loss 0.5208
+step 1900 loss 0.3790
+step 2000 loss 0.6564
+step 2100 loss 0.5476
+step 2200 loss 0.4401
+step 2300 loss 0.3439
+step 2400 loss 0.5768
+step 2500 loss 0.3642
+step 2600 loss 0.6372
+step 2700 loss 0.2922
+step 2800 loss 0.6333
+step 2900 loss 0.5847
+step 3000 loss 0.3170
+step 3100 loss 0.3831
+step 3200 loss 0.3681
+step 3300 loss 0.2228
+step 3400 loss 0.4868
+step 3500 loss 0.6157
+step 3600 loss 0.2864
+step 3700 loss 0.4655
+step 3800 loss 0.3406
+step 3900 loss 0.3154
+=== DAS-64 SUFFICIENCY ===
+k=  1 learned acc=0.850 pd=+2.859 random acc=0.050
+k=  2 learned acc=0.887 pd=+3.364 random acc=0.037
+k=  4 learned acc=1.000 pd=+8.110 random acc=0.050
+k=  8 learned acc=1.000 pd=+11.005 random acc=0.037
+k= 12 learned acc=1.000 pd=+12.772 random acc=0.050
+k= 16 learned acc=1.000 pd=+12.719 random acc=0.037
+k= 24 learned acc=1.000 pd=+12.459 random acc=0.037
+k= 32 learned acc=1.000 pd=+12.499 random acc=0.025
+k= 48 learned acc=1.000 pd=+12.668 random acc=1.000
+k= 64 learned acc=1.000 pd=+12.046 random acc=1.000
