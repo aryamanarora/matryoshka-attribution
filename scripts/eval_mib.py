@@ -19,7 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import math
 
-from learning_to_attribute import sigmoid_topk
+from learning_to_attribute import sigmoid_topk, learn_scores
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
@@ -204,27 +204,18 @@ def main():
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
 
-    scores = nn.Parameter(torch.zeros(total, device=device))
-    # Global scalar bias for zero-point calibration. Only trained on "bias steps"
-    # (natural_k_frac fraction); rank-preserving since it shifts all scores equally.
-    bias = nn.Parameter(torch.zeros(1, device=device))
-    if args.optimizer == "sgd":
-        optimizer = torch.optim.SGD([scores, bias], lr=args.lr)
-    else:
-        optimizer = torch.optim.Adam([scores, bias], lr=args.lr)
     hooker.register_hooks()
 
-    # Training loop
-    loss_log = []
-    train_log = []  # (step, k, k_frac, loss, bias_step) for k-adjusted convergence plots
+    # Training loop: the optimization (k-sampling, mask variants, REINFORCE/L0/bias-step,
+    # optimizer) lives in learn_scores; this closure is the MIB *environment* — it samples a
+    # same-length batch, applies the mask via the hooker, and returns the logit-diff loss.
     logger.info("Training for %d steps on %s/%s...", args.steps, args.task, args.model)
-    t0 = time.time()
     n_examples = len(dataset)
-
     B = args.train_batch_size
 
-    for step in range(args.steps):
-        # Sample B examples, keep only same-length pairs
+    def loss_fn(mask):
+        # Sample B same-length pairs (Python RNG; does not touch the torch RNG stream, so the
+        # k/mask draws stay bit-identical to the pre-refactor loop).
         cleans, corrupteds, correct_ids, incorrect_ids = [], [], [], []
         attempts = 0
         while len(cleans) < B and attempts < B * 3:
@@ -239,153 +230,45 @@ def main():
             corrupteds.append(corrupted)
             correct_ids.append(labels[0])
             incorrect_ids.append(labels[1])
-
         if not cleans:
-            continue
+            return None                       # skip step (no same-length pairs sampled)
         actual_B = len(cleans)
 
-        # Tokenize and pad batch
         base_tok = tokenizer(cleans, return_tensors="pt", padding=True).to(device)
         src_tok = tokenizer(corrupteds, return_tensors="pt", padding=True).to(device)
-        base_ids = base_tok.input_ids        # [B, max_len]
-        base_attn = base_tok.attention_mask   # [B, max_len]
-        src_ids = src_tok.input_ids
+        base_ids = base_tok.input_ids
+        base_attn = base_tok.attention_mask
+        last_pos = base_attn.sum(dim=1) - 1
+        hooker.cache_cf_activations(src_tok.input_ids)
 
-        # Find last real token position per item (for logit extraction)
-        last_pos = base_attn.sum(dim=1) - 1  # [B]
-
-        # Cache batched CF activations
-        hooker.cache_cf_activations(src_ids)
-
-        # Decide step type. On a "bias step" (natural_k_frac fraction) we train ONLY
-        # the global bias; otherwise we train the scores normally (bias not involved).
-        bias_step = args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac
-
-        # Sample k (shared across batch) for normal score-training steps.
-        if args.k_schedule == "log":
-            log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
-            k = math.exp(log_k)
-        else:
-            k = 1.0 + (total - 1.0) * torch.rand(1).item()
-
-        if bias_step:
-            # Selection by thresholding (scores + bias) at 0; scores detached so the
-            # ranking is untouched and only `bias` receives gradient (via the soft mask).
-            x = scores.detach() + bias
-            soft = torch.sigmoid(x / args.T)
-            hard = (x >= 0).float()
-            hooker.mask = hard - soft.detach() + soft
-        elif args.masking == "topk":
-            hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-        elif args.masking == "topk_detached":
-            hooker.mask = sigmoid_topk_detached_tau(scores, k=k, T=args.T, n_iters=args.n_iters)
-        elif args.masking == "hard_topk":
-            ki = max(1, int(k))
-            _, top_idx = scores.topk(ki)
-            hard = torch.zeros_like(scores)
-            hard[top_idx] = 1.0
-            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-            hooker.mask = hard - soft.detach() + soft
-        elif args.masking == "hard_topk_identity":
-            # hard top-k forward, IDENTITY straight-through backward (dm/ds = 1): the score
-            # gradient is purely g*delta for every node (no sigmoid gate-slope, no temperature).
-            ki = max(1, int(k))
-            _, top_idx = scores.topk(ki)
-            hard = torch.zeros_like(scores)
-            hard[top_idx] = 1.0
-            hooker.mask = hard.detach() + (scores - scores.detach())
-        elif args.masking == "hard_topk_gumbel":
-            # Add Gumbel(0,1) noise per score, then hard top-k on the perturbed scores
-            # (forward selection is randomized); straight-through grad via clean-score soft.
-            gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1 - 1e-8)))
-            perturbed = scores + gumbel
-            ki = max(1, int(k))
-            _, top_idx = perturbed.topk(ki)
-            hard = torch.zeros_like(scores)
-            hard[top_idx] = 1.0
-            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-            hooker.mask = hard - soft.detach() + soft
-        elif args.masking == "hard_topk_reinforce":
-            gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1-1e-8)))
-            perturbed = scores + gumbel
-            ki = max(1, int(k))
-            _, top_idx = perturbed.topk(ki)
-            hard = torch.zeros_like(scores)
-            hard[top_idx] = 1.0
-            threshold = perturbed.topk(ki).values[-1]
-            proxy = torch.sigmoid((scores - threshold.detach()) / args.T)
-            hooker.mask = hard - proxy.detach() + proxy
-        elif args.masking == "bernoulli_reinforce":
-            # Bernoulli with k-adjusted threshold + REINFORCE gradient
-            # Find tau via bisection (same as sigmoid_topk) so E[active] ≈ k
-            lo = scores.min() - 10 * args.T
-            hi = scores.max() + 10 * args.T
-            with torch.no_grad():
-                for _ in range(args.n_iters):
-                    mid = (lo + hi) / 2
-                    f_mid = torch.sigmoid((scores - mid) / args.T).sum()
-                    if f_mid > k:
-                        lo = mid
-                    else:
-                        hi = mid
-                tau = ((lo + hi) / 2).detach()
-            probs = torch.sigmoid((scores - tau) / args.T)
-            hard = torch.bernoulli(probs).detach()
-            hooker.mask = hard
-            # Gradient handled manually after loss computation
-        else:
-            probs = torch.sigmoid(scores)
-            hard = torch.bernoulli(probs)
-            hooker.mask = hard - probs.detach() + probs
-
-        # Batched forward
-        logits = hf_model(base_ids, attention_mask=base_attn).logits.float()  # [B, seq_len, vocab]
-
-        # Extract last-token logits per item
-        last_logits = logits[torch.arange(actual_B, device=device), last_pos]  # [B, vocab]
-
-        # Per-item logit diff
+        hooker.mask = mask
+        logits = hf_model(base_ids, attention_mask=base_attn).logits.float()
+        last_logits = logits[torch.arange(actual_B, device=device), last_pos]
         correct_t = torch.tensor(correct_ids, device=device)
         incorrect_t = torch.tensor(incorrect_ids, device=device)
         logit_diffs = last_logits[torch.arange(actual_B, device=device), correct_t] - \
                       last_logits[torch.arange(actual_B, device=device), incorrect_t]
+        # necessary/noising: corrupting the circuit should break behavior (maximize diff);
+        # sufficient/denoising: circuit alone should retain clean behavior (minimize -diff).
+        return logit_diffs.mean() if corrupt_topk else -logit_diffs.mean()
 
-        if corrupt_topk:
-            # necessary/noising: corrupting the circuit should break behavior
-            loss = logit_diffs.mean()
-        else:
-            # sufficient/denoising: circuit alone should retain clean behavior
-            loss = -logit_diffs.mean()
+    on_step = None
+    if wandb:
+        on_step = lambda step, k, lv, sc: wandb.log(
+            {"loss": lv, "k": k, "k_frac": k / total}, step=step)
 
-        if args.masking == "hard_concrete":
-            loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
-
-        optimizer.zero_grad()
-        if args.masking == "bernoulli_reinforce" and not bias_step:
-            # REINFORCE: grad = loss * d/d_scores log P(mask | scores)
-            # P(mask_i=1) = sigma((s_i - tau) / T)
-            # d log P / d s_i = (1/T) * (mask_i - sigma((s_i - tau) / T))
-            with torch.no_grad():
-                p = torch.sigmoid((scores - tau) / args.T)
-                log_prob_grad = (hooker.mask - p) / args.T
-                scores.grad = loss.item() * log_prob_grad
-        else:
-            loss.backward()
-        optimizer.step()
-
-        loss_val = loss.item()
-        loss_log.append(loss_val)
-        train_log.append((step, float(k), float(k) / total, loss_val, int(bias_step)))
-        if wandb:
-            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
-        if (step + 1) % 50 == 0 or step == 0:
-            rate = (step + 1) / (time.time() - t0)
-            n_pos = int((scores.detach() + bias.detach() >= 0).sum().item())
-            logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  B=%d  bias=%.3f  n>=0=%d  (%.1f step/s)",
-                        step + 1, args.steps, loss_val, k, total, actual_B,
-                        bias.item(), n_pos, rate)
-
-    train_time = time.time() - t0
+    result = learn_scores(
+        total, loss_fn, steps=args.steps, variant=args.masking,
+        k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
+        optimizer=args.optimizer, l0_lambda=args.l0_lambda,
+        natural_k_frac=args.natural_k_frac, use_bias=True, device=device,
+        on_step=on_step, logger=logger, log_every=50,
+    )
+    scores = result.scores
+    bias = result.bias
+    loss_log = result.loss_log
+    train_log = result.train_log
+    train_time = result.train_time_s
     logger.info("Training complete in %.1fs", train_time)
 
     # Save per-step train log (step, k, k_frac, loss, bias_step) for convergence plots
@@ -413,7 +296,9 @@ def main():
             scores.data.add_(bias.data)
     hooker.remove_hooks()
 
-    # Delete HF model to free memory
+    # Delete HF model to free memory. loss_fn closes over hf_model, so drop it too or the
+    # model stays referenced and is not collected.
+    del loss_fn
     del hf_model
     torch.cuda.empty_cache()
 

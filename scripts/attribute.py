@@ -13,7 +13,9 @@ import matplotlib.pyplot as plt
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import sigmoid_topk, sigmoid_topk_hard, make_rotate_layer, CausalGymDataset
+from learning_to_attribute import (
+    sigmoid_topk, sigmoid_topk_hard, make_rotate_layer, CausalGymDataset, learn_scores,
+)
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
     GPTNeoXAttributionHooks, GPTNeoXSpanAttributionHooks,
@@ -114,38 +116,25 @@ def run_single(args, model, tokenizer, device, wandb):
         ref_probs = clean_probs
         top5_indices = clean_logits.topk(5).indices
 
-    scores = nn.Parameter(torch.zeros(total, device=device))
-    optimizer = torch.optim.Adam([scores], lr=args.lr)
     hooker.register_hooks()
-
-    # Train
-    loss_log = []
     logger.info("Training for %d steps...", args.steps)
-    t0 = time.time()
-    for step in range(args.steps):
-        k = sample_k(total, args.k_schedule)
-        hooker.mask = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
+
+    def loss_fn(mask):
+        hooker.mask = mask
         logits = model(input_ids).logits[0, -1].float()
-
         if args.loss == "kl":
-            loss = F.kl_div(F.log_softmax(logits, dim=-1), ref_probs, reduction="batchmean")
+            return F.kl_div(F.log_softmax(logits, dim=-1), ref_probs, reduction="batchmean")
         elif args.loss == "top5":
-            loss = -logits[top5_indices].sum()
+            return -logits[top5_indices].sum()
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_val = loss.item()
-        loss_log.append(loss_val)
-        if wandb:
-            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
-        if (step + 1) % 50 == 0 or step == 0:
-            rate = (step + 1) / (time.time() - t0)
-            logger.info("Step %4d/%d  loss=%.6f  k=%.0f/%d  (%.1f step/s)",
-                        step + 1, args.steps, loss_val, k, total, rate)
-
-    train_time = time.time() - t0
+    on_step = (lambda step, k, lv, sc: wandb.log(
+        {"loss": lv, "k": k, "k_frac": k / total}, step=step)) if wandb else None
+    res = learn_scores(total, loss_fn, steps=args.steps, variant="topk",
+                       k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
+                       lr=args.lr, device=device, on_step=on_step, logger=logger, log_every=50)
+    scores = res.scores.to(device)        # back on device for the sparsity eval
+    loss_log = res.loss_log
+    train_time = res.train_time_s
 
     # Sparsity eval
     sparsities = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
@@ -188,69 +177,45 @@ def run_dataset(args, model, tokenizer, device, wandb):
 
     total = hooker.total
     logger.info("Scores: %s", hooker.describe())
-    scores = nn.Parameter(torch.zeros(total, device=device))
 
+    # DAS trains the low-rank rotation matrices alongside the scores (second param group).
+    extra_params, lr_extra = None, None
     if args.mask == "das":
-        lr_rot = args.lr_rotation if args.lr_rotation is not None else args.lr
-        rot_params = [p for rl in das_rotations.values() for p in rl.parameters()]
-        optimizer = torch.optim.Adam([
-            {"params": [scores], "lr": args.lr},
-            {"params": rot_params, "lr": lr_rot},
-        ])
-    else:
-        optimizer = torch.optim.Adam([scores], lr=args.lr)
+        lr_extra = args.lr_rotation if args.lr_rotation is not None else args.lr
+        extra_params = [p for rl in das_rotations.values() for p in rl.parameters()]
 
     hooker.register_hooks()
-
-    # Train
-    loss_log = []
     logger.info("Training for %d steps (dataset=%s, loss=%s, pos=%s, flip=%s)...",
                 args.steps, args.dataset, args.loss, args.pos_strategy, args.sufficient)
-    t0 = time.time()
-    for step in range(args.steps):
-        # Sample a fresh pair
+
+    def loss_fn(mask):
         pair = dataset.sample_pair()
         tok = dataset.tokenize_pair(pair, tokenizer, device=str(device))
-
-        # Update alignment and cache CF activations
         hooker.set_alignment(
             tok.base_alignment, tok.src_alignment,
             tok.base_input_ids.shape[1], tok.src_input_ids.shape[1])
         src_logits = hooker.cache_cf_activations(tok.src_input_ids)
-
-        # Forward with mask
-        if args.natural_k_frac > 0 and torch.rand(1).item() < args.natural_k_frac:
-            k = max(1, (scores.detach() >= 0).sum().item())
-        else:
-            k = sample_k(total, args.k_schedule)
-        mask_fn = sigmoid_topk_hard if args.hard_fwd else sigmoid_topk
-        hooker.mask = mask_fn(scores, k=k, T=args.T, n_iters=args.n_iters)
+        hooker.mask = mask
         logits = model(tok.base_input_ids).logits[0, -1].float()
-
-        # Loss
         if args.loss == "ce":
             target_id = tok.src_label_id if args.sufficient else tok.base_label_id
-            loss = F.cross_entropy(
-                logits.unsqueeze(0),
-                torch.tensor([target_id], device=device))
+            return F.cross_entropy(logits.unsqueeze(0), torch.tensor([target_id], device=device))
         elif args.loss == "kl":
             ref_probs = F.softmax(src_logits if args.sufficient else logits.detach(), dim=-1)
-            loss = F.kl_div(F.log_softmax(logits, dim=-1), ref_probs, reduction="batchmean")
+            return F.kl_div(F.log_softmax(logits, dim=-1), ref_probs, reduction="batchmean")
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_val = loss.item()
-        loss_log.append(loss_val)
-        if wandb:
-            wandb.log({"loss": loss_val, "k": k, "k_frac": k / total}, step=step)
-        if (step + 1) % 50 == 0 or step == 0:
-            rate = (step + 1) / (time.time() - t0)
-            logger.info("Step %4d/%d  loss=%.6f  k=%.0f/%d  (%.1f step/s)",
-                        step + 1, args.steps, loss_val, k, total, rate)
-
-    train_time = time.time() - t0
+    on_step = (lambda step, k, lv, sc: wandb.log(
+        {"loss": lv, "k": k, "k_frac": k / total}, step=step)) if wandb else None
+    res = learn_scores(
+        total, loss_fn, steps=args.steps,
+        variant="hard_topk" if args.hard_fwd else "topk",
+        k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
+        natural_k_frac=args.natural_k_frac, use_bias=False,
+        extra_params=extra_params, lr_extra=lr_extra, device=device,
+        on_step=on_step, logger=logger, log_every=50)
+    scores = res.scores.to(device)        # back on device for the sparsity eval
+    loss_log = res.loss_log
+    train_time = res.train_time_s
     logger.info("Training complete in %.1fs (%.2f step/s)",
                 train_time, args.steps / train_time)
 

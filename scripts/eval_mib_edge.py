@@ -93,7 +93,7 @@ def main():
     from einops import einsum
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from learning_to_attribute import sigmoid_topk
+    from learning_to_attribute import sigmoid_topk, learn_scores
     from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -138,16 +138,13 @@ def main():
 
     # Score tensor
     total = n_real
-    scores = nn.Parameter(torch.zeros(total, device=device))
-    optimizer = torch.optim.Adam([scores], lr=args.lr)
     logger.info("Edge scores: %d parameters", total)
 
     # "necessary" (noising) corrupts the top-k edges; "sufficient" (denoising) corrupts
     # the complement (our runs / MIB CPR).
     corrupt_topk = args.mode == "necessary"
 
-    # Precompute source node info for hooks
-    # Sources: input, a{l}.h{h} for each layer/head, m{l} for each layer
+    # Precompute source node info for hooks (input, a{l}.h{h}, m{l})
     source_hooks = []  # (hook_name, node_name, forward_index, is_attn)
     input_node = graph.nodes['input']
     source_hooks.append(('hook_embed', 'input', graph.forward_index(input_node), False))
@@ -160,31 +157,29 @@ def main():
         mlp_idx = graph.forward_index(mlp_node)
         source_hooks.append((f'blocks.{l}.hook_mlp_out', f'm{l}', mlp_idx, False))
 
-    # Training loop
-    loss_log = []
     n_examples = len(dataset)
     logger.info("Training for %d steps (mode=%s, k_schedule=%s, live activations)...",
                 args.steps, args.mode, args.k_schedule)
-    t0 = time.time()
 
-    for step in range(args.steps):
+    # The optimization (k-sampling, mask variants incl. REINFORCE/L0) is in learn_scores;
+    # this closure is the EDGE environment: sample one pair, expand the flat edge mask to the
+    # [n_forward, n_backward] adjacency, patch destinations with the live activation diffs,
+    # and return the logit-diff loss. Returns None on a length-mismatch (skips the step).
+    def loss_fn(mask_flat):
         idx = random.randint(0, n_examples - 1)
         clean, corrupted, labels = dataset[idx]
         correct_idx, incorrect_idx = labels[0], labels[1]
-
         clean_tokens, attention_mask, input_lengths, n_pos = tokenize_plus(model, [clean])
         corrupted_tokens, _, _, _ = tokenize_plus(model, [corrupted])
-
         if clean_tokens.shape[1] != corrupted_tokens.shape[1]:
-            continue
+            return None
 
-        # Step 1: Cache corrupted source outputs (no grad)
+        # Step 1: cache corrupted source outputs (no grad)
         corrupted_acts = {}
 
         def make_corrupted_hook(name, fwd_idx, is_attn):
             def hook(act, hook):
                 if is_attn:
-                    # act: [batch, pos, n_heads, d_model] — store per head
                     for h in range(n_heads):
                         corrupted_acts[fwd_idx + h] = act[:, :, h].detach()
                 else:
@@ -197,51 +192,12 @@ def main():
             model.run_with_hooks(corrupted_tokens, fwd_hooks=corrupted_fwd_hooks,
                                  attention_mask=attention_mask)
 
-        # Step 2: Build edge mask
-        k = sample_k(total, args.k_schedule)
-
-        if args.masking == "topk":
-            mask_flat = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-        elif args.masking == "topk_detached":
-            mask_flat = sigmoid_topk_detached_tau(scores, k=k, T=args.T, n_iters=args.n_iters)
-        elif args.masking == "hard_topk":
-            _, top_idx = scores.topk(int(k))
-            hard = torch.zeros_like(scores)
-            hard[top_idx] = 1.0
-            soft = sigmoid_topk(scores, k=k, T=args.T, n_iters=args.n_iters)
-            mask_flat = hard - soft.detach() + soft
-        elif args.masking == "bernoulli_reinforce":
-            lo = scores.min() - 10 * args.T
-            hi = scores.max() + 10 * args.T
-            with torch.no_grad():
-                for _ in range(args.n_iters):
-                    mid = (lo + hi) / 2
-                    f_mid = torch.sigmoid((scores - mid) / args.T).sum()
-                    if f_mid > k:
-                        lo = mid
-                    else:
-                        hi = mid
-            tau = ((lo + hi) / 2).detach()
-            probs = torch.sigmoid((scores - tau) / args.T)
-            hard = torch.bernoulli(probs).detach()
-            mask_flat = hard
-        else:  # hard_concrete
-            probs = torch.sigmoid(scores)
-            hard = torch.bernoulli(probs)
-            mask_flat = hard - probs.detach() + probs
-
-        # Differentiable expansion to full [n_forward, n_backward] matrix
+        # Step 2: differentiable expansion of mask_flat to full [n_forward, n_backward]
         expanded = mask_flat[cumsum]  # [n_full]
         full_mask = (expanded * real_flat_device).view(graph.n_forward, graph.n_backward)
+        corruption_mask = (full_mask if corrupt_topk else 1 - full_mask).to(model.cfg.dtype)
 
-        if corrupt_topk:
-            corruption_mask = full_mask
-        else:
-            corruption_mask = 1 - full_mask
-
-        corruption_mask = corruption_mask.to(model.cfg.dtype)
-
-        # Step 3: Clean forward with live source capture + destination patching
+        # Step 3: clean forward with live source capture + destination patching
         clean_acts = {}
 
         def make_clean_hook(name, fwd_idx, is_attn):
@@ -260,8 +216,6 @@ def main():
             weights = corruption_mask[:prev_idx, bwd_idx]  # [prev, ...] or [prev, n_heads]
 
             def hook(activations, hook):
-                # Build activation difference matrix from live clean acts
-                # Shape: [batch, pos, prev_idx, d_model]
                 diffs = []
                 for src_i in range(prev_idx):
                     if src_i in corrupted_acts:
@@ -271,14 +225,10 @@ def main():
                         diffs.append(torch.zeros(1, activations.shape[1], d_model,
                                                  device=device, dtype=activations.dtype))
                 diff_stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
-
                 if weights.dim() == 1:
-                    # Scalar per source (MLP/logits destination)
                     update = einsum(diff_stack, weights,
                                     'batch pos src hidden, src -> batch pos hidden')
                 else:
-                    # Per-head weights (attention QKV destination)
-                    # weights: [prev, n_heads], update: [batch, pos, n_heads, d_model]
                     update = einsum(diff_stack, weights,
                                     'batch pos src hidden, src heads -> batch pos heads hidden')
                 return activations + update
@@ -286,53 +236,30 @@ def main():
 
         clean_fwd_hooks = [(hname, make_clean_hook(nname, fidx, is_a))
                            for hname, nname, fidx, is_a in source_hooks]
-
         dest_hooks = []
         for l in range(n_layers):
-            # Attention Q/K/V hooks
             for i, letter in enumerate('qkv'):
                 node = graph.nodes[f'a{l}.h0']
-                dest_hooks.append((node.qkv_inputs[i],
-                                   make_dest_hook(node, letter=letter)))
-            # MLP hook
+                dest_hooks.append((node.qkv_inputs[i], make_dest_hook(node, letter=letter)))
             node = graph.nodes[f'm{l}']
             dest_hooks.append((node.in_hook, make_dest_hook(node)))
-
-        # Logits hook
         node = graph.nodes['logits']
         dest_hooks.append((node.in_hook, make_dest_hook(node)))
 
-        all_hooks = clean_fwd_hooks + dest_hooks
-        logits = model.run_with_hooks(clean_tokens, fwd_hooks=all_hooks,
+        logits = model.run_with_hooks(clean_tokens, fwd_hooks=clean_fwd_hooks + dest_hooks,
                                       attention_mask=attention_mask)
-
         logit_diff = logits[0, -1, correct_idx] - logits[0, -1, incorrect_idx]
-        if corrupt_topk:
-            loss = logit_diff.float()
-        else:
-            loss = -logit_diff.float()
+        return logit_diff.float() if corrupt_topk else -logit_diff.float()
 
-        if args.masking == "hard_concrete":
-            loss = loss + args.l0_lambda * torch.sigmoid(scores).sum()
-
-        optimizer.zero_grad()
-        if args.masking == "bernoulli_reinforce":
-            with torch.no_grad():
-                p = torch.sigmoid((scores - tau) / args.T)
-                log_prob_grad = (mask_flat - p) / args.T
-                scores.grad = loss.item() * log_prob_grad
-        else:
-            loss.backward()
-        optimizer.step()
-
-        loss_val = loss.item()
-        loss_log.append(loss_val)
-        if (step + 1) % 50 == 0 or step == 0:
-            rate = (step + 1) / (time.time() - t0)
-            logger.info("Step %4d/%d  loss=%.4f  k=%.0f/%d  (%.1f step/s)",
-                        step + 1, args.steps, loss_val, k, total, rate)
-
-    train_time = time.time() - t0
+    result = learn_scores(
+        total, loss_fn, steps=args.steps, variant=args.masking,
+        k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
+        optimizer=getattr(args, "optimizer", "adam"), l0_lambda=args.l0_lambda,
+        device=device, logger=logger, log_every=50,
+    )
+    scores = result.scores
+    loss_log = result.loss_log
+    train_time = result.train_time_s
     logger.info("Training complete in %.1fs", train_time)
 
     # === MIB Evaluation ===
