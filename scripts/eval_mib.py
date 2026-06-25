@@ -85,6 +85,8 @@ def main():
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"],
+                        help="Mask-score optimizer (sgd accumulates raw g*delta; adam normalizes).")
     parser.add_argument("--n_iters", type=int, default=30)
     parser.add_argument("--split", type=str, default="validation",
                         help="Split to EVALUATE the circuit on (held out)")
@@ -206,7 +208,10 @@ def main():
     # Global scalar bias for zero-point calibration. Only trained on "bias steps"
     # (natural_k_frac fraction); rank-preserving since it shifts all scores equally.
     bias = nn.Parameter(torch.zeros(1, device=device))
-    optimizer = torch.optim.Adam([scores, bias], lr=args.lr)
+    if args.optimizer == "sgd":
+        optimizer = torch.optim.SGD([scores, bias], lr=args.lr)
+    else:
+        optimizer = torch.optim.Adam([scores, bias], lr=args.lr)
     hooker.register_hooks()
 
     # Training loop

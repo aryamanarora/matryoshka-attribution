@@ -1,0 +1,11 @@
+Loaded pretrained model Qwen/Qwen2.5-0.5B into HookedTransformer
+Computing results for 0.1% of nodes (N=0)
+Computing results for 0.2% of nodes (N=0)
+Computing results for 0.5% of nodes (N=1)
+Computing results for 1.0% of nodes (N=3)
+Computing results for 2.0% of nodes (N=7)
+Computing results for 5.0% of nodes (N=18)
+Computing results for 10.0% of nodes (N=36)
+Computing results for 20.0% of nodes (N=72)
+Computing results for 50.0% of nodes (N=180)
+Computing results for 100% of nodes (N=361)
