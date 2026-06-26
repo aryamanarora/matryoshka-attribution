@@ -130,17 +130,36 @@ def main():
         if len(ec) >= args.eval_examples: break
     logger.info("Eval on %d test pairs (len=%d)", len(ec), seq_len)
 
+    # MEAN-ablation baseline (matches circuits' auc_test_ablation_type="mean"): the complement
+    # is ablated to the MEAN of the patch activations over the eval set, NOT each example's own
+    # counterfactual (patch-ablation to the number-flipped sentence is far too destructive — it
+    # injects the wrong-number signal everywhere, so no sparse circuit recovers). Cache once.
+    et = tok(eco, return_tensors="pt", padding=True).to(device)
+    hooker.cache_cf_activations(et.input_ids)
+    for li in list(hooker.cf_acts_mlp):
+        hooker.cf_acts_mlp[li] = hooker.cf_acts_mlp[li].mean(0, keepdim=True)
+    for li in list(hooker.cf_acts_attn):
+        hooker.cf_acts_attn[li] = hooker.cf_acts_attn[li].mean(0, keepdim=True)
+
+    bt_all = tok(ec, return_tensors="pt", padding=True).to(device)
+    last_all = bt_all.attention_mask.sum(1) - 1
+    cor_all = torch.tensor(eci, device=device); inc_all = torch.tensor(eii, device=device)
+
     @torch.no_grad()
     def mean_ld(mask):
+        hooker.sufficient = False              # faithfulness: top-k CLEAN, complement -> mean
+        hooker.mask = mask.to(device)
         out = []
         for s in range(0, len(ec), 20):
-            d = forward_logit_diff(ec[s:s+20], eco[s:s+20], eci[s:s+20], eii[s:s+20],
-                                   mask.to(device), sufficient=False)  # faithfulness: top-k clean
-            out.append(d)
+            ids = bt_all.input_ids[s:s+20]; am = bt_all.attention_mask[s:s+20]
+            lg = hf(ids, attention_mask=am).logits.float()
+            B = ids.shape[0]; ll = lg[torch.arange(B, device=device), last_all[s:s+20]]
+            out.append(ll[torch.arange(B, device=device), cor_all[s:s+20]]
+                       - ll[torch.arange(B, device=device), inc_all[s:s+20]])
         return torch.cat(out).mean().item()
 
     F_full = mean_ld(torch.ones(total))    # whole circuit clean == clean run
-    F_empty = mean_ld(torch.zeros(total))  # everything ablated to patch
+    F_empty = mean_ld(torch.zeros(total))  # everything mean-ablated
     denom = (F_full - F_empty) or 1e-9
     logger.info("F(full)=%.3f  F(empty)=%.3f", F_full, F_empty)
 

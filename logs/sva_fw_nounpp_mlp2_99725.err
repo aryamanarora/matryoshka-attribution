@@ -1,0 +1,16 @@
+2026-06-26 06:40:03,392 INFO: Loading meta-llama/Llama-3.1-8B ...
+2026-06-26 06:40:03,675 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-26 06:40:03,889 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:40:04,052 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-26 06:40:04,218 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-26 06:40:05,143 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
+2026-06-26 06:40:05,321 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  15%|█▍        | 43/291 [00:00<00:00, 367.62it/s]Loading weights:  27%|██▋       | 80/291 [00:00<00:00, 254.49it/s]Loading weights:  37%|███▋      | 108/291 [00:00<00:00, 244.30it/s]Loading weights:  49%|████▉     | 142/291 [00:00<00:00, 268.77it/s]Loading weights:  58%|█████▊    | 170/291 [00:00<00:00, 247.58it/s]Loading weights:  68%|██████▊   | 198/291 [00:00<00:00, 252.32it/s]Loading weights:  77%|███████▋  | 224/291 [00:00<00:00, 252.68it/s]Loading weights:  86%|████████▌ | 250/291 [00:00<00:00, 250.22it/s]Loading weights:  95%|█████████▍| 276/291 [00:01<00:00, 234.90it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 260.65it/s]
+2026-06-26 06:40:09,491 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:40:15,591 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
+2026-06-26 06:40:15,592 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
+2026-06-26 06:40:15,593 INFO: Training 2000 steps (hard_topk gate, necessary, adam, k=log)...
+2026-06-26 06:43:08,283 INFO: Eval on 100 test pairs (len=6)
+2026-06-26 06:43:08,751 INFO: F(full)=3.200  F(empty)=-2.962
+2026-06-26 06:43:14,033 INFO: faith AUC=0.026  fmax=1.000  total=2752512 -> results/sva/nounpp_llama3_mlp_necessary_hard_topk_adam.json
