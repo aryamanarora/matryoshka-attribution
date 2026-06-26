@@ -28,7 +28,7 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
                    "gemma2": "google/gemma-2-2b", "llama3": "meta-llama/Llama-3.1-8B"}
 
 
-def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False):
+def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1):
     """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
 
     Captures the clean activation at each node module (down_proj / o_proj input) with a
@@ -52,9 +52,14 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
         cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
 
-    def capture(texts, want_grad):
-        store = {}
-        handles = []
+    bt = tok(cl, return_tensors="pt", padding=True).to(device)
+    bid, bam = bt.input_ids, bt.attention_mask
+    last = bam.sum(1) - 1
+    B = len(cl)
+    cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
+
+    def capture(ids, am, want_grad, embed_override=None):
+        store = {}; handles = []
         def mk(li, kind):
             def hook(mod, args):
                 x = args[0]
@@ -67,37 +72,53 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             handles.append(layers[li].mlp.down_proj.register_forward_pre_hook(mk(li, "mlp")))
             if use_attn:
                 handles.append(layers[li].self_attn.o_proj.register_forward_pre_hook(mk(li, "attn")))
-        t = tok(texts, return_tensors="pt", padding=True).to(device)
-        last = t.attention_mask.sum(1) - 1
-        logits = hf(t.input_ids, attention_mask=t.attention_mask).logits.float()
-        for h in handles:
-            h.remove()
-        return store, logits, last
+        if embed_override is not None:
+            handles.append(hf.model.embed_tokens.register_forward_hook(
+                lambda mod, inp, out: embed_override))
+        logits = hf(ids, attention_mask=am).logits.float()
+        for h in handles: h.remove()
+        return store, logits
 
-    # patch acts (no grad)
+    def metric_of(logits):
+        ll = logits[torch.arange(B, device=device), last]
+        return (ll[torch.arange(B, device=device), cor] - ll[torch.arange(B, device=device), inc]).sum()
+
+    # cached clean & patch node acts (no grad) -> delta
+    pt = tok(co, return_tensors="pt", padding=True).to(device)
     with torch.no_grad():
-        patch_store, _, _ = capture(co, want_grad=False)
-    patch_store = {k: v.detach() for k, v in patch_store.items()}
+        clean_acts, _ = capture(bid, bam, False)
+        patch_acts, _ = capture(pt.input_ids, pt.attention_mask, False)
+    clean_acts = {k: v.detach() for k, v in clean_acts.items()}
+    patch_acts = {k: v.detach() for k, v in patch_acts.items()}
 
-    # clean acts + grad
-    clean_store, logits, last = capture(cl, want_grad=True)
-    B = len(cl)
-    ll = logits[torch.arange(B, device=device), last]
-    cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
-    metric = (ll[torch.arange(B, device=device), cor] - ll[torch.arange(B, device=device), inc]).sum()
-    metric.backward()
+    # embeddings for the IG path (interpolate clean->patch input embedding, downstream live)
+    emb_override = None
+    if ig_steps > 1:
+        cap = {}
+        h = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: cap.__setitem__("e", o.detach()))
+        with torch.no_grad(): hf(bid, attention_mask=bam); ec = cap["e"]
+        with torch.no_grad(): hf(pt.input_ids, attention_mask=pt.attention_mask); ep = cap["e"]
+        h.remove()
+
+    grad_acc = {k: torch.zeros_like(v) for k, v in clean_acts.items()}
+    alphas = [s / ig_steps for s in range(ig_steps)] if ig_steps > 1 else [0.0]
+    for alpha in alphas:
+        if ig_steps > 1:
+            emb_override = (1 - alpha) * ec + alpha * ep
+        store_g, logits = capture(bid, bam, True, embed_override=emb_override)
+        metric_of(logits).backward()
+        for k in grad_acc:
+            grad_acc[k] += store_g[k].grad
+    for k in grad_acc:
+        grad_acc[k] /= len(alphas)
 
     scores = torch.zeros(total)
     for li in range(len(layers)):
-        cx = clean_store[(li, "mlp")]; g = cx.grad; px = patch_store[(li, "mlp")]
-        eff = (g * (cx.detach() - px)).sum(0)              # [seq, N]
-        off = li * P * N
-        scores[off:off + P * N] = eff.reshape(-1).cpu()
+        eff = (grad_acc[(li, "mlp")] * (clean_acts[(li, "mlp")] - patch_acts[(li, "mlp")])).sum(0)
+        off = li * P * N; scores[off:off + P * N] = eff.reshape(-1).cpu()
         if use_attn:
-            cx = clean_store[(li, "attn")]; g = cx.grad; px = patch_store[(li, "attn")]
-            eff = (g * (cx.detach() - px)).sum(0)          # [seq, H]
-            off = hooker.mlp_total + li * P * H
-            scores[off:off + P * H] = eff.reshape(-1).cpu()
+            eff = (grad_acc[(li, "attn")] * (clean_acts[(li, "attn")] - patch_acts[(li, "attn")])).sum(0)
+            off = hooker.mlp_total + li * P * H; scores[off:off + P * H] = eff.reshape(-1).cpu()
     if relp:
         revert_relp(hf)
     return scores.to(device)
@@ -107,7 +128,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # nounpp | rc | simple | within_rc
-    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp"])
+    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
+    p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
@@ -191,7 +213,8 @@ def main():
 
     if args.method in ("ixg", "relp"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
-                                 n_examples=args.eval_examples, relp=(args.method == "relp"))
+                                 n_examples=args.eval_examples, relp=(args.method == "relp"),
+                                 ig_steps=args.ig_steps if args.method == "ig" else 1)
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
