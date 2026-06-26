@@ -238,17 +238,32 @@ def main():
     logger.info("Eval on %d test pairs (len=%d)", len(ec), seq_len)
 
     @torch.no_grad()
-    def eval_ld(mask, sufficient):
-        out = []
+    def eval_metrics(mask, sufficient):
+        # base = clean/correct answer (ci); source = patch answer (ii)
+        LB, LS, PB, PS = [], [], [], []
         for s in range(0, len(ec), 20):
-            d = forward_logit_diff(ec[s:s+20], eco[s:s+20], eci[s:s+20], eii[s:s+20],
-                                   mask.to(device), sufficient=sufficient)
-            out.append(d)
-        return torch.cat(out).mean().item()
+            bt = tok(ec[s:s+20], return_tensors="pt", padding=True).to(device)
+            st = tok(eco[s:s+20], return_tensors="pt", padding=True).to(device)
+            last = bt.attention_mask.sum(1) - 1
+            hooker.cache_cf_activations(st.input_ids)
+            old = hooker.sufficient; hooker.sufficient = sufficient; hooker.mask = mask.to(device)
+            logits = hf(bt.input_ids, attention_mask=bt.attention_mask).logits.float()
+            hooker.sufficient = old
+            B = bt.input_ids.shape[0]; ar = torch.arange(B, device=device)
+            ll = logits[ar, last]; probs = ll.softmax(-1)
+            cor = torch.tensor(eci[s:s+20], device=device); inc = torch.tensor(eii[s:s+20], device=device)
+            LB.append(ll[ar, cor]); LS.append(ll[ar, inc]); PB.append(probs[ar, cor]); PS.append(probs[ar, inc])
+        lb = torch.cat(LB); ls = torch.cat(LS); pb = torch.cat(PB); ps = torch.cat(PS)
+        ld = lb - ls
+        return {"logit_diff": ld.mean().item(),
+                "p_base": pb.mean().item(), "p_source": ps.mean().item(),
+                "acc_base": (lb > ls).float().mean().item(),       # 1[p(base) > p(source)]
+                "acc_source": (ls > lb).float().mean().item(),     # 1[p(source) > p(base)]
+                "log_odds_ratio": ld.mean().item(),                # mean log(p_base/p_source) = logit-diff
+                "odds_ratio": float(torch.exp(ld.mean()))}         # geometric-mean odds (stable)
 
-    # FM = all clean, F0 = all patched (direction-independent; verify via both conventions)
-    FM = eval_ld(torch.ones(total), sufficient=False)
-    F0 = eval_ld(torch.zeros(total), sufficient=False)
+    FM = eval_metrics(torch.ones(total), sufficient=False)["logit_diff"]   # all clean
+    F0 = eval_metrics(torch.zeros(total), sufficient=False)["logit_diff"]  # all patched
     denom = (FM - F0) or 1e-9
     logger.info("F(clean)=%.3f  F(patch)=%.3f", FM, F0)
 
@@ -258,16 +273,18 @@ def main():
         lx = np.log10(xs); ya = np.asarray(ys, float)
         return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
 
-    # iso/faithfulness: top-k clean (sufficient=False), normalized recovery
-    iso = sparsity_sweep(scores, total, sparsities,
-                         lambda hm: {"v": (eval_ld(hm, False) - F0) / denom},
-                         device=device, include_random=False)
-    # cause/completeness: corrupt top-k (sufficient=True); 1 - normalized-remaining = breakage
-    cause = sparsity_sweep(scores, total, sparsities,
-                           lambda hm: {"v": (eval_ld(hm, True) - F0) / denom},
-                           device=device, include_random=False)
+    def metrics_at(mask, sufficient):
+        m = eval_metrics(mask, sufficient)
+        m["faithfulness"] = (m["logit_diff"] - F0) / denom   # normalized logit-diff
+        return m
+
+    # iso (sufficiency): keep top-k clean ; cause (necessity): corrupt top-k
+    iso = sparsity_sweep(scores, total, sparsities, lambda hm: metrics_at(hm, False),
+                         device=device, include_random=False)["learned"]
+    cause = sparsity_sweep(scores, total, sparsities, lambda hm: metrics_at(hm, True),
+                           device=device, include_random=False)["learned"]
     xs = [s * total for s in sparsities]
-    faith = iso["learned"]["v"]; compl = cause["learned"]["v"]
+    faith = iso["faithfulness"]; compl = cause["faithfulness"]
     faith_auc = auc_of(faith, xs); cause_auc = auc_of(compl, xs)
     hooker.remove_hooks()
 
@@ -275,7 +292,8 @@ def main():
                mode=args.mode, optimizer=args.optimizer, k_schedule=args.k_schedule,
                total=total, seq_len=seq_len, F_clean=FM, F_patch=F0, n_nodes=xs,
                faith_auc=faith_auc, faith_max=max(faith), faithfulness=faith,
-               cause_auc=cause_auc, cause_curve=compl)
+               cause_auc=cause_auc, cause_curve=compl,
+               iso_metrics=iso, cause_metrics=cause)   # full per-metric curves, both directions
     out["intermediate_size"] = hooker.intermediate_size
     out["hidden_size"] = hooker.hidden_size
     out["num_layers"] = hooker.num_layers
