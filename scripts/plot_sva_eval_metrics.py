@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 from plotnine import (
-    ggplot, aes, geom_line, geom_point, geom_hline, facet_wrap, labs,
+    ggplot, aes, geom_line, geom_point, geom_hline, facet_grid, labs,
     scale_x_log10, scale_color_brewer, theme_set, theme_bw, theme,
     element_text, element_line, element_blank,
 )
@@ -35,13 +35,15 @@ theme_set(
 )
 
 RES = "results/sva"
-METHODS = [  # (label, file stem) — order = legend/colour order
-    ("MAttr suff", "nounpp_llama3_mlp_sufficient_hard_topk_adam"),
-    ("MAttr nec", "nounpp_llama3_mlp_necessary_hard_topk_adam"),
-    ("RelP", "nounpp_llama3_mlp_relp"),
-    ("IxG", "nounpp_llama3_mlp_ixg"),
-    ("IG", "nounpp_llama3_mlp_ig"),
+TASK, MODEL = "nounpp", "llama3"
+METHODS = [  # (label, file tag) — order = legend/colour order
+    ("MAttr suff", "sufficient_hard_topk_adam"),
+    ("MAttr nec", "necessary_hard_topk_adam"),
+    ("RelP", "relp"),
+    ("IxG", "ixg"),
+    ("IG", "ig"),
 ]
+NODESETS = [("mlp", "MLP"), ("mlp-attn_dim", "MLP + attn")]  # (file key, facet label)
 # metric key -> facet title (proper capitalisation)
 METRICS = {
     "faithfulness": "Faithfulness (norm. logit diff)",
@@ -59,25 +61,28 @@ def log_labels(breaks):
 
 def make(direction, fname):
     rows = []
-    for label, stem in METHODS:
-        d = json.load(open(f"{RES}/{stem}.json"))
-        cur = d[f"{direction}_metrics"]
-        for mkey, mtitle in METRICS.items():
-            for n, v in zip(d["n_nodes"], cur[mkey]):
-                rows.append({"method": label, "n_nodes": n, "metric": mtitle, "value": v})
+    for label, tag in METHODS:
+        for nkey, nlabel in NODESETS:
+            d = json.load(open(f"{RES}/{TASK}_{MODEL}_{nkey}_{tag}.json"))
+            cur = d[f"{direction}_metrics"]
+            for mkey, mtitle in METRICS.items():
+                for n, v in zip(d["n_nodes"], cur[mkey]):
+                    rows.append({"method": label, "nodes": nlabel, "n_nodes": n,
+                                 "metric": mtitle, "value": v})
     df = pd.DataFrame(rows)
     df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS])
+    df["nodes"] = pd.Categorical(df["nodes"], [n[1] for n in NODESETS])
     df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
     p = (
         ggplot(df, aes("n_nodes", "value", color="method"))
         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
         + geom_line(size=0.5)
-        + geom_point(size=0.5)
-        + facet_wrap("metric", ncol=3, scales="free_y")
+        + geom_point(size=0.4)
+        + facet_grid("metric ~ nodes", scales="free_y")
         + scale_x_log10(labels=log_labels)
         + scale_color_brewer(type="qual", palette="Set1")
         + labs(x="Circuit size (nodes)", y="Value", color="")
-        + theme(figure_size=(5.5, 3.0))
+        + theme(figure_size=(5.5, 7.2))
     )
     p.save(fname, verbose=False)
     print("wrote", fname)
