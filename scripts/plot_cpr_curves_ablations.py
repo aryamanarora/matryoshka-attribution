@@ -42,13 +42,14 @@ METHODS = [
     ("+hard bwd", "log", "mib_node_bernoulli_reinforce_log", False),
     ("+hard bwd", "uniform", "mib_node_bernoulli_reinforce", False),
     ("+Gumbel", "uniform", "mib_node_hard_topk_gumbel", False),
+    ("+id-STE SGD", "log", "mib_node_identity_sgd_log", False),
     ("NAP-IG", "log", "napig_repro_eval/EAP-IG-inputs_patching_node", True),
 ]
-BASE_ORDER = ["MAttr", "+Gumbel", "+soft fwd", "+soft -ck", "+hard bwd", "NAP-IG"]
+BASE_ORDER = ["MAttr", "+Gumbel", "+soft fwd", "+soft -ck", "+hard bwd", "+id-STE SGD", "NAP-IG"]
 
 PALETTE = {
     "MAttr": "#e41a1c", "+Gumbel": "#ff7f00", "+soft fwd": "#984ea3",
-    "+soft -ck": "#4daf4a", "+hard bwd": "#a65628", "NAP-IG": "#377eb8",
+    "+soft -ck": "#4daf4a", "+hard bwd": "#a65628", "+id-STE SGD": "#f781bf", "NAP-IG": "#377eb8",
 }
 
 theme_set(
