@@ -173,8 +173,12 @@ def main():
                total=total, seq_len=seq_len, F_clean=FM, F_patch=F0, n_nodes=xs,
                faith_auc=faith_auc, faith_max=max(faith), faithfulness=faith,
                cause_auc=cause_auc, cause_curve=compl)
+    out["intermediate_size"] = hooker.intermediate_size
+    out["hidden_size"] = hooker.hidden_size
+    out["num_layers"] = hooker.num_layers
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{args.mode}_{args.variant}_{args.optimizer}.json"
+    torch.save(scores.cpu(), fn.with_suffix(".scores.pt"))
     json.dump(out, open(fn, "w"), indent=2)
     logger.info("iso/faith AUC=%.3f (fmax %.3f) | cause AUC=%.3f | total=%d -> %s",
                 faith_auc, max(faith), cause_auc, total, fn)
