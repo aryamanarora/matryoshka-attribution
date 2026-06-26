@@ -43,6 +43,7 @@ METHODS = [
     ("+hard bwd", "uniform", "mib_node_bernoulli_reinforce", False),
     ("+Gumbel", "uniform", "mib_node_hard_topk_gumbel", False),
     ("+id-STE SGD", "log", "mib_node_identity_sgd_log", False),
+    ("+id-STE SGD", "uniform", "mib_node_identity_sgd", False),
     ("NAP-IG", "log", "napig_repro_eval/EAP-IG-inputs_patching_node", True),
 ]
 BASE_ORDER = ["MAttr", "+Gumbel", "+soft fwd", "+soft -ck", "+hard bwd", "+id-STE SGD", "NAP-IG"]
