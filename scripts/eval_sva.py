@@ -211,7 +211,7 @@ def main():
         d = forward_logit_diff(cl, co, ci, ii, mask, sufficient=corrupt_topk)
         return d.mean() if corrupt_topk else -d.mean()
 
-    if args.method in ("ixg", "relp"):
+    if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=args.eval_examples, relp=(args.method == "relp"),
                                  ig_steps=args.ig_steps if args.method == "ig" else 1)
