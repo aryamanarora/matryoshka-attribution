@@ -120,7 +120,11 @@ def main():
                        lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device)
     scores = res.scores.detach()
 
-    # ---- Phase 2: faithfulness sparsity sweep (top-k CLEAN, complement -> patch) ----
+    # ---- Phase 2: sparsity sweep, BOTH directions, counterfactual (patch) ablation ----
+    #   iso  (sufficiency): keep top-k CLEAN, corrupt the complement  -> recovery curve
+    #   cause(necessity):   corrupt top-k, keep the complement clean  -> breakage curve
+    # Same top-k ranking; only the hooker `sufficient` flag flips. Complement/top-k are ablated
+    # to each example's own counterfactual (patch), matching training (mean-abl deferred).
     ec, eco, eci, eii = [], [], [], []
     for i in range(len(test)):
         clean, corr, lab = test[i]
@@ -130,58 +134,50 @@ def main():
         if len(ec) >= args.eval_examples: break
     logger.info("Eval on %d test pairs (len=%d)", len(ec), seq_len)
 
-    # MEAN-ablation baseline (matches circuits' auc_test_ablation_type="mean"): the complement
-    # is ablated to the MEAN of the patch activations over the eval set, NOT each example's own
-    # counterfactual (patch-ablation to the number-flipped sentence is far too destructive — it
-    # injects the wrong-number signal everywhere, so no sparse circuit recovers). Cache once.
-    et = tok(eco, return_tensors="pt", padding=True).to(device)
-    hooker.cache_cf_activations(et.input_ids)
-    for li in list(hooker.cf_acts_mlp):
-        hooker.cf_acts_mlp[li] = hooker.cf_acts_mlp[li].mean(0, keepdim=True)
-    for li in list(hooker.cf_acts_attn):
-        hooker.cf_acts_attn[li] = hooker.cf_acts_attn[li].mean(0, keepdim=True)
-
-    bt_all = tok(ec, return_tensors="pt", padding=True).to(device)
-    last_all = bt_all.attention_mask.sum(1) - 1
-    cor_all = torch.tensor(eci, device=device); inc_all = torch.tensor(eii, device=device)
-
     @torch.no_grad()
-    def mean_ld(mask):
-        hooker.sufficient = False              # faithfulness: top-k CLEAN, complement -> mean
-        hooker.mask = mask.to(device)
+    def eval_ld(mask, sufficient):
         out = []
         for s in range(0, len(ec), 20):
-            ids = bt_all.input_ids[s:s+20]; am = bt_all.attention_mask[s:s+20]
-            lg = hf(ids, attention_mask=am).logits.float()
-            B = ids.shape[0]; ll = lg[torch.arange(B, device=device), last_all[s:s+20]]
-            out.append(ll[torch.arange(B, device=device), cor_all[s:s+20]]
-                       - ll[torch.arange(B, device=device), inc_all[s:s+20]])
+            d = forward_logit_diff(ec[s:s+20], eco[s:s+20], eci[s:s+20], eii[s:s+20],
+                                   mask.to(device), sufficient=sufficient)
+            out.append(d)
         return torch.cat(out).mean().item()
 
-    F_full = mean_ld(torch.ones(total))    # whole circuit clean == clean run
-    F_empty = mean_ld(torch.zeros(total))  # everything mean-ablated
-    denom = (F_full - F_empty) or 1e-9
-    logger.info("F(full)=%.3f  F(empty)=%.3f", F_full, F_empty)
-
-    def apply_and_eval(hard_mask):
-        return {"faithfulness": (mean_ld(hard_mask) - F_empty) / denom}
+    # FM = all clean, F0 = all patched (direction-independent; verify via both conventions)
+    FM = eval_ld(torch.ones(total), sufficient=False)
+    F0 = eval_ld(torch.zeros(total), sufficient=False)
+    denom = (FM - F0) or 1e-9
+    logger.info("F(clean)=%.3f  F(patch)=%.3f", FM, F0)
 
     sparsities = sorted(set(float(10 ** x) for x in np.linspace(np.log10(1.0/total), 0.0, 24)))
-    sweep = sparsity_sweep(scores, total, sparsities, apply_and_eval, device=device, include_random=False)
-    ys = sweep["learned"]["faithfulness"]; xs = [s * total for s in sweep["sparsities"]]
-    lx = np.log10(xs); ya = np.asarray(ys, float)
-    auc = float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
+
+    def auc_of(ys, xs):
+        lx = np.log10(xs); ya = np.asarray(ys, float)
+        return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
+
+    # iso/faithfulness: top-k clean (sufficient=False), normalized recovery
+    iso = sparsity_sweep(scores, total, sparsities,
+                         lambda hm: {"v": (eval_ld(hm, False) - F0) / denom},
+                         device=device, include_random=False)
+    # cause/completeness: corrupt top-k (sufficient=True); 1 - normalized-remaining = breakage
+    cause = sparsity_sweep(scores, total, sparsities,
+                           lambda hm: {"v": (eval_ld(hm, True) - F0) / denom},
+                           device=device, include_random=False)
+    xs = [s * total for s in sparsities]
+    faith = iso["learned"]["v"]; compl = cause["learned"]["v"]
+    faith_auc = auc_of(faith, xs); cause_auc = auc_of(compl, xs)
     hooker.remove_hooks()
 
     out = dict(task=args.task, model=args.model, nodes=args.nodes, variant=args.variant,
                mode=args.mode, optimizer=args.optimizer, k_schedule=args.k_schedule,
-               total=total, seq_len=seq_len, F_full=F_full, F_empty=F_empty,
-               faith_auc=auc, faith_max=max(ys), sparsities=sweep["sparsities"],
-               n_nodes=xs, faithfulness=ys)
+               total=total, seq_len=seq_len, F_clean=FM, F_patch=F0, n_nodes=xs,
+               faith_auc=faith_auc, faith_max=max(faith), faithfulness=faith,
+               cause_auc=cause_auc, cause_curve=compl)
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{args.mode}_{args.variant}_{args.optimizer}.json"
     json.dump(out, open(fn, "w"), indent=2)
-    logger.info("faith AUC=%.3f  fmax=%.3f  total=%d -> %s", auc, max(ys), total, fn)
+    logger.info("iso/faith AUC=%.3f (fmax %.3f) | cause AUC=%.3f | total=%d -> %s",
+                faith_auc, max(faith), cause_auc, total, fn)
 
 
 if __name__ == "__main__":

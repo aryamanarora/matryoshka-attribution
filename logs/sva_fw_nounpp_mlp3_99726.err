@@ -1,0 +1,14 @@
+2026-06-26 06:47:54,491 INFO: Loading meta-llama/Llama-3.1-8B ...
+2026-06-26 06:47:54,766 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-26 06:47:54,989 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:47:55,152 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-26 06:47:55,307 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-26 06:47:56,218 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
+2026-06-26 06:47:56,396 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  12%|█▏        | 36/291 [00:00<00:00, 353.13it/s]Loading weights:  25%|██▍       | 72/291 [00:00<00:00, 260.90it/s]Loading weights:  36%|███▌      | 104/291 [00:00<00:00, 274.52it/s]Loading weights:  46%|████▌     | 133/291 [00:00<00:00, 248.65it/s]Loading weights:  55%|█████▌    | 161/291 [00:00<00:00, 254.57it/s]Loading weights:  68%|██████▊   | 198/291 [00:00<00:00, 282.45it/s]Loading weights:  78%|███████▊  | 227/291 [00:00<00:00, 278.68it/s]Loading weights:  88%|████████▊ | 256/291 [00:00<00:00, 237.24it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 273.34it/s]
+2026-06-26 06:48:00,441 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:48:06,380 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
+2026-06-26 06:48:06,381 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
+2026-06-26 06:48:06,382 INFO: Training 2000 steps (hard_topk gate, necessary, adam, k=log)...
+slurmstepd: error: *** JOB 99726 ON worker-20 CANCELLED AT 2026-06-26T06:49:27 ***
