@@ -38,7 +38,9 @@ RES = "results/sva"
 TASK, MODEL = "nounpp", "llama3"
 METHODS = [  # (label, file tag) — order = legend/colour order
     ("MAttr suff", "sufficient_hard_topk_adam"),
+    ("MAttr suff (idSGD)", "sufficient_hard_topk_identity_sgd"),
     ("MAttr nec", "necessary_hard_topk_adam"),
+    ("MAttr nec (idSGD)", "necessary_hard_topk_identity_sgd"),
     ("RelP", "relp"),
     ("IxG", "ixg"),
     ("IG", "ig"),
