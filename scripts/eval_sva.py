@@ -150,7 +150,8 @@ def main():
     sparsities = sorted(set(float(10 ** x) for x in np.linspace(np.log10(1.0/total), 0.0, 24)))
     sweep = sparsity_sweep(scores, total, sparsities, apply_and_eval, device=device, include_random=False)
     ys = sweep["learned"]["faithfulness"]; xs = [s * total for s in sweep["sparsities"]]
-    auc = float(np.trapz(ys, np.log10(xs)) / (np.log10(xs[-1]) - np.log10(xs[0])))
+    lx = np.log10(xs); ya = np.asarray(ys, float)
+    auc = float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
     hooker.remove_hooks()
 
     out = dict(task=args.task, model=args.model, nodes=args.nodes, variant=args.variant,

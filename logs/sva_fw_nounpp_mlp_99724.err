@@ -1,0 +1,24 @@
+2026-06-26 06:33:29,744 INFO: Loading meta-llama/Llama-3.1-8B ...
+2026-06-26 06:33:30,046 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-26 06:33:30,401 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:33:30,569 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-26 06:33:30,796 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-26 06:33:31,707 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
+2026-06-26 06:33:31,884 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  29%|██▊       | 83/291 [00:00<00:00, 740.81it/s]Loading weights:  54%|█████▍    | 158/291 [00:00<00:00, 281.91it/s]Loading weights:  69%|██████▊   | 200/291 [00:00<00:00, 288.88it/s]Loading weights:  81%|████████▏ | 237/291 [00:00<00:00, 260.29it/s]Loading weights:  92%|█████████▏| 268/291 [00:00<00:00, 267.13it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 289.79it/s]
+2026-06-26 06:33:36,100 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-26 06:33:42,306 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
+2026-06-26 06:33:42,307 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
+2026-06-26 06:33:42,308 INFO: Training 2000 steps (hard_topk gate, necessary, adam, k=log)...
+2026-06-26 06:36:33,555 INFO: Eval on 100 test pairs (len=6)
+2026-06-26 06:36:34,023 INFO: F(full)=3.200  F(empty)=-2.962
+Traceback (most recent call last):
+  File "/home/guests/aryaman/learning-to-attribute/scripts/eval_sva.py", line 168, in <module>
+    main()
+  File "/home/guests/aryaman/learning-to-attribute/scripts/eval_sva.py", line 153, in main
+    auc = float(np.trapz(ys, np.log10(xs)) / (np.log10(xs[-1]) - np.log10(xs[0])))
+                ^^^^^^^^
+  File "/home/guests/aryaman/learning-to-attribute/.venv/lib/python3.12/site-packages/numpy/__init__.py", line 792, in __getattr__
+    raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
+AttributeError: module 'numpy' has no attribute 'trapz'. Did you mean: 'trace'?
