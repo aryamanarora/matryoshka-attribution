@@ -65,10 +65,12 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
-    parser.add_argument("--mode", default="sufficient", choices=["necessary", "sufficient"],
-                        help="sufficient (denoising): corrupt the complement of the top-k, "
+    parser.add_argument("--mode", default="iso",
+                        choices=["iso", "cause", "sufficient", "necessary"],
+                        help="iso (=sufficient, denoising): corrupt the complement of the top-k, "
                              "maximize retained clean behavior (MIB CPR; all our runs). "
-                             "necessary (noising): corrupt the top-k, find what breaks behavior.")
+                             "cause (=necessary, noising): corrupt the top-k, find what breaks "
+                             "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "hard_topk", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
@@ -93,8 +95,9 @@ def main():
     from einops import einsum
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from learning_to_attribute import sigmoid_topk, learn_scores
+    from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode
     from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
+    args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     random.seed(args.seed)

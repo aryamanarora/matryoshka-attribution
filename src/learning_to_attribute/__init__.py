@@ -10,6 +10,7 @@ from .masks import MaskResult, build_mask, build_bias_mask, VARIANTS
 from .schedules import sample_k, sample_k_sum_pow2, natural_k
 from .trainer import learn_scores, TrainResult
 from .evaluate import sparsity_sweep
+from .modes import normalize_mode, preferred_mode, MODE_CHOICES, ISO, CAUSE
 
 # Model/data adapters need transformers/datasets; degrade gracefully if those aren't installed
 # (a consumer may only want the core learning algorithm).
@@ -33,4 +34,5 @@ __all__ = [
     "MaskResult", "build_mask", "build_bias_mask", "VARIANTS",
     "sample_k", "sample_k_sum_pow2", "natural_k",
     "learn_scores", "TrainResult", "sparsity_sweep",
+    "normalize_mode", "preferred_mode", "MODE_CHOICES", "ISO", "CAUSE",
 ]

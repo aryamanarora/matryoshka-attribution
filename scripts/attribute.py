@@ -15,6 +15,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import (
     sigmoid_topk, sigmoid_topk_hard, make_rotate_layer, CausalGymDataset, learn_scores,
+    normalize_mode,
 )
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
@@ -363,6 +364,10 @@ def main():
                              "corrupted; recover clean behavior. Use --no-sufficient for "
                              "necessary/noising (top-k get CF, find what flips). "
                              "Matches eval_mib.py's convention.")
+    parser.add_argument("--mode", default=None,
+                        choices=["iso", "cause", "sufficient", "necessary"],
+                        help="Preferred alias for --sufficient: iso (=sufficient/denoising) "
+                             "or cause (=necessary/noising). Overrides --sufficient if set.")
     parser.add_argument("--dataset", default=None,
                         help="CausalGym task, e.g. syntaxgym/agr_gender")
     parser.add_argument("--pos_strategy", default="last",
@@ -405,6 +410,10 @@ def main():
                     break
 
     args = parser.parse_args()
+    # --mode (iso/cause, the preferred names) overrides --sufficient when given, in the
+    # user-facing sense (iso=sufficient/denoising -> True) BEFORE the legacy inversion below.
+    if args.mode is not None:
+        args.sufficient = (normalize_mode(args.mode) == "sufficient")
     # `--sufficient`/`sufficient:` (CLI + config) uses the consistent convention shared
     # with eval_mib.py: True = top-k stay CLEAN, complement corrupted (denoising /
     # sufficiency). The code below + sigmoid_das.intervene use the legacy convention

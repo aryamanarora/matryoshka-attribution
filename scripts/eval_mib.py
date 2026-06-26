@@ -19,7 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import math
 
-from learning_to_attribute import sigmoid_topk, learn_scores
+from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
@@ -97,12 +97,12 @@ def main():
     parser.add_argument("--k-schedule", default="log",
                         choices=["uniform", "log"],
                         help="How to sample k: uniform or log-uniform")
-    parser.add_argument("--mode", default="sufficient",
-                        choices=["necessary", "sufficient"],
-                        help="sufficient (denoising): top-k stay clean, complement "
+    parser.add_argument("--mode", default="iso", choices=MODE_CHOICES,
+                        help="iso (=sufficient, denoising): top-k stay clean, complement "
                              "corrupted; maximize retained clean behavior (this is "
                              "what MIB CPR measures, and what all our runs use). "
-                             "necessary (noising): top-k get CF; find what breaks behavior.")
+                             "cause (=necessary, noising): top-k get CF; find what breaks "
+                             "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
@@ -144,6 +144,7 @@ def main():
                     break
 
     args = parser.parse_args()
+    args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
     if args.model is None or args.task is None:
         parser.error("--model and --task are required (via CLI or config)")
 
