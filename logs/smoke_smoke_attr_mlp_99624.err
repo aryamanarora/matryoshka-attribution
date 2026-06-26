@@ -1,0 +1,184 @@
+2026-06-25 23:14:05,397 INFO __main__: Config: {
+  "config": null,
+  "model": "gpt2",
+  "text": "The capital of France is",
+  "steps": 20,
+  "T": 0.5,
+  "lr": 0.01,
+  "n_iters": 30,
+  "output": "results/smoke_attr_mlp",
+  "loss": "kl",
+  "mask": "mlp",
+  "chat": false,
+  "seed_response": null,
+  "cf_text": null,
+  "sufficient": false,
+  "dataset": "syntaxgym/agr_sv_num_subj-relc",
+  "pos_strategy": "last",
+  "seed": 42,
+  "k_schedule": "uniform",
+  "lr_rotation": null,
+  "n_eval": 5,
+  "hard_fwd": false,
+  "natural_k_frac": 0.0,
+  "das_dim": null,
+  "wandb": false,
+  "wandb_project": "learning-to-attribute",
+  "wandb_name": null
+}
+2026-06-25 23:14:05,723 INFO __main__: Device: cuda
+2026-06-25 23:14:05,724 INFO __main__: Loading model gpt2...
+2026-06-25 23:14:06,000 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-25 23:14:06,180 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-25 23:14:06,332 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:14:06,475 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-25 23:14:06,617 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:14:06,757 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-25 23:14:07,075 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights:  80%|███████▉  | 118/148 [00:00<00:00, 1163.21it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 830.77it/s] 
+2026-06-25 23:14:10,446 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-25 23:14:10,456 INFO __main__: Model loaded in 4.7s
+2026-06-25 23:14:10,460 INFO __main__: Dataset: syntaxgym/agr_sv_num_subj-relc (6 spans: ['<|endoftext|>The', '{subject}', '_that', '{verbed}', '_the', '{object}'])
+2026-06-25 23:14:10,461 INFO __main__: Scores: MLP: 12L x 6spans x 3072n = 221,184 = 221,184 total
+2026-06-25 23:14:10,461 INFO __main__: Training for 20 steps (dataset=syntaxgym/agr_sv_num_subj-relc, loss=kl, pos=last, flip=False)...
+2026-06-25 23:14:11,347 INFO __main__: Step    1/20  loss=-0.0000  k=41915/221184  bias=0  (1.1 step/s)
+2026-06-25 23:14:12,155 INFO __main__: Training complete in 1.7s (11.91 step/s)
+2026-06-25 23:14:12,156 INFO __main__: Evaluating sparsity averaged over 5 pairs...
+2026-06-25 23:14:12,243 INFO __main__: keep=  0.1% (    221/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=7.6142  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,262 INFO __main__: keep=  0.5% (   1105/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=7.5498  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,281 INFO __main__: keep=  1.0% (   2211/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.1890  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,300 INFO __main__: keep=  2.0% (   4423/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=7.7777  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,318 INFO __main__: keep=  5.0% (  11059/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.2286  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,337 INFO __main__: keep= 10.0% (  22118/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.2525  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,357 INFO __main__: keep= 20.0% (  44236/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.1210  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,376 INFO __main__: keep= 30.0% (  66355/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.3057  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,396 INFO __main__: keep= 50.0% ( 110592/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.2842  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,415 INFO __main__: keep= 70.0% ( 154828/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.0229  KL_cf_L=0.000000  KL_cf_R=0.000002
+2026-06-25 23:14:12,434 INFO __main__: keep= 90.0% ( 199065/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.1533  KL_cf_L=0.000000  KL_cf_R=0.000003
+2026-06-25 23:14:12,452 INFO __main__: keep= 95.0% ( 210124/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.0718  KL_cf_L=0.000000  KL_cf_R=0.000004
+2026-06-25 23:14:12,471 INFO __main__: keep= 99.0% ( 218972/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=7.8506  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:12,490 INFO __main__: keep=100.0% ( 221184/221184)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=4.9637  KL_cf_L=0.000004  KL_cf_R=0.000004
+2026-06-25 23:14:12,521 INFO __main__: keep=  0.1% (    221/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.7502  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:12,540 INFO __main__: keep=  0.5% (   1105/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.6565  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:12,559 INFO __main__: keep=  1.0% (   2211/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.8222  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,578 INFO __main__: keep=  2.0% (   4423/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.7143  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,596 INFO __main__: keep=  5.0% (  11059/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.6166  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,615 INFO __main__: keep= 10.0% (  22118/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.5552  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:12,634 INFO __main__: keep= 20.0% (  44236/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=9.0367  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,653 INFO __main__: keep= 30.0% (  66355/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.7417  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:12,671 INFO __main__: keep= 50.0% ( 110592/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.6225  KL_cf_L=0.000000  KL_cf_R=0.000001
+2026-06-25 23:14:12,698 INFO __main__: keep= 70.0% ( 154828/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9750  KL_cf_L=0.000001  KL_cf_R=0.000002
+2026-06-25 23:14:12,716 INFO __main__: keep= 90.0% ( 199065/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9902  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:12,735 INFO __main__: keep= 95.0% ( 210124/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9811  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:12,753 INFO __main__: keep= 99.0% ( 218972/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.8384  KL_cf_L=0.000001  KL_cf_R=0.000005
+2026-06-25 23:14:12,771 INFO __main__: keep=100.0% ( 221184/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.3931  KL_cf_L=0.000005  KL_cf_R=0.000005
+2026-06-25 23:14:12,804 INFO __main__: keep=  0.1% (    221/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.9622  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:12,823 INFO __main__: keep=  0.5% (   1105/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.7723  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,843 INFO __main__: keep=  1.0% (   2211/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.0453  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,862 INFO __main__: keep=  2.0% (   4423/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.1513  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:12,881 INFO __main__: keep=  5.0% (  11059/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.8621  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,901 INFO __main__: keep= 10.0% (  22118/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.7215  KL_cf_L=0.000002  KL_cf_R=0.000000
+2026-06-25 23:14:12,921 INFO __main__: keep= 20.0% (  44236/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.0688  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:12,941 INFO __main__: keep= 30.0% (  66355/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.1938  KL_cf_L=0.000002  KL_cf_R=0.000000
+2026-06-25 23:14:12,961 INFO __main__: keep= 50.0% ( 110592/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.9468  KL_cf_L=0.000002  KL_cf_R=0.000002
+2026-06-25 23:14:12,981 INFO __main__: keep= 70.0% ( 154828/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.8594  KL_cf_L=0.000002  KL_cf_R=0.000002
+2026-06-25 23:14:13,000 INFO __main__: keep= 90.0% ( 199065/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.0471  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:13,026 INFO __main__: keep= 95.0% ( 210124/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.0000  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:13,045 INFO __main__: keep= 99.0% ( 218972/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.0688  KL_cf_L=0.000001  KL_cf_R=0.000005
+2026-06-25 23:14:13,063 INFO __main__: keep=100.0% ( 221184/221184)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=3.7876  KL_cf_L=0.000005  KL_cf_R=0.000005
+2026-06-25 23:14:13,092 INFO __main__: keep=  0.1% (    221/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.9917  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,110 INFO __main__: keep=  0.5% (   1105/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.2568  KL_cf_L=0.000000  KL_cf_R=0.000000
+2026-06-25 23:14:13,129 INFO __main__: keep=  1.0% (   2211/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.4566  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,148 INFO __main__: keep=  2.0% (   4423/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.7214  KL_cf_L=0.000001  KL_cf_R=0.000000
+2026-06-25 23:14:13,166 INFO __main__: keep=  5.0% (  11059/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.7528  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,185 INFO __main__: keep= 10.0% (  22118/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.1909  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,204 INFO __main__: keep= 20.0% (  44236/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.4455  KL_cf_L=0.000002  KL_cf_R=0.000000
+2026-06-25 23:14:13,222 INFO __main__: keep= 30.0% (  66355/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.3823  KL_cf_L=0.000002  KL_cf_R=0.000001
+2026-06-25 23:14:13,241 INFO __main__: keep= 50.0% ( 110592/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.4057  KL_cf_L=0.000002  KL_cf_R=0.000002
+2026-06-25 23:14:13,260 INFO __main__: keep= 70.0% ( 154828/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.4440  KL_cf_L=0.000002  KL_cf_R=0.000003
+2026-06-25 23:14:13,278 INFO __main__: keep= 90.0% ( 199065/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.1093  KL_cf_L=0.000001  KL_cf_R=0.000005
+2026-06-25 23:14:13,297 INFO __main__: keep= 95.0% ( 210124/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.7988  KL_cf_L=0.000002  KL_cf_R=0.000005
+2026-06-25 23:14:13,316 INFO __main__: keep= 99.0% ( 218972/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.6935  KL_cf_L=0.000001  KL_cf_R=0.000004
+2026-06-25 23:14:13,334 INFO __main__: keep=100.0% ( 221184/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=2.8002  KL_cf_L=0.000005  KL_cf_R=0.000005
+2026-06-25 23:14:13,363 INFO __main__: keep=  0.1% (    221/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9943  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,382 INFO __main__: keep=  0.5% (   1105/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=9.0199  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,400 INFO __main__: keep=  1.0% (   2211/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.8786  KL_cf_L=0.000001  KL_cf_R=0.000001
+2026-06-25 23:14:13,420 INFO __main__: keep=  2.0% (   4423/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=9.2613  KL_cf_L=0.000002  KL_cf_R=0.000001
+2026-06-25 23:14:13,438 INFO __main__: keep=  5.0% (  11059/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9393  KL_cf_L=0.000003  KL_cf_R=0.000001
+2026-06-25 23:14:13,456 INFO __main__: keep= 10.0% (  22118/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.7656  KL_cf_L=0.000003  KL_cf_R=0.000001
+2026-06-25 23:14:13,475 INFO __main__: keep= 20.0% (  44236/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=9.0483  KL_cf_L=0.000003  KL_cf_R=0.000001
+2026-06-25 23:14:13,493 INFO __main__: keep= 30.0% (  66355/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9211  KL_cf_L=0.000004  KL_cf_R=0.000001
+2026-06-25 23:14:13,512 INFO __main__: keep= 50.0% ( 110592/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.7951  KL_cf_L=0.000003  KL_cf_R=0.000001
+2026-06-25 23:14:13,530 INFO __main__: keep= 70.0% ( 154828/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.8223  KL_cf_L=0.000003  KL_cf_R=0.000003
+2026-06-25 23:14:13,548 INFO __main__: keep= 90.0% ( 199065/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9870  KL_cf_L=0.000003  KL_cf_R=0.000007
+2026-06-25 23:14:13,567 INFO __main__: keep= 95.0% ( 210124/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.9034  KL_cf_L=0.000003  KL_cf_R=0.000009
+2026-06-25 23:14:13,585 INFO __main__: keep= 99.0% ( 218972/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=8.8758  KL_cf_L=0.000002  KL_cf_R=0.000009
+2026-06-25 23:14:13,604 INFO __main__: keep=100.0% ( 221184/221184)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.7738  KL_cf_L=0.000009  KL_cf_R=0.000009
+2026-06-25 23:14:13,605 INFO __main__: Averaged eval over 5 examples:
+2026-06-25 23:14:13,606 INFO __main__:   keep=  0.1% (221/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.2625
+2026-06-25 23:14:13,606 INFO __main__:   keep=  0.5% (1105/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.2511
+2026-06-25 23:14:13,607 INFO __main__:   keep=  1.0% (2211/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.4783
+2026-06-25 23:14:13,608 INFO __main__:   keep=  2.0% (4423/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.5252
+2026-06-25 23:14:13,608 INFO __main__:   keep=  5.0% (11059/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.4799
+2026-06-25 23:14:13,609 INFO __main__:   keep= 10.0% (22118/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.4971
+2026-06-25 23:14:13,609 INFO __main__:   keep= 20.0% (44236/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.7441
+2026-06-25 23:14:13,610 INFO __main__:   keep= 30.0% (66355/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.7089
+2026-06-25 23:14:13,610 INFO __main__:   keep= 50.0% (110592/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.6109
+2026-06-25 23:14:13,611 INFO __main__:   keep= 70.0% (154828/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.6247
+2026-06-25 23:14:13,611 INFO __main__:   keep= 90.0% (199065/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.6574
+2026-06-25 23:14:13,611 INFO __main__:   keep= 95.0% (210124/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.5510
+2026-06-25 23:14:13,612 INFO __main__:   keep= 99.0% (218972/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=7.4654
+2026-06-25 23:14:13,612 INFO __main__:   keep=100.0% (221184/221184)  KL_L=0.0000  KL_R=0.0000  CE_L=3.9437
+2026-06-25 23:14:13,633 INFO __main__: Saved scores to results/smoke_attr_mlp_scores.pt
+2026-06-25 23:14:13,638 INFO __main__: Top-50:
+2026-06-25 23:14:13,639 INFO __main__:     1. L11 span= 5 ('{object}') mlp n=  896  score=0.0000
+2026-06-25 23:14:13,640 INFO __main__:     2. L11 span= 5 ('{object}') mlp n= 2983  score=0.0000
+2026-06-25 23:14:13,640 INFO __main__:     3. L 7 span= 5 ('{object}') mlp n=  625  score=0.0000
+2026-06-25 23:14:13,641 INFO __main__:     4. L 3 span= 5 ('{object}') mlp n=  362  score=0.0000
+2026-06-25 23:14:13,641 INFO __main__:     5. L 3 span= 5 ('{object}') mlp n= 1670  score=0.0000
+2026-06-25 23:14:13,642 INFO __main__:     6. L 3 span= 1 ('{subject}') mlp n=  581  score=0.0000
+2026-06-25 23:14:13,642 INFO __main__:     7. L 3 span= 1 ('{subject}') mlp n= 1982  score=0.0000
+2026-06-25 23:14:13,643 INFO __main__:     8. L11 span= 5 ('{object}') mlp n= 1632  score=0.0000
+2026-06-25 23:14:13,643 INFO __main__:     9. L 3 span= 1 ('{subject}') mlp n= 2774  score=0.0000
+2026-06-25 23:14:13,644 INFO __main__:    10. L 3 span= 5 ('{object}') mlp n= 1026  score=0.0000
+2026-06-25 23:14:13,644 INFO __main__:    11. L11 span= 5 ('{object}') mlp n= 2187  score=0.0000
+2026-06-25 23:14:13,645 INFO __main__:    12. L 9 span= 5 ('{object}') mlp n= 1584  score=0.0000
+2026-06-25 23:14:13,645 INFO __main__:    13. L 1 span= 1 ('{subject}') mlp n= 2671  score=0.0000
+2026-06-25 23:14:13,646 INFO __main__:    14. L 8 span= 5 ('{object}') mlp n=  458  score=0.0000
+2026-06-25 23:14:13,646 INFO __main__:    15. L 1 span= 1 ('{subject}') mlp n=  775  score=0.0000
+2026-06-25 23:14:13,647 INFO __main__:    16. L 2 span= 5 ('{object}') mlp n= 1991  score=0.0000
+2026-06-25 23:14:13,647 INFO __main__:    17. L 2 span= 1 ('{subject}') mlp n= 2705  score=0.0000
+2026-06-25 23:14:13,648 INFO __main__:    18. L 2 span= 5 ('{object}') mlp n= 1646  score=0.0000
+2026-06-25 23:14:13,648 INFO __main__:    19. L10 span= 5 ('{object}') mlp n= 1015  score=0.0000
+2026-06-25 23:14:13,649 INFO __main__:    20. L 2 span= 1 ('{subject}') mlp n= 2793  score=0.0000
+2026-06-25 23:14:13,649 INFO __main__:    21. L 0 span= 1 ('{subject}') mlp n=  789  score=0.0000
+2026-06-25 23:14:13,650 INFO __main__:    22. L 2 span= 1 ('{subject}') mlp n= 1625  score=0.0000
+2026-06-25 23:14:13,650 INFO __main__:    23. L 2 span= 1 ('{subject}') mlp n= 1204  score=0.0000
+2026-06-25 23:14:13,651 INFO __main__:    24. L 7 span= 5 ('{object}') mlp n= 2194  score=0.0000
+2026-06-25 23:14:13,651 INFO __main__:    25. L 5 span= 5 ('{object}') mlp n= 2036  score=0.0000
+2026-06-25 23:14:13,652 INFO __main__:    26. L 6 span= 5 ('{object}') mlp n= 2509  score=0.0000
+2026-06-25 23:14:13,652 INFO __main__:    27. L 2 span= 5 ('{object}') mlp n=  716  score=0.0000
+2026-06-25 23:14:13,653 INFO __main__:    28. L 4 span= 5 ('{object}') mlp n= 2997  score=0.0000
+2026-06-25 23:14:13,653 INFO __main__:    29. L 2 span= 5 ('{object}') mlp n= 1167  score=0.0000
+2026-06-25 23:14:13,654 INFO __main__:    30. L 2 span= 5 ('{object}') mlp n= 2161  score=0.0000
+2026-06-25 23:14:13,654 INFO __main__:    31. L 3 span= 1 ('{subject}') mlp n= 2550  score=0.0000
+2026-06-25 23:14:13,655 INFO __main__:    32. L 8 span= 3 ('{verbed}') mlp n=   23  score=0.0000
+2026-06-25 23:14:13,655 INFO __main__:    33. L 2 span= 5 ('{object}') mlp n= 1295  score=0.0000
+2026-06-25 23:14:13,662 INFO __main__:    34. L 1 span= 5 ('{object}') mlp n=  788  score=0.0000
+2026-06-25 23:14:13,662 INFO __main__:    35. L 2 span= 5 ('{object}') mlp n=  573  score=0.0000
+2026-06-25 23:14:13,663 INFO __main__:    36. L10 span= 5 ('{object}') mlp n=  838  score=0.0000
+2026-06-25 23:14:13,664 INFO __main__:    37. L 9 span= 5 ('{object}') mlp n= 2357  score=0.0000
+2026-06-25 23:14:13,664 INFO __main__:    38. L 2 span= 3 ('{verbed}') mlp n= 2302  score=0.0000
+2026-06-25 23:14:13,665 INFO __main__:    39. L 8 span= 1 ('{subject}') mlp n= 1969  score=0.0000
+2026-06-25 23:14:13,665 INFO __main__:    40. L 0 span= 1 ('{subject}') mlp n= 2877  score=0.0000
+2026-06-25 23:14:13,666 INFO __main__:    41. L 6 span= 1 ('{subject}') mlp n= 1030  score=0.0000
+2026-06-25 23:14:13,666 INFO __main__:    42. L 2 span= 3 ('{verbed}') mlp n= 2595  score=0.0000
+2026-06-25 23:14:13,667 INFO __main__:    43. L 9 span= 5 ('{object}') mlp n= 1845  score=0.0000
+2026-06-25 23:14:13,667 INFO __main__:    44. L 8 span= 1 ('{subject}') mlp n=  152  score=0.0000
+2026-06-25 23:14:13,668 INFO __main__:    45. L 1 span= 1 ('{subject}') mlp n=  586  score=0.0000
+2026-06-25 23:14:13,669 INFO __main__:    46. L 1 span= 1 ('{subject}') mlp n=  249  score=0.0000
+2026-06-25 23:14:13,669 INFO __main__:    47. L 7 span= 5 ('{object}') mlp n=  600  score=0.0000
+2026-06-25 23:14:13,670 INFO __main__:    48. L10 span= 3 ('{verbed}') mlp n= 2587  score=0.0000
+2026-06-25 23:14:13,671 INFO __main__:    49. L 2 span= 5 ('{object}') mlp n= 2918  score=0.0000
+2026-06-25 23:14:13,671 INFO __main__:    50. L10 span= 5 ('{object}') mlp n=  900  score=0.0000
+2026-06-25 23:14:14,512 INFO __main__: Saved plot to results/smoke_attr_mlp.png

@@ -23,7 +23,7 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "resid_dim", "node", "das", "sae"}
+    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
@@ -44,6 +44,7 @@ class LlamaAttributionHooks:
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
         self.attn_output_total = self.num_layers * seq_len
         self.attn_head_total = self.num_layers * seq_len * self.num_heads
+        self.attn_dim_total = self.num_layers * seq_len * self.hidden_size  # per-dim o_proj input
         self.resid_total = self.num_layers * seq_len
         self.node_total = self.num_layers * self.num_heads + self.num_layers + (1 if self.include_input else 0)
 
@@ -55,6 +56,8 @@ class LlamaAttributionHooks:
             self.total = self.attn_head_total
         elif mask_type == "mlp+attn_head":
             self.total = self.mlp_total + self.attn_head_total
+        elif mask_type == "mlp+attn_dim":
+            self.total = self.mlp_total + self.attn_dim_total
         elif mask_type == "resid":
             self.total = self.resid_total
         elif mask_type == "node":
@@ -69,11 +72,11 @@ class LlamaAttributionHooks:
 
     @property
     def has_mlp(self):
-        return self.mask_type in ("mlp", "mlp+attn_head", "node")
+        return self.mask_type in ("mlp", "mlp+attn_head", "mlp+attn_dim", "node")
 
     @property
     def has_attn(self):
-        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "node")
+        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "node")
 
     @property
     def has_resid(self):
@@ -115,6 +118,9 @@ class LlamaAttributionHooks:
                 if self.mask_type == "attn_output":
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos = "
                                  f"{self.attn_output_total:,}")
+                elif self.mask_type == "mlp+attn_dim":
+                    parts.append(f"Attn(pre-out per-dim): {self.num_layers}L x {self.seq_len}pos x "
+                                 f"{self.hidden_size}d = {self.attn_dim_total:,}")
                 else:
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
                                  f"{self.num_heads}h = {self.attn_head_total:,}")
@@ -235,6 +241,13 @@ class LlamaAttributionHooks:
                             off = li * self.seq_len
                             m = self.mask[off:off + self.seq_len].view(
                                 1, self.seq_len, 1)
+                            return self._interpolate(x, m, cf)
+
+                        if self.mask_type == "mlp+attn_dim":
+                            # per-(pos, dim) over the o_proj input (pre-out, hidden_size)
+                            off = self.mlp_total + li * self.seq_len * self.hidden_size
+                            end = off + self.seq_len * self.hidden_size
+                            m = self.mask[off:end].view(1, self.seq_len, self.hidden_size)
                             return self._interpolate(x, m, cf)
 
                         # attn_head or mlp+attn_head

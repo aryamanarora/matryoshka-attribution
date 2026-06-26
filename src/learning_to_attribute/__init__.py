@@ -16,20 +16,22 @@ from .modes import normalize_mode, preferred_mode, MODE_CHOICES, ISO, CAUSE
 # (a consumer may only want the core learning algorithm).
 try:
     from .models import LlamaAttributionHooks, LlamaSpanAttributionHooks
-    from .data import CounterfactualDataset, CausalGymDataset
+    from .data import CounterfactualDataset, CausalGymDataset, SVADataset, SVA_TASKS
 except ImportError as _e:  # pragma: no cover
     import warnings as _warnings
     _warnings.warn(f"learning_to_attribute: model/data adapters unavailable ({_e}); "
                    "core (build_mask/learn_scores/...) still usable.")
     LlamaAttributionHooks = LlamaSpanAttributionHooks = None
     CounterfactualDataset = CausalGymDataset = None
+    SVADataset = None
+    SVA_TASKS = ()
 
 __all__ = [
     "SigmoidTopK", "sigmoid_topk", "sigmoid_topk_hard", "sigmoid_topk_detached_tau",
     "test_gradcheck",
     "RotateLayer", "make_rotate_layer", "householder_product", "cayley",
     "LlamaAttributionHooks", "LlamaSpanAttributionHooks",
-    "CounterfactualDataset", "CausalGymDataset",
+    "CounterfactualDataset", "CausalGymDataset", "SVADataset", "SVA_TASKS",
     # MAttr learning algorithm (shared core)
     "MaskResult", "build_mask", "build_bias_mask", "VARIANTS",
     "sample_k", "sample_k_sum_pow2", "natural_k",
