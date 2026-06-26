@@ -28,10 +28,86 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
                    "gemma2": "google/gemma-2-2b", "llama3": "meta-llama/Llama-3.1-8B"}
 
 
+def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False):
+    """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
+
+    Captures the clean activation at each node module (down_proj / o_proj input) with a
+    forward-pre-hook (retain_grad), runs a clean forward + logit-diff backward, and scores each
+    node by g . (clean - patch), summed over a batch. relp=True applies the RelP modified
+    backward first (LN-freeze + MLP gate rule + QK-detach). [RelP backward not yet ported.]
+    """
+    if relp:
+        from learning_to_attribute.grad_attribution import install_relp, revert_relp
+        install_relp(hf)
+    layers = hf.model.layers
+    use_attn = hooker.mask_type == "mlp+attn_dim"
+    N, H, P = hooker.intermediate_size, hooker.hidden_size, seq_len
+
+    # collect a same-length batch of clean/patch pairs
+    cl, co, ci, ii = [], [], [], []
+    i = 0
+    while len(cl) < n_examples and i < len(ds):
+        clean, corr, lab = ds[i]; i += 1
+        if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+        if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+        cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
+
+    def capture(texts, want_grad):
+        store = {}
+        handles = []
+        def mk(li, kind):
+            def hook(mod, args):
+                x = args[0]
+                if want_grad:
+                    x.requires_grad_(True); x.retain_grad()
+                store[(li, kind)] = x
+                return (x,) + tuple(args[1:])
+            return hook
+        for li in range(len(layers)):
+            handles.append(layers[li].mlp.down_proj.register_forward_pre_hook(mk(li, "mlp")))
+            if use_attn:
+                handles.append(layers[li].self_attn.o_proj.register_forward_pre_hook(mk(li, "attn")))
+        t = tok(texts, return_tensors="pt", padding=True).to(device)
+        last = t.attention_mask.sum(1) - 1
+        logits = hf(t.input_ids, attention_mask=t.attention_mask).logits.float()
+        for h in handles:
+            h.remove()
+        return store, logits, last
+
+    # patch acts (no grad)
+    with torch.no_grad():
+        patch_store, _, _ = capture(co, want_grad=False)
+    patch_store = {k: v.detach() for k, v in patch_store.items()}
+
+    # clean acts + grad
+    clean_store, logits, last = capture(cl, want_grad=True)
+    B = len(cl)
+    ll = logits[torch.arange(B, device=device), last]
+    cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
+    metric = (ll[torch.arange(B, device=device), cor] - ll[torch.arange(B, device=device), inc]).sum()
+    metric.backward()
+
+    scores = torch.zeros(total)
+    for li in range(len(layers)):
+        cx = clean_store[(li, "mlp")]; g = cx.grad; px = patch_store[(li, "mlp")]
+        eff = (g * (cx.detach() - px)).sum(0)              # [seq, N]
+        off = li * P * N
+        scores[off:off + P * N] = eff.reshape(-1).cpu()
+        if use_attn:
+            cx = clean_store[(li, "attn")]; g = cx.grad; px = patch_store[(li, "attn")]
+            eff = (g * (cx.detach() - px)).sum(0)          # [seq, H]
+            off = hooker.mlp_total + li * P * H
+            scores[off:off + P * H] = eff.reshape(-1).cpu()
+    if relp:
+        revert_relp(hf)
+    return scores.to(device)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # nounpp | rc | simple | within_rc
+    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp"])
     p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
@@ -113,12 +189,16 @@ def main():
         d = forward_logit_diff(cl, co, ci, ii, mask, sufficient=corrupt_topk)
         return d.mean() if corrupt_topk else -d.mean()
 
-    logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
-                args.mode, args.optimizer, args.k_schedule)
-    res = learn_scores(total, loss_fn, steps=args.steps, variant=args.variant,
-                       k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
-                       lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device)
-    scores = res.scores.detach()
+    if args.method in ("ixg", "relp"):
+        scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
+                                 n_examples=args.eval_examples, relp=(args.method == "relp"))
+    else:
+        logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
+                    args.mode, args.optimizer, args.k_schedule)
+        res = learn_scores(total, loss_fn, steps=args.steps, variant=args.variant,
+                           k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
+                           lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device)
+        scores = res.scores.detach()
 
     # ---- Phase 2: sparsity sweep, BOTH directions, counterfactual (patch) ablation ----
     #   iso  (sufficiency): keep top-k CLEAN, corrupt the complement  -> recovery curve
@@ -177,7 +257,8 @@ def main():
     out["hidden_size"] = hooker.hidden_size
     out["num_layers"] = hooker.num_layers
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
-    fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{args.mode}_{args.variant}_{args.optimizer}.json"
+    tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
+    fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{tag}.json"
     torch.save(scores.cpu(), fn.with_suffix(".scores.pt"))
     json.dump(out, open(fn, "w"), indent=2)
     logger.info("iso/faith AUC=%.3f (fmax %.3f) | cause AUC=%.3f | total=%d -> %s",
