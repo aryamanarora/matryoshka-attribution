@@ -58,6 +58,7 @@ def learn_scores(
     l0_lambda: float = 0.0,
     natural_k_frac: float = 0.0,
     use_bias: bool = False,
+    manual_backward: bool = False,
     extra_params: Optional[list] = None,
     lr_extra: Optional[float] = None,
     device="cpu",
@@ -111,25 +112,34 @@ def learn_scores(
         else:
             mr = build_mask(scores, k, variant, T=T, n_iters=n_iters)
 
-        loss = loss_fn(mr.mask)
-        if loss is None:                       # caller signalled skip (e.g. empty batch)
-            continue
-        if mr.l0_scores is not None:
-            loss = loss + l0_lambda * mr.l0_scores.sum()
-
         optimizer_.zero_grad()
-        if mr.reinforce is not None and not bias_step:
-            # REINFORCE: grad = loss * d/ds log P(sample | scores),
-            # P(active_i) = sigma((s_i - tau)/T)  =>  d log P / d s_i = (sample_i - p_i)/T
-            with torch.no_grad():
-                r = mr.reinforce
-                p = torch.sigmoid((scores - r["tau"]) / r["T"])
-                scores.grad = loss.item() * ((r["sample"] - p) / r["T"])
+        if manual_backward:
+            # Caller owns the backward (e.g. loss.backward() inside an nnsight model.trace).
+            # loss_fn applies the mask, computes the loss, backprops, and returns the scalar
+            # loss for logging (or None -> not logged). Grad still flows through the mask's
+            # autograd graph to `scores`; we only do zero_grad (above) + step (below).
+            assert mr.reinforce is None and mr.l0_scores is None, \
+                "manual_backward is incompatible with REINFORCE / hard_concrete variants"
+            loss = loss_fn(mr.mask)
+            loss_val = float(loss) if loss is not None else float("nan")
         else:
-            loss.backward()
+            loss = loss_fn(mr.mask)
+            if loss is None:                       # caller signalled skip (e.g. empty batch)
+                continue
+            if mr.l0_scores is not None:
+                loss = loss + l0_lambda * mr.l0_scores.sum()
+            if mr.reinforce is not None and not bias_step:
+                # REINFORCE: grad = loss * d/ds log P(sample | scores),
+                # P(active_i) = sigma((s_i - tau)/T) => d log P / d s_i = (sample_i - p_i)/T
+                with torch.no_grad():
+                    r = mr.reinforce
+                    p = torch.sigmoid((scores - r["tau"]) / r["T"])
+                    scores.grad = loss.item() * ((r["sample"] - p) / r["T"])
+            else:
+                loss.backward()
+            loss_val = loss.item()
         optimizer_.step()
 
-        loss_val = loss.item()
         result.loss_log.append(loss_val)
         result.k_log.append(float(k))
         result.train_log.append((step, float(k), float(k) / total, loss_val, int(bias_step)))
