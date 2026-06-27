@@ -134,6 +134,8 @@ def main():
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary"])
+    p.add_argument("--loss", default="logit_diff", choices=["logit_diff", "ce"],
+                   help="training loss: logit-diff (base-source) or CE on the base token")
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
     p.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
     p.add_argument("--steps", type=int, default=2000)
@@ -189,7 +191,8 @@ def main():
             cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
         return cl, co, ci, ii
 
-    def forward_logit_diff(cleans, corrupteds, ci, ii, mask, sufficient):
+    def forward_last(cleans, corrupteds, ci, ii, mask, sufficient):
+        """Run the masked forward; return (last-token logits [B,vocab], base idx, source idx)."""
         bt = tok(cleans, return_tensors="pt", padding=True).to(device)
         st = tok(corrupteds, return_tensors="pt", padding=True).to(device)
         last = bt.attention_mask.sum(1) - 1
@@ -200,15 +203,26 @@ def main():
         hooker.sufficient = old_suf
         B = len(cleans)
         ll = logits[torch.arange(B, device=device), last]
-        cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
-        return ll[torch.arange(B, device=device), cor] - ll[torch.arange(B, device=device), inc]
+        return ll, torch.tensor(ci, device=device), torch.tensor(ii, device=device)
+
+    def forward_logit_diff(cleans, corrupteds, ci, ii, mask, sufficient):
+        ll, cor, inc = forward_last(cleans, corrupteds, ci, ii, mask, sufficient)
+        ar = torch.arange(ll.shape[0], device=device)
+        return ll[ar, cor] - ll[ar, inc]
 
     n_train = len(train)
     def loss_fn(mask):
         cl, co, ci, ii = sample_batch(train, args.train_batch_size, n_train)
         if not cl:
             return None
-        d = forward_logit_diff(cl, co, ci, ii, mask, sufficient=corrupt_topk)
+        ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=corrupt_topk)
+        ar = torch.arange(ll.shape[0], device=device)
+        if args.loss == "ce":
+            # CE on the base/correct token: iso minimizes it (circuit predicts base);
+            # cause maximizes it (corrupting the circuit breaks the base prediction).
+            ce = torch.nn.functional.cross_entropy(ll, cor)
+            return -ce if corrupt_topk else ce
+        d = ll[ar, cor] - ll[ar, inc]
         return d.mean() if corrupt_topk else -d.mean()
 
     if args.method in ("ixg", "relp", "ig"):
@@ -297,8 +311,11 @@ def main():
     out["intermediate_size"] = hooker.intermediate_size
     out["hidden_size"] = hooker.hidden_size
     out["num_layers"] = hooker.num_layers
+    out["loss"] = args.loss
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
+    if args.method == "mattr" and args.loss != "logit_diff":
+        tag += f"_{args.loss}"
     fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{tag}.json"
     torch.save(scores.cpu(), fn.with_suffix(".scores.pt"))
     json.dump(out, open(fn, "w"), indent=2)
