@@ -39,8 +39,10 @@ TASK, MODEL = "nounpp", "llama3"
 METHODS = [  # (label, file tag) — order = legend/colour order
     ("MAttr suff", "sufficient_hard_topk_adam"),
     ("MAttr suff (idSGD)", "sufficient_hard_topk_identity_sgd"),
+    ("MAttr suff (CE)", "sufficient_hard_topk_adam_ce"),
     ("MAttr nec", "necessary_hard_topk_adam"),
     ("MAttr nec (idSGD)", "necessary_hard_topk_identity_sgd"),
+    ("MAttr nec (CE)", "necessary_hard_topk_adam_ce"),
     ("RelP", "relp"),
     ("IxG", "ixg"),
     ("IG", "ig"),
@@ -65,7 +67,11 @@ def make(direction, fname):
     rows = []
     for label, tag in METHODS:
         for nkey, nlabel in NODESETS:
-            d = json.load(open(f"{RES}/{TASK}_{MODEL}_{nkey}_{tag}.json"))
+            fp = f"{RES}/{TASK}_{MODEL}_{nkey}_{tag}.json"
+            try:
+                d = json.load(open(fp))
+            except FileNotFoundError:
+                print("skip (missing):", fp); continue
             cur = d[f"{direction}_metrics"]
             for mkey, mtitle in METRICS.items():
                 for n, v in zip(d["n_nodes"], cur[mkey]):
