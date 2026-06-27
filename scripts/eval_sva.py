@@ -18,8 +18,29 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import learn_scores, sparsity_sweep
-from learning_to_attribute.data import SVADataset
+from learning_to_attribute.data import SVADataset, CausalGymDataset
 from learning_to_attribute.models import LlamaAttributionHooks
+
+
+class CGDataset:
+    """CausalGym task as a fixed list of (clean, corrupted, [base_id, source_id]) pairs.
+    Drop-in for SVADataset; strips the gpt2 <|endoftext|> prefix (the model tokenizer adds BOS)."""
+    def __init__(self, task, tokenizer, n=2000, seed=42):
+        cg = CausalGymDataset(f"syntaxgym/{task}", seed=seed)
+        self.recs = []
+        for _ in range(n):
+            p = cg.sample_pair()
+            clean = "".join(p.base_spans).replace("<|endoftext|>", "").lstrip()
+            corr = "".join(p.src_spans).replace("<|endoftext|>", "").lstrip()
+            bid = tokenizer(p.base_label).input_ids[-1]
+            sid = tokenizer(p.src_label).input_ids[-1]
+            self.recs.append((clean, corr, [bid, sid]))
+
+    def __len__(self):
+        return len(self.recs)
+
+    def __getitem__(self, i):
+        return self.recs[i]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -127,15 +148,16 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
-    p.add_argument("--task", required=True)            # nounpp | rc | simple | within_rc
+    p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
+    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary"])
-    p.add_argument("--loss", default="logit_diff", choices=["logit_diff", "ce"],
-                   help="training loss: logit-diff (base-source) or CE on the base token")
+    p.add_argument("--loss", default="logit_diff", choices=["logit_diff", "ce", "logit"],
+                   help="training loss: logit-diff (base-source), CE on base, or raw base logit")
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
     p.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
     p.add_argument("--steps", type=int, default=2000)
@@ -162,8 +184,12 @@ def main():
     for pp in hf.parameters():
         pp.requires_grad_(False)
 
-    train = SVADataset(args.task, tok, split="train")
-    test = SVADataset(args.task, tok, split="test")
+    if args.dataset == "causalgym":
+        train = CGDataset(args.task, tok, n=2000, seed=0)
+        test = CGDataset(args.task, tok, n=400, seed=1)
+    else:
+        train = SVADataset(args.task, tok, split="train")
+        test = SVADataset(args.task, tok, split="test")
 
     # seq_len for the per-position node layout: use the modal clean-prompt token length; the
     # train/eval loops only sample pairs of exactly this length (so the mask indices line up).
@@ -222,6 +248,10 @@ def main():
             # cause maximizes it (corrupting the circuit breaks the base prediction).
             ce = torch.nn.functional.cross_entropy(ll, cor)
             return -ce if corrupt_topk else ce
+        if args.loss == "logit":
+            # raw base-token logit: iso maximizes it, cause minimizes it.
+            lg = ll[ar, cor]
+            return lg.mean() if corrupt_topk else -lg.mean()
         d = ll[ar, cor] - ll[ar, inc]
         return d.mean() if corrupt_topk else -d.mean()
 
