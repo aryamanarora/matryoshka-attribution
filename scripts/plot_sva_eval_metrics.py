@@ -6,8 +6,8 @@ import json
 import numpy as np
 import pandas as pd
 from plotnine import (
-    ggplot, aes, geom_line, geom_point, geom_hline, facet_grid, labs,
-    scale_x_log10, scale_color_brewer, theme_set, theme_bw, theme,
+    ggplot, aes, geom_line, geom_point, geom_hline, facet_grid, facet_wrap, labs,
+    scale_x_log10, scale_color_brewer, scale_color_manual, scale_linetype_manual, theme_set, theme_bw, theme,
     element_text, element_line, element_blank,
 )
 
@@ -52,49 +52,324 @@ NODESETS = [("mlp", "MLP"), ("mlp-attn_dim", "MLP + attn")]  # (file key, facet 
 METRICS = {
     "faithfulness": "Faithfulness (norm. logit diff)",
     "logit_diff": "Logit difference",
+    "logit_base": "Logit (base)",
+    "logit_source": "Logit (source)",
     "p_base": "P(base)",
     "p_source": "P(source)",
+    "ce_base": "Cross-entropy (base)",
+    "ce_source": "Cross-entropy (source)",
     "acc_base": "Acc: P(base) > P(source)",
     "acc_source": "Acc: P(source) > P(base)",
 }
+
+import math as _math
+def _metric_curve(cur, mkey):
+    """Return the per-sparsity curve for mkey, deriving CE from P(.) when absent in old JSONs.
+    Returns None if unavailable (e.g. logit_base in a pre-metric run)."""
+    if mkey in cur:
+        return cur[mkey]
+    if mkey == "ce_base" and "p_base" in cur:
+        return [-_math.log(max(p, 1e-9)) for p in cur["p_base"]]
+    if mkey == "ce_source" and "p_source" in cur:
+        return [-_math.log(max(p, 1e-9)) for p in cur["p_source"]]
+    return None
 
 _SUP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
 def log_labels(breaks):
     return [f"10{str(int(round(np.log10(b)))).translate(_SUP)}" if b > 0 else "0" for b in breaks]
 
 
-def make(direction, fname):
+def make(direction, fname, task, methods, nodesets):
     rows = []
-    for label, tag in METHODS:
-        for nkey, nlabel in NODESETS:
-            fp = f"{RES}/{TASK}_{MODEL}_{nkey}_{tag}.json"
+    for label, tag in methods:
+        for nkey, nlabel in nodesets:
+            fp = f"{RES}/{task}_{MODEL}_{nkey}_{tag}.json"
             try:
                 d = json.load(open(fp))
             except FileNotFoundError:
                 print("skip (missing):", fp); continue
             cur = d[f"{direction}_metrics"]
             for mkey, mtitle in METRICS.items():
-                for n, v in zip(d["n_nodes"], cur[mkey]):
+                curve = _metric_curve(cur, mkey)
+                if curve is None:
+                    continue
+                for n, v in zip(d["n_nodes"], curve):
                     rows.append({"method": label, "nodes": nlabel, "n_nodes": n,
                                  "metric": mtitle, "value": v})
     df = pd.DataFrame(rows)
-    df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS])
-    df["nodes"] = pd.Categorical(df["nodes"], [n[1] for n in NODESETS])
+    df["method"] = pd.Categorical(df["method"], [m[0] for m in methods])
     df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
-    p = (
-        ggplot(df, aes("n_nodes", "value", color="method"))
-        + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
-        + geom_line(size=0.5)
-        + geom_point(size=0.4)
-        + facet_grid("metric ~ nodes", scales="free_y")
-        + scale_x_log10(labels=log_labels)
-        + scale_color_brewer(type="qual", palette="Set1")
-        + labs(x="Circuit size (nodes)", y="Value", color="")
-        + theme(figure_size=(5.5, 7.2))
-    )
+    p = (ggplot(df, aes("n_nodes", "value", color="method"))
+         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
+         + geom_line(size=0.5) + geom_point(size=0.4)
+         + scale_x_log10(labels=log_labels)
+         + scale_color_brewer(type="qual", palette="Set1")
+         + labs(x="Circuit size (nodes)", y="Value", color=""))
+    n_metrics = df["metric"].nunique()
+    if len(nodesets) > 1:  # facet metric x node-set
+        df["nodes"] = pd.Categorical(df["nodes"], [n[1] for n in nodesets])
+        p = p + facet_grid("metric ~ nodes", scales="free_y") + theme(figure_size=(5.5, 1.2 * n_metrics))
+    else:                   # single node set -> wrap metrics (ncol=3, ~1.5in per row)
+        nrow = -(-n_metrics // 3)
+        p = p + facet_wrap("metric", ncol=3, scales="free_y") + theme(figure_size=(5.5, 1.5 * nrow))
     p.save(fname, verbose=False)
     print("wrote", fname)
 
 
-make("iso", "plots/sva_eval_metrics_iso.pdf")
-make("cause", "plots/sva_eval_metrics_cause.pdf")
+# --- SVA (nounpp): 9 methods x {MLP, MLP+attn} ---
+make("iso", "plots/sva_eval_metrics_iso.pdf", "nounpp", METHODS, NODESETS)
+make("cause", "plots/sva_eval_metrics_cause.pdf", "nounpp", METHODS, NODESETS)
+
+# --- NPI subj-relc: MAttr iso x {logit-diff, logit, CE} + RelP/IxG/IG, MLP only ---
+NPI = [
+    ("MAttr iso logit-diff", "sufficient_hard_topk_adam"),
+    ("MAttr iso logit", "sufficient_hard_topk_adam_logit"),
+    ("MAttr iso CE", "sufficient_hard_topk_adam_ce"),
+    ("RelP", "relp"), ("IxG", "ixg"), ("IG", "ig"),
+]
+# same MAttr losses but uniform-k schedule (vs log-uniform default above)
+NPI_UNIF = [
+    ("MAttr logit-diff (log k)", "sufficient_hard_topk_adam"),
+    ("MAttr logit-diff (unif k)", "sufficient_hard_topk_adam_uniformk"),
+    ("MAttr logit (log k)", "sufficient_hard_topk_adam_logit"),
+    ("MAttr logit (unif k)", "sufficient_hard_topk_adam_logit_uniformk"),
+    ("MAttr CE (log k)", "sufficient_hard_topk_adam_ce"),
+    ("MAttr CE (unif k)", "sufficient_hard_topk_adam_ce_uniformk"),
+]
+make("iso", "plots/npi_eval_metrics_iso.pdf", "npi_any_subj-relc", NPI, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause.pdf", "npi_any_subj-relc", NPI, [("mlp", "MLP")])
+
+# --- NPI: log-k vs uniform-k for each loss ---
+make("iso", "plots/npi_eval_metrics_iso_kshed.pdf", "npi_any_subj-relc", NPI_UNIF, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_kshed.pdf", "npi_any_subj-relc", NPI_UNIF, [("mlp", "MLP")])
+
+# same log-k vs uniform-k comparison but at bs=1
+NPI_UNIF_BS1 = [
+    ("logit-diff log-k", "sufficient_hard_topk_adam_bs1"),
+    ("logit-diff unif-k", "sufficient_hard_topk_adam_uniformk_bs1"),
+    ("logit-diff adapt-k", "sufficient_hard_topk_adam_adaptivek_bs1"),
+    ("logit log-k", "sufficient_hard_topk_adam_logit_bs1"),
+    ("logit unif-k", "sufficient_hard_topk_adam_logit_uniformk_bs1"),
+    ("CE log-k", "sufficient_hard_topk_adam_ce_bs1"),
+    ("CE unif-k", "sufficient_hard_topk_adam_ce_uniformk_bs1"),
+    ("hinge log-k", "sufficient_hard_topk_adam_hinge_bs1"),
+    ("hinge adapt-k", "sufficient_hard_topk_adam_hinge_adaptivek_bs1"),
+]
+make("iso", "plots/npi_eval_metrics_iso_kshed_bs1.pdf", "npi_any_subj-relc", NPI_UNIF_BS1, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_kshed_bs1.pdf", "npi_any_subj-relc", NPI_UNIF_BS1, [("mlp", "MLP")])
+
+# --- NPI: MAttr (log-k) bs=1 vs bs=8 per loss, vs gradient methods (9 lines) ---
+NPI_BS = [
+    ("MAttr logit-diff bs8", "sufficient_hard_topk_adam"),
+    ("MAttr logit-diff bs1", "sufficient_hard_topk_adam_bs1"),
+    ("MAttr logit bs8", "sufficient_hard_topk_adam_logit"),
+    ("MAttr logit bs1", "sufficient_hard_topk_adam_logit_bs1"),
+    ("MAttr CE bs8", "sufficient_hard_topk_adam_ce"),
+    ("MAttr CE bs1", "sufficient_hard_topk_adam_ce_bs1"),
+    ("RelP", "relp"), ("IxG", "ixg"), ("IG", "ig"),
+]
+# decision-focused: hinge loss (saturating margin) vs the gap-maximisers + gradients
+NPI_HINGE = [  # all bs=1
+    ("MAttr hinge", "sufficient_hard_topk_adam_hinge_bs1"),
+    ("MAttr prob", "sufficient_hard_topk_adam_prob_bs1"),
+    ("MAttr logit-diff", "sufficient_hard_topk_adam_bs1"),
+    ("MAttr CE", "sufficient_hard_topk_adam_ce_bs1"),
+    ("RelP", "relp"), ("IxG", "ixg"), ("IG", "ig"),
+]
+make("iso", "plots/npi_eval_metrics_iso_bs.pdf", "npi_any_subj-relc", NPI_BS, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_bs.pdf", "npi_any_subj-relc", NPI_BS, [("mlp", "MLP")])
+
+# --- NPI: hinge (decision-focused) vs gap-maximisers vs gradients ---
+make("iso", "plots/npi_eval_metrics_iso_hinge.pdf", "npi_any_subj-relc", NPI_HINGE, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_hinge.pdf", "npi_any_subj-relc", NPI_HINGE, [("mlp", "MLP")])
+
+# --- NPI: 2k vs 8k steps, bs=1, log-k, for logit-diff / CE / prob ---
+NPI_8K = [
+    ("logit-diff 2k", "sufficient_hard_topk_adam_bs1"),
+    ("logit-diff 8k", "sufficient_hard_topk_adam_bs1_s8000"),
+    ("CE 2k", "sufficient_hard_topk_adam_ce_bs1"),
+    ("CE 8k", "sufficient_hard_topk_adam_ce_bs1_s8000"),
+    ("prob 2k", "sufficient_hard_topk_adam_prob_bs1"),
+    ("prob 8k", "sufficient_hard_topk_adam_prob_bs1_s8000"),
+]
+make("iso", "plots/npi_eval_metrics_iso_8k.pdf", "npi_any_subj-relc", NPI_8K, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_8k.pdf", "npi_any_subj-relc", NPI_8K, [("mlp", "MLP")])
+
+
+# --- NPI: color=method, linetype=2k/8k, with gradient methods (1-shot, dotted) ---
+# (base, steps, tag)
+NPI_8K_GRAD = [
+    ("logit-diff", "2k", "sufficient_hard_topk_adam_bs1"),
+    ("logit-diff", "8k", "sufficient_hard_topk_adam_bs1_s8000"),
+    ("CE", "2k", "sufficient_hard_topk_adam_ce_bs1"),
+    ("CE", "8k", "sufficient_hard_topk_adam_ce_bs1_s8000"),
+    ("prob", "2k", "sufficient_hard_topk_adam_prob_bs1"),
+    ("prob", "8k", "sufficient_hard_topk_adam_prob_bs1_s8000"),
+    ("IG", "1-shot", "ig"),
+    ("RelP", "1-shot", "relp"),
+    ("IxG", "1-shot", "ixg"),
+]
+
+
+def make_lt(direction, fname, task="npi_any_subj-relc"):
+    rows = []
+    for base, steps, tag in NPI_8K_GRAD:
+        fp = f"{RES}/{task}_{MODEL}_mlp_{tag}.json"
+        try:
+            d = json.load(open(fp))
+        except FileNotFoundError:
+            print("skip (missing):", fp); continue
+        cur = d[f"{direction}_metrics"]
+        for mkey, mtitle in METRICS.items():
+            curve = _metric_curve(cur, mkey)
+            if curve is None:
+                continue
+            for n, v in zip(d["n_nodes"], curve):
+                rows.append({"method": base, "steps": steps, "n_nodes": n,
+                             "metric": mtitle, "value": v})
+    df = pd.DataFrame(rows)
+    bases = ["logit-diff", "CE", "prob", "IG", "RelP", "IxG"]
+    df["method"] = pd.Categorical(df["method"], bases)
+    df["steps"] = pd.Categorical(df["steps"], ["2k", "8k", "1-shot"])
+    df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
+    p = (ggplot(df, aes("n_nodes", "value", color="method", linetype="steps"))
+         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
+         + geom_line(size=0.5)
+         + scale_x_log10(labels=log_labels)
+         + scale_color_brewer(type="qual", palette="Set1")
+         + scale_linetype_manual(values={"2k": "solid", "8k": "dashed", "1-shot": "dotted"})
+         + facet_wrap("metric", ncol=3, scales="free_y")
+         + labs(x="Circuit size (nodes)", y="Value", color="", linetype="Steps")
+         + theme(figure_size=(5.5, 1.5 * -(-df["metric"].nunique() // 3))))
+    p.save(fname, verbose=False)
+    print("wrote", fname)
+
+
+make_lt("iso", "plots/npi_eval_metrics_iso_8k_grad.pdf")
+make_lt("cause", "plots/npi_eval_metrics_cause_8k_grad.pdf")
+
+# --- NPI: adaptive-k vs log-k (A/B per loss/bs), with IG/RelP reference ---
+NPI_ADK = [
+    ("hinge bs1 log-k", "sufficient_hard_topk_adam_hinge_bs1"),
+    ("hinge bs1 adapt-k", "sufficient_hard_topk_adam_hinge_adaptivek_bs1"),
+    ("logit-diff bs1 log-k", "sufficient_hard_topk_adam_bs1"),
+    ("logit-diff bs1 adapt-k", "sufficient_hard_topk_adam_adaptivek_bs1"),
+    ("logit-diff bs8 log-k", "sufficient_hard_topk_adam"),
+    ("logit-diff bs8 adapt-k", "sufficient_hard_topk_adam_adaptivek"),
+    ("IG", "ig"), ("RelP", "relp"),
+]
+make("iso", "plots/npi_eval_metrics_iso_adaptivek.pdf", "npi_any_subj-relc", NPI_ADK, [("mlp", "MLP")])
+make("cause", "plots/npi_eval_metrics_cause_adaptivek.pdf", "npi_any_subj-relc", NPI_ADK, [("mlp", "MLP")])
+
+# --- NPI: per-span (mlp_span, variable length) -- CE MAttr + IG/RelP/IxG ---
+NPI_SPAN = [
+    ("MAttr CE (iso-trained)", "sufficient_hard_topk_adam_ce_bs1"),
+    ("MAttr CE (cause-trained)", "necessary_hard_topk_adam_ce_bs1"),
+    ("IG", "ig"), ("RelP", "relp"), ("IxG", "ixg"),
+]
+# all MAttr loss targets on span (iso, bs=1) + gradients
+NPI_SPAN_LOSS = [
+    ("MAttr acc (T=1)", "sufficient_hard_topk_adam_acc_bs1"),
+    ("MAttr acc (T=.5)", "sufficient_hard_topk_adam_acc_bs1_t05"),
+    ("MAttr hinge", "sufficient_hard_topk_adam_hinge_bs1"),
+    ("MAttr logit-diff", "sufficient_hard_topk_adam_bs1"),
+    ("MAttr CE", "sufficient_hard_topk_adam_ce_bs1"),
+    ("MAttr prob", "sufficient_hard_topk_adam_prob_bs1"),
+    ("IG", "ig"), ("RelP", "relp"), ("IxG", "ixg"),
+]
+make("iso", "plots/npi_eval_metrics_iso_span.pdf", "npi_any_subj-relc", NPI_SPAN,
+     [("mlp_span", "MLP per-span")])
+make("cause", "plots/npi_eval_metrics_cause_span.pdf", "npi_any_subj-relc", NPI_SPAN,
+     [("mlp_span", "MLP per-span")])
+make("iso", "plots/npi_eval_metrics_iso_span_loss.pdf", "npi_any_subj-relc", NPI_SPAN_LOSS,
+     [("mlp_span", "MLP per-span")])
+make("cause", "plots/npi_eval_metrics_cause_span_loss.pdf", "npi_any_subj-relc", NPI_SPAN_LOSS,
+     [("mlp_span", "MLP per-span")])
+
+# --- NPI span: CE iso/cause x log / log_both k-schedule (4 methods) ---
+NPI_SPAN_LB = [
+    ("CE iso (log)", "sufficient_hard_topk_adam_ce_bs1"),
+    ("CE iso (log_both)", "sufficient_hard_topk_adam_ce_logboth_bs1"),
+    ("CE cause (log)", "necessary_hard_topk_adam_ce_bs1"),
+    ("CE cause (log_both)", "necessary_hard_topk_adam_ce_logboth_bs1"),
+]
+make("iso", "plots/npi_eval_metrics_iso_span_logboth.pdf", "npi_any_subj-relc", NPI_SPAN_LB,
+     [("mlp_span", "MLP per-span")])
+make("cause", "plots/npi_eval_metrics_cause_span_logboth.pdf", "npi_any_subj-relc", NPI_SPAN_LB,
+     [("mlp_span", "MLP per-span")])
+
+# --- NPI span: CE iso/cause x log/log_both, with OLD (suppress-base) vs FIXED (force-source) cause ---
+NPI_SPAN_FIX = [
+    ("iso (log)", "sufficient_hard_topk_adam_ce_bs1"),
+    ("iso (log_both)", "sufficient_hard_topk_adam_ce_logboth_bs1"),
+    ("cause log [suppress]", "necessary_hard_topk_adam_ce_oldsupp_bs1"),
+    ("cause log [force-src]", "necessary_hard_topk_adam_ce_bs1"),
+    ("cause log_both [suppress]", "necessary_hard_topk_adam_ce_logboth_oldsupp_bs1"),
+    ("cause log_both [force-src]", "necessary_hard_topk_adam_ce_logboth_bs1"),
+]
+make("iso", "plots/npi_eval_metrics_iso_span_cefix.pdf", "npi_any_subj-relc", NPI_SPAN_FIX,
+     [("mlp_span", "MLP per-span")])
+make("cause", "plots/npi_eval_metrics_cause_span_cefix.pdf", "npi_any_subj-relc", NPI_SPAN_FIX,
+     [("mlp_span", "MLP per-span")])
+
+# --- NPI span: 12 variants = loss(CE/LD/acc) x direction(iso/cause) x schedule(log/log_both) ---
+# col=loss, color=train direction, linetype=schedule. (loss, direction, schedule, tag)
+SPAN12 = [
+    ("CE", "iso", "log", "sufficient_hard_topk_adam_ce_bs1"),
+    ("CE", "iso", "log_both", "sufficient_hard_topk_adam_ce_logboth_bs1"),
+    ("CE", "cause", "log", "necessary_hard_topk_adam_ce_bs1"),
+    ("CE", "cause", "log_both", "necessary_hard_topk_adam_ce_logboth_bs1"),
+    ("logit-diff", "iso", "log", "sufficient_hard_topk_adam_bs1"),
+    ("logit-diff", "iso", "log_both", "sufficient_hard_topk_adam_logboth_bs1"),
+    ("logit-diff", "cause", "log", "necessary_hard_topk_adam_bs1"),
+    ("logit-diff", "cause", "log_both", "necessary_hard_topk_adam_logboth_bs1"),
+    ("acc T=.5", "iso", "log", "sufficient_hard_topk_adam_acc_bs1_t05"),
+    ("acc T=.5", "iso", "log_both", "sufficient_hard_topk_adam_acc_logboth_bs1_t05"),
+    ("acc T=.5", "cause", "log", "necessary_hard_topk_adam_acc_bs1_t05"),
+    ("acc T=.5", "cause", "log_both", "necessary_hard_topk_adam_acc_logboth_bs1_t05"),
+]
+
+
+# gradient reference column: no direction/schedule; colour distinguishes the 3 methods
+SPAN12_GRAD = [("Gradient", "IG", "log", "ig"), ("Gradient", "RelP", "log", "relp"),
+               ("Gradient", "IxG", "log", "ixg")]
+_GRID_COL = {"iso": "#e41a1c", "cause": "#377eb8",         # MAttr train direction
+             "IG": "#4daf4a", "RelP": "#984ea3", "IxG": "#ff7f00"}  # gradient methods
+
+
+def make_grid(direction, fname, task="npi_any_subj-relc"):
+    rows = []
+    for loss, tdir, sched, tag in SPAN12 + SPAN12_GRAD:
+        fp = f"{RES}/{task}_{MODEL}_mlp_span_{tag}.json"
+        try:
+            d = json.load(open(fp))
+        except FileNotFoundError:
+            print("skip (missing):", fp); continue
+        cur = d[f"{direction}_metrics"]
+        for mkey, mtitle in METRICS.items():
+            curve = _metric_curve(cur, mkey)
+            if curve is None:
+                continue
+            for n, v in zip(d["n_nodes"], curve):
+                rows.append({"loss": loss, "dir": tdir, "sched": sched, "n_nodes": n,
+                             "metric": mtitle, "value": v})
+    df = pd.DataFrame(rows)
+    df["loss"] = pd.Categorical(df["loss"], ["CE", "logit-diff", "acc T=.5", "Gradient"])
+    df["dir"] = pd.Categorical(df["dir"], ["iso", "cause", "IG", "RelP", "IxG"])
+    df["sched"] = pd.Categorical(df["sched"], ["log", "log_both"])
+    df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
+    p = (ggplot(df, aes("n_nodes", "value", color="dir", linetype="sched"))
+         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
+         + geom_line(size=0.5)
+         + scale_x_log10(labels=log_labels)
+         + scale_color_manual(values=_GRID_COL, name="Train / method")
+         + scale_linetype_manual(values={"log": "solid", "log_both": "dashed"})
+         + facet_grid("metric ~ loss", scales="free_y")
+         + labs(x="Circuit size (nodes)", y="Value", linetype="k-sched")
+         + theme(figure_size=(6.8, 1.15 * df["metric"].nunique())))
+    p.save(fname, verbose=False)
+    print("wrote", fname)
+
+
+make_grid("iso", "plots/npi_eval_metrics_iso_span12.pdf")
+make_grid("cause", "plots/npi_eval_metrics_cause_span12.pdf")

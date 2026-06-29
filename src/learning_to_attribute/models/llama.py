@@ -23,9 +23,10 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
+    MASK_TYPES = {"mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
 
-    def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
+    def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False,
+                 num_spans=None):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
 
         self.model = model
@@ -33,6 +34,9 @@ class LlamaAttributionHooks:
         self.seq_len = seq_len
         self.sufficient = sufficient
         self.include_input = include_input and (mask_type == "node")
+        self.num_spans = num_spans          # for mlp_span: # of causalgym content spans
+        self.span_last = None               # per-batch [B, num_spans] long: base last-token pos/span
+        self.span_last_src = None           # per-batch [B, num_spans] long: source last-token pos/span
 
         config = model.config
         self.num_layers = config.num_hidden_layers
@@ -42,6 +46,13 @@ class LlamaAttributionHooks:
         self.hidden_size = config.hidden_size
 
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
+        self.mlp_tied_total = self.num_layers * self.intermediate_size  # per-(layer,neuron), tied over pos
+        self.mlp_span_total = (self.num_layers * num_spans * self.intermediate_size
+                               if num_spans else 0)  # per-(layer,span,neuron)
+        self.attn_span_total = (self.num_layers * num_spans * self.hidden_size
+                                if num_spans else 0)  # per-(layer,span,dim) o_proj input
+        self.attn_head_span_total = (self.num_layers * num_spans * self.num_heads
+                                     if num_spans else 0)  # per-(layer,span,head)
         self.attn_output_total = self.num_layers * seq_len
         self.attn_head_total = self.num_layers * seq_len * self.num_heads
         self.attn_dim_total = self.num_layers * seq_len * self.hidden_size  # per-dim o_proj input
@@ -50,6 +61,17 @@ class LlamaAttributionHooks:
 
         if mask_type == "mlp":
             self.total = self.mlp_total
+        elif mask_type == "mlp_tied":
+            self.total = self.mlp_tied_total
+        elif mask_type == "mlp_span":
+            assert num_spans, "mlp_span requires num_spans"
+            self.total = self.mlp_span_total
+        elif mask_type == "mlp+attn_span":
+            assert num_spans, "mlp+attn_span requires num_spans"
+            self.total = self.mlp_span_total + self.attn_span_total
+        elif mask_type == "mlp+attn_head_span":
+            assert num_spans, "mlp+attn_head_span requires num_spans"
+            self.total = self.mlp_span_total + self.attn_head_span_total
         elif mask_type == "attn_output":
             self.total = self.attn_output_total
         elif mask_type == "attn_head":
@@ -72,11 +94,11 @@ class LlamaAttributionHooks:
 
     @property
     def has_mlp(self):
-        return self.mask_type in ("mlp", "mlp+attn_head", "mlp+attn_dim", "node")
+        return self.mask_type in ("mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp+attn_head", "mlp+attn_dim", "node")
 
     @property
     def has_attn(self):
-        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "node")
+        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "mlp+attn_span", "mlp+attn_head_span", "node")
 
     @property
     def has_resid(self):
@@ -111,7 +133,13 @@ class LlamaAttributionHooks:
             parts.append(f"Node: {self.num_layers}L x ({self.num_heads}h + 1mlp){inp} = "
                          f"{self.node_total:,}")
         else:
-            if self.has_mlp:
+            if self.mask_type == "mlp_tied":
+                parts.append(f"MLP(tied over pos): {self.num_layers}L x "
+                             f"{self.intermediate_size}n = {self.mlp_tied_total:,}")
+            elif self.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span"):
+                parts.append(f"MLP(per-span): {self.num_layers}L x {self.num_spans}span x "
+                             f"{self.intermediate_size}n = {self.mlp_span_total:,}")
+            elif self.has_mlp:
                 parts.append(f"MLP: {self.num_layers}L x {self.seq_len}pos x "
                              f"{self.intermediate_size}n = {self.mlp_total:,}")
             if self.has_attn:
@@ -121,6 +149,12 @@ class LlamaAttributionHooks:
                 elif self.mask_type == "mlp+attn_dim":
                     parts.append(f"Attn(pre-out per-dim): {self.num_layers}L x {self.seq_len}pos x "
                                  f"{self.hidden_size}d = {self.attn_dim_total:,}")
+                elif self.mask_type == "mlp+attn_span":
+                    parts.append(f"Attn(per-span dim): {self.num_layers}L x {self.num_spans}span x "
+                                 f"{self.hidden_size}d = {self.attn_span_total:,}")
+                elif self.mask_type == "mlp+attn_head_span":
+                    parts.append(f"Attn(per-span head): {self.num_layers}L x {self.num_spans}span x "
+                                 f"{self.num_heads}h = {self.attn_head_span_total:,}")
                 else:
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
                                  f"{self.num_heads}h = {self.attn_head_total:,}")
@@ -205,6 +239,30 @@ class LlamaAttributionHooks:
                             off = self._node_offset
                             attn_count = self.num_layers * self.num_heads
                             m = self.mask[off + attn_count + li].view(1, 1, 1)
+                        elif self.mask_type == "mlp_tied":
+                            # per-(layer, neuron), tied/broadcast across all token positions
+                            start = li * self.intermediate_size
+                            end = start + self.intermediate_size
+                            m = self.mask[start:end].view(1, 1, self.intermediate_size)
+                        elif self.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span"):
+                            # per-(layer, span, neuron): node lives at each span's LAST token.
+                            # The cf (patch) is cross-aligned span-for-span: the SOURCE span's
+                            # last-token activation is written into the BASE span's last token.
+                            # Non-span positions stay clean (identity), which under _interpolate
+                            # means default m=0 if sufficient else 1.
+                            S, N = self.num_spans, self.intermediate_size
+                            per_span = self.mask[li * S * N:(li + 1) * S * N].view(S, N).to(x.dtype)
+                            B, seq = self.span_last.shape[0], x.shape[1]
+                            bidx = self.span_last[:, :, None].expand(B, S, N)        # base last pos
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, N), default_m)
+                            m = m.scatter(1, bidx, per_span[None].expand(B, S, N))
+                            cf_full = self.cf_acts_mlp.get(li)                       # [B, src_seq, N]
+                            cf_aligned = x.detach().clone() if cf_full is not None else None
+                            if cf_full is not None:
+                                sidx = self.span_last_src[:, :, None].expand(B, S, N)
+                                cf_aligned = cf_aligned.scatter(1, bidx, cf_full.gather(1, sidx))
+                            return self._interpolate(x, m, cf_aligned)
                         else:
                             start = li * self.seq_len * self.intermediate_size
                             end = start + self.seq_len * self.intermediate_size
@@ -249,6 +307,43 @@ class LlamaAttributionHooks:
                             end = off + self.seq_len * self.hidden_size
                             m = self.mask[off:end].view(1, self.seq_len, self.hidden_size)
                             return self._interpolate(x, m, cf)
+
+                        if self.mask_type == "mlp+attn_span":
+                            # per-(layer, span, dim) over o_proj input, node at each span's LAST
+                            # token, cross-aligned base<-src (mirrors the MLP-span branch).
+                            H, S = self.hidden_size, self.num_spans
+                            base = self.mlp_span_total + li * S * H
+                            per_span = self.mask[base:base + S * H].view(S, H).to(x.dtype)
+                            B = self.span_last.shape[0]
+                            bidx = self.span_last[:, :, None].expand(B, S, H)
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, H), default_m).scatter(1, bidx, per_span[None].expand(B, S, H))
+                            cf_aligned = x.detach().clone() if cf is not None else None
+                            if cf is not None:
+                                sidx = self.span_last_src[:, :, None].expand(B, S, H)
+                                cf_aligned = cf_aligned.scatter(1, bidx, cf.gather(1, sidx))
+                            return self._interpolate(x, m, cf_aligned)
+
+                        if self.mask_type == "mlp+attn_head_span":
+                            # per-(layer, span, head): one mask value per head (broadcast over
+                            # head_dim), node at each span's LAST token, cross-aligned base<-src.
+                            nh, Hd, S = self.num_heads, self.head_dim, self.num_spans
+                            base = self.mlp_span_total + li * S * nh
+                            per_span = self.mask[base:base + S * nh].view(S, nh).to(x.dtype)
+                            B = self.span_last.shape[0]
+                            x4 = x.view(B, seq, nh, Hd)
+                            bidx = self.span_last[:, :, None].expand(B, S, nh)
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, nh), default_m).scatter(
+                                1, bidx, per_span[None].expand(B, S, nh))[:, :, :, None]  # [B,seq,nh,1]
+                            cf4 = None
+                            if cf is not None:
+                                cf4 = x4.detach().clone()
+                                bidx4 = self.span_last[:, :, None, None].expand(B, S, nh, Hd)
+                                sidx4 = self.span_last_src[:, :, None, None].expand(B, S, nh, Hd)
+                                cf4 = cf4.scatter(1, bidx4, cf.view(B, -1, nh, Hd).gather(1, sidx4))
+                            out = self._interpolate(x4, m, cf4)
+                            return (out[0].reshape(B, seq, -1),)
 
                         # attn_head or mlp+attn_head
                         if self.mask_type == "attn_head":

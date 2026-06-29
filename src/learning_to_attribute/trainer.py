@@ -66,6 +66,7 @@ def learn_scores(
     on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
     log_every: int = 0,
     logger=None,
+    k_sampler=None,
 ) -> TrainResult:
     """Learn attribution ``scores`` over ``total`` nodes by minimizing ``loss_fn(mask)``.
 
@@ -104,6 +105,9 @@ def learn_scores(
             k = natural_k(scores)
         elif k_schedule == "natural":
             k = natural_k(scores)
+        elif k_sampler is not None:
+            # adaptive sampler owns k; loss_fn feeds it back per-step via k_sampler.observe(acc)
+            k = k_sampler.sample()
         else:
             k = sample_k(total, k_schedule)
 
