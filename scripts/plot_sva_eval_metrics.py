@@ -373,3 +373,64 @@ def make_grid(direction, fname, task="npi_any_subj-relc"):
 
 make_grid("iso", "plots/npi_eval_metrics_iso_span12.pdf")
 make_grid("cause", "plots/npi_eval_metrics_cause_span12.pdf")
+
+
+# --- NPI mlp+attn_head_span: acc loss x {iso,cause,joint} x {Adam, SGD+id-STE} + gradients ---
+# color = mode/method, linetype = optimizer.
+ACC_OPT = [
+    ("iso", "Adam", "sufficient_hard_topk_adam_acc_bs1_t05"),
+    ("iso", "SGD+id-STE", "sufficient_hard_topk_identity_sgd_acc_bs1_t05"),
+    ("cause", "Adam", "necessary_hard_topk_adam_acc_bs1_t05"),
+    ("cause", "SGD+id-STE", "necessary_hard_topk_identity_sgd_acc_bs1_t05"),
+    ("joint", "Adam", "joint_hard_topk_adam_acc_bs1_t05"),
+    ("joint", "SGD+id-STE", "joint_hard_topk_identity_sgd_acc_bs1_t05"),
+    ("IG", "gradient", "ig"), ("RelP", "gradient", "relp"), ("IxG", "gradient", "ixg"),
+]
+_ACC_COL = {"iso": "#e41a1c", "cause": "#377eb8", "joint": "#4daf4a",
+            "IG": "#984ea3", "RelP": "#ff7f00", "IxG": "#a65628"}
+
+
+def make_acc_opt(direction, fname, task="npi_any_subj-relc"):
+    rows = []
+    for grp, opt, tag in ACC_OPT:
+        fp = f"{RES}/{task}_{MODEL}_mlp-attn_head_span_{tag}.json"
+        try:
+            d = json.load(open(fp))
+        except FileNotFoundError:
+            print("skip (missing):", fp); continue
+        cur = d[f"{direction}_metrics"]
+        for mkey, mtitle in METRICS.items():
+            curve = _metric_curve(cur, mkey)
+            if curve is None:
+                continue
+            for n, v in zip(d["n_nodes"], curve):
+                rows.append({"grp": grp, "opt": opt, "n_nodes": n, "metric": mtitle, "value": v})
+    df = pd.DataFrame(rows)
+    df["grp"] = pd.Categorical(df["grp"], ["iso", "cause", "joint", "IG", "RelP", "IxG"])
+    df["opt"] = pd.Categorical(df["opt"], ["Adam", "SGD+id-STE", "gradient"])
+    df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
+    nrow = -(-df["metric"].nunique() // 3)
+    p = (ggplot(df, aes("n_nodes", "value", color="grp", linetype="opt"))
+         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
+         + geom_line(size=0.5)
+         + scale_x_log10(labels=log_labels)
+         + scale_color_manual(values=_ACC_COL, name="mode / method")
+         + scale_linetype_manual(values={"Adam": "solid", "SGD+id-STE": "dashed", "gradient": "dotted"})
+         + facet_wrap("metric", ncol=3, scales="free_y")
+         + labs(x="Circuit size (nodes)", y="Value", linetype="optimizer")
+         + theme(figure_size=(6.5, 1.5 * nrow)))
+    p.save(fname, verbose=False)
+    print("wrote", fname)
+
+
+make_acc_opt("iso", "plots/npi_eval_metrics_iso_accopt.pdf")
+make_acc_opt("cause", "plots/npi_eval_metrics_cause_accopt.pdf")
+
+# --- NPI SAE: acc-iso, MLP-out vs resid SAE x {Adam, SGD+id-STE} ---
+SAE_METHODS = [
+    ("Adam", "sufficient_hard_topk_adam_acc_bs1_t05"),
+    ("SGD+id-STE", "sufficient_hard_topk_identity_sgd_acc_bs1_t05"),
+]
+SAE_NODESETS = [("mlp_sae_span", "MLP-out SAE"), ("resid_sae_span", "resid SAE")]
+make("iso", "plots/npi_eval_metrics_iso_sae.pdf", "npi_any_subj-relc", SAE_METHODS, SAE_NODESETS)
+make("cause", "plots/npi_eval_metrics_cause_sae.pdf", "npi_any_subj-relc", SAE_METHODS, SAE_NODESETS)

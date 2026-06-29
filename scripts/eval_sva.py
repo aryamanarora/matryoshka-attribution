@@ -93,6 +93,8 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     node by g . (clean - patch), summed over a batch. relp=True applies the RelP modified
     backward first (LN-freeze + MLP gate rule + QK-detach). [RelP backward not yet ported.]
     """
+    if hooker.mask_type in ("mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"):
+        raise NotImplementedError("gradient attribution not supported for SAE/DAS nodes; use --method mattr")
     if relp:
         from learning_to_attribute.grad_attribution import install_relp, revert_relp
         install_relp(hf)
@@ -239,10 +241,10 @@ def main():
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
-    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span"])
+    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
-    p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary"])
+    p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
     p.add_argument("--loss", default="logit_diff",
                    choices=["logit_diff", "ce", "logit", "hinge", "prob", "acc"],
                    help="training loss: logit-diff (base-source), CE on base, raw base logit, "
@@ -251,6 +253,10 @@ def main():
                         "of accuracy 1[base>source])")
     p.add_argument("--hinge-margin", type=float, default=2.0, help="margin (logits) for --loss hinge")
     p.add_argument("--acc-temp", type=float, default=1.0, help="temperature for --loss acc (smaller=sharper)")
+    p.add_argument("--sae-repo", default=None, help="Llama-Scope SAE repo (auto: LXM for mlp_sae_span, LXR for resid_sae_span)")
+    p.add_argument("--sae-dtype", default="float32", choices=["float32", "bfloat16"])
+    p.add_argument("--das-dim", type=int, default=None, help="DAS rotation subspace rank (default d_model)")
+    p.add_argument("--das-lr", type=float, default=1e-3, help="lr for the DAS rotation params")
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
     p.add_argument("--k-schedule", default="log",
                    choices=["uniform", "log", "adaptive_log", "log_both"])
@@ -291,11 +297,25 @@ def main():
     seq_len = lens.most_common(1)[0][0]
     logger.info("seq_len=%d (modal clean length; %s)", seq_len, dict(lens))
 
-    SPAN = args.nodes in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span")
+    SAE = args.nodes in ("mlp_sae_span", "resid_sae_span")
+    DAS = args.nodes in ("das_mlp_span", "das_resid_span")
+    SPAN = args.nodes in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span") or SAE or DAS
     corrupt_topk = args.mode == "necessary"
     hooker = LlamaAttributionHooks(hf, args.nodes, seq_len=seq_len,
                                    sufficient=corrupt_topk, include_input=False,
                                    num_spans=(NUM_SPANS if SPAN else None))
+    if SAE:
+        from learning_to_attribute.sae_loader import load_llama_scope_saes
+        comp = "M" if args.nodes == "mlp_sae_span" else "R"
+        repo = args.sae_repo or f"fnlp/Llama3_1-8B-Base-LX{comp}-8x"
+        sdt = torch.float32 if args.sae_dtype == "float32" else torch.bfloat16
+        logger.info("Loading %d Llama-Scope SAEs (%s, component=%s, %s)...",
+                    hooker.num_layers, repo, comp, sdt)
+        hooker.set_saes(load_llama_scope_saes(repo, hooker.num_layers, device, dtype=sdt, component=comp))
+    if DAS:
+        logger.info("Creating %d DAS rotations (d_model=%d -> rot-dim=%d)...",
+                    hooker.num_layers, hooker.hidden_size, args.das_dim or hooker.hidden_size)
+        hooker.set_das(args.das_dim, device=device, dtype=torch.float32)
     total = hooker.total
     logger.info("Nodes (%s): %s", args.nodes, hooker.describe())
     if SPAN:
@@ -350,7 +370,11 @@ def main():
         cl, co, ci, ii = sample_batch(train, args.train_batch_size, n_train)
         if not cl:
             return None
-        ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=corrupt_topk)
+        # joint mode: each step flips a coin between iso (sufficiency) and cause (necessity),
+        # training one circuit to both recover base (keep top-k clean) and force source
+        # (corrupt top-k). Otherwise use the fixed direction.
+        step_cause = (torch.rand(1).item() < 0.5) if args.mode == "joint" else corrupt_topk
+        ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=step_cause)
         ar = torch.arange(ll.shape[0], device=device)
         if k_sampler is not None:  # feed adaptive-k sampler the decided fraction at this k
             with torch.no_grad():
@@ -359,7 +383,7 @@ def main():
         # base-only losses target the BASE token for iso (retain base behaviour) and the
         # SOURCE token for cause (force source behaviour, i.e. the interchange counterfactual).
         # Both directions MINIMIZE CE / MAXIMIZE prob & logit of the target token.
-        tgt = inc if corrupt_topk else cor
+        tgt = inc if step_cause else cor
         if args.loss == "ce":
             return torch.nn.functional.cross_entropy(ll, tgt)
         if args.loss == "logit":
@@ -372,16 +396,16 @@ def main():
             # soft 0-1 / sigmoid surrogate for accuracy 1[d>0]: gradient peaks at the decision
             # boundary (d=0) and vanishes for confidently-correct AND hopeless examples, so it
             # spends capacity only on flippable cases. iso wants d>0; cause wants d<0.
-            arg = (-d if not corrupt_topk else d) / args.acc_temp
+            arg = (-d if not step_cause else d) / args.acc_temp
             return torch.sigmoid(arg).mean()
         if args.loss == "hinge":
             # margin hinge: reward flipping the DECISION (base>source by margin), then
             # saturate -- no gradient once an example is decided, so capacity goes to
             # undecided examples / fewer nodes rather than widening an already-won gap.
             # iso: want d>=margin; cause: want -d>=margin.
-            h = torch.relu(args.hinge_margin - (d if not corrupt_topk else -d))
+            h = torch.relu(args.hinge_margin - (d if not step_cause else -d))
             return h.mean()
-        return d.mean() if corrupt_topk else -d.mean()
+        return d.mean() if step_cause else -d.mean()
 
     if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
@@ -390,10 +414,12 @@ def main():
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
+        # DAS jointly learns the rotation matrices (a second param group) alongside scores.
+        das_params = hooker.das_parameters() if DAS else None
         res = learn_scores(total, loss_fn, steps=args.steps, variant=args.variant,
                            k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
                            lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device,
-                           k_sampler=k_sampler)
+                           k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr)
         scores = res.scores.detach()
         if k_sampler is not None:
             logger.info("adaptive-k final frontier: k_max=%.0f (%.2f%% of %d)",
