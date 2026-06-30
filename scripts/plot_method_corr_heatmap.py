@@ -39,6 +39,8 @@ METHODS = [
     ("+Gumbel",        "mib_node_hard_topk_gumbel",                     "flat"),
     ("+soft",          "final_node",                                    "flat"),
     ("$-c_k$",         "mib_node_detached_tau",                         "flat"),
+    ("+id-STE",        "mib_node_identity_sgd",                         "flat"),
+    ("+id-STE log",    "mib_node_identity_sgd_log",                     "flat"),
     ("NAP-IG",         "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
     ("Conductance",    "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
     ("I$\\times$G",    "ig1/EAP-IG-inputs_patching_node",               "nested"),
