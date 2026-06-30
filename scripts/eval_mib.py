@@ -20,6 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import math
 
 from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES
+from learning_to_attribute.losses import attribution_loss
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
@@ -247,11 +248,11 @@ def main():
         last_logits = logits[torch.arange(actual_B, device=device), last_pos]
         correct_t = torch.tensor(correct_ids, device=device)
         incorrect_t = torch.tensor(incorrect_ids, device=device)
-        logit_diffs = last_logits[torch.arange(actual_B, device=device), correct_t] - \
-                      last_logits[torch.arange(actual_B, device=device), incorrect_t]
-        # necessary/noising: corrupting the circuit should break behavior (maximize diff);
-        # sufficient/denoising: circuit alone should retain clean behavior (minimize -diff).
-        return logit_diffs.mean() if corrupt_topk else -logit_diffs.mean()
+        # shared loss core: logit_diff = correct - incorrect; necessary/noising maximizes the
+        # break (returns diff.mean()), sufficient/denoising minimizes -diff. Bit-identical to the
+        # previous inline form.
+        return attribution_loss("logit_diff", last_logits, correct_t, incorrect_t,
+                                corrupt_topk=corrupt_topk)
 
     on_step = None
     if wandb:

@@ -19,6 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import learn_scores, sparsity_sweep
 from learning_to_attribute.schedules import AdaptiveLogK
+from learning_to_attribute.losses import attribution_loss, resolve_direction, LOSS_CHOICES
 from learning_to_attribute.data import SVADataset, CausalGymDataset
 from learning_to_attribute.models import LlamaAttributionHooks
 
@@ -245,18 +246,16 @@ def main():
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
-    p.add_argument("--loss", default="logit_diff",
-                   choices=["logit_diff", "ce", "logit", "hinge", "prob", "acc"],
-                   help="training loss: logit-diff (base-source), CE on base, raw base logit, "
-                        "hinge (flip decision by --hinge-margin then saturate), prob "
-                        "(softmax p(base), bounded [0,1]), or acc (sigmoid soft-0-1 surrogate "
-                        "of accuracy 1[base>source])")
+    p.add_argument("--loss", default="logit_diff", choices=list(LOSS_CHOICES),
+                   help="training loss (see learning_to_attribute.losses): logit_diff, ce, "
+                        "logit, prob (bounded), hinge (--hinge-margin), acc (soft-0-1, --acc-temp)")
     p.add_argument("--hinge-margin", type=float, default=2.0, help="margin (logits) for --loss hinge")
     p.add_argument("--acc-temp", type=float, default=1.0, help="temperature for --loss acc (smaller=sharper)")
     p.add_argument("--sae-repo", default=None, help="Llama-Scope SAE repo (auto: LXM for mlp_sae_span, LXR for resid_sae_span)")
     p.add_argument("--sae-dtype", default="float32", choices=["float32", "bfloat16"])
     p.add_argument("--das-dim", type=int, default=None, help="DAS rotation subspace rank (default d_model)")
     p.add_argument("--das-lr", type=float, default=1e-3, help="lr for the DAS rotation params")
+    p.add_argument("--das-optimizer", default="adam", choices=["adam", "sgd"], help="optimizer for the DAS rotation (separate from --optimizer for scores)")
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
     p.add_argument("--k-schedule", default="log",
                    choices=["uniform", "log", "adaptive_log", "log_both"])
@@ -370,42 +369,15 @@ def main():
         cl, co, ci, ii = sample_batch(train, args.train_batch_size, n_train)
         if not cl:
             return None
-        # joint mode: each step flips a coin between iso (sufficiency) and cause (necessity),
-        # training one circuit to both recover base (keep top-k clean) and force source
-        # (corrupt top-k). Otherwise use the fixed direction.
-        step_cause = (torch.rand(1).item() < 0.5) if args.mode == "joint" else corrupt_topk
+        step_cause = resolve_direction(args.mode, corrupt_topk)   # joint -> per-step coin flip
         ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=step_cause)
-        ar = torch.arange(ll.shape[0], device=device)
         if k_sampler is not None:  # feed adaptive-k sampler the decided fraction at this k
+            ar = torch.arange(ll.shape[0], device=device)
             with torch.no_grad():
                 dec = (ll[ar, cor] > ll[ar, inc]).float().mean().item()
             k_sampler.observe(dec)
-        # base-only losses target the BASE token for iso (retain base behaviour) and the
-        # SOURCE token for cause (force source behaviour, i.e. the interchange counterfactual).
-        # Both directions MINIMIZE CE / MAXIMIZE prob & logit of the target token.
-        tgt = inc if step_cause else cor
-        if args.loss == "ce":
-            return torch.nn.functional.cross_entropy(ll, tgt)
-        if args.loss == "logit":
-            return -ll[ar, tgt].mean()
-        if args.loss == "prob":
-            # softmax p(target): bounded in [0,1], self-saturates as p->1 (no gap-padding).
-            return -ll.softmax(-1)[ar, tgt].mean()
-        d = ll[ar, cor] - ll[ar, inc]
-        if args.loss == "acc":
-            # soft 0-1 / sigmoid surrogate for accuracy 1[d>0]: gradient peaks at the decision
-            # boundary (d=0) and vanishes for confidently-correct AND hopeless examples, so it
-            # spends capacity only on flippable cases. iso wants d>0; cause wants d<0.
-            arg = (-d if not step_cause else d) / args.acc_temp
-            return torch.sigmoid(arg).mean()
-        if args.loss == "hinge":
-            # margin hinge: reward flipping the DECISION (base>source by margin), then
-            # saturate -- no gradient once an example is decided, so capacity goes to
-            # undecided examples / fewer nodes rather than widening an already-won gap.
-            # iso: want d>=margin; cause: want -d>=margin.
-            h = torch.relu(args.hinge_margin - (d if not step_cause else -d))
-            return h.mean()
-        return d.mean() if step_cause else -d.mean()
+        return attribution_loss(args.loss, ll, cor, inc, corrupt_topk=step_cause,
+                                hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
 
     if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
@@ -419,7 +391,8 @@ def main():
         res = learn_scores(total, loss_fn, steps=args.steps, variant=args.variant,
                            k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
                            lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device,
-                           k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr)
+                           k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr,
+                           extra_optimizer=(args.das_optimizer if DAS else None))
         scores = res.scores.detach()
         if k_sampler is not None:
             logger.info("adaptive-k final frontier: k_max=%.0f (%.2f%% of %d)",
