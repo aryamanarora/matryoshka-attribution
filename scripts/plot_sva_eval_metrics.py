@@ -434,3 +434,50 @@ SAE_METHODS = [
 SAE_NODESETS = [("mlp_sae_span", "MLP-out SAE"), ("resid_sae_span", "resid SAE")]
 make("iso", "plots/npi_eval_metrics_iso_sae.pdf", "npi_any_subj-relc", SAE_METHODS, SAE_NODESETS)
 make("cause", "plots/npi_eval_metrics_cause_sae.pdf", "npi_any_subj-relc", SAE_METHODS, SAE_NODESETS)
+
+# --- NPI acc-iso: neuron vs DAS-64 vs SAE, MLP-out & resid (5 node families, overlaid) ---
+NODE5 = [  # (label, nodeset key)
+    ("neuron (MLP)", "mlp_span"),
+    ("DAS-64 MLP-out", "das_mlp_span"),
+    ("DAS-64 resid", "das_resid_span"),
+    ("SAE MLP-out", "mlp_sae_span"),
+    ("SAE resid", "resid_sae_span"),
+]
+def make_node5(direction, fname, task="npi_any_subj-relc",
+               tag="sufficient_hard_topk_adam_acc_bs1_t05"):
+    rows = []
+    for label, nkey in NODE5:
+        try:
+            d = json.load(open(f"{RES}/{task}_{MODEL}_{nkey}_{tag}.json"))
+        except FileNotFoundError:
+            print("skip:", nkey); continue
+        cur = d[f"{direction}_metrics"]
+        for mkey, mtitle in METRICS.items():
+            curve = _metric_curve(cur, mkey)
+            if curve is None:
+                continue
+            for n, v in zip(d["n_nodes"], curve):
+                rows.append({"method": label, "n_nodes": n, "metric": mtitle, "value": v})
+    df = pd.DataFrame(rows)
+    df["method"] = pd.Categorical(df["method"], [m[0] for m in NODE5])
+    df["metric"] = pd.Categorical(df["metric"], list(METRICS.values()))
+    nrow = -(-df["metric"].nunique() // 3)
+    p = (ggplot(df, aes("n_nodes", "value", color="method"))
+         + geom_hline(yintercept=[0, 1], linetype="dashed", color="#cccccc", size=0.25)
+         + geom_line(size=0.5) + geom_point(size=0.35)
+         + scale_x_log10(labels=log_labels)
+         + scale_color_brewer(type="qual", palette="Set1")
+         + facet_wrap("metric", ncol=3, scales="free_y")
+         + labs(x="Circuit size (nodes)", y="Value", color="")
+         + theme(figure_size=(6.5, 1.5 * nrow)))
+    p.save(fname, verbose=False); print("wrote", fname)
+
+make_node5("iso", "plots/npi_eval_metrics_iso_node5.pdf")
+make_node5("cause", "plots/npi_eval_metrics_cause_node5.pdf")
+
+# --- NPI DAS-64: MLP-out vs resid x {acc, CE} loss ---
+DAS_METHODS = [("acc", "sufficient_hard_topk_adam_acc_bs1_t05"),
+               ("CE", "sufficient_hard_topk_adam_ce_bs1")]
+DAS_NODESETS = [("das_mlp_span", "DAS MLP-out"), ("das_resid_span", "DAS resid")]
+make("iso", "plots/npi_eval_metrics_iso_das.pdf", "npi_any_subj-relc", DAS_METHODS, DAS_NODESETS)
+make("cause", "plots/npi_eval_metrics_cause_das.pdf", "npi_any_subj-relc", DAS_METHODS, DAS_NODESETS)

@@ -42,7 +42,12 @@ class RotateLayer(nn.Module):
 
 def make_rotate_layer(d_model, das_dim=None):
     layer = RotateLayer(d_model, das_dim)
-    return nn.utils.parametrizations.orthogonal(layer)
+    # householder: semi-orthogonal weight stored low-rank as das_dim reflection vectors
+    # ([d_model, das_dim]). NOTE PyTorch already auto-selects householder for tall matrices,
+    # so this is explicit-not-a-speedup. The cost is APPLYING the product of das_dim
+    # reflections, recomputed (+ backprop) per layer per step; across many layers this is the
+    # DAS-training bottleneck, not the d_model x das_dim storage.
+    return nn.utils.parametrizations.orthogonal(layer, orthogonal_map="householder")
 
 
 def householder_product(V):

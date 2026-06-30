@@ -61,6 +61,7 @@ def learn_scores(
     manual_backward: bool = False,
     extra_params: Optional[list] = None,
     lr_extra: Optional[float] = None,
+    extra_optimizer: Optional[str] = None,
     device="cpu",
     init_scores: Optional[torch.Tensor] = None,
     on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
@@ -83,10 +84,18 @@ def learn_scores(
     bias = nn.Parameter(torch.zeros(1, device=device)) if use_bias else None
 
     main_params = [scores] + ([bias] if use_bias else [])
-    groups = [{"params": main_params, "lr": lr}]
-    if extra_params:
-        groups.append({"params": list(extra_params), "lr": lr_extra if lr_extra is not None else lr})
     opt_cls = torch.optim.SGD if optimizer == "sgd" else torch.optim.Adam
+    groups = [{"params": main_params, "lr": lr}]
+    extra_optimizer_ = None
+    if extra_params:
+        elr = lr_extra if lr_extra is not None else lr
+        if extra_optimizer is not None and extra_optimizer != optimizer:
+            # extra params (e.g. DAS rotation) get their OWN optimizer -- lets the scores use
+            # SGD (id-STE magnitude signal) while the rotation uses Adam (manifold param).
+            ecls = torch.optim.SGD if extra_optimizer == "sgd" else torch.optim.Adam
+            extra_optimizer_ = ecls([{"params": list(extra_params), "lr": elr}])
+        else:
+            groups.append({"params": list(extra_params), "lr": elr})
     optimizer_ = opt_cls(groups)
 
     result = TrainResult(scores=scores, bias=bias)
@@ -117,6 +126,8 @@ def learn_scores(
             mr = build_mask(scores, k, variant, T=T, n_iters=n_iters)
 
         optimizer_.zero_grad()
+        if extra_optimizer_ is not None:
+            extra_optimizer_.zero_grad()
         if manual_backward:
             # Caller owns the backward (e.g. loss.backward() inside an nnsight model.trace).
             # loss_fn applies the mask, computes the loss, backprops, and returns the scalar
@@ -143,6 +154,8 @@ def learn_scores(
                 loss.backward()
             loss_val = loss.item()
         optimizer_.step()
+        if extra_optimizer_ is not None:
+            extra_optimizer_.step()
 
         result.loss_log.append(loss_val)
         result.k_log.append(float(k))
