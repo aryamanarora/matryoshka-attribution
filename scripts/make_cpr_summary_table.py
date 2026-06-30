@@ -29,6 +29,8 @@ NODE = [
     ("$+$ soft, $-c_k$, log $k$", "o", ("mib_node_detached_tau_log",)),
     ("$+$ hard bwd", "o", ("mib_node_bernoulli_reinforce",)),
     ("$+$ hard, log $k$", "o", ("mib_node_bernoulli_reinforce_log",)),
+    ("$+$ id-STE, SGD", "o", ("mib_node_identity_sgd",)),
+    ("$+$ id-STE, SGD, log $k$", "o", ("mib_node_identity_sgd_log",)),
 ]
 EDGE = [
     ("EAP-IG-inp", "g", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),

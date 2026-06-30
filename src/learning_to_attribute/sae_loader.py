@@ -5,8 +5,9 @@ from safetensors.torch import load_file
 
 
 class LlamaScopeSAE:
-    def __init__(self, repo, layer, device, dtype=torch.bfloat16):
-        sub = f"Llama3_1-8B-Base-L{layer}R-8x"
+    def __init__(self, repo, layer, device, dtype=torch.bfloat16, component="R"):
+        # component: "R" residual stream (LXR repo), "M" MLP output (LXM repo)
+        sub = f"Llama3_1-8B-Base-L{layer}{component}-8x"
         sd = load_file(hf_hub_download(repo, f"{sub}/checkpoints/final.safetensors"))
         hp = json.load(open(hf_hub_download(repo, f"{sub}/hyperparams.json")))
         self.W_enc = sd["encoder.weight"].to(device, dtype)   # [d_sae, d_model]
@@ -28,7 +29,7 @@ class LlamaScopeSAE:
         return (g.to(self.W_dec.dtype) @ self.W_dec.T) / self.s
 
 
-def load_llama_scope_saes(repo, n_layers, device, dtype=torch.float32):
+def load_llama_scope_saes(repo, n_layers, device, dtype=torch.float32, component="R"):
     # float32 by default: the bf16 interchange overflowed to NaN when feature
     # deltas are injected across all 32 layers during training.
-    return {li: LlamaScopeSAE(repo, li, device, dtype) for li in range(n_layers)}
+    return {li: LlamaScopeSAE(repo, li, device, dtype, component) for li in range(n_layers)}

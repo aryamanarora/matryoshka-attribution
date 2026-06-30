@@ -1,0 +1,62 @@
+2026-06-25 23:10:40,553 INFO __main__: Loading gpt2-small...
+2026-06-25 23:10:40,786 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-25 23:10:40,957 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 2491.51it/s]
+2026-06-25 23:10:41,560 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-25 23:10:41,720 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-25 23:10:41,880 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-25 23:10:42,041 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:10:42,188 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:42,339 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:10:42,492 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-25 23:10:44,463 INFO __main__: Graph: 158 nodes, 32491 edges (32491 real)
+2026-06-25 23:10:44,617 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:10:44,633 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/mib-bench/ioi/e5f3468f3af4c0883be35cd3bced8c711c95d286/README.md "HTTP/1.1 200 OK"
+2026-06-25 23:10:44,790 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/ioi.py "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:45,216 INFO httpx: HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/mib-bench/ioi/mib-bench/ioi.py "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:45,372 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/revision/e5f3468f3af4c0883be35cd3bced8c711c95d286 "HTTP/1.1 200 OK"
+2026-06-25 23:10:45,521 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/.huggingface.yaml "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:45,755 INFO httpx: HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=mib-bench/ioi "HTTP/1.1 200 OK"
+2026-06-25 23:10:45,903 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/tree/e5f3468f3af4c0883be35cd3bced8c711c95d286/data?recursive=true&expand=false "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:46,054 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/tree/e5f3468f3af4c0883be35cd3bced8c711c95d286?recursive=false&expand=false "HTTP/1.1 200 OK"
+2026-06-25 23:10:46,257 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/dataset_infos.json "HTTP/1.1 404 Not Found"
+Filter:   0%|          | 0/10000 [00:00<?, ? examples/s]Filter:  10%|█         | 1000/10000 [00:00<00:01, 8380.71 examples/s]Filter:  20%|██        | 2000/10000 [00:00<00:00, 8255.89 examples/s]Filter:  30%|███       | 3000/10000 [00:00<00:00, 8119.46 examples/s]Filter:  40%|████      | 4000/10000 [00:00<00:00, 8343.70 examples/s]Filter:  50%|█████     | 5000/10000 [00:00<00:00, 8586.63 examples/s]Filter:  60%|██████    | 6000/10000 [00:00<00:00, 8687.31 examples/s]Filter:  70%|███████   | 7000/10000 [00:00<00:00, 8749.17 examples/s]Filter:  80%|████████  | 8000/10000 [00:01<00:00, 6101.95 examples/s]Filter:  90%|█████████ | 9000/10000 [00:01<00:00, 6779.53 examples/s]Filter: 100%|██████████| 10000/10000 [00:01<00:00, 7296.19 examples/s]Filter: 100%|██████████| 10000/10000 [00:01<00:00, 7567.47 examples/s]
+2026-06-25 23:10:48,117 INFO __main__: Loaded 10000 examples
+2026-06-25 23:10:48,118 INFO __main__: Edge scores: 32491 parameters
+2026-06-25 23:10:48,118 INFO __main__: Training for 20 steps (mode=sufficient, k_schedule=uniform, live activations)...
+2026-06-25 23:10:48,985 INFO __main__: Step    1/20  loss=-0.0683  k=28666/32491  bias=0  (1.2 step/s)
+2026-06-25 23:10:52,381 INFO __main__: Training complete in 4.2s
+2026-06-25 23:10:52,383 INFO __main__: Running MIB evaluation (edge level)...
+2026-06-25 23:10:52,631 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+2026-06-25 23:10:52,644 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/mib-bench/ioi/e5f3468f3af4c0883be35cd3bced8c711c95d286/README.md "HTTP/1.1 200 OK"
+2026-06-25 23:10:52,799 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/ioi.py "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:53,187 INFO httpx: HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/mib-bench/ioi/mib-bench/ioi.py "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:53,353 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/.huggingface.yaml "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:53,603 INFO httpx: HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=mib-bench/ioi "HTTP/1.1 200 OK"
+2026-06-25 23:10:53,758 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/tree/e5f3468f3af4c0883be35cd3bced8c711c95d286/data?recursive=true&expand=false "HTTP/1.1 404 Not Found"
+2026-06-25 23:10:53,964 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/dataset_infos.json "HTTP/1.1 404 Not Found"
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 27.30it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 32.05it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.50it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.32it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 33.16it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.54it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.28it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.17it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 28.90it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 29.91it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00, 30.83it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00,  9.62it/s]100%|██████████| 1/1 [00:00<00:00,  9.52it/s]
+2026-06-25 23:10:55,266 INFO __main__: MIB Results (edge level, live activations):
+2026-06-25 23:10:55,267 INFO __main__:     0.1% -> CPR=0.0011
+2026-06-25 23:10:55,267 INFO __main__:     0.2% -> CPR=0.0011
+2026-06-25 23:10:55,268 INFO __main__:     0.5% -> CPR=0.0011
+2026-06-25 23:10:55,269 INFO __main__:     1.0% -> CPR=0.0204
+2026-06-25 23:10:55,269 INFO __main__:     2.0% -> CPR=0.6936
+2026-06-25 23:10:55,270 INFO __main__:     5.0% -> CPR=1.5381
+2026-06-25 23:10:55,270 INFO __main__:    10.0% -> CPR=2.1935
+2026-06-25 23:10:55,271 INFO __main__:    20.0% -> CPR=2.7914
+2026-06-25 23:10:55,272 INFO __main__:    50.0% -> CPR=2.7229
+2026-06-25 23:10:55,272 INFO __main__:   100.0% -> CPR=1.0000
+2026-06-25 23:10:55,273 INFO __main__:   CPR AUC=2.1375  Avg CPR=1.0963
+2026-06-25 23:10:55,295 INFO __main__: Saved results to results/smoke_edge_topk

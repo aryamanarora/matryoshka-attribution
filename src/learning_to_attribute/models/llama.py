@@ -23,9 +23,10 @@ class LlamaAttributionHooks:
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "attn_output", "attn_head", "mlp+attn_head", "resid", "resid_dim", "node", "das", "sae"}
+    MASK_TYPES = {"mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
 
-    def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False):
+    def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False,
+                 num_spans=None):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
 
         self.model = model
@@ -33,6 +34,14 @@ class LlamaAttributionHooks:
         self.seq_len = seq_len
         self.sufficient = sufficient
         self.include_input = include_input and (mask_type == "node")
+        self.num_spans = num_spans          # for mlp_span: # of causalgym content spans
+        self.span_last = None               # per-batch [B, num_spans] long: base last-token pos/span
+        self.span_last_src = None           # per-batch [B, num_spans] long: source last-token pos/span
+        self.saes = None                    # {layer: LlamaScopeSAE} for *_sae_span
+        self.d_sae = None; self.sae_width = None
+        self.cf_acts_saemlp = {}            # cached src MLP-out (down_proj output) per layer
+        self.R = {}                        # {layer: RotateLayer} for das_*_span
+        self.das_dim = None
 
         config = model.config
         self.num_layers = config.num_hidden_layers
@@ -42,19 +51,46 @@ class LlamaAttributionHooks:
         self.hidden_size = config.hidden_size
 
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
+        self.mlp_tied_total = self.num_layers * self.intermediate_size  # per-(layer,neuron), tied over pos
+        self.mlp_span_total = (self.num_layers * num_spans * self.intermediate_size
+                               if num_spans else 0)  # per-(layer,span,neuron)
+        self.attn_span_total = (self.num_layers * num_spans * self.hidden_size
+                                if num_spans else 0)  # per-(layer,span,dim) o_proj input
+        self.attn_head_span_total = (self.num_layers * num_spans * self.num_heads
+                                     if num_spans else 0)  # per-(layer,span,head)
         self.attn_output_total = self.num_layers * seq_len
         self.attn_head_total = self.num_layers * seq_len * self.num_heads
+        self.attn_dim_total = self.num_layers * seq_len * self.hidden_size  # per-dim o_proj input
         self.resid_total = self.num_layers * seq_len
         self.node_total = self.num_layers * self.num_heads + self.num_layers + (1 if self.include_input else 0)
 
         if mask_type == "mlp":
             self.total = self.mlp_total
+        elif mask_type == "mlp_tied":
+            self.total = self.mlp_tied_total
+        elif mask_type == "mlp_span":
+            assert num_spans, "mlp_span requires num_spans"
+            self.total = self.mlp_span_total
+        elif mask_type == "mlp+attn_span":
+            assert num_spans, "mlp+attn_span requires num_spans"
+            self.total = self.mlp_span_total + self.attn_span_total
+        elif mask_type == "mlp+attn_head_span":
+            assert num_spans, "mlp+attn_head_span requires num_spans"
+            self.total = self.mlp_span_total + self.attn_head_span_total
+        elif mask_type in ("mlp_sae_span", "resid_sae_span"):
+            assert num_spans, "*_sae_span requires num_spans"
+            self.total = 0   # set by set_saes() once SAE width is known
+        elif mask_type in ("das_mlp_span", "das_resid_span"):
+            assert num_spans, "das_*_span requires num_spans"
+            self.total = 0   # set by set_das() once das_dim is known
         elif mask_type == "attn_output":
             self.total = self.attn_output_total
         elif mask_type == "attn_head":
             self.total = self.attn_head_total
         elif mask_type == "mlp+attn_head":
             self.total = self.mlp_total + self.attn_head_total
+        elif mask_type == "mlp+attn_dim":
+            self.total = self.mlp_total + self.attn_dim_total
         elif mask_type == "resid":
             self.total = self.resid_total
         elif mask_type == "node":
@@ -69,11 +105,11 @@ class LlamaAttributionHooks:
 
     @property
     def has_mlp(self):
-        return self.mask_type in ("mlp", "mlp+attn_head", "node")
+        return self.mask_type in ("mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp+attn_head", "mlp+attn_dim", "node")
 
     @property
     def has_attn(self):
-        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "node")
+        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "mlp+attn_span", "mlp+attn_head_span", "node")
 
     @property
     def has_resid(self):
@@ -82,6 +118,36 @@ class LlamaAttributionHooks:
     @property
     def is_node(self):
         return self.mask_type == "node"
+
+    @property
+    def is_sae(self):
+        return self.mask_type in ("mlp_sae_span", "resid_sae_span")
+
+    def set_saes(self, saes):
+        """Provide per-layer frozen SAEs (.encode/.decode_delta/.d_sae). Sets the node layout:
+        per-(layer, span, d_sae feature) + 1 per-(layer,span) reconstruction-error node."""
+        assert self.is_sae, "set_saes only for *_sae_span"
+        self.saes = saes
+        self.d_sae = next(iter(saes.values())).d_sae
+        self.sae_width = self.d_sae + 1
+        self.total = self.num_layers * self.num_spans * self.sae_width
+
+    @property
+    def is_das(self):
+        return self.mask_type in ("das_mlp_span", "das_resid_span")
+
+    def set_das(self, das_dim=None, device="cpu", dtype=torch.float32):
+        """Create per-layer learned orthogonal DAS rotations (d_model -> das_dim) and set the
+        node layout: per-(layer, span, das_dim) score in the rotated subspace."""
+        assert self.is_das, "set_das only for das_*_span"
+        from learning_to_attribute.sigmoid_das import make_rotate_layer
+        self.das_dim = das_dim or self.hidden_size
+        self.R = {li: make_rotate_layer(self.hidden_size, self.das_dim).to(device, dtype)
+                  for li in range(self.num_layers)}
+        self.total = self.num_layers * self.num_spans * self.das_dim
+
+    def das_parameters(self):
+        return [p for li in sorted(self.R) for p in self.R[li].parameters()]
 
     @property
     def _node_offset(self):
@@ -103,18 +169,41 @@ class LlamaAttributionHooks:
 
     def describe(self):
         parts = []
+        if self.is_sae:
+            site = "MLP-out" if self.mask_type == "mlp_sae_span" else "resid"
+            return (f"SAE({site}): {self.num_layers}L x {self.num_spans}span x "
+                    f"({self.d_sae}feat + 1err) = {self.total:,} total")
+        if self.is_das:
+            site = "MLP-out" if self.mask_type == "das_mlp_span" else "resid"
+            return (f"DAS({site}): {self.num_layers}L x {self.num_spans}span x "
+                    f"{self.das_dim}rot-dim = {self.total:,} total")
         if self.is_node:
             inp = "+input" if self.include_input else ""
             parts.append(f"Node: {self.num_layers}L x ({self.num_heads}h + 1mlp){inp} = "
                          f"{self.node_total:,}")
         else:
-            if self.has_mlp:
+            if self.mask_type == "mlp_tied":
+                parts.append(f"MLP(tied over pos): {self.num_layers}L x "
+                             f"{self.intermediate_size}n = {self.mlp_tied_total:,}")
+            elif self.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span"):
+                parts.append(f"MLP(per-span): {self.num_layers}L x {self.num_spans}span x "
+                             f"{self.intermediate_size}n = {self.mlp_span_total:,}")
+            elif self.has_mlp:
                 parts.append(f"MLP: {self.num_layers}L x {self.seq_len}pos x "
                              f"{self.intermediate_size}n = {self.mlp_total:,}")
             if self.has_attn:
                 if self.mask_type == "attn_output":
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos = "
                                  f"{self.attn_output_total:,}")
+                elif self.mask_type == "mlp+attn_dim":
+                    parts.append(f"Attn(pre-out per-dim): {self.num_layers}L x {self.seq_len}pos x "
+                                 f"{self.hidden_size}d = {self.attn_dim_total:,}")
+                elif self.mask_type == "mlp+attn_span":
+                    parts.append(f"Attn(per-span dim): {self.num_layers}L x {self.num_spans}span x "
+                                 f"{self.hidden_size}d = {self.attn_span_total:,}")
+                elif self.mask_type == "mlp+attn_head_span":
+                    parts.append(f"Attn(per-span head): {self.num_layers}L x {self.num_spans}span x "
+                                 f"{self.num_heads}h = {self.attn_head_span_total:,}")
                 else:
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
                                  f"{self.num_heads}h = {self.attn_head_total:,}")
@@ -133,6 +222,16 @@ class LlamaAttributionHooks:
             hooks.append(self._get_embed_module().register_forward_hook(_embed_hook))
         for li in range(self.num_layers):
             layer = self._get_layer(li)
+            if self.is_sae or self.is_das:
+                mlp_site = self.mask_type in ("mlp_sae_span", "das_mlp_span")
+                mod = self._get_mlp_module(layer) if mlp_site else layer
+                cf_dict = self.cf_acts_saemlp if mlp_site else self.cf_acts_resid
+                def _post(idx, cfd):
+                    def hook(mod, inp, output):
+                        cfd[idx] = (output[0] if isinstance(output, tuple) else output).detach()
+                    return hook
+                hooks.append(mod.register_forward_hook(_post(li, cf_dict)))
+                continue
             if self.has_mlp:
                 def _mlp(idx):
                     def hook(mod, args):
@@ -169,8 +268,78 @@ class LlamaAttributionHooks:
                 return (x * m + cf_act * (1 - m),)
         return (x * m,)
 
+    def _sae_interchange(self, out, cf, layer_idx):
+        """SAE feature interchange at each span's LAST token, cross-aligned base<-src.
+        Node = per (span, feature) + 1 per-span reconstruction-error node. Reconstruction
+        error held at base; update = base + decode(masked feature delta) + masked err_diff.
+        sufficient (noising): mask=1 (top-k) -> source feature; else (denoising): mask=1 -> base."""
+        sae = self.saes.get(layer_idx)
+        if sae is None or cf is None or self.mask is None or self.span_last is None:
+            return out
+        S, dm, dsae, W = self.num_spans, out.shape[-1], self.d_sae, self.sae_width
+        B = self.span_last.shape[0]
+        off = layer_idx * S * W
+        per_span = self.mask[off:off + S * W].view(S, W)
+        wdt = sae.W_enc.dtype
+        mf = per_span[:, :dsae].to(wdt)[None]      # [1,S,dsae]
+        me = per_span[:, dsae].to(wdt)[None, :, None]   # [1,S,1]
+        bidx = self.span_last[:, :, None].expand(B, S, dm)
+        sidx = self.span_last_src[:, :, None].expand(B, S, dm)
+        b = out.gather(1, bidx).to(wdt)            # clean act at base span-last  [B,S,dm]
+        c = cf.gather(1, sidx).to(wdt)             # source act at src span-last
+        fb, fc = sae.encode(b), sae.encode(c)
+        fd = fc - fb
+        err_diff = (c - b) - sae.decode_delta(fd)
+        if self.sufficient:
+            new = b + sae.decode_delta(mf * fd) + me * err_diff
+        else:
+            new = b + sae.decode_delta((1.0 - mf) * fd) + (1.0 - me) * err_diff
+        # numerical guard: cap per-(B,S) norm at 8x source norm; fall back to source on NaN
+        nn = new.norm(dim=-1, keepdim=True); cap = 8.0 * c.norm(dim=-1, keepdim=True) + 1e-6
+        new = torch.where(torch.isfinite(nn) & (nn > cap), new * cap / nn, new)
+        new = torch.where(torch.isfinite(new), new, c)
+        return out.scatter(1, bidx, new.to(out.dtype))
+
+    def _das_interchange(self, out, cf, layer_idx):
+        """DAS interchange in a learned orthogonal subspace at each span's LAST token,
+        cross-aligned base<-src. Node = per (span, das_dim) score in the rotated space."""
+        rot = self.R.get(layer_idx)
+        if rot is None or cf is None or self.mask is None or self.span_last is None:
+            return out
+        S, dm, dd = self.num_spans, out.shape[-1], self.das_dim
+        B = self.span_last.shape[0]
+        off = layer_idx * S * dd
+        per_span = self.mask[off:off + S * dd].view(S, dd)
+        bidx = self.span_last[:, :, None].expand(B, S, dm)
+        sidx = self.span_last_src[:, :, None].expand(B, S, dm)
+        b = out.gather(1, bidx)
+        c = cf.gather(1, sidx)
+        m = per_span.to(b.dtype)[None]                 # [1, S, das_dim]
+        new = rot.intervene(b, c, m, sufficient=self.sufficient)   # [B, S, d_model]
+        return out.scatter(1, bidx, new.to(out.dtype))
+
     def register_hooks(self):
         self.remove_hooks()
+
+        if self.is_sae or self.is_das:
+            interchange = self._sae_interchange if self.is_sae else self._das_interchange
+            mlp_site = self.mask_type in ("mlp_sae_span", "das_mlp_span")
+            for layer_idx in range(self.num_layers):
+                layer = self._get_layer(layer_idx)
+                mod = self._get_mlp_module(layer) if mlp_site else layer
+                cf_dict = self.cf_acts_saemlp if mlp_site else self.cf_acts_resid
+
+                def make_post_hook(li, cfd):
+                    def hook(mod, inp, output):
+                        if self.mask is None:
+                            return
+                        tup = isinstance(output, tuple)
+                        out = output[0] if tup else output
+                        new = interchange(out, cfd.get(li), li)
+                        return ((new,) + tuple(output[1:])) if tup else new
+                    return hook
+                self._hooks.append(mod.register_forward_hook(make_post_hook(layer_idx, cf_dict)))
+            return
 
         # Input embedding hook (node mask with include_input)
         if self.include_input:
@@ -199,6 +368,30 @@ class LlamaAttributionHooks:
                             off = self._node_offset
                             attn_count = self.num_layers * self.num_heads
                             m = self.mask[off + attn_count + li].view(1, 1, 1)
+                        elif self.mask_type == "mlp_tied":
+                            # per-(layer, neuron), tied/broadcast across all token positions
+                            start = li * self.intermediate_size
+                            end = start + self.intermediate_size
+                            m = self.mask[start:end].view(1, 1, self.intermediate_size)
+                        elif self.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span"):
+                            # per-(layer, span, neuron): node lives at each span's LAST token.
+                            # The cf (patch) is cross-aligned span-for-span: the SOURCE span's
+                            # last-token activation is written into the BASE span's last token.
+                            # Non-span positions stay clean (identity), which under _interpolate
+                            # means default m=0 if sufficient else 1.
+                            S, N = self.num_spans, self.intermediate_size
+                            per_span = self.mask[li * S * N:(li + 1) * S * N].view(S, N).to(x.dtype)
+                            B, seq = self.span_last.shape[0], x.shape[1]
+                            bidx = self.span_last[:, :, None].expand(B, S, N)        # base last pos
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, N), default_m)
+                            m = m.scatter(1, bidx, per_span[None].expand(B, S, N))
+                            cf_full = self.cf_acts_mlp.get(li)                       # [B, src_seq, N]
+                            cf_aligned = x.detach().clone() if cf_full is not None else None
+                            if cf_full is not None:
+                                sidx = self.span_last_src[:, :, None].expand(B, S, N)
+                                cf_aligned = cf_aligned.scatter(1, bidx, cf_full.gather(1, sidx))
+                            return self._interpolate(x, m, cf_aligned)
                         else:
                             start = li * self.seq_len * self.intermediate_size
                             end = start + self.seq_len * self.intermediate_size
@@ -236,6 +429,50 @@ class LlamaAttributionHooks:
                             m = self.mask[off:off + self.seq_len].view(
                                 1, self.seq_len, 1)
                             return self._interpolate(x, m, cf)
+
+                        if self.mask_type == "mlp+attn_dim":
+                            # per-(pos, dim) over the o_proj input (pre-out, hidden_size)
+                            off = self.mlp_total + li * self.seq_len * self.hidden_size
+                            end = off + self.seq_len * self.hidden_size
+                            m = self.mask[off:end].view(1, self.seq_len, self.hidden_size)
+                            return self._interpolate(x, m, cf)
+
+                        if self.mask_type == "mlp+attn_span":
+                            # per-(layer, span, dim) over o_proj input, node at each span's LAST
+                            # token, cross-aligned base<-src (mirrors the MLP-span branch).
+                            H, S = self.hidden_size, self.num_spans
+                            base = self.mlp_span_total + li * S * H
+                            per_span = self.mask[base:base + S * H].view(S, H).to(x.dtype)
+                            B = self.span_last.shape[0]
+                            bidx = self.span_last[:, :, None].expand(B, S, H)
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, H), default_m).scatter(1, bidx, per_span[None].expand(B, S, H))
+                            cf_aligned = x.detach().clone() if cf is not None else None
+                            if cf is not None:
+                                sidx = self.span_last_src[:, :, None].expand(B, S, H)
+                                cf_aligned = cf_aligned.scatter(1, bidx, cf.gather(1, sidx))
+                            return self._interpolate(x, m, cf_aligned)
+
+                        if self.mask_type == "mlp+attn_head_span":
+                            # per-(layer, span, head): one mask value per head (broadcast over
+                            # head_dim), node at each span's LAST token, cross-aligned base<-src.
+                            nh, Hd, S = self.num_heads, self.head_dim, self.num_spans
+                            base = self.mlp_span_total + li * S * nh
+                            per_span = self.mask[base:base + S * nh].view(S, nh).to(x.dtype)
+                            B = self.span_last.shape[0]
+                            x4 = x.view(B, seq, nh, Hd)
+                            bidx = self.span_last[:, :, None].expand(B, S, nh)
+                            default_m = 0.0 if self.sufficient else 1.0
+                            m = x.new_full((B, seq, nh), default_m).scatter(
+                                1, bidx, per_span[None].expand(B, S, nh))[:, :, :, None]  # [B,seq,nh,1]
+                            cf4 = None
+                            if cf is not None:
+                                cf4 = x4.detach().clone()
+                                bidx4 = self.span_last[:, :, None, None].expand(B, S, nh, Hd)
+                                sidx4 = self.span_last_src[:, :, None, None].expand(B, S, nh, Hd)
+                                cf4 = cf4.scatter(1, bidx4, cf.view(B, -1, nh, Hd).gather(1, sidx4))
+                            out = self._interpolate(x4, m, cf4)
+                            return (out[0].reshape(B, seq, -1),)
 
                         # attn_head or mlp+attn_head
                         if self.mask_type == "attn_head":
