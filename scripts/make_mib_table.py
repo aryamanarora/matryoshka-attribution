@@ -179,6 +179,26 @@ def main():
         prefix = f"\\quad {name}" if indent else name
         return f"{prefix} & " + " & ".join(vals) + " \\\\"
 
+    def opt_of(results_dir):
+        # id-STE variants are trained with SGD; everything else with Adam.
+        return "sgd" if "identity" in results_dir else "adam"
+
+    def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
+        # Split the "Ours" rows into two optimizer sets, each with a header.
+        # Within a set: uniform-k = main rows, then the annotated log-k variants.
+        for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
+            rows_u = [(n, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
+            rows_o = [(n, g) for n, r, _, g in ours_list if opt_of(r) == opt]
+            if not rows_u and not rows_o:
+                continue
+            lines.append(f"\\textbf{{{label}}} \\\\")
+            for n, g in rows_u:
+                lines.append(make_row(n, all_results.get(f"{n}_{level}_{g}", {}), best, second,
+                                      indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
+            for n, g in rows_o:
+                lines.append(make_row(logk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
+                                      indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
+
     # Generate LaTeX
     ncols = len(COLUMNS)
     lines = []
@@ -243,15 +263,7 @@ def main():
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
-    lines.append("\\textbf{Ours} \\\\")
-    # uniform-k = main method
-    for method_name, _, _, group in node_uniform:
-        key = f"{method_name}_node_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
-    # log-k variants, annotated (no separate section)
-    for method_name, _, _, group in node_ours:
-        key = f"{method_name}_node_{group}"
-        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
+    emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs)
 
     # === Edge-level section ===
     lines.append("\\midrule")
@@ -281,15 +293,7 @@ def main():
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb, avg_second=eavs))
-    lines.append("\\textbf{Ours} \\\\")
-    # uniform-k = main method
-    for method_name, _, _, group in edge_uniform:
-        key = f"{method_name}_edge_{group}"
-        lines.append(make_row(method_name, all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER, avg_best=eavb, avg_second=eavs))
-    # log-k variants, annotated (no separate section)
-    for method_name, _, _, group in edge_ours:
-        key = f"{method_name}_edge_{group}"
-        lines.append(make_row(logk(method_name), all_results.get(key, {}), best_edge, second_edge, indent=True, dagger=EDGE_LLAMA_DAGGER, avg_best=eavb, avg_second=eavs))
+    emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs, dagger=EDGE_LLAMA_DAGGER)
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
