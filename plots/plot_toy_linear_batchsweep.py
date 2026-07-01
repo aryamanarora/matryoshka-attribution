@@ -6,7 +6,7 @@ Two subfigure-sized PDFs:
   2. toy_linear_batch_convrate.pdf  -- SAMPLES (steps*batch) to Spearman>=thresh vs batch
      (fair-compute view: y is total counterfactual pairs seen, not optimizer steps)
 
-Regenerate with: uv run python scripts/plot_toy_linear_batchsweep.py
+Regenerate with: uv run python plots/plot_toy_linear_batchsweep.py
 """
 import pickle
 from pathlib import Path

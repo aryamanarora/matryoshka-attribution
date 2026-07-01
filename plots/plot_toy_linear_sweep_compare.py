@@ -10,7 +10,7 @@ sum_pow2 does |ks| = (#powers of two < n)+1 evals per step, so its count is scal
 All six sweeps share config (n in {16,64,256}, steps=1500, seeds=4, matched grids).
 
 Outputs paper/figs/: toy_linear_lr_convrate_cmp.pdf, toy_linear_batch_convrate_cmp.pdf
-Regenerate with: uv run python scripts/plot_toy_linear_sweep_compare.py
+Regenerate with: uv run python plots/plot_toy_linear_sweep_compare.py
 """
 import pickle
 from pathlib import Path

@@ -1,7 +1,7 @@
 """Bar chart showing effect of swapping MLP rankings between methods.
 
 Usage:
-    uv run python scripts/plot_hybrid_swap.py
+    uv run python plots/plot_hybrid_swap.py
 """
 
 import pickle

@@ -1,5 +1,5 @@
 """Top-100-node overlap heatmap across NPI attribution methods (bs=1 MAttr + gradients).
-Overlap(A,B) = |top100(A) ∩ top100(B)| / 100 * 100  (%).  Run: uv run python scripts/plot_npi_overlap_heatmap.py
+Overlap(A,B) = |top100(A) ∩ top100(B)| / 100 * 100  (%).  Run: uv run python plots/plot_npi_overlap_heatmap.py
 """
 import torch
 import numpy as np

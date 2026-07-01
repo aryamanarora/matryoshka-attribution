@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"],
+                        help="Optimizer for the scores (adam or sgd)")
     parser.add_argument("--n_iters", type=int, default=30)
     parser.add_argument("--split", type=str, default="validation",
                         help="Split to EVALUATE the circuit on (held out)")
@@ -72,7 +74,7 @@ def main():
                              "cause (=necessary, noising): corrupt the top-k, find what breaks "
                              "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_topk_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
                              "hard_topk: hard 0/1 + straight-through. "
                              "hard_concrete: Bernoulli(sigmoid) + L0. "

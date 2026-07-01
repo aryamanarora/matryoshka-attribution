@@ -1,7 +1,7 @@
 """Plot # of active rotated dimensions per (layer, span) at varying sparsities.
 
 Usage:
-    uv run python scripts/plot_das_dims.py results/pythia1b_npi_any_das_scores.pt
+    uv run python plots/plot_das_dims.py results/pythia1b_npi_any_das_scores.pt
 """
 
 import sys

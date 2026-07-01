@@ -1,6 +1,6 @@
 """Best (lowest) global rank of any MLP neuron in each layer, per method. Line plot.
 For method m and layer L: rank of m's top-scoring node among all nodes in that layer
-(rank 1 = the single best node overall lives in L). Run: uv run python scripts/plot_npi_best_rank_per_layer.py
+(rank 1 = the single best node overall lives in L). Run: uv run python plots/plot_npi_best_rank_per_layer.py
 """
 import torch
 import numpy as np

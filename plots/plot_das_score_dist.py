@@ -1,7 +1,7 @@
 """Plot per-layer score distributions for DAS, facetted by layer, one line per span.
 
 Usage:
-    uv run python scripts/plot_das_score_dist.py results/foo_scores.pt results/bar_scores.pt
+    uv run python plots/plot_das_score_dist.py results/foo_scores.pt results/bar_scores.pt
 """
 
 import sys

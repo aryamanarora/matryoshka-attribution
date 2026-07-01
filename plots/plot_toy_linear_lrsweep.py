@@ -4,7 +4,7 @@ Two subfigure-sized PDFs:
   1. toy_linear_lr_recovery.pdf  -- final Spearman recovery vs LR, one line per n
   2. toy_linear_lr_convrate.pdf  -- steps to Spearman>=thresh vs LR, one line per n
 
-Regenerate with: uv run python scripts/plot_toy_linear_lrsweep.py
+Regenerate with: uv run python plots/plot_toy_linear_lrsweep.py
 """
 import pickle
 from pathlib import Path

@@ -3,5 +3,7 @@
 __pycache__/
 MIB-circuit-track/
 results/
-plots/
+logs/
+plots/*
+!plots/*.py
 .claude/

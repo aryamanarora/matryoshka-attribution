@@ -1,10 +1,13 @@
-"""Three-way method comparison on the linear toy: MAttr (uniform k) vs MAttr (log k) vs
-IxG (attribution patching). Convergence of rank recovery (Spearman vs |a|) faceted by n.
+"""Sample-/compute-efficiency view of the 4-way toy comparison.
 
-All three use one counterfactual pair per step/sample (batch=1), so the x-axis is directly
-comparable. Reads the three n-sweep pickles in results/. \textwidth single-row figure.
+Same convergence data as plot_toy_linear_methods.py, but the x-axis counts MASKED FORWARD
+PASSES (the dominant cost), not counterfactual pairs. uniform/log MAttr and IxG do 1 forward
+per step/sample; sum_pow2 does |ks| = (#powers of two < n) + 1 forwards per step on the
+SAME pair, so its curve is stretched right by that factor. This exposes whether sum_pow2's
+per-pair advantage survives once you pay for the extra forwards.
 
-Regenerate with: uv run python scripts/plot_toy_linear_methods.py
+\textwidth single-row figure, faceted by n. Regenerate:
+    uv run python plots/plot_toy_linear_sample_eff.py
 """
 import pickle
 from pathlib import Path
@@ -43,43 +46,56 @@ theme_set(
     )
 )
 
+
+def n_pow2(n):
+    """Number of forward passes sum_pow2 does per step at width n (matches train_one)."""
+    ks, v = [], 1
+    while v < n:
+        ks.append(v); v *= 2
+    if n - 1 >= 1 and (n - 1) not in ks:
+        ks.append(n - 1)
+    return len(ks)
+
+
 SOURCES = [
-    (R / "toy_linear_mattr.pkl", "MAttr (uniform $k$)"),
-    (R / "toy_linear_mattr_logk.pkl", "MAttr (log $k$)"),
-    (R / "toy_linear_mattr_sumpow2.pkl", r"MAttr ($\sum_k$ pow2)"),
-    (R / "toy_linear_ixg.pkl", "IxG"),
+    (R / "toy_linear_mattr.pkl", "MAttr (uniform $k$)", lambda n: 1),
+    (R / "toy_linear_mattr_logk.pkl", "MAttr (log $k$)", lambda n: 1),
+    (R / "toy_linear_mattr_sumpow2.pkl", r"MAttr ($\sum_k$ pow2)", n_pow2),
+    (R / "toy_linear_ixg.pkl", "IxG", lambda n: 1),
 ]
-METHODS = [m for _, m in SOURCES]
+METHODS = [m for _, m, _ in SOURCES]
 SEL_N = [16, 64, 256]
 
 thresh = None
 rows = []
-for path, method in SOURCES:
+for path, method, fwd_per_step in SOURCES:
     with open(path, "rb") as f:
         d = pickle.load(f)
     thresh = d["args"]["thresh"]
     for r in d["runs"]:
         if r["n"] not in SEL_N:
             continue
+        f_per = fwd_per_step(r["n"])
         for st, sp in zip(r["steps"], r["spearman"]):
-            rows.append({"n": r["n"], "method": method, "pairs": st, "spearman": sp})
+            rows.append({"n": r["n"], "method": method,
+                         "forwards": st * f_per, "spearman": sp})
 
 df = pd.DataFrame(rows)
-agg = df.groupby(["n", "method", "pairs"])["spearman"].mean().reset_index()
+agg = df.groupby(["n", "method", "forwards"])["spearman"].mean().reset_index()
 agg["method"] = pd.Categorical(agg["method"], categories=METHODS, ordered=True)
 agg["facet"] = pd.Categorical(
     "$n = " + agg["n"].astype(str) + "$",
     categories=[f"$n = {n}$" for n in SEL_N], ordered=True)
 
 p = (
-    ggplot(agg, aes("pairs", "spearman", color="method"))
+    ggplot(agg, aes("forwards", "spearman", color="method"))
     + geom_hline(yintercept=thresh, color="#888888", linetype="dotted", size=0.3)
     + geom_line(size=0.6)
     + facet_wrap("facet", nrow=1)
     + scale_color_brewer(type="qual", palette="Set1")
     + scale_x_log10(labels=label_log(base=10))
     + scale_y_continuous(limits=(0, 1), breaks=[0, 0.25, 0.5, 0.75, 1.0])
-    + labs(x="# Counterfactual Pairs", y=r"Spearman($s$, $|a|$)", color="")
+    + labs(x="# Masked Forward Passes", y=r"Spearman($s$, $|a|$)", color="")
 )
-p.save(OUT / "toy_linear_methods.pdf", verbose=False)
-print(f"Saved {OUT / 'toy_linear_methods.pdf'}")
+p.save(OUT / "toy_linear_sample_eff.pdf", verbose=False)
+print(f"Saved {OUT / 'toy_linear_sample_eff.pdf'}")

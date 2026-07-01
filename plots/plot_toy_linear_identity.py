@@ -7,7 +7,7 @@ sigmoid-STE MAttr (gate-slope gradient) and pure IxG (g*delta averaged at the co
 
 Spearman recovery vs training step, selected n (all batch=1, 2000 steps, 5 seeds).
 Reads results/toy_linear_{mattr,identity,ixg}.pkl. Plots paper/figs/toy_linear_identity.pdf.
-  uv run python scripts/plot_toy_linear_identity.py
+  uv run python plots/plot_toy_linear_identity.py
 """
 import pickle
 from pathlib import Path
