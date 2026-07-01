@@ -182,6 +182,9 @@ def main():
     p.add_argument("--ste", default="sigmoid", choices=["sigmoid", "identity"],
                    help="straight-through estimator: sigmoid gate (default) or identity "
                         "(hard_topk_identity, g*delta gradient to every node)")
+    p.add_argument("--opt", default="adam", choices=["adam", "sgd"],
+                   help="optimizer for the mask scores; id-STE needs sgd (Adam normalizes "
+                        "out the g*delta magnitude signal)")
     p.add_argument("--output", default="results/toy_linear_mattr")
     args = p.parse_args()
 
@@ -193,7 +196,7 @@ def main():
             r = train_one(n, lr=args.lr, T=args.T, n_iters=args.n_iters,
                           num_steps=args.steps, batch=args.batch,
                           eval_every=args.eval_every, topk_frac=args.topk_frac,
-                          seed=seed, k_schedule=args.k_schedule, ste=args.ste)
+                          seed=seed, k_schedule=args.k_schedule, ste=args.ste, opt=args.opt)
             r["tts"] = steps_to_threshold(r["steps"], r["spearman"], args.thresh)
             all_runs.append(r)
             print(f"n={n:4d} seed={seed}  final Spearman={r['spearman'][-1]:.3f}  "

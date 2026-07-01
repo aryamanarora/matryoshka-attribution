@@ -60,6 +60,8 @@ else:
         ("toy_linear_mattr", "MAttr (uniform $k$)"),
         ("toy_linear_mattr_logk", "MAttr (log $k$)"),
         ("toy_linear_ixg", "IxG"),
+        ("toy_linear_identity_sgd", "id-STE+SGD (uniform $k$)"),
+        ("toy_linear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
     ]
     OUTNAME = "toy_linear_convrate_facet.pdf"
 METHODS = [m for _, m in SOURCES]
