@@ -27,6 +27,7 @@ COLOR_MAP = {
     "MAttr (uniform $k$)": "#e41a1c", "MAttr (log $k$)": "#377eb8", "IxG": "#4daf4a",
     "id-STE+SGD (uniform $k$)": "#984ea3", "id-STE+SGD (log $k$)": "#ff7f00",
     "id-STE+Adam (uniform $k$)": "#a65628", "id-STE+Adam (log $k$)": "#f781bf",
+    "IG (5 steps)": "#17becf",
 }
 
 theme_set(
@@ -60,6 +61,7 @@ SOURCES = [
     (f"{PREFIX}_mattr", "MAttr (uniform $k$)"),
     (f"{PREFIX}_mattr_logk", "MAttr (log $k$)"),
     (f"{PREFIX}_ixg", "IxG"),
+    (f"{PREFIX}_ig", "IG (5 steps)"),
     (f"{PREFIX}_identity_sgd", "id-STE+SGD (uniform $k$)"),
     (f"{PREFIX}_identity_sgd_logk", "id-STE+SGD (log $k$)"),
     (f"{PREFIX}_identity_adam", "id-STE+Adam (uniform $k$)"),

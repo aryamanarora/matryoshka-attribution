@@ -161,9 +161,44 @@ def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero", linear_only=F
             "prod_pct": prod_pct, "lin_pct": lin_pct, "loss_auc": auc}
 
 
+def ig_one(n, num_samples=3000, ig_steps=5, eval_every=30, seed=0, cf="zero", linear_only=False):
+    """Integrated Gradients (delta * gradient averaged over `ig_steps` interpolation points
+    from the corrupt baseline to the clean input), accumulated over samples. Unlike single-
+    point IxG, the gradient through a product node is nonzero off the baseline, so IG can see
+    products. ig_steps=1 (grad at clean) is ordinary Input x Gradient; MIB EAP-IG uses ~5."""
+    a_lin, c_pair, n_lin, imp = make_instance(n, seed, linear_only)
+    imp_np = imp.numpy()
+    prod_idx, lin_idx = range(n_lin, n), range(n_lin)
+    X = torch.randn(num_samples, n)
+    Xcf = torch.zeros(num_samples, n) if cf == "zero" else torch.randn(num_samples, n)
+    delta = X - Xcf                                                  # [N, n]
+    y_clean = forward(a_lin, c_pair, n_lin, X).detach()              # [N]
+    alphas = torch.arange(1, ig_steps + 1, dtype=torch.float) / ig_steps      # (0,1]
+    Z = Xcf[:, None, :] + alphas[None, :, None] * delta[:, None, :]  # [N, m, n]
+    Zf = Z.reshape(-1, n).clone().requires_grad_(True)
+    M = (forward(a_lin, c_pair, n_lin, Zf) - y_clean.repeat_interleave(ig_steps)) ** 2
+    g = torch.autograd.grad(M.sum(), Zf)[0].reshape(num_samples, ig_steps, n)
+    attr = delta * g.mean(1)                                         # delta * path-avg grad
+    cum = attr.cumsum(0)
+
+    checkpoints = [1] + list(range(eval_every, num_samples + 1, eval_every))
+    steps, spearman, prod_pct, lin_pct, auc = [], [], [], [], []
+    for s in checkpoints:
+        importance = (-cum[s - 1] / s).numpy()
+        corr, _ = spearmanr(importance, imp_np)
+        steps.append(s)
+        spearman.append(float(corr) if not np.isnan(corr) else 0.0)
+        prod_pct.append(mean_pct(importance, prod_idx))
+        lin_pct.append(mean_pct(importance, lin_idx))
+        auc.append(loss_auc(importance, a_lin, c_pair, n_lin))
+    return {"n": n, "seed": seed, "steps": steps, "spearman": spearman,
+            "prod_pct": prod_pct, "lin_pct": lin_pct, "loss_auc": auc}
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--method", default="mattr", choices=["mattr", "ixg"])
+    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "ig"])
+    p.add_argument("--ig_steps", type=int, default=5, help="IG interpolation steps (method=ig)")
     p.add_argument("--n", type=int, nargs="+", default=[4, 8, 16, 32, 64, 128, 256])
     p.add_argument("--seeds", type=int, default=5)
     p.add_argument("--steps", type=int, default=3000, help="MAttr steps / IxG samples")
@@ -191,6 +226,10 @@ def main():
                               eval_every=args.eval_every, seed=seed,
                               k_schedule=args.k_schedule, ste=args.ste, opt=args.opt,
                               cf=args.cf, linear_only=args.linear_only)
+            elif args.method == "ig":
+                r = ig_one(n, num_samples=args.steps, ig_steps=args.ig_steps,
+                           eval_every=max(1, args.steps // 100), seed=seed, cf=args.cf,
+                           linear_only=args.linear_only)
             else:
                 r = ixg_one(n, num_samples=args.steps, eval_every=max(1, args.steps // 100),
                             seed=seed, cf=args.cf, linear_only=args.linear_only)
