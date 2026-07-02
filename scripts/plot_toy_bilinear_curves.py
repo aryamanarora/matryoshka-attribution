@@ -11,10 +11,9 @@ import numpy as np
 import pandas as pd
 from plotnine import (
     ggplot, aes, geom_line, geom_ribbon, geom_hline, labs, facet_wrap,
-    scale_color_brewer, scale_fill_brewer, scale_x_log10,
+    scale_color_brewer, scale_fill_brewer,
     theme_bw, theme_set, theme, element_text, element_line, element_blank,
 )
-from mizani.formatters import label_log
 
 R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
@@ -79,7 +78,6 @@ p = (
     + facet_wrap("facet", ncol=4)
     + scale_color_brewer(type="qual", palette="Set1")
     + scale_fill_brewer(type="qual", palette="Set1")
-    + scale_x_log10(labels=label_log(base=10))
     + labs(x="Steps (counterfactual pairs seen)",
            y=r"Spearman(scores, importance)", color="", fill="")
 )
