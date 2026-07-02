@@ -53,6 +53,40 @@ def mean_pct(scores, idx):
     return float(np.mean([(s < s[i]).mean() for i in idx]) * 100.0)
 
 
+def loss_auc(scores, a_lin, c_pair, n_lin):
+    """Normalized area under the denoising loss vs sparsity (top-k kept clean) curve,
+    for the ranking induced by `scores`. No gold needed -- uses the objective itself.
+
+    Under the zero CF the expected loss of keeping set S clean is analytic:
+        loss(S) = Σ_{linear i∉S} a_i^2  +  Σ_{pairs not fully in S} c_j^2.
+    Sweep k = 0..n (top-k by score kept clean), integrate loss/loss(k=0) over k/n.
+    Lower AUC = the ranking drives loss down faster = better attribution. Adding a lone
+    product node reduces loss by 0 (supermodular), which this captures exactly.
+    """
+    a2 = np.asarray(a_lin, float) ** 2
+    c2 = np.asarray(c_pair, float) ** 2
+    n = n_lin + 2 * len(c2)
+    total = a2.sum() + c2.sum()
+    if total == 0:
+        return 0.0
+    order = np.argsort(-np.asarray(scores, float))
+    selected = np.zeros(n, dtype=bool)
+    loss = total
+    curve = [total]
+    for node in order:
+        selected[node] = True
+        if node < n_lin:
+            loss -= a2[node]
+        else:
+            j = (node - n_lin) // 2
+            partner = n_lin + 2 * j + (1 - (node - n_lin) % 2)
+            if selected[partner]:                 # pair completed -> now recovered
+                loss -= c2[j]
+        curve.append(loss)
+    y = np.array(curve) / total                   # normalized loss, len n+1
+    return float((y[:-1] + y[1:]).sum() / 2 / n)  # trapezoid over k/n in [0,1]
+
+
 def forward(a_lin, c_pair, n_lin, xeff):
     """y = Σ a_i x_i + Σ c_j x_p x_q on effective (masked) node values xeff [batch, n]."""
     lin = (a_lin * xeff[:, :n_lin]).sum(-1)
@@ -67,7 +101,7 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
     a_lin, c_pair, n_lin, imp = make_instance(n, seed)
     imp_np = imp.numpy()
     prod_idx, lin_idx = range(n_lin, n), range(n_lin)
-    steps, spearman, prod_pct, lin_pct = [], [], [], []
+    steps, spearman, prod_pct, lin_pct, auc = [], [], [], [], []
 
     def record(step, sc):
         if (step + 1) % eval_every != 0 and step != 0:
@@ -78,6 +112,7 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
         spearman.append(float(corr) if not np.isnan(corr) else 0.0)
         prod_pct.append(mean_pct(s, prod_idx))
         lin_pct.append(mean_pct(s, lin_idx))
+        auc.append(loss_auc(s, a_lin, c_pair, n_lin))
 
     def loss_fn(mask):
         x = torch.randn(batch, n)
@@ -90,7 +125,7 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
     learn_scores(n, loss_fn, steps=num_steps, variant=variant, k_schedule=k_schedule,
                  lr=lr, optimizer=opt, on_step=lambda step, k, lv, sc: record(step, sc))
     return {"n": n, "seed": seed, "steps": steps, "spearman": spearman,
-            "prod_pct": prod_pct, "lin_pct": lin_pct}
+            "prod_pct": prod_pct, "lin_pct": lin_pct, "loss_auc": auc}
 
 
 def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
@@ -108,7 +143,7 @@ def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
     cum = attr.cumsum(0)
 
     checkpoints = [1] + list(range(eval_every, num_samples + 1, eval_every))
-    steps, spearman, prod_pct, lin_pct = [], [], [], []
+    steps, spearman, prod_pct, lin_pct, auc = [], [], [], [], []
     for s in checkpoints:
         importance = (-cum[s - 1] / s).numpy()
         corr, _ = spearmanr(importance, imp_np)
@@ -116,8 +151,9 @@ def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
         spearman.append(float(corr) if not np.isnan(corr) else 0.0)
         prod_pct.append(mean_pct(importance, prod_idx))
         lin_pct.append(mean_pct(importance, lin_idx))
+        auc.append(loss_auc(importance, a_lin, c_pair, n_lin))
     return {"n": n, "seed": seed, "steps": steps, "spearman": spearman,
-            "prod_pct": prod_pct, "lin_pct": lin_pct}
+            "prod_pct": prod_pct, "lin_pct": lin_pct, "loss_auc": auc}
 
 
 def main():
