@@ -29,7 +29,7 @@ from plotnine import (
 import sys
 sys.path.insert(0, "scripts")
 from toy_bilinear import make_instance
-from learning_to_attribute import learn_scores
+from learning_to_attribute import learn_scores, build_mask
 
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 RES = Path("results"); RES.mkdir(parents=True, exist_ok=True)
@@ -104,12 +104,33 @@ def train_ig_intervene(n, seed, beta, tau, ig_steps=5, steps=3000, lr=0.05):
     return scores.detach().numpy()
 
 
+def train_ig_intervene_sigmoid(n, seed, beta, tau, ig_steps=5, steps=3000, lr=0.05, T=0.5):
+    """IG-under-intervention routed through the SIGMOID STE (sigma'/T envelope + coupling)
+    with Adam, instead of the raw identity STE with SGD. Same IG-integrated per-node effect
+    a_j = delta_j * path-avg grad, but fed to scores via the differentiable sigmoid_topk mask."""
+    torch.manual_seed(seed); a, c, n_lin, _ = make_instance(n, seed)
+    scores = torch.nn.Parameter(torch.zeros(n)); opt = torch.optim.Adam([scores], lr=lr)
+    al = torch.arange(1, ig_steps + 1).float() / ig_steps
+    for _ in range(steps):
+        k = max(1, min(n, int(round(1 + (n - 1) * torch.rand(1).item()))))
+        mask = build_mask(scores, float(k), "hard_topk", T=T).mask   # hard fwd, sigmoid bwd
+        x = torch.randn(1, n)
+        yc = fwd(a, c, n_lin, x, beta, tau).detach()
+        Z = (al[None, :, None] * (mask.detach()[None, None, :] * x[:, None, :])).reshape(-1, n).detach().requires_grad_(True)
+        L = (fwd(a, c, n_lin, Z, beta, tau) - yc.repeat_interleave(ig_steps)) ** 2
+        g = torch.autograd.grad(L.sum(), Z)[0].reshape(1, ig_steps, n)
+        a_ig = (x * g.mean(1)).mean(0).detach()                     # IG-integrated dL/dm_j
+        opt.zero_grad(); (a_ig * mask).sum().backward(); opt.step()  # -> sigmoid STE grad to scores
+    return scores.detach().numpy()
+
+
 METHODS = [
-    ("IxG (1-step)",     "#ff7f00", lambda n, s, b, t: attr_ixg(n, s, b, t)),
-    ("IG-5 (global)",    "#4daf4a", lambda n, s, b, t: attr_ig_global(n, s, b, t, 5)),
-    ("id-STE+SGD",       "#377eb8", lambda n, s, b, t: train_mattr(n, s, b, t, "hard_topk_identity", "sgd", 0.01)),
-    ("IG-5 (intervene)", "#984ea3", lambda n, s, b, t: train_ig_intervene(n, s, b, t, 5)),
-    ("MAttr",            "#e41a1c", lambda n, s, b, t: train_mattr(n, s, b, t)),
+    ("IxG (1-step)",         "#ff7f00", lambda n, s, b, t: attr_ixg(n, s, b, t)),
+    ("IG-5 (global)",        "#4daf4a", lambda n, s, b, t: attr_ig_global(n, s, b, t, 5)),
+    ("id-STE+SGD",           "#377eb8", lambda n, s, b, t: train_mattr(n, s, b, t, "hard_topk_identity", "sgd", 0.01)),
+    ("IG-5 int (id-STE)",    "#984ea3", lambda n, s, b, t: train_ig_intervene(n, s, b, t, 5)),
+    ("IG-5 int (sigmoid)",   "#17becf", lambda n, s, b, t: train_ig_intervene_sigmoid(n, s, b, t, 5)),
+    ("MAttr",                "#e41a1c", lambda n, s, b, t: train_mattr(n, s, b, t)),
 ]
 TASKS = [("Bilinear", 0.0, 0.0), ("Saturated gate ($\\beta$=8)", 8.0, 0.5)]
 NS = [8, 16, 32, 64, 128]
