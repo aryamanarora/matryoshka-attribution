@@ -9,6 +9,7 @@ incomplete pairs), so the curve is exact. Full-width -> paper/figs/.
 Regenerate: uv run python scripts/plot_toy_bilinear_lossauc.py
 """
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -51,14 +52,18 @@ theme_set(
     )
 )
 
+# argv[1] = "linonly" -> control task (all linear, no product circuit)
+TASK = sys.argv[1] if len(sys.argv) > 1 else "bilinear"
+PREFIX = "toy_linonly" if TASK == "linonly" else "toy_bilinear"
+OUTNAME = "toy_bilinear_lossauc_linonly.pdf" if TASK == "linonly" else "toy_bilinear_lossauc.pdf"
 SOURCES = [
-    ("toy_bilinear_mattr", "MAttr (uniform $k$)"),
-    ("toy_bilinear_mattr_logk", "MAttr (log $k$)"),
-    ("toy_bilinear_ixg", "IxG"),
-    ("toy_bilinear_identity_sgd", "id-STE+SGD (uniform $k$)"),
-    ("toy_bilinear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
-    ("toy_bilinear_identity_adam", "id-STE+Adam (uniform $k$)"),
-    ("toy_bilinear_identity_adam_logk", "id-STE+Adam (log $k$)"),
+    (f"{PREFIX}_mattr", "MAttr (uniform $k$)"),
+    (f"{PREFIX}_mattr_logk", "MAttr (log $k$)"),
+    (f"{PREFIX}_ixg", "IxG"),
+    (f"{PREFIX}_identity_sgd", "id-STE+SGD (uniform $k$)"),
+    (f"{PREFIX}_identity_sgd_logk", "id-STE+SGD (log $k$)"),
+    (f"{PREFIX}_identity_adam", "id-STE+Adam (uniform $k$)"),
+    (f"{PREFIX}_identity_adam_logk", "id-STE+Adam (log $k$)"),
 ]
 METHODS = [m for _, m in SOURCES]
 
@@ -92,5 +97,5 @@ p = (
     + labs(x="Steps (counterfactual pairs seen)",
            y="Loss AUC (lower is better)", color="", fill="")
 )
-p.save(OUT / "toy_bilinear_lossauc.pdf", verbose=False)
-print(f"Saved {OUT / 'toy_bilinear_lossauc.pdf'}")
+p.save(OUT / OUTNAME, verbose=False)
+print(f"Saved {OUT / OUTNAME}")

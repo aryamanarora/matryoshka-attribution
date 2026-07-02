@@ -32,18 +32,23 @@ from learning_to_attribute import learn_scores
 from toy_linear_mattr import steps_to_threshold
 
 
-def make_instance(n, seed):
-    """Split n nodes into n//4 linear anchors + product pairs; return coeffs + GT imp."""
+def make_instance(n, seed, linear_only=False):
+    """Split n nodes into n//4 linear anchors + product pairs; return coeffs + GT imp.
+    linear_only=True -> all n nodes are linear (control: no product circuit)."""
     torch.manual_seed(seed)
-    n_lin = max(2, n // 4)
-    if (n - n_lin) % 2:                      # keep the product block even
-        n_lin += 1
-    n_pairs = (n - n_lin) // 2
+    if linear_only:
+        n_lin, n_pairs = n, 0
+    else:
+        n_lin = max(2, n // 4)
+        if (n - n_lin) % 2:                  # keep the product block even
+            n_lin += 1
+        n_pairs = (n - n_lin) // 2
     a_lin = torch.randn(n_lin)
     c_pair = torch.randn(n_pairs)
     imp = torch.empty(n)
     imp[:n_lin] = a_lin ** 2                  # marginal denoising importance
-    imp[n_lin:] = c_pair.repeat_interleave(2) ** 2
+    if n_pairs:
+        imp[n_lin:] = c_pair.repeat_interleave(2) ** 2
     return a_lin, c_pair, n_lin, imp
 
 
@@ -96,9 +101,9 @@ def forward(a_lin, c_pair, n_lin, xeff):
 
 
 def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
-              k_schedule="uniform", ste="sigmoid", opt="adam", cf="zero"):
+              k_schedule="uniform", ste="sigmoid", opt="adam", cf="zero", linear_only=False):
     """MAttr on one bilinear instance; trace Spearman(scores, true imp) over steps."""
-    a_lin, c_pair, n_lin, imp = make_instance(n, seed)
+    a_lin, c_pair, n_lin, imp = make_instance(n, seed, linear_only)
     imp_np = imp.numpy()
     prod_idx, lin_idx = range(n_lin, n), range(n_lin)
     steps, spearman, prod_pct, lin_pct, auc = [], [], [], [], []
@@ -128,9 +133,9 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
             "prod_pct": prod_pct, "lin_pct": lin_pct, "loss_auc": auc}
 
 
-def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
+def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero", linear_only=False):
     """Attribution-patching (delta*grad at the corrupt baseline), accumulated over samples."""
-    a_lin, c_pair, n_lin, imp = make_instance(n, seed)
+    a_lin, c_pair, n_lin, imp = make_instance(n, seed, linear_only)
     imp_np = imp.numpy()
     prod_idx, lin_idx = range(n_lin, n), range(n_lin)
     X = torch.randn(num_samples, n)
@@ -172,6 +177,8 @@ def main():
     p.add_argument("--cf", default="zero", choices=["zero", "resample"],
                    help="counterfactual: zero (mean-ablation; kills IxG on products) or "
                         "resample (~N(0,1); IxG then only mis-scales, stays competitive)")
+    p.add_argument("--linear_only", action="store_true",
+                   help="control: all n nodes linear (no product circuit)")
     p.add_argument("--output", default="results/toy_bilinear_mattr")
     args = p.parse_args()
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -182,10 +189,11 @@ def main():
             if args.method == "mattr":
                 r = train_one(n, lr=args.lr, num_steps=args.steps, batch=args.batch,
                               eval_every=args.eval_every, seed=seed,
-                              k_schedule=args.k_schedule, ste=args.ste, opt=args.opt, cf=args.cf)
+                              k_schedule=args.k_schedule, ste=args.ste, opt=args.opt,
+                              cf=args.cf, linear_only=args.linear_only)
             else:
                 r = ixg_one(n, num_samples=args.steps, eval_every=max(1, args.steps // 100),
-                            seed=seed, cf=args.cf)
+                            seed=seed, cf=args.cf, linear_only=args.linear_only)
             r["tts"] = steps_to_threshold(r["steps"], r["spearman"], args.thresh)
             all_runs.append(r)
         fin = np.mean([rr["spearman"][-1] for rr in all_runs if rr["n"] == n])
