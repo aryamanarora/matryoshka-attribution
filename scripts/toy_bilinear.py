@@ -47,6 +47,12 @@ def make_instance(n, seed):
     return a_lin, c_pair, n_lin, imp
 
 
+def mean_pct(scores, idx):
+    """Mean percentile rank (0-100) of nodes `idx`: fraction of all nodes they score above."""
+    s = np.asarray(scores, dtype=float)
+    return float(np.mean([(s < s[i]).mean() for i in idx]) * 100.0)
+
+
 def forward(a_lin, c_pair, n_lin, xeff):
     """y = Σ a_i x_i + Σ c_j x_p x_q on effective (masked) node values xeff [batch, n]."""
     lin = (a_lin * xeff[:, :n_lin]).sum(-1)
@@ -60,14 +66,18 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
     """MAttr on one bilinear instance; trace Spearman(scores, true imp) over steps."""
     a_lin, c_pair, n_lin, imp = make_instance(n, seed)
     imp_np = imp.numpy()
-    steps, spearman = [], []
+    prod_idx, lin_idx = range(n_lin, n), range(n_lin)
+    steps, spearman, prod_pct, lin_pct = [], [], [], []
 
     def record(step, sc):
         if (step + 1) % eval_every != 0 and step != 0:
             return
-        corr, _ = spearmanr(sc.detach().cpu().numpy(), imp_np)
+        s = sc.detach().cpu().numpy()
+        corr, _ = spearmanr(s, imp_np)
         steps.append(step + 1)
         spearman.append(float(corr) if not np.isnan(corr) else 0.0)
+        prod_pct.append(mean_pct(s, prod_idx))
+        lin_pct.append(mean_pct(s, lin_idx))
 
     def loss_fn(mask):
         x = torch.randn(batch, n)
@@ -79,13 +89,15 @@ def train_one(n, lr=0.05, num_steps=3000, batch=1, eval_every=20, seed=0,
     variant = "hard_topk_identity" if ste == "identity" else "hard_topk"
     learn_scores(n, loss_fn, steps=num_steps, variant=variant, k_schedule=k_schedule,
                  lr=lr, optimizer=opt, on_step=lambda step, k, lv, sc: record(step, sc))
-    return {"n": n, "seed": seed, "steps": steps, "spearman": spearman}
+    return {"n": n, "seed": seed, "steps": steps, "spearman": spearman,
+            "prod_pct": prod_pct, "lin_pct": lin_pct}
 
 
 def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
     """Attribution-patching (delta*grad at the corrupt baseline), accumulated over samples."""
     a_lin, c_pair, n_lin, imp = make_instance(n, seed)
     imp_np = imp.numpy()
+    prod_idx, lin_idx = range(n_lin, n), range(n_lin)
     X = torch.randn(num_samples, n)
     Xcf = torch.zeros(num_samples, n) if cf == "zero" else torch.randn(num_samples, n)
     y_clean = forward(a_lin, c_pair, n_lin, X).detach()
@@ -96,13 +108,16 @@ def ixg_one(n, num_samples=4000, eval_every=40, seed=0, cf="zero"):
     cum = attr.cumsum(0)
 
     checkpoints = [1] + list(range(eval_every, num_samples + 1, eval_every))
-    steps, spearman = [], []
+    steps, spearman, prod_pct, lin_pct = [], [], [], []
     for s in checkpoints:
         importance = (-cum[s - 1] / s).numpy()
         corr, _ = spearmanr(importance, imp_np)
         steps.append(s)
         spearman.append(float(corr) if not np.isnan(corr) else 0.0)
-    return {"n": n, "seed": seed, "steps": steps, "spearman": spearman}
+        prod_pct.append(mean_pct(importance, prod_idx))
+        lin_pct.append(mean_pct(importance, lin_idx))
+    return {"n": n, "seed": seed, "steps": steps, "spearman": spearman,
+            "prod_pct": prod_pct, "lin_pct": lin_pct}
 
 
 def main():
