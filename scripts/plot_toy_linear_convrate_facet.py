@@ -64,6 +64,8 @@ elif TASK == "bilinear":
         ("toy_bilinear_mattr", "MAttr (uniform $k$)"),
         ("toy_bilinear_mattr_logk", "MAttr (log $k$)"),
         ("toy_bilinear_ixg", "IxG"),
+        ("toy_bilinear_identity_sgd", "id-STE+SGD (uniform $k$)"),
+        ("toy_bilinear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
     ]
     OUTNAME = "toy_bilinear_convrate_facet.pdf"
     RHOS = [0.4, 0.5, 0.6, 0.7]

@@ -22,7 +22,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(3.2, 2.0),
+        figure_size=(5.5, 2.0),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         axis_text_x=element_text(size=6, rotation=45, hjust=0.5, vjust=1.0),
@@ -42,6 +42,8 @@ SOURCES = [
     ("toy_bilinear_mattr", "MAttr (uniform $k$)"),
     ("toy_bilinear_mattr_logk", "MAttr (log $k$)"),
     ("toy_bilinear_ixg", "IxG"),
+    ("toy_bilinear_identity_sgd", "id-STE+SGD (uniform $k$)"),
+    ("toy_bilinear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
 ]
 METHODS = [m for _, m in SOURCES]
 
