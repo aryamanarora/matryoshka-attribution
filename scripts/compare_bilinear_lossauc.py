@@ -128,8 +128,8 @@ METHODS = [
     ("IxG (1-step)",         "#ff7f00", lambda n, s, b, t: attr_ixg(n, s, b, t)),
     ("IG-5 (global)",        "#4daf4a", lambda n, s, b, t: attr_ig_global(n, s, b, t, 5)),
     ("id-STE+SGD",           "#377eb8", lambda n, s, b, t: train_mattr(n, s, b, t, "hard_topk_identity", "sgd", 0.01)),
-    ("IG-5 int (id-STE)",    "#984ea3", lambda n, s, b, t: train_ig_intervene(n, s, b, t, 5)),
-    ("IG-5 int (sigmoid)",   "#17becf", lambda n, s, b, t: train_ig_intervene_sigmoid(n, s, b, t, 5)),
+    ("id-STE $+$ IG",        "#984ea3", lambda n, s, b, t: train_ig_intervene(n, s, b, t, 5)),
+    ("MAttr $+$ IG",         "#17becf", lambda n, s, b, t: train_ig_intervene_sigmoid(n, s, b, t, 5)),
     ("MAttr",                "#e41a1c", lambda n, s, b, t: train_mattr(n, s, b, t)),
 ]
 TASKS = [("Bilinear", 0.0, 0.0), ("Saturated gate ($\\beta$=8)", 8.0, 0.5)]
