@@ -11,12 +11,19 @@ import numpy as np
 import pandas as pd
 from plotnine import (
     ggplot, aes, geom_line, geom_ribbon, geom_hline, labs, facet_wrap,
-    scale_color_brewer, scale_fill_brewer,
+    scale_color_manual, scale_fill_manual,
     theme_bw, theme_set, theme, element_text, element_line, element_blank,
 )
 
 R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
+
+# Manual legible palette (Set1 runs out of usable colors past 5; skip yellow).
+COLOR_MAP = {
+    "MAttr (uniform $k$)": "#e41a1c", "MAttr (log $k$)": "#377eb8", "IxG": "#4daf4a",
+    "id-STE+SGD (uniform $k$)": "#984ea3", "id-STE+SGD (log $k$)": "#ff7f00",
+    "id-STE+Adam (uniform $k$)": "#a65628", "id-STE+Adam (log $k$)": "#f781bf",
+}
 
 theme_set(
     theme_bw(base_size=8)
@@ -47,6 +54,8 @@ SOURCES = [
     ("toy_bilinear_ixg", "IxG"),
     ("toy_bilinear_identity_sgd", "id-STE+SGD (uniform $k$)"),
     ("toy_bilinear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
+    ("toy_bilinear_identity_adam", "id-STE+Adam (uniform $k$)"),
+    ("toy_bilinear_identity_adam_logk", "id-STE+Adam (log $k$)"),
 ]
 METHODS = [m for _, m in SOURCES]
 
@@ -76,8 +85,8 @@ p = (
     + geom_ribbon(aes(ymin="lo", ymax="hi"), alpha=0.12, color="none")
     + geom_line(size=0.5)
     + facet_wrap("facet", ncol=4)
-    + scale_color_brewer(type="qual", palette="Set1")
-    + scale_fill_brewer(type="qual", palette="Set1")
+    + scale_color_manual(values=[COLOR_MAP[m] for m in METHODS])
+    + scale_fill_manual(values=[COLOR_MAP[m] for m in METHODS])
     + labs(x="Steps (counterfactual pairs seen)",
            y=r"Spearman(scores, importance)", color="", fill="")
 )

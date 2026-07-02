@@ -15,10 +15,17 @@ import numpy as np
 import pandas as pd
 from plotnine import (
     ggplot, aes, geom_line, geom_point, labs, facet_wrap,
-    scale_color_brewer, scale_x_log10, scale_y_log10,
+    scale_color_manual, scale_x_log10, scale_y_log10,
     theme_bw, theme_set, theme, element_text, element_line, element_blank,
 )
 from mizani.formatters import label_log
+
+# Manual legible palette (Set1 runs out of usable colors past 5; skip yellow).
+COLOR_MAP = {
+    "MAttr (uniform $k$)": "#e41a1c", "MAttr (log $k$)": "#377eb8", "IxG": "#4daf4a",
+    "id-STE+SGD (uniform $k$)": "#984ea3", "id-STE+SGD (log $k$)": "#ff7f00",
+    "id-STE+Adam (uniform $k$)": "#a65628", "id-STE+Adam (log $k$)": "#f781bf",
+}
 
 R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
@@ -66,6 +73,8 @@ elif TASK == "bilinear":
         ("toy_bilinear_ixg", "IxG"),
         ("toy_bilinear_identity_sgd", "id-STE+SGD (uniform $k$)"),
         ("toy_bilinear_identity_sgd_logk", "id-STE+SGD (log $k$)"),
+        ("toy_bilinear_identity_adam", "id-STE+Adam (uniform $k$)"),
+        ("toy_bilinear_identity_adam_logk", "id-STE+Adam (log $k$)"),
     ]
     OUTNAME = "toy_bilinear_convrate_facet.pdf"
     RHOS = [0.4, 0.5, 0.6, 0.7]
@@ -115,7 +124,7 @@ p = (
     + geom_line(size=0.5)
     + geom_point(size=1.1)
     + facet_wrap("facet", nrow=1)
-    + scale_color_brewer(type="qual", palette="Set1")
+    + scale_color_manual(values=[COLOR_MAP.get(m, "#333333") for m in METHODS])
     + scale_x_log10(breaks=ns, labels=[str(n) for n in ns])
     + scale_y_log10(labels=label_log(base=10))
     + labs(x="Number of Terms $n$",
