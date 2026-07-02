@@ -48,6 +48,7 @@ theme_set(
 
 import sys
 TASK = sys.argv[1] if len(sys.argv) > 1 else "linear"
+RHOS = [0.7, 0.8, 0.9, 0.95]
 if TASK == "quadratic":
     SOURCES = [
         ("toy_quadratic_uniform", "MAttr (uniform $k$)"),
@@ -55,6 +56,17 @@ if TASK == "quadratic":
         ("toy_quadratic_ixg", "IxG"),
     ]
     OUTNAME = "toy_quadratic_convrate_facet.pdf"
+elif TASK == "bilinear":
+    # y = Σ a_i x_i + Σ c_j x_p x_q under a zero-ablation CF: IxG's gradient through
+    # every product node is 0, so it never recovers the ordering (see toy_bilinear.py).
+    # MAttr's ceiling is ~0.78 (node-node products are supermodular), so use lower ρ.
+    SOURCES = [
+        ("toy_bilinear_mattr", "MAttr (uniform $k$)"),
+        ("toy_bilinear_mattr_logk", "MAttr (log $k$)"),
+        ("toy_bilinear_ixg", "IxG"),
+    ]
+    OUTNAME = "toy_bilinear_convrate_facet.pdf"
+    RHOS = [0.4, 0.5, 0.6, 0.7]
 else:
     SOURCES = [
         ("toy_linear_mattr", "MAttr (uniform $k$)"),
@@ -65,7 +77,6 @@ else:
     ]
     OUTNAME = "toy_linear_convrate_facet.pdf"
 METHODS = [m for _, m in SOURCES]
-RHOS = [0.7, 0.8, 0.9, 0.95]
 
 
 def steps_to(steps, trace, rho):
