@@ -61,38 +61,45 @@ submit() {   # $1=name $2=tag ; rest = eval_sva.py args
   n=$((n+1))
 }
 
-for task in "${TASKS[@]}"; do
-  for nodes in "${NODES[@]}"; do
-    nabbr=${nodes//+/-}
-    for loss in "${LOSSES[@]}"; do
-      for gm in "${GRAD[@]}"; do
-        submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
-          --model "$MODEL" --task "$task" --dataset sva --nodes "$nodes" \
-          --method "$gm" --loss "$loss" --eval-examples 100 --output "$OUT"
+emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one (task, substrate)
+  local task=$1 nodes=$2 dataset=$3 nabbr=${2//+/-} loss gm cfg variant opt vabbr ks
+  for loss in "${LOSSES[@]}"; do
+    for gm in "${GRAD[@]}"; do
+      submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
+        --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
+        --method "$gm" --loss "$loss" --eval-examples 100 --output "$OUT"
+    done
+    for cfg in "${MATTR_CONFIGS[@]}"; do
+      variant=${cfg%:*}; opt=${cfg#*:}
+      vabbr=$([[ "$variant" == hard_topk_identity ]] && echo idste || echo soft)
+      for ks in "${KS[@]}"; do
+        submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_${loss}" \
+          "$(mattr_tag "$variant" "$opt" "$loss" "$ks")" \
+          --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
+          --method mattr --loss "$loss" --k-schedule "$ks" \
+          --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" --output "$OUT"
       done
-      for cfg in "${MATTR_CONFIGS[@]}"; do
-        variant=${cfg%:*}; opt=${cfg#*:}
-        vabbr=$([[ "$variant" == hard_topk_identity ]] && echo idste || echo soft)
-        for ks in "${KS[@]}"; do
-          submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_${loss}" \
-            "$(mattr_tag "$variant" "$opt" "$loss" "$ks")" \
-            --model "$MODEL" --task "$task" --dataset sva --nodes "$nodes" \
+      if [[ "$IGS" -gt 1 ]]; then   # MAttr-IG variants (env-gated), IG_KS schedules only
+        for ks in $IG_KS_STR; do
+          submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_ig${IGS}_${loss}" \
+            "$(mattr_tag "$variant" "$opt" "$loss" "$ks" "$IGS")" \
+            --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
             --method mattr --loss "$loss" --k-schedule "$ks" \
-            --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" --output "$OUT"
+            --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" \
+            "${MATTR_COMMON[@]}" --output "$OUT"
         done
-        if [[ "$IGS" -gt 1 ]]; then   # MAttr-IG variants (env-gated), IG_KS schedules only
-          for ks in $IG_KS_STR; do
-            submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_ig${IGS}_${loss}" \
-              "$(mattr_tag "$variant" "$opt" "$loss" "$ks" "$IGS")" \
-              --model "$MODEL" --task "$task" --dataset sva --nodes "$nodes" \
-              --method mattr --loss "$loss" --k-schedule "$ks" \
-              --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" \
-              "${MATTR_COMMON[@]}" --output "$OUT"
-          done
-        fi
-      done
+      fi
     done
   done
+}
+
+for task in "${TASKS[@]}"; do
+  for nodes in "${NODES[@]}"; do emit_grid "$task" "$nodes" sva; done
+done
+# MIB tasks (e.g. arc_easy): variable-length -> node substrate only, --dataset mib.
+#   MIB_TASKS="arc_easy" IG_STEPS=5 bash scripts/submit_sva_sweep.sh
+read -ra MIB_TASKS_ARR <<< "${MIB_TASKS:-}"
+for task in "${MIB_TASKS_ARR[@]}"; do
+  [[ -n "$task" ]] && emit_grid "$task" node mib
 done
 echo "submitted $n, skipped $skip (already present) -> $OUT"
-echo "full grid = 4 tasks x 3 substrates x [2 grad + 2 gate/opt x 2 ks] x 3 losses = 216"

@@ -114,7 +114,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     i = 0
     while len(cl) < n_examples and i < len(ds):
         clean, corr, lab = ds[i]; i += 1
-        if not span:
+        if not span and not is_node:   # node is position-agnostic -> variable length OK
             if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
         cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
@@ -274,7 +274,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
-    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym"])
+    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--mattr-ig-steps", type=int, default=1,
@@ -326,6 +326,15 @@ def main():
     if args.dataset == "causalgym":
         train = CGDataset(args.task, tok, n=2000, seed=0)
         test = CGDataset(args.task, tok, n=400, seed=1)
+    elif args.dataset == "mib":
+        # MIB tasks (arc_easy, ...) via HFEAPDataset: (clean, corrupted, [base_id, source_id]),
+        # length-matched per example but variable across examples -> node substrate only.
+        import sys as _sys
+        _sys.path.insert(0, "MIB-circuit-track")
+        from MIB_circuit_track.dataset import HFEAPDataset
+        hf_task, name_full = f"mib-bench/{args.task}", MODEL_FULLNAMES[args.model]
+        train = HFEAPDataset(hf_task, tok, split="train", task=args.task, model_name=name_full)
+        test = HFEAPDataset(hf_task, tok, split="validation", task=args.task, model_name=name_full)
     else:
         train = SVADataset(args.task, tok, split="train")
         test = SVADataset(args.task, tok, split="test")
@@ -339,6 +348,9 @@ def main():
     SAE = args.nodes in ("mlp_sae_span", "resid_sae_span")
     DAS = args.nodes in ("das_mlp_span", "das_resid_span")
     SPAN = args.nodes in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span") or SAE or DAS
+    # node is position-agnostic (mask broadcasts over positions), so it -- like span mode --
+    # does not need a fixed seq_len; both skip the modal-length filter (VARLEN).
+    VARLEN = SPAN or args.nodes == "node"
     corrupt_topk = args.mode == "necessary"
     hooker = LlamaAttributionHooks(hf, args.nodes, seq_len=seq_len,
                                    sufficient=corrupt_topk, include_input=False,
@@ -374,7 +386,7 @@ def main():
         while len(cl) < B and tries < B * 20:
             tries += 1
             clean, corr, lab = ds[random.randint(0, n - 1)]
-            if not SPAN:  # per-position layout needs a fixed length; span mode takes any length
+            if not VARLEN:  # per-position layout needs a fixed length; span/node take any length
                 a = tok(clean, return_tensors="pt").input_ids
                 b = tok(corr, return_tensors="pt").input_ids
                 if a.shape[1] != seq_len or b.shape[1] != seq_len:
@@ -479,12 +491,12 @@ def main():
     ec, eco, eci, eii = [], [], [], []
     for i in range(len(test)):
         clean, corr, lab = test[i]
-        if not SPAN:  # span mode evaluates variable-length pairs
+        if not VARLEN:  # span/node evaluate variable-length pairs
             if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
         ec.append(clean); eco.append(corr); eci.append(lab[0]); eii.append(lab[1])
         if len(ec) >= args.eval_examples: break
-    logger.info("Eval on %d test pairs (%s)", len(ec), "variable len" if SPAN else f"len={seq_len}")
+    logger.info("Eval on %d test pairs (%s)", len(ec), "variable len" if VARLEN else f"len={seq_len}")
 
     @torch.no_grad()
     def eval_metrics(mask, sufficient):
