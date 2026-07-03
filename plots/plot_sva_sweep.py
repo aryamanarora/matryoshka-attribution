@@ -50,10 +50,11 @@ LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (json key, facet-strip label, log10-transform?)
 METRICS = [
     ("acc_auc", "Accuracy AUC (↑)", False),
-    ("kstar_50", "log₁₀ k* (↓)", True),          # huge dynamic range -> log10 in load()
+    ("kstar_50", "log₁₀ k* iso (↓)", True),      # iso: first k s.t. acc_base>=0.5 (in JSON)
     ("faith_auc", "Faithfulness AUC (↑)", False),
-    ("cause_accsrc_auc", "Cause acc-source AUC (↑)", False),
+    ("cause_kstar", "log₁₀ k* cause (↓)", True), # cause: first k s.t. acc_source>=0.5 (computed)
 ]
+CAUSE_THR = 0.5
 
 
 def parse_method(fname: str, d: dict) -> str:
@@ -74,8 +75,11 @@ def load() -> pd.DataFrame:
         d = json.load(open(f))
         rec = {"task": d["task"], "nodes": d["nodes"], "loss": d["loss"],
                "method": parse_method(Path(f).name, d)}
+        # cause k*: first k (n_nodes) at which corrupting the top-k gives acc_source >= thr
+        cs = d["cause_metrics"]["acc_source"]
+        cause_kstar = next((float(k) for k, a in zip(d["n_nodes"], cs) if a >= CAUSE_THR), None)
         for key, _, is_log in METRICS:
-            v = d.get(key)
+            v = cause_kstar if key == "cause_kstar" else d.get(key)
             rec[key] = (np.nan if v is None
                         else float(np.log10(v)) if is_log else float(v))
         rows.append(rec)
