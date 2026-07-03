@@ -40,7 +40,7 @@ theme_set(
 )
 
 RES = Path("results/sva_sweep")
-TASKS = ["nounpp", "rc", "simple", "within_rc"]
+TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy"]   # arc_easy: MIB, node substrate only
 METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
                 "soft-log-IG", "idSTE-log-IG"]   # -IG = mask-space IG score update (log-k)
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
@@ -99,7 +99,9 @@ def cat(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_substrate(df: pd.DataFrame, nodes: str, out: Path):
-    sub = df[df["nodes"] == nodes]
+    sub = df[df["nodes"] == nodes].copy()
+    sub["task"] = sub["task"].cat.remove_unused_categories()   # drop tasks absent for substrate
+    n_tasks = sub["task"].nunique()
     brk = [10.0 ** e for e in range(0, 8) if 10 ** e <= sub["k"].max() * 1.5]
     p = (
         ggplot(sub, aes("k", "value", color="method", linetype="loss"))
@@ -108,7 +110,7 @@ def plot_substrate(df: pd.DataFrame, nodes: str, out: Path):
         + scale_x_log10(breaks=brk, labels=sci_labels)
         + scale_color_brewer(type="qual", palette="Set1")
         + labs(x="k (nodes kept clean)", y="", color="Method", linetype="Loss")
-        + theme(figure_size=(6.3, 4.6))
+        + theme(figure_size=(1.35 * n_tasks + 1.0, 4.6))
     )
     p.save(out, verbose=False)
     print(f"wrote {out}")

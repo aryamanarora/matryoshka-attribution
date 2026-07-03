@@ -40,7 +40,7 @@ theme_set(
 )
 
 RES = Path("results/sva_sweep")
-TASKS = ["nounpp", "rc", "simple", "within_rc"]
+TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy"]   # arc_easy: MIB, node substrate only
 # MAttr split into gate/optimizer family: soft = hard_topk + Adam (sigmoid-STE);
 # idSTE = hard_topk_identity + SGD (identity-STE). Each x {log, uniform} k; -IG = mask-space
 # integrated-gradient score update (--mattr-ig-steps>1), swept on log-k only.
@@ -99,13 +99,16 @@ def long_form(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_substrate(m: pd.DataFrame, nodes: str, out: Path):
+    sub = m[m["nodes"] == nodes].copy()
+    sub["task"] = sub["task"].cat.remove_unused_categories()   # drop tasks absent for substrate
+    n_tasks = sub["task"].nunique()
     p = (
-        ggplot(m[m["nodes"] == nodes], aes("method", "value", fill="loss"))
+        ggplot(sub, aes("method", "value", fill="loss"))
         + geom_col(position=position_dodge(width=0.8), width=0.72)
         + facet_grid("metric ~ task", scales="free_y")
         + scale_fill_brewer(type="qual", palette="Set1")
         + labs(x="", y="", fill="Loss")
-        + theme(figure_size=(7.5, 5.2))   # 8 methods x 4 tasks
+        + theme(figure_size=(1.6 * n_tasks + 1.1, 5.2))   # 8 methods; width scales with #tasks
     )
     p.save(out, verbose=False)
     print(f"wrote {out}")
