@@ -22,7 +22,7 @@ mkdir -p logs results/sva_sweep
 
 MODEL=${MODEL:-llama3}   # override for MIB tasks on other models, e.g. MODEL=qwen2.5
 OUT=results/sva_sweep
-TASKS=(nounpp rc simple within_rc)
+read -ra TASKS <<< "${SVA_TASKS-nounpp rc simple within_rc}"   # SVA_TASKS="" (set, empty) runs only MIB_TASKS
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
 LOSSES=(ce acc logit_diff)
 GRAD=(ig ixg)
