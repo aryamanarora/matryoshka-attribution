@@ -277,6 +277,11 @@ def main():
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
+    p.add_argument("--mattr-ig-steps", type=int, default=1,
+                   help="MAttr-IG: integrate dL/dmask over this many baseline(CF)->clean mask "
+                        "interpolation points per step (1 = plain STE; >1 = IG-under-intervention). "
+                        "Routed to scores through the chosen STE, so works with hard_topk (Adam) "
+                        "and hard_topk_identity (SGD).")
     p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp+attn_head", "node", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
@@ -400,19 +405,50 @@ def main():
     n_train = len(train)
     k_sampler = AdaptiveLogK(total) if args.k_schedule == "adaptive_log" else None
 
+    IG_STEPS = args.mattr_ig_steps
+
     def loss_fn(mask):
         cl, co, ci, ii = sample_batch(train, args.train_batch_size, n_train)
         if not cl:
             return None
         step_cause = resolve_direction(args.mode, corrupt_topk)   # joint -> per-step coin flip
-        ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=step_cause)
-        if k_sampler is not None:  # feed adaptive-k sampler the decided fraction at this k
-            ar = torch.arange(ll.shape[0], device=device)
-            with torch.no_grad():
-                dec = (ll[ar, cor] > ll[ar, inc]).float().mean().item()
-            k_sampler.observe(dec)
-        return attribution_loss(args.loss, ll, cor, inc, corrupt_topk=step_cause,
-                                hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
+        if IG_STEPS <= 1:
+            ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=step_cause)
+            if k_sampler is not None:  # feed adaptive-k sampler the decided fraction at this k
+                ar = torch.arange(ll.shape[0], device=device)
+                with torch.no_grad():
+                    dec = (ll[ar, cor] > ll[ar, inc]).float().mean().item()
+                k_sampler.observe(dec)
+            return attribution_loss(args.loss, ll, cor, inc, corrupt_topk=step_cause,
+                                    hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
+        # ---- MAttr-IG: integrate dL/dmask over the baseline(CF)->clean mask path ----
+        # effective mask alpha*m_hard makes activations cf + alpha*m*(clean-cf): alpha=0 is the
+        # all-baseline circuit, alpha=1 the top-k intervention. a_ig_j = mean_alpha dL/d(mask_j)
+        # is the IG attribution of node j; the surrogate (a_ig * mask).sum() re-routes it to the
+        # scores through mask's STE (identity or sigmoid), so no trainer change is needed.
+        bt = tok(cl, return_tensors="pt", padding=True).to(device)
+        st = tok(co, return_tensors="pt", padding=True).to(device)
+        last = bt.attention_mask.sum(1) - 1
+        hooker.cache_cf_activations(st.input_ids)
+        set_span(cl, co)
+        B = len(cl); ar = torch.arange(B, device=device)
+        cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
+        m_hard = mask.detach()
+        a_ig = torch.zeros_like(m_hard); L1 = None
+        old_suf = hooker.sufficient; hooker.sufficient = step_cause
+        for j in range(1, IG_STEPS + 1):
+            mm = (float(j) / IG_STEPS * m_hard).requires_grad_(True)
+            hooker.mask = mm
+            logits = hf(bt.input_ids, attention_mask=bt.attention_mask).logits.float()
+            Lj = attribution_loss(args.loss, logits[ar, last], cor, inc, corrupt_topk=step_cause,
+                                  hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
+            a_ig = a_ig + torch.autograd.grad(Lj, mm)[0]
+            if j == IG_STEPS:
+                L1 = Lj.detach()
+        hooker.sufficient = old_suf
+        a_ig = a_ig / IG_STEPS
+        surrogate = (a_ig.detach() * mask).sum()   # d/dscores = STE(a_ig); value carries L(alpha=1)
+        return surrogate - surrogate.detach() + L1
 
     if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
@@ -539,6 +575,8 @@ def main():
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
     if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
+    if args.method == "mattr" and args.mattr_ig_steps > 1:
+        tag += f"_ig{args.mattr_ig_steps}"
     if args.method == "mattr" and args.k_schedule == "uniform":
         tag += "_uniformk"
     if args.method == "mattr" and args.k_schedule == "adaptive_log":

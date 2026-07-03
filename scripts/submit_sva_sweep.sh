@@ -36,12 +36,18 @@ MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --lr 0.05 
 grad_tag() {   # $1=method $2=loss
   local t=$1; [[ "$2" != "logit_diff" ]] && t="${t}_$2"; echo "$t"
 }
-mattr_tag() {  # $1=variant $2=optimizer $3=loss $4=kschedule
+mattr_tag() {  # $1=variant $2=optimizer $3=loss $4=kschedule $5=ig_steps(optional,>1)
   local t="sufficient_$1_$2"
   [[ "$3" != "logit_diff" ]] && t="${t}_$3"
+  [[ "${5:-1}" -gt 1 ]] && t="${t}_ig${5}"
   [[ "$4" == "uniform" ]] && t="${t}_uniformk"
   echo "${t}_bs1"
 }
+
+# MAttr-IG variants (env-gated). IG_STEPS>1 enables them (integrate dL/dmask over that many
+# CF->clean points); IG_KS restricts which k-schedules get an IG variant (default: log only).
+IGS=${IG_STEPS:-0}
+IG_KS_STR=${IG_KS:-log}
 
 n=0; skip=0
 submit() {   # $1=name $2=tag ; rest = eval_sva.py args
@@ -74,6 +80,16 @@ for task in "${TASKS[@]}"; do
             --method mattr --loss "$loss" --k-schedule "$ks" \
             --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" --output "$OUT"
         done
+        if [[ "$IGS" -gt 1 ]]; then   # MAttr-IG variants (env-gated), IG_KS schedules only
+          for ks in $IG_KS_STR; do
+            submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_ig${IGS}_${loss}" \
+              "$(mattr_tag "$variant" "$opt" "$loss" "$ks" "$IGS")" \
+              --model "$MODEL" --task "$task" --dataset sva --nodes "$nodes" \
+              --method mattr --loss "$loss" --k-schedule "$ks" \
+              --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" \
+              "${MATTR_COMMON[@]}" --output "$OUT"
+          done
+        fi
       done
     done
   done
