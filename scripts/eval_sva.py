@@ -87,7 +87,7 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
 
 
 def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1,
-                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0):
+                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0, conductance=False):
     """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
 
     Captures the clean activation at each node module (down_proj / o_proj input) with a
@@ -164,12 +164,40 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
 
     # embeddings for the IG path (interpolate clean->patch input embedding, downstream live)
     emb_override = None
-    if ig_steps > 1:
+    if ig_steps > 1 or conductance:
         cap = {}
         h = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: cap.__setitem__("e", o.detach()))
         with torch.no_grad(): hf(bid, attention_mask=bam); ec = cap["e"]
         with torch.no_grad(): hf(pt.input_ids, attention_mask=pt.attention_mask); ep = cap["e"]
         h.remove()
+
+    if conductance:
+        # CONDUCTANCE (local-delta): proper Riemann sum along the ACTUAL (nonlinear) activation
+        # trajectory as the input embedding goes clean->patch. Instead of pulling the endpoint
+        # delta (clean-patch) out of the integral (that is exact only for alpha-linear nodes),
+        # accumulate the realized per-step increment  sum_k grad(a_k) . (a(a_{k-1}) - a(a_k)).
+        # fp32 accumulation. Node granularity only (span/per-pos cross-alignment not handled).
+        assert is_node, "conductance implemented for --nodes node only"
+        S = ig_steps if ig_steps > 1 else 30
+        prev = {k: clean_acts[k].float() for k in clean_acts}         # a(alpha_0) = clean
+        cond = {k: torch.zeros(v.shape, device=device, dtype=torch.float32) for k, v in clean_acts.items()}
+        for step in range(1, S + 1):
+            emb_override = (1 - step / S) * ec + (step / S) * ep       # clean -> patch
+            store_g, logits = capture(bid, bam, True, embed_override=emb_override)
+            metric_of(logits).backward()
+            for k in cond:
+                cur = store_g[k].detach().float()
+                cond[k] += store_g[k].grad.float() * (prev[k] - cur)  # grad(a_k) . (a_{k-1}-a_k)
+                prev[k] = cur
+        off0, nh, Hd, L = hooker._node_offset, hooker.num_heads, hooker.head_dim, len(layers)
+        scores = torch.zeros(total)
+        for li in range(L):
+            scores[off0 + L * nh + li] = cond[(li, "mlp")].sum().cpu()
+            c = cond[(li, "attn")]; Bn, Pn = c.shape[0], c.shape[1]
+            scores[off0 + li * nh:off0 + (li + 1) * nh] = c.view(Bn, Pn, nh, Hd).sum(-1).sum((0, 1)).cpu()
+        if relp:
+            revert_relp(hf)
+        return scores.to(device)
 
     grad_acc = {k: torch.zeros_like(v) for k, v in clean_acts.items()}
     alphas = [s / ig_steps for s in range(ig_steps)] if ig_steps > 1 else [0.0]
@@ -275,7 +303,7 @@ def main():
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
-    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "random"])
+    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "conductance", "random"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--mattr-ig-steps", type=int, default=1,
                    help="MAttr-IG: integrate dL/dmask over this many baseline(CF)->clean mask "
@@ -468,12 +496,14 @@ def main():
 
     if args.method == "random":
         scores = torch.randn(total, device=device)   # random-ranking baseline (seeded)
-    elif args.method in ("ixg", "relp", "ig"):
+    elif args.method in ("ixg", "relp", "ig", "conductance"):
+        cond = args.method == "conductance"
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=(args.grad_examples or args.eval_examples),
                                  relp=(args.method == "relp"),
-                                 ig_steps=args.ig_steps if args.method == "ig" else 1,
-                                 loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
+                                 ig_steps=args.ig_steps if args.method in ("ig", "conductance") else 1,
+                                 loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
+                                 conductance=cond)
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
