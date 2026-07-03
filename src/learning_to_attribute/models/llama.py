@@ -413,16 +413,17 @@ class LlamaAttributionHooks:
                         seq = x.shape[1]
 
                         if self.is_node:
-                            # Node: [n_heads] per layer, broadcast over positions
+                            # Node: [n_heads] per layer, broadcast over batch & positions
+                            B = x.shape[0]
                             off = self._node_offset + li * self.num_heads
                             m = self.mask[off:off + self.num_heads].view(
                                 1, 1, self.num_heads, 1)
-                            x4d = x.view(1, seq, self.num_heads, self.head_dim)
-                            cf4d = (cf.view(1, cf.shape[1], self.num_heads,
+                            x4d = x.view(B, seq, self.num_heads, self.head_dim)
+                            cf4d = (cf.view(cf.shape[0], cf.shape[1], self.num_heads,
                                             self.head_dim) if cf is not None
                                     else None)
                             out = self._interpolate(x4d, m, cf4d)
-                            return (out[0].reshape(1, seq, -1),)
+                            return (out[0].reshape(B, seq, -1),)
 
                         if self.mask_type == "attn_output":
                             off = li * self.seq_len
@@ -481,16 +482,16 @@ class LlamaAttributionHooks:
                             off = (self.mlp_total
                                    + li * self.seq_len * self.num_heads)
                         end = off + self.seq_len * self.num_heads
+                        B = x.shape[0]
                         m = self.mask[off:end].view(
-                            1, self.seq_len, self.num_heads, 1)
-
-                        x4d = x.view(1, self.seq_len, self.num_heads,
+                            1, self.seq_len, self.num_heads, 1)   # broadcast over batch
+                        x4d = x.view(B, self.seq_len, self.num_heads,
                                      self.head_dim)
-                        cf4d = (cf.view(1, self.seq_len, self.num_heads,
+                        cf4d = (cf.view(cf.shape[0], self.seq_len, self.num_heads,
                                         self.head_dim) if cf is not None
                                 else None)
                         out = self._interpolate(x4d, m, cf4d)
-                        return (out[0].reshape(1, self.seq_len, -1),)
+                        return (out[0].reshape(B, self.seq_len, -1),)
                     return hook
                 self._hooks.append(
                     self._get_attn_module(layer).register_forward_pre_hook(
