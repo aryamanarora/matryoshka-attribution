@@ -5,7 +5,7 @@ For each sparsity level and layer, shows stacked bars of:
 - dims shared by 2+ spans
 
 Usage:
-    uv run python scripts/plot_das_sharing.py results/pythia1b_npi_any_das_scores.pt
+    uv run python plots/plot_das_sharing.py results/pythia1b_npi_any_das_scores.pt
 """
 
 import sys

@@ -86,7 +86,8 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
                    "gemma2": "google/gemma-2-2b", "llama3": "meta-llama/Llama-3.1-8B"}
 
 
-def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1):
+def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1,
+                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0):
     """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
 
     Captures the clean activation at each node module (down_proj / o_proj input) with a
@@ -100,7 +101,9 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         from learning_to_attribute.grad_attribution import install_relp, revert_relp
         install_relp(hf)
     layers = hf.model.layers
-    use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_span", "mlp+attn_head_span")
+    use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_head", "node", "mlp+attn_span", "mlp+attn_head_span")
+    head_nonspan = hooker.mask_type == "mlp+attn_head"   # per-(pos, head), fixed-length
+    is_node = hooker.mask_type == "node"                 # MIB granularity: mlp block + attn head
     span = hooker.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span")
     span_attn = hooker.mask_type == "mlp+attn_span"
     span_head = hooker.mask_type == "mlp+attn_head_span"
@@ -144,8 +147,12 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         return store, logits
 
     def metric_of(logits):
+        # gradient-attribution target = goodness (= -loss), scored by g . (clean - patch).
+        # sufficiency direction (corrupt_topk=False): reward recovering the BASE answer. For
+        # loss=logit_diff this is exactly (logit_base - logit_source), matching the prior default.
         ll = logits[torch.arange(B, device=device), last]
-        return (ll[torch.arange(B, device=device), cor] - ll[torch.arange(B, device=device), inc]).sum()
+        return -attribution_loss(loss, ll, cor, inc, corrupt_topk=False,
+                                 hinge_margin=hinge_margin, acc_temp=acc_temp)
 
     # cached clean & patch node acts (no grad) -> delta
     pt = tok(co, return_tensors="pt", padding=True).to(device)
@@ -178,6 +185,24 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
 
     tied = hooker.mask_type == "mlp_tied"
     scores = torch.zeros(total)
+    if is_node:
+        # MIB node granularity: one scalar per MLP block per layer (g.delta summed over the
+        # whole intermediate block + positions; == masking the MLP output, down_proj linear),
+        # and one per attention head per layer (g.delta summed over head_dim + positions).
+        # Layout mirrors the hooker: [offset][attn: L*nh heads][mlp: L blocks].
+        off0 = hooker._node_offset
+        nh, Hd, L = hooker.num_heads, hooker.head_dim, len(layers)
+        for li in range(L):
+            cm = grad_acc[(li, "mlp")] * (clean_acts[(li, "mlp")] - patch_acts[(li, "mlp")])
+            scores[off0 + L * nh + li] = cm.sum().cpu()                # [B,P,N] -> scalar
+            ga, ca, pa = grad_acc[(li, "attn")], clean_acts[(li, "attn")], patch_acts[(li, "attn")]
+            Bn, Pn = ga.shape[0], ga.shape[1]
+            effh = (ga.view(Bn, Pn, nh, Hd)
+                    * (ca.view(Bn, Pn, nh, Hd) - pa.view(Bn, Pn, nh, Hd))).sum(-1).sum((0, 1))
+            scores[off0 + li * nh:off0 + (li + 1) * nh] = effh.cpu()   # [nh]
+        if relp:
+            revert_relp(hf)
+        return scores.to(device)
     if span:
         # per-(layer, span, neuron): node at each span's last token, cross-aligned base<-src.
         # effect = grad[base_last] . (clean[base_last] - patch[src_last]).
@@ -228,8 +253,18 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         eff = contrib.sum(0)
         off = li * P * N; scores[off:off + P * N] = eff.reshape(-1).cpu()
         if use_attn:
-            eff = (grad_acc[(li, "attn")] * (clean_acts[(li, "attn")] - patch_acts[(li, "attn")])).sum(0)
-            off = hooker.mlp_total + li * P * H; scores[off:off + P * H] = eff.reshape(-1).cpu()
+            ga, ca, pa = grad_acc[(li, "attn")], clean_acts[(li, "attn")], patch_acts[(li, "attn")]
+            if head_nonspan:
+                # per-(pos, head): reshape o_proj input to heads, sum g.delta over head_dim.
+                nh, Hd = hooker.num_heads, hooker.head_dim
+                Bn = ga.shape[0]
+                effh = (ga.view(Bn, P, nh, Hd)
+                        * (ca.view(Bn, P, nh, Hd) - pa.view(Bn, P, nh, Hd))).sum(-1).sum(0)  # [P, nh]
+                off = hooker.mlp_total + li * P * nh
+                scores[off:off + P * nh] = effh.reshape(-1).cpu()
+            else:  # mlp+attn_dim: per-(pos, dim)
+                eff = (ga * (ca - pa)).sum(0)
+                off = hooker.mlp_total + li * P * H; scores[off:off + P * H] = eff.reshape(-1).cpu()
     if relp:
         revert_relp(hf)
     return scores.to(device)
@@ -242,7 +277,7 @@ def main():
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
-    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"])
+    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp+attn_head", "node", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"])
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
@@ -382,7 +417,8 @@ def main():
     if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=args.eval_examples, relp=(args.method == "relp"),
-                                 ig_steps=args.ig_steps if args.method == "ig" else 1)
+                                 ig_steps=args.ig_steps if args.method == "ig" else 1,
+                                 loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
@@ -501,7 +537,7 @@ def main():
     out["loss"] = args.loss
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
-    if args.method == "mattr" and args.loss != "logit_diff":
+    if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
     if args.method == "mattr" and args.k_schedule == "uniform":
         tag += "_uniformk"

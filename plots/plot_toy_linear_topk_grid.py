@@ -7,7 +7,7 @@ Reads results/toy_linear_topk_grid_{lr,batch}.pkl. Emits to paper/figs/:
   toy_linear_topk_grid_lr.pdf     (lines = learning rate, batch=1)
   toy_linear_topk_grid_batch.pdf  (lines = batch size, lr=0.05)
 
-Regenerate with: uv run python scripts/plot_toy_linear_topk_grid.py
+Regenerate with: uv run python plots/plot_toy_linear_topk_grid.py
 """
 import pickle
 from pathlib import Path

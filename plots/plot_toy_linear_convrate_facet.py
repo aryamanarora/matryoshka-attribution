@@ -6,7 +6,7 @@ the seeds that reach the target (a (method, n, rho) point is plotted only if a m
 seeds reach it, to avoid survivorship-biased single-seed points).
 
 Reads the three n-sweep pickles in results/. Full-width figure -> paper/figs/.
-Regenerate with: uv run python scripts/plot_toy_linear_convrate_facet.py
+Regenerate with: uv run python plots/plot_toy_linear_convrate_facet.py
 """
 import pickle
 from pathlib import Path

@@ -3,7 +3,7 @@
 Faceted: rows = node/edge level, columns = task/model.
 
 Usage:
-    uv run python scripts/plot_jaccard_curves.py
+    uv run python plots/plot_jaccard_curves.py
 """
 
 import json

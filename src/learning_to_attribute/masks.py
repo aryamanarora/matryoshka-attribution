@@ -19,6 +19,7 @@ from .sigmoid_topk import sigmoid_topk, sigmoid_topk_detached_tau
 # Variants that need a sampled ``k`` (everything except the bias-step, which is separate).
 VARIANTS = (
     "topk", "topk_detached", "hard_topk", "hard_topk_identity",
+    "hard_topk_identity_gumbel",
     "hard_topk_gumbel", "hard_topk_reinforce", "bernoulli_reinforce",
     "hard_concrete", "topk_kth_threshold", "topk_kth_threshold_hard",
 )
@@ -64,6 +65,16 @@ def build_mask(scores: torch.Tensor, k: float, variant: str = "topk",
         # hard top-k forward, IDENTITY straight-through backward (dm/ds = 1): score
         # gradient is purely g*delta per node (no sigmoid gate-slope, no temperature).
         hard = _hard_topk_indices(scores, k)
+        return MaskResult(hard.detach() + (scores - scores.detach()))
+
+    if variant == "hard_topk_identity_gumbel":
+        # Gumbel(0,1) per score, hard top-k on the PERTURBED scores (stochastic selection),
+        # but IDENTITY straight-through backward (dm/ds = 1) on the CLEAN scores — same
+        # gradient as hard_topk_identity, just with noisy forward selection so always-on /
+        # always-off nodes still flip in/out and get a gradient signal.
+        gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1 - 1e-8)))
+        perturbed = scores + gumbel
+        hard = _hard_topk_indices(perturbed, k)
         return MaskResult(hard.detach() + (scores - scores.detach()))
 
     if variant == "hard_topk_gumbel":

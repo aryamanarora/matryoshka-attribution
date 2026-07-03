@@ -8,7 +8,7 @@ loss-at-a-given-k keeps dropping in later stages the model is still learning
 Reads results/<dir>/<task>_<model>_trainlog.csv (step,k,k_frac,loss,bias_step).
 
 Usage:
-    uv run python scripts/plot_train_convergence.py [results_subdir]
+    uv run python plots/plot_train_convergence.py [results_subdir]
 """
 
 import sys

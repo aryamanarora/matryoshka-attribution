@@ -1,8 +1,8 @@
 """Scatter plot of node ranks: Ours vs NAP-IG, for any task/model.
 
 Usage:
-    uv run python scripts/plot_rank_scatter.py --task ioi --model gpt2
-    uv run python scripts/plot_rank_scatter.py --task ioi --model qwen2.5
+    uv run python plots/plot_rank_scatter.py --task ioi --model gpt2
+    uv run python plots/plot_rank_scatter.py --task ioi --model qwen2.5
 """
 
 import argparse

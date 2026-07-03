@@ -5,7 +5,7 @@ Three subfigure-sized PDFs (side-by-side in a \textwidth row):
   2. toy_linear_recovery_vs_n.pdf -- final recovery metrics vs n
   3. toy_linear_convrate_vs_n.pdf -- steps to Spearman>=thresh vs n (convergence rate)
 
-Run on sc (or locally; CPU-only). Regenerate with: uv run python scripts/plot_toy_linear_mattr.py
+Run on sc (or locally; CPU-only). Regenerate with: uv run python plots/plot_toy_linear_mattr.py
 """
 import pickle
 from pathlib import Path

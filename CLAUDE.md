@@ -56,8 +56,8 @@ both used the same eval. Eval was changed to average over `n_eval` examples (com
 ### Known-still-wrong artifacts (as of 2026-06-09)
 These compare NAP-IG against the **uniform-k** `mib_node_hard_topk` instead of the
 log-k `mib_node_hard_topk_log`, so they're inconsistent with the paper's L2A:
-- `scripts/plot_rank_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
-- `scripts/plot_score_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
+- `plots/plot_rank_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
+- `plots/plot_score_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
 - `scripts/compare_ranks.py` → `paper/tabs/rank_correlations.tex` (`compare_node_methods("mib_node_hard_topk", ...)`)
 
 The natural-k comparison scripts (`plot_cpr_curves_naturalk.py`,
