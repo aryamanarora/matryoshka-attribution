@@ -47,7 +47,7 @@ RANDOM_METRICS = {"acc_auc", "faith_auc"}
 # MAttr split into gate/optimizer family: soft = hard_topk + Adam (sigmoid-STE);
 # idSTE = hard_topk_identity + SGD (identity-STE). Each x {log, uniform} k; -IG = mask-space
 # integrated-gradient score update (--mattr-ig-steps>1), swept on log-k only.
-METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
+METHOD_ORDER = ["IG", "IxG", "Cond", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
                 "soft-log-IG", "idSTE-log-IG"]
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (json key, facet-strip label, log10-transform?)
@@ -66,6 +66,8 @@ def parse_method(fname: str, d: dict) -> str:
     tag = fname.split(f"_{nodes_safe}_", 1)[1].rsplit(".json", 1)[0]
     if tag.startswith("random"):
         return "RANDOM"
+    if tag.startswith("conductance"):
+        return "Cond"
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"

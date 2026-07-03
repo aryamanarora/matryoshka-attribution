@@ -41,8 +41,8 @@ theme_set(
 
 RES = Path("results/sva_sweep")
 TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy"]   # arc_easy: MIB, node substrate only
-METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
-                "soft-log-IG", "idSTE-log-IG"]   # -IG = mask-space IG score update (log-k)
+METHOD_ORDER = ["IG", "IxG", "Cond", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
+                "soft-log-IG", "idSTE-log-IG"]   # Cond = conductance (local-delta IG)
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (metrics dict in JSON, key, facet-strip label) — the curves behind the AUC rows.
 CURVES = [
@@ -67,6 +67,10 @@ def sci_labels(breaks):
 def parse_method(fname: str, d: dict) -> str:
     nodes_safe = d["nodes"].replace("+", "-")
     tag = fname.split(f"_{nodes_safe}_", 1)[1].rsplit(".json", 1)[0]
+    if tag.startswith("random"):
+        return "RANDOM"
+    if tag.startswith("conductance"):
+        return "Cond"
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"
@@ -79,12 +83,15 @@ def load() -> pd.DataFrame:
     rows = []
     for f in sorted(glob.glob(str(RES / "*.json"))):
         d = json.load(open(f))
-        ks = d["n_nodes"]
         method = parse_method(Path(f).name, d)
+        if method == "RANDOM":
+            continue
+        ks = d["n_nodes"]
+        task = d["task"] if d["model"] == "llama3" else f"{d['task']}/{d['model']}"
         for dictname, key, label in CURVES:
             ys = d[dictname][key]
             for k, y in zip(ks, ys):
-                rows.append({"task": d["task"], "nodes": d["nodes"], "loss": d["loss"],
+                rows.append({"task": task, "nodes": d["nodes"], "loss": d["loss"],
                              "method": method, "metric": label, "k": float(k),
                              "value": float(y)})
     return pd.DataFrame(rows)
