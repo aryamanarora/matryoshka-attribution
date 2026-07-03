@@ -20,7 +20,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs results/sva_sweep
 
-MODEL=llama3
+MODEL=${MODEL:-llama3}   # override for MIB tasks on other models, e.g. MODEL=qwen2.5
 OUT=results/sva_sweep
 TASKS=(nounpp rc simple within_rc)
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
