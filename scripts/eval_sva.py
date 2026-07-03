@@ -117,6 +117,9 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         if not span and not is_node:   # node is position-agnostic -> variable length OK
             if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+        elif is_node:   # node: clean/corrupted must match length (interpolation alignment)
+            if tok(clean, return_tensors="pt").input_ids.shape[1] != \
+               tok(corr, return_tensors="pt").input_ids.shape[1]: continue
         cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
 
     bt = tok(cl, return_tensors="pt", padding=True).to(device)
@@ -423,6 +426,10 @@ def main():
                 b = tok(corr, return_tensors="pt").input_ids
                 if a.shape[1] != seq_len or b.shape[1] != seq_len:
                     continue
+            elif not SPAN:  # node: interpolation needs clean/corrupted the SAME length per pair
+                if tok(clean, return_tensors="pt").input_ids.shape[1] != \
+                   tok(corr, return_tensors="pt").input_ids.shape[1]:
+                    continue
             cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
         return cl, co, ci, ii
 
@@ -531,6 +538,9 @@ def main():
         if not VARLEN:  # span/node evaluate variable-length pairs
             if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+        elif not SPAN:   # node: clean/corrupted must match length (interpolation alignment)
+            if tok(clean, return_tensors="pt").input_ids.shape[1] != \
+               tok(corr, return_tensors="pt").input_ids.shape[1]: continue
         ec.append(clean); eco.append(corr); eci.append(lab[0]); eii.append(lab[1])
         if len(ec) >= args.eval_examples: break
     logger.info("Eval on %d test pairs (%s)", len(ec), "variable len" if VARLEN else f"len={seq_len}")
