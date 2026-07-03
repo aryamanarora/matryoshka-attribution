@@ -275,7 +275,7 @@ def main():
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
-    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig"])
+    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "random"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--mattr-ig-steps", type=int, default=1,
                    help="MAttr-IG: integrate dL/dmask over this many baseline(CF)->clean mask "
@@ -466,7 +466,9 @@ def main():
         surrogate = (a_ig.detach() * mask).sum()   # d/dscores = STE(a_ig); value carries L(alpha=1)
         return surrogate - surrogate.detach() + L1
 
-    if args.method in ("ixg", "relp", "ig"):
+    if args.method == "random":
+        scores = torch.randn(total, device=device)   # random-ranking baseline (seeded)
+    elif args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=(args.grad_examples or args.eval_examples),
                                  relp=(args.method == "relp"),
@@ -590,6 +592,8 @@ def main():
     out["loss"] = args.loss
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
+    if args.method == "random":
+        tag = f"random_s{args.seed}"
     if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
     if args.method == "mattr" and args.mattr_ig_steps > 1:
