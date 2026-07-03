@@ -305,6 +305,10 @@ def main():
     p.add_argument("--n_iters", type=int, default=30)
     p.add_argument("--train-batch-size", type=int, default=8)
     p.add_argument("--eval-examples", type=int, default=100)
+    p.add_argument("--grad-examples", type=int, default=None,
+                   help="# examples in the IG/IxG attribution batch (default: --eval-examples). "
+                        "Lower for long-prompt tasks (arc): the batch is captured with grad for "
+                        "all layers at once, so long seqs OOM. Independent of the eval-sweep size.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="results/sva")
     args = p.parse_args()
@@ -464,7 +468,8 @@ def main():
 
     if args.method in ("ixg", "relp", "ig"):
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
-                                 n_examples=args.eval_examples, relp=(args.method == "relp"),
+                                 n_examples=(args.grad_examples or args.eval_examples),
+                                 relp=(args.method == "relp"),
                                  ig_steps=args.ig_steps if args.method == "ig" else 1,
                                  loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp)
     else:

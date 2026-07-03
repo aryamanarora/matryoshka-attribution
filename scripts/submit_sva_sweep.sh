@@ -63,11 +63,14 @@ submit() {   # $1=name $2=tag ; rest = eval_sva.py args
 
 emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one (task, substrate)
   local task=$1 nodes=$2 dataset=$3 nabbr=${2//+/-} loss gm cfg variant opt vabbr ks
+  # long-prompt MIB tasks: shrink the IG/IxG attribution batch (captured with grad over all
+  # layers at once) to avoid OOM; eval sweep still uses 100 test pairs.
+  local grad_extra=(); [[ "$dataset" == mib ]] && grad_extra=(--grad-examples 32)
   for loss in "${LOSSES[@]}"; do
     for gm in "${GRAD[@]}"; do
       submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
         --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
-        --method "$gm" --loss "$loss" --eval-examples 100 --output "$OUT"
+        --method "$gm" --loss "$loss" --eval-examples 100 "${grad_extra[@]}" --output "$OUT"
     done
     for cfg in "${MATTR_CONFIGS[@]}"; do
       variant=${cfg%:*}; opt=${cfg#*:}
