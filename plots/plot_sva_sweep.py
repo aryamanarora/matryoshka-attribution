@@ -6,6 +6,7 @@ Run:  uv run python plots/plot_sva_sweep.py
 """
 import glob
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -41,8 +42,10 @@ theme_set(
 RES = Path("results/sva_sweep")
 TASKS = ["nounpp", "rc", "simple", "within_rc"]
 # MAttr split into gate/optimizer family: soft = hard_topk + Adam (sigmoid-STE);
-# idSTE = hard_topk_identity + SGD (identity-STE). Each x {log, uniform} k.
-METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif"]
+# idSTE = hard_topk_identity + SGD (identity-STE). Each x {log, uniform} k; -IG = mask-space
+# integrated-gradient score update (--mattr-ig-steps>1), swept on log-k only.
+METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
+                "soft-log-IG", "idSTE-log-IG"]
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (json key, facet-strip label, log10-transform?)
 METRICS = [
@@ -60,7 +63,8 @@ def parse_method(fname: str, d: dict) -> str:
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"
-        return f"{fam}-{ks}"
+        ig = "-IG" if re.search(r"_ig\d+", tag) else ""
+        return f"{fam}-{ks}{ig}"
     return "IxG" if tag.startswith("ixg") else "IG"
 
 
@@ -97,7 +101,7 @@ def plot_substrate(m: pd.DataFrame, nodes: str, out: Path):
         + facet_grid("metric ~ task", scales="free_y")
         + scale_fill_brewer(type="qual", palette="Set1")
         + labs(x="", y="", fill="Loss")
-        + theme(figure_size=(6.3, 5.2))   # 6 methods x 4 tasks -> a touch over \textwidth
+        + theme(figure_size=(7.5, 5.2))   # 8 methods x 4 tasks
     )
     p.save(out, verbose=False)
     print(f"wrote {out}")

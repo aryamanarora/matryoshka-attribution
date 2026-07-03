@@ -6,6 +6,7 @@ Run:  uv run python plots/plot_sva_sweep_curves.py
 """
 import glob
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +41,8 @@ theme_set(
 
 RES = Path("results/sva_sweep")
 TASKS = ["nounpp", "rc", "simple", "within_rc"]
-METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif"]
+METHOD_ORDER = ["IG", "IxG", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
+                "soft-log-IG", "idSTE-log-IG"]   # -IG = mask-space IG score update (log-k)
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (metrics dict in JSON, key, facet-strip label) — the curves behind the AUC rows.
 CURVES = [
@@ -67,7 +69,9 @@ def parse_method(fname: str, d: dict) -> str:
     tag = fname.split(f"_{nodes_safe}_", 1)[1].rsplit(".json", 1)[0]
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
-        return f"{fam}-{'unif' if 'uniformk' in tag else 'log'}"
+        ks = "unif" if "uniformk" in tag else "log"
+        ig = "-IG" if re.search(r"_ig\d+", tag) else ""
+        return f"{fam}-{ks}{ig}"
     return "IxG" if tag.startswith("ixg") else "IG"
 
 
