@@ -18,7 +18,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import learn_scores, sparsity_sweep
-from learning_to_attribute.schedules import AdaptiveLogK
+from learning_to_attribute.schedules import AdaptiveLogK, FixedK
 from learning_to_attribute.losses import attribution_loss, resolve_direction, LOSS_CHOICES
 from learning_to_attribute.data import SVADataset, CausalGymDataset
 from learning_to_attribute.models import LlamaAttributionHooks
@@ -330,6 +330,9 @@ def main():
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
     p.add_argument("--k-schedule", default="log",
                    choices=["uniform", "log", "adaptive_log", "log_both"])
+    p.add_argument("--fixed-k-frac", type=float, default=None,
+                   help="MAttr ablation: train the mask at a single FIXED k = frac*total nodes "
+                        "every step (overrides --k-schedule sampling). e.g. 0.1 = 10%% of nodes.")
     p.add_argument("--steps", type=int, default=2000)
     p.add_argument("--lr", type=float, default=0.05)
     p.add_argument("--T", type=float, default=0.5)
@@ -454,7 +457,14 @@ def main():
         return ll[ar, cor] - ll[ar, inc]
 
     n_train = len(train)
-    k_sampler = AdaptiveLogK(total) if args.k_schedule == "adaptive_log" else None
+    if args.fixed_k_frac is not None:
+        k_sampler = FixedK(max(1, round(args.fixed_k_frac * total)))
+        logger.info("Fixed-k training: k=%d (%.1f%% of %d)", k_sampler.k,
+                    100 * args.fixed_k_frac, total)
+    elif args.k_schedule == "adaptive_log":
+        k_sampler = AdaptiveLogK(total)
+    else:
+        k_sampler = None
 
     IG_STEPS = args.mattr_ig_steps
 
@@ -522,7 +532,7 @@ def main():
                            k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr,
                            extra_optimizer=(args.das_optimizer if DAS else None))
         scores = res.scores.detach()
-        if k_sampler is not None:
+        if isinstance(k_sampler, AdaptiveLogK):
             logger.info("adaptive-k final frontier: k_max=%.0f (%.2f%% of %d)",
                         math.exp(k_sampler.kmax_log),
                         100 * math.exp(k_sampler.kmax_log) / total, total)
@@ -638,7 +648,9 @@ def main():
         tag += f"_{args.loss}"
     if args.method == "mattr" and args.mattr_ig_steps > 1:
         tag += f"_ig{args.mattr_ig_steps}"
-    if args.method == "mattr" and args.k_schedule == "uniform":
+    if args.method == "mattr" and args.fixed_k_frac is not None:
+        tag += f"_fixedk{int(round(args.fixed_k_frac * 100))}"
+    if args.method == "mattr" and args.fixed_k_frac is None and args.k_schedule == "uniform":
         tag += "_uniformk"
     if args.method == "mattr" and args.k_schedule == "adaptive_log":
         tag += "_adaptivek"

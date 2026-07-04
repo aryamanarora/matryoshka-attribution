@@ -52,6 +52,20 @@ def sample_k_sum_pow2(n: int) -> list[float]:
     return ks
 
 
+class FixedK:
+    """k_sampler that returns a constant ``k`` every step -- train the mask at a single fixed
+    sparsity instead of sampling k from a schedule. ``observe`` is a no-op."""
+
+    def __init__(self, k):
+        self.k = int(k)
+
+    def sample(self):
+        return self.k
+
+    def observe(self, *args):
+        pass
+
+
 class AdaptiveLogK:
     """Frontier-restricted log-uniform ``k`` sampler (single-scalar Robbins-Monro).
 
