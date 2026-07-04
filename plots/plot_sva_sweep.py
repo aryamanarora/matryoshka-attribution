@@ -47,8 +47,9 @@ RANDOM_METRICS = {"acc_auc", "faith_auc"}
 # MAttr split into gate/optimizer family: soft = hard_topk + Adam (sigmoid-STE);
 # idSTE = hard_topk_identity + SGD (identity-STE). Each x {log, uniform} k; -IG = mask-space
 # integrated-gradient score update (--mattr-ig-steps>1), swept on log-k only.
-METHOD_ORDER = ["IG", "IxG", "Cond", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
-                "soft-log-IG", "idSTE-log-IG"]
+METHOD_ORDER = ["IG", "IxG", "Cond",
+                "soft-log", "soft-unif", "soft-fixed", "idSTE-log", "idSTE-unif", "idSTE-fixed",
+                "soft-log-IG", "idSTE-log-IG"]   # -fixed = trained at fixed k=10% (no schedule)
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (json key, facet-strip label, log10-transform?)
 METRICS = [
@@ -70,7 +71,7 @@ def parse_method(fname: str, d: dict) -> str:
         return "Cond"
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
-        ks = "unif" if "uniformk" in tag else "log"
+        ks = "fixed" if "fixedk" in tag else ("unif" if "uniformk" in tag else "log")
         ig = "-IG" if re.search(r"_ig\d+", tag) else ""
         return f"{fam}-{ks}{ig}"
     return "IxG" if tag.startswith("ixg") else "IG"

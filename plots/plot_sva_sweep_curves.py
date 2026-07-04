@@ -41,8 +41,9 @@ theme_set(
 
 RES = Path("results/sva_sweep")
 TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy"]   # arc_easy: MIB, node substrate only
-METHOD_ORDER = ["IG", "IxG", "Cond", "soft-log", "soft-unif", "idSTE-log", "idSTE-unif",
-                "soft-log-IG", "idSTE-log-IG"]   # Cond = conductance (local-delta IG)
+METHOD_ORDER = ["IG", "IxG", "Cond",
+                "soft-log", "soft-unif", "soft-fixed", "idSTE-log", "idSTE-unif", "idSTE-fixed",
+                "soft-log-IG", "idSTE-log-IG"]   # Cond = conductance; -fixed = fixed k=10%
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
 # (metrics dict in JSON, key, facet-strip label) — the curves behind the AUC rows.
 CURVES = [
@@ -73,7 +74,7 @@ def parse_method(fname: str, d: dict) -> str:
         return "Cond"
     if "hard_topk" in tag:
         fam = "idSTE" if "identity" in tag else "soft"
-        ks = "unif" if "uniformk" in tag else "log"
+        ks = "fixed" if "fixedk" in tag else ("unif" if "uniformk" in tag else "log")
         ig = "-IG" if re.search(r"_ig\d+", tag) else ""
         return f"{fam}-{ks}{ig}"
     return "IxG" if tag.startswith("ixg") else "IG"
