@@ -167,12 +167,26 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
 
     # embeddings for the IG path (interpolate clean->patch input embedding, downstream live)
     emb_override = None
-    if ig_steps > 1 or conductance:
+    if ig_steps > 1 or conductance or hooker.include_input:
         cap = {}
         h = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: cap.__setitem__("e", o.detach()))
         with torch.no_grad(): hf(bid, attention_mask=bam); ec = cap["e"]
         with torch.no_grad(): hf(pt.input_ids, attention_mask=pt.attention_mask); ep = cap["e"]
         h.remove()
+
+    def input_node_effect():
+        # score for the input-embedding node (index 0 when include_input): grad(emb).(clean-patch),
+        # averaged over the IG path. The input embedding is interpolated LINEARLY, so its IG and
+        # conductance coincide; ixg (ig_steps=1) is grad at the clean embedding.
+        S = ig_steps if ig_steps > 1 else 1
+        g_acc = torch.zeros_like(ec)
+        for step in range(1, S + 1):
+            eo = (ep + (step / S) * (ec - ep)).detach().requires_grad_(True)   # step=S -> clean
+            hh = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: eo)
+            metric_of(hf(bid, attention_mask=bam).logits.float()).backward()
+            hh.remove()
+            g_acc += eo.grad
+        return float((g_acc / S * (ec - ep)).sum())
 
     if conductance:
         # CONDUCTANCE (local-delta): proper Riemann sum along the ACTUAL (nonlinear) activation
@@ -198,6 +212,8 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             scores[off0 + L * nh + li] = cond[(li, "mlp")].sum().cpu()
             c = cond[(li, "attn")]; Bn, Pn = c.shape[0], c.shape[1]
             scores[off0 + li * nh:off0 + (li + 1) * nh] = c.view(Bn, Pn, nh, Hd).sum(-1).sum((0, 1)).cpu()
+        if hooker.include_input:
+            scores[0] = input_node_effect()
         if relp:
             revert_relp(hf)
         return scores.to(device)
@@ -231,6 +247,8 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             effh = (ga.view(Bn, Pn, nh, Hd)
                     * (ca.view(Bn, Pn, nh, Hd) - pa.view(Bn, Pn, nh, Hd))).sum(-1).sum((0, 1))
             scores[off0 + li * nh:off0 + (li + 1) * nh] = effh.cpu()   # [nh]
+        if hooker.include_input:
+            scores[0] = input_node_effect()
         if relp:
             revert_relp(hf)
         return scores.to(device)
@@ -308,6 +326,9 @@ def main():
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "conductance", "random"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
+    p.add_argument("--include-input", action="store_true",
+                   help="score + ablate the input-embedding node (node substrate only), matching "
+                        "MIB's graph which includes an input node. Adds 1 node at index 0.")
     p.add_argument("--mattr-ig-steps", type=int, default=1,
                    help="MAttr-IG: integrate dL/dmask over this many baseline(CF)->clean mask "
                         "interpolation points per step (1 = plain STE; >1 = IG-under-intervention). "
@@ -391,7 +412,7 @@ def main():
     VARLEN = SPAN or args.nodes == "node"
     corrupt_topk = args.mode == "necessary"
     hooker = LlamaAttributionHooks(hf, args.nodes, seq_len=seq_len,
-                                   sufficient=corrupt_topk, include_input=False,
+                                   sufficient=corrupt_topk, include_input=args.include_input,
                                    num_spans=(NUM_SPANS if SPAN else None))
     if SAE:
         from learning_to_attribute.sae_loader import load_llama_scope_saes
