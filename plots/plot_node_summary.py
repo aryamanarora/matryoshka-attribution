@@ -115,22 +115,23 @@ def heatmap(g):
 
 
 def scatter(g):
-    meth6 = [m for m in METHODS if "fixed" not in m]     # fixed-k lives in the interaction figure
-    d = g[g["method"].isin(meth6)].copy()
-    d["loss"] = pd.Categorical(d["loss"], categories=LOSSES, ordered=True)
-    d["method"] = pd.Categorical(d["method"], categories=meth6, ordered=True)
+    meth = ["IG", "IxG", "soft-log", "idSTE-log"]   # drop unif (and fixed-k: interaction figure)
+    llab = {"ce": "CE", "acc": "acc", "logit_diff": "logit-diff"}
+    d = g[g["method"].isin(meth)].copy()
+    d["loss"] = pd.Categorical(d["loss"].map(llab), categories=list(llab.values()), ordered=True)
+    d["method"] = pd.Categorical(d["method"], categories=meth, ordered=True)
     d["grp"] = pd.Categorical(d["grp"], categories=["SVA", "ARC-E", "IOI"], ordered=True)
     p = (ggplot(d, aes("acc_auc", "faith_auc", color="loss", shape="method"))
          + geom_hline(yintercept=1.0, linetype="dashed", color="#888888", size=0.3)  # overshoot
-         + geom_point(size=2.3, alpha=0.9)
+         + geom_point(size=2.0, alpha=0.9)
          + facet_wrap("~ grp")
          + scale_color_brewer(type="qual", palette="Dark2")
-         + scale_shape_manual(values=["o", "^", "s", "D", "v", "*"])
+         + scale_shape_manual(values=["o", "^", "s", "D"])
          + labs(x="Accuracy AUC ($\\uparrow$)", y="Faithfulness AUC",
                 color="Loss", shape="Method")
-         + theme(figure_size=(6.5, 3.0)))
+         + theme(figure_size=(5.5, 2.2)))
     p.save(RES + "/node_scatter.pdf", verbose=False)
-    p.save("/tmp/node_scatter.png", dpi=140, verbose=False)
+    p.save("/tmp/node_scatter.png", dpi=150, verbose=False)
     print("wrote", RES + "/node_scatter.pdf")
 
 
