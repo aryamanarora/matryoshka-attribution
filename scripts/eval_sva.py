@@ -326,6 +326,11 @@ def main():
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
     p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "conductance", "random"])
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
+    p.add_argument("--train-eval-every", type=int, default=0,
+                   help="MAttr: every N steps, run the FULL eval-metric suite on a fixed tiny "
+                        "train subset and log it (unconfounded by the per-step k). 0 = off.")
+    p.add_argument("--train-eval-examples", type=int, default=20,
+                   help="# fixed train examples for the --train-eval-every probe.")
     p.add_argument("--include-input", action="store_true",
                    help="score + ablate the input-embedding node (node substrate only), matching "
                         "MIB's graph which includes an input node. Adds 1 node at index 0.")
@@ -532,6 +537,81 @@ def main():
         surrogate = (a_ig.detach() * mask).sum()   # d/dscores = STE(a_ig); value carries L(alpha=1)
         return surrogate - surrogate.detach() + L1
 
+    # ---- eval helpers (defined pre-training so an optional train-probe can call them) ----
+    @torch.no_grad()
+    def eval_metrics(examples, mask, sufficient):
+        xc, xco, xci, xii = examples
+        LB, LS, PB, PS = [], [], [], []
+        for s in range(0, len(xc), 20):
+            bt = tok(xc[s:s+20], return_tensors="pt", padding=True).to(device)
+            st = tok(xco[s:s+20], return_tensors="pt", padding=True).to(device)
+            last = bt.attention_mask.sum(1) - 1
+            hooker.cache_cf_activations(st.input_ids)
+            set_span(xc[s:s+20], xco[s:s+20])
+            old = hooker.sufficient; hooker.sufficient = sufficient; hooker.mask = mask.to(device)
+            logits = hf(bt.input_ids, attention_mask=bt.attention_mask).logits.float()
+            hooker.sufficient = old
+            B = bt.input_ids.shape[0]; ar = torch.arange(B, device=device)
+            ll = logits[ar, last]; probs = ll.softmax(-1)
+            cor = torch.tensor(xci[s:s+20], device=device); inc = torch.tensor(xii[s:s+20], device=device)
+            LB.append(ll[ar, cor]); LS.append(ll[ar, inc]); PB.append(probs[ar, cor]); PS.append(probs[ar, inc])
+        lb = torch.cat(LB); ls = torch.cat(LS); pb = torch.cat(PB); ps = torch.cat(PS)
+        ld = lb - ls
+        return {"logit_diff": ld.mean().item(),
+                "p_base": pb.mean().item(), "p_source": ps.mean().item(),
+                "logit_base": lb.mean().item(), "logit_source": ls.mean().item(),
+                "ce_base": (-pb.clamp_min(1e-9).log()).mean().item(),
+                "ce_source": (-ps.clamp_min(1e-9).log()).mean().item(),
+                "acc_base": (lb > ls).float().mean().item(),
+                "acc_source": (ls > lb).float().mean().item(),
+                "log_odds_ratio": ld.mean().item(),
+                "odds_ratio": float(torch.exp(ld.mean()))}
+
+    sparsities = sorted(set(float(10 ** x) for x in np.linspace(np.log10(1.0/total), 0.0, 24)))
+    xs = [s * total for s in sparsities]
+
+    def auc_of(ys):
+        lx = np.log10(xs); ya = np.asarray(ys, float)
+        return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
+
+    def summarize(scores_, examples):
+        """Full metric suite (both directions) for a ranking on a set of examples."""
+        FM = eval_metrics(examples, torch.ones(total), sufficient=False)["logit_diff"]
+        F0 = eval_metrics(examples, torch.zeros(total), sufficient=False)["logit_diff"]
+        denom = (FM - F0) or 1e-9
+        def metrics_at(mask, sufficient):
+            m = eval_metrics(examples, mask, sufficient)
+            m["faithfulness"] = (m["logit_diff"] - F0) / denom
+            return m
+        iso = sparsity_sweep(scores_, total, sparsities, lambda hm: metrics_at(hm, False),
+                             device=device, include_random=False)["learned"]
+        cause = sparsity_sweep(scores_, total, sparsities, lambda hm: metrics_at(hm, True),
+                               device=device, include_random=False)["learned"]
+        acc = iso["acc_base"]
+        kstar = lambda thr: next((float(x) for x, a in zip(xs, acc) if a >= thr), None)
+        return dict(F_clean=FM, F_patch=F0, faith_auc=auc_of(iso["faithfulness"]),
+                    faith_max=max(iso["faithfulness"]), faithfulness=iso["faithfulness"],
+                    cause_auc=auc_of(cause["faithfulness"]), cause_curve=cause["faithfulness"],
+                    cause_psrc_auc=auc_of(cause["p_source"]),
+                    cause_accsrc_auc=auc_of(cause["acc_source"]),
+                    acc_auc=auc_of(acc), kstar_50=kstar(0.5), kstar_90=kstar(0.9),
+                    iso_metrics=iso, cause_metrics=cause)
+
+    # optional training-time probe: full metric suite on a FIXED tiny train subset every N steps
+    # (unconfounded by the per-step budget k, unlike the raw train loss).
+    train_eval_log = []
+    on_step_cb = None
+    if args.method == "mattr" and args.train_eval_every > 0:
+        probe_ex = sample_batch(train, args.train_eval_examples, n_train)
+        def on_step_cb(step, k, loss, live_scores):
+            if step % args.train_eval_every == 0 or step == args.steps - 1:
+                m = summarize(live_scores.detach().cpu(), probe_ex)
+                train_eval_log.append({"step": step, **{kk: m[kk] for kk in
+                    ("acc_auc", "faith_auc", "kstar_50", "cause_accsrc_auc", "F_clean", "F_patch")}})
+                logger.info("  [probe %4d] acc_auc=%.3f faith_auc=%.3f k*=%s",
+                            step, m["acc_auc"], m["faith_auc"], m["kstar_50"])
+
+    train_loss_log = None
     if args.method == "random":
         scores = torch.randn(total, device=device)   # random-ranking baseline (seeded)
     elif args.method in ("ixg", "relp", "ig", "conductance"):
@@ -551,8 +631,9 @@ def main():
                            k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
                            lr=args.lr, optimizer=args.optimizer, use_bias=False, device=device,
                            k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr,
-                           extra_optimizer=(args.das_optimizer if DAS else None))
+                           extra_optimizer=(args.das_optimizer if DAS else None), on_step=on_step_cb)
         scores = res.scores.detach()
+        train_loss_log = res.loss_log
         if isinstance(k_sampler, AdaptiveLogK):
             logger.info("adaptive-k final frontier: k_max=%.0f (%.2f%% of %d)",
                         math.exp(k_sampler.kmax_log),
@@ -576,91 +657,22 @@ def main():
         if len(ec) >= args.eval_examples: break
     logger.info("Eval on %d test pairs (%s)", len(ec), "variable len" if VARLEN else f"len={seq_len}")
 
-    @torch.no_grad()
-    def eval_metrics(mask, sufficient):
-        # base = clean/correct answer (ci); source = patch answer (ii)
-        LB, LS, PB, PS = [], [], [], []
-        for s in range(0, len(ec), 20):
-            bt = tok(ec[s:s+20], return_tensors="pt", padding=True).to(device)
-            st = tok(eco[s:s+20], return_tensors="pt", padding=True).to(device)
-            last = bt.attention_mask.sum(1) - 1
-            hooker.cache_cf_activations(st.input_ids)
-            set_span(ec[s:s+20], eco[s:s+20])
-            old = hooker.sufficient; hooker.sufficient = sufficient; hooker.mask = mask.to(device)
-            logits = hf(bt.input_ids, attention_mask=bt.attention_mask).logits.float()
-            hooker.sufficient = old
-            B = bt.input_ids.shape[0]; ar = torch.arange(B, device=device)
-            ll = logits[ar, last]; probs = ll.softmax(-1)
-            cor = torch.tensor(eci[s:s+20], device=device); inc = torch.tensor(eii[s:s+20], device=device)
-            LB.append(ll[ar, cor]); LS.append(ll[ar, inc]); PB.append(probs[ar, cor]); PS.append(probs[ar, inc])
-        lb = torch.cat(LB); ls = torch.cat(LS); pb = torch.cat(PB); ps = torch.cat(PS)
-        ld = lb - ls
-        return {"logit_diff": ld.mean().item(),
-                "p_base": pb.mean().item(), "p_source": ps.mean().item(),
-                "logit_base": lb.mean().item(), "logit_source": ls.mean().item(),
-                "ce_base": (-pb.clamp_min(1e-9).log()).mean().item(),     # per-example CE on base
-                "ce_source": (-ps.clamp_min(1e-9).log()).mean().item(),   # per-example CE on source
-                "acc_base": (lb > ls).float().mean().item(),       # 1[p(base) > p(source)]
-                "acc_source": (ls > lb).float().mean().item(),     # 1[p(source) > p(base)]
-                "log_odds_ratio": ld.mean().item(),                # mean log(p_base/p_source) = logit-diff
-                "odds_ratio": float(torch.exp(ld.mean()))}         # geometric-mean odds (stable)
-
-    FM = eval_metrics(torch.ones(total), sufficient=False)["logit_diff"]   # all clean
-    F0 = eval_metrics(torch.zeros(total), sufficient=False)["logit_diff"]  # all patched
-    denom = (FM - F0) or 1e-9
+    S = summarize(scores, (ec, eco, eci, eii))   # eval_metrics/summarize defined above (pre-training)
+    FM, F0 = S["F_clean"], S["F_patch"]
+    faith_auc, acc_auc, kstar_50 = S["faith_auc"], S["acc_auc"], S["kstar_50"]
     logger.info("F(clean)=%.3f  F(patch)=%.3f", FM, F0)
-
-    sparsities = sorted(set(float(10 ** x) for x in np.linspace(np.log10(1.0/total), 0.0, 24)))
-
-    def auc_of(ys, xs):
-        lx = np.log10(xs); ya = np.asarray(ys, float)
-        return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
-
-    def metrics_at(mask, sufficient):
-        m = eval_metrics(mask, sufficient)
-        m["faithfulness"] = (m["logit_diff"] - F0) / denom   # normalized logit-diff
-        return m
-
-    # iso (sufficiency): keep top-k clean ; cause (necessity): corrupt top-k
-    iso = sparsity_sweep(scores, total, sparsities, lambda hm: metrics_at(hm, False),
-                         device=device, include_random=False)["learned"]
-    cause = sparsity_sweep(scores, total, sparsities, lambda hm: metrics_at(hm, True),
-                           device=device, include_random=False)["learned"]
-    xs = [s * total for s in sparsities]
-    faith = iso["faithfulness"]; compl = cause["faithfulness"]
-    faith_auc = auc_of(faith, xs); cause_auc = auc_of(compl, xs)
-    # un-confounded necessity (interchange): corrupting the top-k should FORCE SOURCE.
-    # cause_auc (logit-diff based) is dominated by unbounded base-suppression and rewards
-    # base-annihilation over genuine source-recovery; these source-recovery AUCs are the
-    # honest necessity summaries. Higher = corrupting the circuit installs the source answer.
-    cause_psrc_auc = auc_of(cause["p_source"], xs)
-    cause_accsrc_auc = auc_of(cause["acc_source"], xs)
-
-    # decision-recovery summaries: reward flipping p(base)>p(source) at the sparsest k,
-    # not maximising the gap. acc_auc = mean acc_base over log-k; kstar = first k crossing thr.
-    iso_acc = iso["acc_base"]
-    acc_auc = auc_of(iso_acc, xs)
-    def kstar(thr):
-        for x, a in zip(xs, iso_acc):
-            if a >= thr:
-                return float(x)
-        return None
-    kstar_50, kstar_90 = kstar(0.5), kstar(0.9)
-    logger.info("acc_auc=%.3f  k*(>0.5)=%s  k*(>0.9)=%s", acc_auc, kstar_50, kstar_90)
+    logger.info("acc_auc=%.3f  k*(>0.5)=%s  k*(>0.9)=%s", acc_auc, kstar_50, S["kstar_90"])
     hooker.remove_hooks()
 
     out = dict(task=args.task, model=args.model, nodes=args.nodes, variant=args.variant,
                mode=args.mode, optimizer=args.optimizer, k_schedule=args.k_schedule,
-               total=total, seq_len=seq_len, F_clean=FM, F_patch=F0, n_nodes=xs,
-               faith_auc=faith_auc, faith_max=max(faith), faithfulness=faith,
-               cause_auc=cause_auc, cause_curve=compl,
-               cause_psrc_auc=cause_psrc_auc, cause_accsrc_auc=cause_accsrc_auc,
-               acc_auc=acc_auc, kstar_50=kstar_50, kstar_90=kstar_90,
-               iso_metrics=iso, cause_metrics=cause)   # full per-metric curves, both directions
+               total=total, seq_len=seq_len, n_nodes=xs, **S)   # S carries all metric curves+AUCs
     out["intermediate_size"] = hooker.intermediate_size
     out["hidden_size"] = hooker.hidden_size
     out["num_layers"] = hooker.num_layers
     out["loss"] = args.loss
+    out["loss_log"] = train_loss_log
+    out["train_eval_log"] = train_eval_log
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
     if args.method == "random":
@@ -687,7 +699,7 @@ def main():
     torch.save(scores.cpu(), fn.with_suffix(".scores.pt"))
     json.dump(out, open(fn, "w"), indent=2)
     logger.info("iso/faith AUC=%.3f (fmax %.3f) | cause AUC=%.3f | total=%d -> %s",
-                faith_auc, max(faith), cause_auc, total, fn)
+                S["faith_auc"], S["faith_max"], S["cause_auc"], total, fn)
 
 
 if __name__ == "__main__":
