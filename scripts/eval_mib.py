@@ -376,7 +376,7 @@ def main():
 
     # Run MIB evaluation
     logger.info("Running MIB evaluation (node level)...")
-    weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
+    weighted_edge_counts, area_under, area_from_1, average, faithfulnesses, accuracies, acc_auc = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
             level="node", absolute=False)
@@ -407,6 +407,8 @@ def main():
         "area_from_1": area_from_1,
         "average": average,
         "faithfulnesses": faithfulnesses,
+        "accuracies": accuracies,
+        "acc_auc": acc_auc,
     }
     results_path = output_dir / f"{args.task}_{args.model}_{args.split}.pkl"
     with open(results_path, "wb") as f:
