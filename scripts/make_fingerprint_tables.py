@@ -46,9 +46,9 @@ def parse_method(fname, d):
     return "IxG" if tag.startswith("ixg") else "IG"
 
 
-def load(nodes):
+def load(nodes, res=RES):
     raw = {}   # (method, loss, task) -> {metric: value}
-    for f in glob.glob(RES + "/*.json"):
+    for f in glob.glob(res + "/*.json"):
         d = json.load(open(f))
         if d["nodes"] != nodes:
             continue
@@ -68,8 +68,8 @@ def hexcol(g):
     return "%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
-def make(nodes, groups):
-    raw = load(nodes)
+def make(nodes, groups, res=RES, suffix=""):
+    raw = load(nodes, res)
     rows = [(mk, lk) for _, ms in SECTIONS for _, mk in ms for lk, _ in LOSSES]
     ncol = 3 * len(groups)
 
@@ -122,7 +122,7 @@ def make(nodes, groups):
                 name = mlabel if li == 0 else ""
                 L.append(f"{name} & {ll} & " + " & ".join(cells) + r" \\")
     L += [r"\bottomrule", r"\end{tabular}", r"\end{adjustbox}"]
-    out = f"{TABDIR}/fingerprint_{nodes.replace('+', '-')}.tex"
+    out = f"{TABDIR}/fingerprint_{nodes.replace('+', '-')}{suffix}.tex"
     os.makedirs(TABDIR, exist_ok=True)
     open(out, "w").write("\n".join(L) + "\n")
     print("wrote", out)
@@ -131,3 +131,6 @@ def make(nodes, groups):
 if __name__ == "__main__":
     for nodes, groups in SUBSTRATES:
         make(nodes, groups)
+    # +input node runs (input-embedding node scored+ablated; learnable-input, harder mode)
+    node_groups = SUBSTRATES[0][1]
+    make("node", node_groups, res="results/sva_sweep_input", suffix="_input")
