@@ -12,9 +12,7 @@ TEX = Path("paper/tabs/lr_sweep.tex")
 ncols = len(M.COLUMNS)
 
 
-def logk_block():
-    method, lrs = M.METHODS[0]
-    assert "log $k$" in method, "METHODS[0] is not the log-k block"
+def logk_block(method, lrs):
     data = {lr: {(t, m): M.cpr(d, t, m) for t, m, _ in M.COLUMNS} for lr, d in lrs}
     best = {}
     for t, m, _ in M.COLUMNS:
@@ -45,13 +43,20 @@ for ln in lines:
         continue
     cleaned.append(ln)
 
-# insert fresh log-k block after the first \midrule (before the uniform-k block)
+# all log-k METHODS blocks (hard fwd, soft fwd, ...) — insert after the first \midrule,
+# before the uniform-k block, each followed by a \midrule.
+logk_methods = [(mth, lrs) for mth, lrs in M.METHODS if "log $k$" in mth]
+blocks = []
+for mth, lrs in logk_methods:
+    blocks += logk_block(mth, lrs) + ["\\midrule"]
+
 out, done = [], False
 for ln in cleaned:
     out.append(ln)
     if not done and ln.strip() == "\\midrule":
-        out += logk_block() + ["\\midrule"]
+        out += blocks
         done = True
 TEX.write_text("\n".join(out) + "\n")
-print(f"spliced log-k block into {TEX}")
-print("\n".join(logk_block()))
+print(f"spliced {len(logk_methods)} log-k block(s) into {TEX}")
+for mth, lrs in logk_methods:
+    print("\n".join(logk_block(mth, lrs)))

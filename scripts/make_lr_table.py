@@ -25,6 +25,10 @@ METHODS = [
         ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
         ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),
     ]),
+    ("\\ourmethod{} (soft fwd, log $k$)", [
+        ("0.005", "topklog_lr_0.005"), ("0.01", "mib_node_topk_log"),
+        ("0.05", "topklog_lr_0.05"), ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3"),
+    ]),
     ("\\ourmethod{} (hard fwd, uniform $k$)", [
         ("0.005", "htk_lr_0.005"), ("0.01", "mib_node_hard_topk"),
         ("0.05", "htk_lr_0.05"), ("0.1", "htk_lr_0.1"), ("0.3", "htk_lr_0.3"),
@@ -41,7 +45,8 @@ METHODS = [
 
 # llama3/ioi (10k val, 8B) is evaluated on a reduced 200-example subset (daggered). The
 # lr=0.01 anchor for that one cell therefore reads the capped rerun, not the full-eval dir.
-DIR_OVERRIDE = {("mib_node_hard_topk_log", "ioi", "llama3"): "htklog_lr_0.01"}
+DIR_OVERRIDE = {("mib_node_hard_topk_log", "ioi", "llama3"): "htklog_lr_0.01",
+                ("mib_node_topk_log", "ioi", "llama3"): "topklog_lr_0.01"}
 DAGGER_CELLS = {("ioi", "llama3")}  # only meaningful in the log-k block (all capped at 200)
 
 
