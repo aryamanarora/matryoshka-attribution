@@ -39,7 +39,14 @@ METHODS = [
 ]
 
 
+# llama3/ioi (10k val, 8B) is evaluated on a reduced 200-example subset (daggered). The
+# lr=0.01 anchor for that one cell therefore reads the capped rerun, not the full-eval dir.
+DIR_OVERRIDE = {("mib_node_hard_topk_log", "ioi", "llama3"): "htklog_lr_0.01"}
+DAGGER_CELLS = {("ioi", "llama3")}  # only meaningful in the log-k block (all capped at 200)
+
+
 def cpr(d, task, model):
+    d = DIR_OVERRIDE.get((d, task, model), d)
     p = RESULTS_BASE / d / f"{task}_{model}_validation.pkl"
     if not p.exists():
         return None
@@ -49,10 +56,11 @@ def cpr(d, task, model):
         return None
 
 
-def fmt(v, bold=False):
+def fmt(v, bold=False, dagger=False):
     if v is None:
         return "---"
-    return f"\\textbf{{{v:.2f}}}" if bold else f"{v:.2f}"
+    s = f"\\textbf{{{v:.2f}}}" if bold else f"{v:.2f}"
+    return ("$^{\\dagger}$" + s) if dagger else s
 
 
 def main():
@@ -74,12 +82,14 @@ def main():
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
+        is_logk = "log $k$" in method
         lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
             avg = f"{sum(present) / len(present):.2f}" if present else "---"
-            cells = [fmt(data[lr][(t, m)], bold=(data[lr][(t, m)] is not None and
-                                                 data[lr][(t, m)] == best[(t, m)]))
+            cells = [fmt(data[lr][(t, m)],
+                         bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
+                         dagger=(is_logk and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
                      for t, m, _ in COLUMNS]
             lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
