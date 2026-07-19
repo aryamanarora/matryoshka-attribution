@@ -13,7 +13,9 @@ from plotnine import (ggplot, aes, geom_tile, geom_text, labs, facet_wrap,
                       theme_bw, theme_set, theme,
                       element_text, element_line, element_blank)
 
-R = Path("results"); OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
+R = Path("results")                                             # l2a: flat MAttr importances
+R_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")  # nested gradient baselines
+OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 theme_set(
     theme_bw(base_size=8)
     + theme(
@@ -35,19 +37,24 @@ theme_set(
 #                                 nested = <sub>/{stask}_{model}/importances.json
 # hard (REINFORCE) and log-k MAttr ablations are dropped to declutter.
 METHODS = [
-    ("MAttr",          "mib_node_hard_topk",                            "flat"),
-    ("+Gumbel",        "mib_node_hard_topk_gumbel",                     "flat"),
-    ("+soft",          "final_node",                                    "flat"),
-    ("$-c_k$",         "mib_node_detached_tau",                         "flat"),
-    ("+id-STE",        "mib_node_identity_sgd",                         "flat"),
-    ("+id-STE log",    "mib_node_identity_sgd_log",                     "flat"),
-    ("NAP-IG",         "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
-    ("Conductance",    "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
-    ("I$\\times$G",    "ig1/EAP-IG-inputs_patching_node",               "nested"),
-    ("RelP",           "relp/RelP_patching_node",                       "nested"),
-    ("RelP+QK",        "relp_qkgrad/RelP-qkgrad_patching_node",         "nested"),
-    ("AttnRLP",        "attnrlp/AttnRLP_patching_node",                 "nested"),
-    ("GIM",            "gim/GIM_patching_node",                         "nested"),
+    ("MAttr",             "mib_node_hard_topk",                            "flat"),
+    ("MAttr (log)",       "mib_node_hard_topk_log",                        "flat"),   # L2A headline
+    ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
+    ("+soft",             "final_node",                                    "flat"),
+    ("+soft-topk (log)",  "mib_node_topk_log",                             "flat"),   # Pareto acc winner
+    ("$-c_k$",            "mib_node_detached_tau",                         "flat"),
+    ("$-c_k$ (log)",      "mib_node_detached_tau_log",                     "flat"),
+    ("+id-STE",           "mib_node_identity_sgd",                         "flat"),
+    ("+id-STE (log)",     "mib_node_identity_sgd_log",                     "flat"),
+    ("+id-STE gum (log)", "mib_node_identity_gumbel_sgd_log",              "flat"),
+    ("+id-STE gum (unif)","mib_node_identity_gumbel_sgd_uniform",          "flat"),
+    ("NAP-IG",            "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
+    ("Conductance",       "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
+    ("I$\\times$G",       "ig1/EAP-IG-inputs_patching_node",               "nested"),
+    ("RelP",              "relp/RelP_patching_node",                       "nested"),
+    ("RelP+QK",           "relp_qkgrad/RelP-qkgrad_patching_node",         "nested"),
+    ("AttnRLP",           "attnrlp/AttnRLP_patching_node",                 "nested"),
+    ("GIM",               "gim/GIM_patching_node",                         "nested"),
 ]
 TASKS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
          ("arithmetic_subtraction", "llama3"), ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
@@ -67,25 +74,59 @@ def scores_for(spec, task, model):
     _, loc, layout = spec
     if layout == "flat":
         return load(R / loc / f"{task}_{model}_importances.json")
-    return load(R / loc / f"{task.replace('_', '-')}_{model}" / "importances.json")
+    return load(R_MIB / loc / f"{task.replace('_', '-')}_{model}" / "importances.json")
 
 
-S = {m[0]: {} for m in METHODS}
-for spec in METHODS:
-    for task, model in TASKS:
-        s = scores_for(spec, task, model)
-        if s:
-            S[spec[0]][(task, model)] = s
+LABEL_SPEC = {m[0]: m for m in METHODS}
+LOC = {m[0]: m[1] for m in METHODS}          # dir path = stable identity for the cache
+KEEP = {
+    "all":              lambda n: True,
+    "Attention heads":  lambda n: bool(re.fullmatch(r"a\d+\.h\d+", n)),
+    "MLPs":             lambda n: bool(re.fullmatch(r"m\d+", n)),
+}
+
+# lazy score loading: only touch importances.json for a method if an uncached pair needs it
+_scores = {}
+def get_scores(label):
+    if label not in _scores:
+        d = {}
+        for task, model in TASKS:
+            s = scores_for(LABEL_SPEC[label], task, model)
+            if s:
+                d[(task, model)] = s
+        _scores[label] = d
+    return _scores[label]
+
+# cache of pairwise rho keyed by (dir_a, dir_b, task, model, subset) -> stable across renames /
+# re-subsetting. delete results/.method_corr_cache.pkl to force a full recompute (e.g. new scores).
+import pickle
+CACHE = R / ".method_corr_cache.pkl"
+_cache = {}
+if CACHE.exists():
+    try:
+        _cache = pickle.load(open(CACHE, "rb"))
+    except Exception:
+        _cache = {}
+
+
+def crho(a, b, tm, subname="all"):
+    key = (LOC[a], LOC[b], tm[0], tm[1], subname)
+    if key in _cache:
+        return _cache[key]
+    keep = KEEP[subname]
+    sa, sb = get_scores(a).get(tm), get_scores(b).get(tm)
+    if not sa or not sb:
+        v = np.nan
+    else:
+        common = sorted(n for n in (set(sa) & set(sb)) if keep(n))
+        v = np.nan if len(common) < 4 else spearmanr([sa[n] for n in common], [sb[n] for n in common])[0]
+    _cache[key] = v
+    _cache[(LOC[b], LOC[a], tm[0], tm[1], subname)] = v   # symmetric
+    return v
 
 
 def rho(a, b, tm):
-    sa, sb = S[a].get(tm), S[b].get(tm)
-    if not sa or not sb:
-        return np.nan
-    common = sorted(set(sa) & set(sb))
-    if len(common) < 4:
-        return np.nan
-    return spearmanr([sa[n] for n in common], [sb[n] for n in common])[0]
+    return crho(a, b, tm, "all")
 
 
 # ---- (1) averaged heatmap ----
@@ -96,8 +137,22 @@ for a in labels:
         vals = [v for v in vals if not np.isnan(v)]
         rows.append({"a": a, "b": b, "rho": np.mean(vals) if vals else np.nan})
 df = pd.DataFrame(rows)
-df["a"] = pd.Categorical(df["a"], categories=labels, ordered=True)
-df["b"] = pd.Categorical(df["b"], categories=labels[::-1], ordered=True)
+
+# ---- hierarchical clustering of methods -> block-diagonal ordering ----
+# distance = 1 - avg rank-corr (all nodes); average linkage w/ optimal leaf ordering.
+from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.spatial.distance import squareform
+M = df.pivot(index="a", columns="b", values="rho").reindex(index=labels, columns=labels).values
+M = (M + M.T) / 2.0
+M = np.nan_to_num(M, nan=0.0)          # unrelated / missing pair -> 0 corr
+D = np.clip(1.0 - M, 0.0, None)
+np.fill_diagonal(D, 0.0)
+Z = linkage(squareform(D, checks=False), method="average", optimal_ordering=True)
+ORDER = [labels[i] for i in leaves_list(Z)]
+print("clustered order:", ORDER)
+
+df["a"] = pd.Categorical(df["a"], categories=ORDER, ordered=True)
+df["b"] = pd.Categorical(df["b"], categories=ORDER[::-1], ordered=True)
 df["lab"] = df["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
 p = (ggplot(df, aes("a", "b", fill="rho")) + geom_tile(color="white")
      + geom_text(aes(label="lab"), size=5)
@@ -110,47 +165,46 @@ p = (ggplot(df, aes("a", "b", fill="rho")) + geom_tile(color="white")
 p.save(OUT / "method_corr_heatmap.pdf", dpi=300); p.save(OUT / "method_corr_heatmap.png", dpi=150)
 print("Saved method_corr_heatmap")
 
-# ---- (1b) averaged heatmap, faceted by node type (all / attn heads / MLPs) ----
-SUBSETS = [
-    ("All nodes",       lambda n: True),
-    ("Attention heads", lambda n: bool(re.fullmatch(r"a\d+\.h\d+", n))),
-    ("MLPs",            lambda n: bool(re.fullmatch(r"m\d+", n))),
+# ---- (1b) MAIN-TEXT figure: curated subset, Attn vs MLP facets only ----
+# ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
+# gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
+MAIN_LABELS = [
+    "MAttr (log)", "+soft-topk (log)", "+Gumbel", "+id-STE (log)",   # learned (4)
+    "NAP-IG", "Conductance", "GIM", "I$\\times$G",                    # gradient (4)
 ]
+SUBSETS = ["Attention heads", "MLPs"]
 
-
-def rho_sub(a, b, tm, keep):
-    sa, sb = S[a].get(tm), S[b].get(tm)
-    if not sa or not sb:
-        return np.nan
-    common = sorted(n for n in (set(sa) & set(sb)) if keep(n))
-    if len(common) < 4:
-        return np.nan
-    return spearmanr([sa[n] for n in common], [sb[n] for n in common])[0]
-
+# re-cluster the subset on its avg all-node correlation so blocks are tight for these methods
+Msub = df.pivot(index="a", columns="b", values="rho").reindex(index=MAIN_LABELS, columns=MAIN_LABELS).values
+Msub = np.nan_to_num((Msub + Msub.T) / 2.0, nan=0.0)
+Dsub = np.clip(1.0 - Msub, 0.0, None); np.fill_diagonal(Dsub, 0.0)
+Zsub = linkage(squareform(Dsub, checks=False), method="average", optimal_ordering=True)
+ORDER_MAIN = [MAIN_LABELS[i] for i in leaves_list(Zsub)]
+print("main-text clustered order:", ORDER_MAIN)
 
 srows = []
-for sublab, keep in SUBSETS:
-    for a in labels:
-        for b in labels:
-            vals = [rho_sub(a, b, tm, keep) for tm in TASKS]
+for sublab in SUBSETS:
+    for a in MAIN_LABELS:
+        for b in MAIN_LABELS:
+            vals = [crho(a, b, tm, sublab) for tm in TASKS]
             vals = [v for v in vals if not np.isnan(v)]
             srows.append({"subset": sublab, "a": a, "b": b,
                           "rho": np.mean(vals) if vals else np.nan})
 sd = pd.DataFrame(srows)
-sd["subset"] = pd.Categorical(sd["subset"], categories=[s[0] for s in SUBSETS], ordered=True)
-sd["a"] = pd.Categorical(sd["a"], categories=labels, ordered=True)
-sd["b"] = pd.Categorical(sd["b"], categories=labels[::-1], ordered=True)
+sd["subset"] = pd.Categorical(sd["subset"], categories=SUBSETS, ordered=True)
+sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN, ordered=True)
+sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN[::-1], ordered=True)
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=3.2)
-       + facet_wrap("subset", ncol=3)
+       + geom_text(aes(label="lab"), size=5)
+       + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
                               midpoint=0, limits=[-1, 1], na_value="#eeeeee")
        + scale_x_discrete(expand=(0, 0)) + scale_y_discrete(expand=(0, 0))
        + labs(x="", y="", fill="avg ρ")
-       + theme(figure_size=(5.5, 2.0), panel_grid=element_blank(),
-               axis_text_x=element_text(rotation=45, ha="right", size=5),
-               axis_text_y=element_text(size=5)))
+       + theme(figure_size=(5.5, 2.9), panel_grid=element_blank(),
+               axis_text_x=element_text(rotation=45, ha="right", size=6),
+               axis_text_y=element_text(size=6)))
 p1b.save(OUT / "method_corr_heatmap_bytype.pdf", dpi=300)
 p1b.save(OUT / "method_corr_heatmap_bytype.png", dpi=150)
 print("Saved method_corr_heatmap_bytype")
@@ -165,8 +219,8 @@ for task, model in TASKS:
 fd = pd.DataFrame(frows)
 tl_order = [f"{t.replace('arithmetic_subtraction','arith').replace('arc_','arc-')}/{m}" for t, m in TASKS]
 fd["task"] = pd.Categorical(fd["task"], categories=tl_order, ordered=True)
-fd["a"] = pd.Categorical(fd["a"], categories=labels, ordered=True)
-fd["b"] = pd.Categorical(fd["b"], categories=labels[::-1], ordered=True)
+fd["a"] = pd.Categorical(fd["a"], categories=ORDER, ordered=True)
+fd["b"] = pd.Categorical(fd["b"], categories=ORDER[::-1], ordered=True)
 p2 = (ggplot(fd, aes("a", "b", fill="rho")) + geom_tile()
       + facet_wrap("task", ncol=4)
       + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
@@ -178,3 +232,6 @@ p2 = (ggplot(fd, aes("a", "b", fill="rho")) + geom_tile()
 p2.save(OUT / "method_corr_heatmap_bytask.pdf", dpi=300)
 p2.save(OUT / "method_corr_heatmap_bytask.png", dpi=150)
 print("Saved method_corr_heatmap_bytask")
+
+pickle.dump(_cache, open(CACHE, "wb"))
+print(f"cached {len(_cache)} pairwise correlations -> {CACHE}")
