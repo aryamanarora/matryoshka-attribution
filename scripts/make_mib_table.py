@@ -147,11 +147,12 @@ def main():
         "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
     }
 
-    def logk(name):
-        # "+ log k" precedes other attributes, comma-separated; main row drops \ourmethod
+    def unifk(name):
+        # log k is the default (unmarked); uniform k is the marked ablation. "+ unif k"
+        # precedes other attributes, comma-separated; main row drops \ourmethod.
         if name.startswith("\\ourmethod"):
-            return "$+$ log $k$"
-        return "$+$ log $k$, " + name
+            return "$+$ unif $k$"
+        return "$+$ unif $k$, " + name
 
     def row_avg(data):
         vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
@@ -185,18 +186,18 @@ def main():
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
         # Split the "Ours" rows into two optimizer sets, each with a header.
-        # Within a set: uniform-k = main rows, then the annotated log-k variants.
+        # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
         for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
             rows_u = [(n, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
             rows_o = [(n, g) for n, r, _, g in ours_list if opt_of(r) == opt]
             if not rows_u and not rows_o:
                 continue
             lines.append(f"\\textbf{{{label}}} \\\\")
-            for n, g in rows_u:
+            for n, g in rows_o:
                 lines.append(make_row(n, all_results.get(f"{n}_{level}_{g}", {}), best, second,
                                       indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
-            for n, g in rows_o:
-                lines.append(make_row(logk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
+            for n, g in rows_u:
+                lines.append(make_row(unifk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
                                       indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
 
     # Generate LaTeX
