@@ -120,6 +120,9 @@ def main():
                         help="Max examples for MIB eval (default: all)")
     parser.add_argument("--train-batch-size", type=int, default=1,
                         help="Gradient accumulation batch size for training")
+    parser.add_argument("--k-avg", type=int, default=1,
+                        help="Average the gradient over this many independent k-draws per step "
+                             "(reduces k-schedule variance; batch size only reduces example noise)")
     parser.add_argument("--natural-k-frac", type=float, default=0.0,
                         help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--output", type=str, default="results/mib")
@@ -261,7 +264,7 @@ def main():
 
     result = learn_scores(
         total, loss_fn, steps=args.steps, variant=args.masking,
-        k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
+        k_schedule=args.k_schedule, k_avg=args.k_avg, T=args.T, n_iters=args.n_iters, lr=args.lr,
         optimizer=args.optimizer, l0_lambda=args.l0_lambda,
         natural_k_frac=args.natural_k_frac, use_bias=True, device=device,
         on_step=on_step, logger=logger, log_every=50,

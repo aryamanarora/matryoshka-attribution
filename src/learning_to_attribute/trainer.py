@@ -50,6 +50,7 @@ def learn_scores(
     steps: int,
     variant: str = "topk",
     k_schedule: str = "uniform",
+    k_avg: int = 1,
     T: float = 0.5,
     n_iters: int = 50,
     lr: float = 0.01,
@@ -106,56 +107,68 @@ def learn_scores(
                 base = lr_extra if (extra_params and g is optimizer_.param_groups[-1]
                                     and lr_extra is not None) else lr
                 g["lr"] = _lr_at(base, lr_schedule, step, steps)
-        # natural_k_frac coin (one draw when >0). With use_bias it selects a bias-step
-        # (eval_mib); without, it selects natural-k for this step's k (attribute.py).
-        hit = (torch.rand(1).item() < natural_k_frac) if natural_k_frac > 0 else False
-        bias_step = use_bias and hit
-        if hit and not use_bias:
-            k = natural_k(scores)
-        elif k_schedule == "natural":
-            k = natural_k(scores)
-        elif k_sampler is not None:
-            # adaptive sampler owns k; loss_fn feeds it back per-step via k_sampler.observe(acc)
-            k = k_sampler.sample()
-        else:
-            k = sample_k(total, k_schedule)
-
-        if bias_step:
-            mr = build_bias_mask(scores, bias, T)
-        else:
-            mr = build_mask(scores, k, variant, T=T, n_iters=n_iters)
-
+        # k-averaging: average the gradient over `k_avg` independent k-draws per step. Since k
+        # is fixed within a batch, this is the only knob that reduces *k-schedule* variance
+        # (batching only averages example noise). k_avg=1 is the original single-draw step.
         optimizer_.zero_grad()
         if extra_optimizer_ is not None:
             extra_optimizer_.zero_grad()
-        if manual_backward:
-            # Caller owns the backward (e.g. loss.backward() inside an nnsight model.trace).
-            # loss_fn applies the mask, computes the loss, backprops, and returns the scalar
-            # loss for logging (or None -> not logged). Grad still flows through the mask's
-            # autograd graph to `scores`; we only do zero_grad (above) + step (below).
-            assert mr.reinforce is None and mr.l0_scores is None, \
-                "manual_backward is incompatible with REINFORCE / hard_concrete variants"
-            loss = loss_fn(mr.mask)
-            loss_val = float(loss) if loss is not None else float("nan")
-        else:
-            loss = loss_fn(mr.mask)
-            if loss is None:                       # caller signalled skip (e.g. empty batch)
-                continue
-            if mr.l0_scores is not None:
-                loss = loss + l0_lambda * mr.l0_scores.sum()
-            if mr.reinforce is not None and not bias_step:
-                # REINFORCE: grad = loss * d/ds log P(sample | scores),
-                # P(active_i) = sigma((s_i - tau)/T) => d log P / d s_i = (sample_i - p_i)/T
-                with torch.no_grad():
-                    r = mr.reinforce
-                    p = torch.sigmoid((scores - r["tau"]) / r["T"])
-                    scores.grad = loss.item() * ((r["sample"] - p) / r["T"])
+        ks, losses = [], []
+        for _ka in range(k_avg):
+            # natural_k_frac coin (one draw when >0). With use_bias it selects a bias-step
+            # (eval_mib); without, it selects natural-k for this step's k (attribute.py).
+            hit = (torch.rand(1).item() < natural_k_frac) if natural_k_frac > 0 else False
+            bias_step = use_bias and hit
+            if hit and not use_bias:
+                k = natural_k(scores)
+            elif k_schedule == "natural":
+                k = natural_k(scores)
+            elif k_sampler is not None:
+                # adaptive sampler owns k; loss_fn feeds it back per-step via k_sampler.observe(acc)
+                k = k_sampler.sample()
             else:
-                loss.backward()
-            loss_val = loss.item()
+                k = sample_k(total, k_schedule)
+
+            mr = build_bias_mask(scores, bias, T) if bias_step else \
+                build_mask(scores, k, variant, T=T, n_iters=n_iters)
+
+            if manual_backward:
+                assert mr.reinforce is None and mr.l0_scores is None, \
+                    "manual_backward is incompatible with REINFORCE / hard_concrete variants"
+                loss = loss_fn(mr.mask)
+                lv = float(loss) if loss is not None else float("nan")
+            else:
+                loss = loss_fn(mr.mask)
+                if loss is None:                   # caller signalled skip (e.g. empty batch)
+                    continue
+                if mr.l0_scores is not None:
+                    loss = loss + l0_lambda * mr.l0_scores.sum()
+                if mr.reinforce is not None and not bias_step:
+                    # REINFORCE: grad = loss * d/ds log P(sample | scores); accumulate across draws
+                    with torch.no_grad():
+                        r = mr.reinforce
+                        p = torch.sigmoid((scores - r["tau"]) / r["T"])
+                        g = loss.item() * ((r["sample"] - p) / r["T"])
+                        scores.grad = g if scores.grad is None else scores.grad + g
+                else:
+                    loss.backward()               # accumulates into .grad across draws
+                lv = loss.item()
+            ks.append(float(k)); losses.append(lv)
+        if not losses:                             # every draw skipped
+            continue
+        if k_avg > 1:                              # mean gradient (keep effective lr ~ bs=1)
+            for opt in (optimizer_, extra_optimizer_):
+                if opt is None:
+                    continue
+                for pgrp in opt.param_groups:
+                    for prm in pgrp["params"]:
+                        if prm.grad is not None:
+                            prm.grad /= len(losses)
         optimizer_.step()
         if extra_optimizer_ is not None:
             extra_optimizer_.step()
+        k = sum(ks) / len(ks)                      # mean k for logging
+        loss_val = sum(losses) / len(losses)
 
         result.loss_log.append(loss_val)
         result.k_log.append(float(k))
