@@ -21,7 +21,11 @@ COLUMNS = [
 
 # method -> list of (lr-label, results-dir). lr=0.01 dirs are the main runs (all tasks).
 METHODS = [
-    ("\\ourmethod{} (hard fwd)", [
+    ("\\ourmethod{} (hard fwd, log $k$)", [
+        ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
+        ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),
+    ]),
+    ("\\ourmethod{} (hard fwd, uniform $k$)", [
         ("0.005", "htk_lr_0.005"), ("0.01", "mib_node_hard_topk"),
         ("0.05", "htk_lr_0.05"), ("0.1", "htk_lr_0.1"), ("0.3", "htk_lr_0.3"),
     ]),
