@@ -37,7 +37,7 @@ theme_set(
 #                                 nested = <sub>/{stask}_{model}/importances.json
 # hard (REINFORCE) and log-k MAttr ablations are dropped to declutter.
 METHODS = [
-    ("MAttr (unif)",      "mib_node_hard_topk",                            "flat"),
+    ("MAttr (unif)*",     "htk_lr_0.05",                                   "flat"),   # uniform-k (lr=0.05, best from sweep)
     ("MAttr (log)*",      "htklog_lr_0.05",                                "flat"),   # L2A headline (lr=0.05, best from sweep)
     ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
     ("+soft",             "final_node",                                    "flat"),
@@ -169,7 +169,7 @@ print("Saved method_corr_heatmap")
 # ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
 # gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
 MAIN_LABELS = [
-    "MAttr (unif)", "MAttr (log)*", "+soft-topk (log)*", "+Gumbel", "+id-STE (log)",  # learned (5); * = lr 0.05
+    "MAttr (unif)*", "MAttr (log)*", "+soft-topk (log)*", "+Gumbel", "+id-STE (log)",  # learned (5); * = lr 0.05
     "NAP-IG", "Conductance", "GIM", "I$\\times$G",                                     # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
