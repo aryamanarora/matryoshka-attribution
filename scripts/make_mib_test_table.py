@@ -64,8 +64,13 @@ EDGE_BASELINES = {
     },
 }
 
-# Our method on test set: uniform-k hard-fwd, train on train, eval on test.
-OUR_NODE_DIR = "test_node_hard_topk_uniform"
+# Our method on test set (train on train, eval on test). The 3 headline MAttr variants at
+# lr=0.05 (best LR from the sweep): (display name, node results dir).
+OUR_NODE_METHODS = [
+    ("\\ourmethod{} (hard, log $k$)",  "test_node_hard_topk_log_lr05"),
+    ("\\ourmethod{} (soft, log $k$)",  "test_node_topk_log_lr05"),
+    ("\\ourmethod{} (hard, unif $k$)", "test_node_hard_topk_uniform_lr05"),
+]
 OUR_EDGE_DIR = "test_edge_hard_topk_uniform"
 
 
@@ -93,24 +98,28 @@ def fmt(v, bold=False, underline=False):
 
 
 def main():
-    # Load our test results
-    ours_node = {}
+    # Load our test results: 3 node variants (name -> {cell: cpr}) + 1 edge.
+    ours_nodes = {}
+    for name, d in OUR_NODE_METHODS:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_cpr_auc(d, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        ours_nodes[name] = data
     ours_edge = {}
     for task, model, _ in COLUMNS:
-        v = load_cpr_auc(OUR_NODE_DIR, task, model)
-        if v is not None:
-            ours_node[(task, model)] = round(v, 2)
         v = load_cpr_auc(OUR_EDGE_DIR, task, model)
         if v is not None:
             ours_edge[(task, model)] = round(v, 2)
 
     # Best per column
-    def find_best(baselines, ours_data):
+    def find_best(baselines, ours_list):
         best = {}
         second = {}
         for task, model, _ in COLUMNS:
             vals = []
-            for data in list(baselines.values()) + [ours_data]:
+            for data in list(baselines.values()) + list(ours_list):
                 v = data.get((task, model))
                 if v is not None:
                     vals.append(v)
@@ -123,8 +132,8 @@ def main():
                 second[(task, model)] = None
         return best, second
 
-    best_node, second_node = find_best(NODE_BASELINES, ours_node)
-    best_edge, second_edge = find_best(EDGE_BASELINES, ours_edge)
+    best_node, second_node = find_best(NODE_BASELINES, list(ours_nodes.values()))
+    best_edge, second_edge = find_best(EDGE_BASELINES, [ours_edge])
 
     def row_avg(data):
         vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
@@ -165,10 +174,11 @@ def main():
     # Node level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
-    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + [ours_node])
+    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(ours_nodes.values()))
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
-    lines.append(make_row("\\ourmethod{}", ours_node, best_node, second_node, avg_best=navb, avg_second=navs))
+    for name, data in ours_nodes.items():
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
 
     # Edge level
     lines.append("\\midrule")
