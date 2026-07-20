@@ -37,11 +37,11 @@ theme_set(
 #                                 nested = <sub>/{stask}_{model}/importances.json
 # hard (REINFORCE) and log-k MAttr ablations are dropped to declutter.
 METHODS = [
-    ("MAttr",             "mib_node_hard_topk",                            "flat"),
-    ("MAttr (log)",       "htklog_lr_0.05",                                "flat"),   # L2A headline (lr=0.05, best from sweep)
+    ("MAttr (unif)",      "mib_node_hard_topk",                            "flat"),
+    ("MAttr (log)*",      "htklog_lr_0.05",                                "flat"),   # L2A headline (lr=0.05, best from sweep)
     ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
     ("+soft",             "final_node",                                    "flat"),
-    ("+soft-topk (log)",  "topklog_lr_0.05",                               "flat"),   # soft-fwd log-k (lr=0.05, best from sweep)
+    ("+soft-topk (log)*", "topklog_lr_0.05",                               "flat"),   # soft-fwd log-k (lr=0.05, best from sweep)
     ("$-c_k$",            "mib_node_detached_tau",                         "flat"),
     ("$-c_k$ (log)",      "mib_node_detached_tau_log",                     "flat"),
     ("+id-STE",           "mib_node_identity_sgd",                         "flat"),
@@ -169,8 +169,8 @@ print("Saved method_corr_heatmap")
 # ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
 # gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
 MAIN_LABELS = [
-    "MAttr (log)", "+soft-topk (log)", "+Gumbel", "+id-STE (log)",   # learned (4)
-    "NAP-IG", "Conductance", "GIM", "I$\\times$G",                    # gradient (4)
+    "MAttr (unif)", "MAttr (log)*", "+soft-topk (log)*", "+Gumbel", "+id-STE (log)",  # learned (5); * = lr 0.05
+    "NAP-IG", "Conductance", "GIM", "I$\\times$G",                                     # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 
