@@ -96,8 +96,7 @@ def make(nodes, groups, res=RES, suffix=""):
                     good[k], txt[k] = None, "---"; continue
                 g = (v - lo) / (hi - lo + 1e-9)
                 good[k] = (1 - g) if not hib else g
-                txt[k] = ("%.0f" % v if metric == "kstar_pct" and v >= 99.5 else
-                          "%.1f" % v if metric == "kstar_pct" else "%.2f" % v)
+                txt[k] = ("%.0f" % v if metric == "kstar_pct" and v >= 99.5 else "%.2f" % v)
                 bg = max(bg, good[k])
             for mk, lk in rows:
                 k = (mk, lk, gi, metric)
