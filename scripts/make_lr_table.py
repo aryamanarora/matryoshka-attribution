@@ -45,9 +45,12 @@ METHODS = [
 
 # llama3/ioi (10k val, 8B) is evaluated on a reduced 200-example subset (daggered). The
 # lr=0.01 anchor for that one cell therefore reads the capped rerun, not the full-eval dir.
+# llama3/ioi is eval'd on a reduced 200-example subset (daggered) in every MAttr block;
+# the lr=0.01 anchor for that cell reads the capped rerun, not the full-eval main dir.
 DIR_OVERRIDE = {("mib_node_hard_topk_log", "ioi", "llama3"): "htklog_lr_0.01",
-                ("mib_node_topk_log", "ioi", "llama3"): "topklog_lr_0.01"}
-DAGGER_CELLS = {("ioi", "llama3")}  # only meaningful in the log-k block (all capped at 200)
+                ("mib_node_topk_log", "ioi", "llama3"): "topklog_lr_0.01",
+                ("mib_node_hard_topk", "ioi", "llama3"): "htk_lr_0.01"}
+DAGGER_CELLS = {("ioi", "llama3")}  # capped at 200 in all 3 MAttr blocks (not REINFORCE)
 
 
 def cpr(d, task, model):
@@ -87,14 +90,14 @@ def main():
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
-        is_logk = "log $k$" in method
+        is_mattr = method.startswith("\\ourmethod")   # 3 MAttr blocks cap llama/ioi; REINFORCE does not
         lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
             avg = f"{sum(present) / len(present):.2f}" if present else "---"
             cells = [fmt(data[lr][(t, m)],
                          bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
-                         dagger=(is_logk and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
+                         dagger=(is_mattr and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
                      for t, m, _ in COLUMNS]
             lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
