@@ -25,6 +25,7 @@ SECTIONS = [
     ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG")]),
     (r"MAttr (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
     (r"MAttr (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
+    (r"MAttr (soft top-$k$ fwd, Adam)", [(r"log-$k$", "stopk-log"), (r"unif-$k$", "stopk-unif")]),
 ]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 SVA = ["nounpp", "rc", "simple", "within_rc"]
@@ -43,6 +44,11 @@ def parse_method(fname, d):
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"
         return f"{fam}-{ks}"
+    if "sufficient_topk_" in tag:   # soft top-k forward (differentiable, no STE)
+        if re.search(r"_ig\d+", tag):
+            return None
+        ks = "unif" if "uniformk" in tag else "log"
+        return f"stopk-{ks}"
     return "IxG" if tag.startswith("ixg") else "IG"
 
 

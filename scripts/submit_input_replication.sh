@@ -50,6 +50,9 @@ for task in nounpp rc simple within_rc arc_easy ioi; do
       sub "inp_${task}_${ab}_fixed_${loss}" "${base}_fixedk10_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --fixed-k-frac 0.1 "${mattr_common[@]}"
       sub "inp_${task}_${ab}_ig5_${loss}"   "${base}_ig5_bs1"      "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --mattr-ig-steps 5 "${mattr_common[@]}"
     done
+    # soft top-k forward (topk gate, Adam): log + uniform only (fixed/ig not used in fingerprints)
+    sub "inp_${task}_stopk_log_${loss}"  "sufficient_topk_adam${ls}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule log     "${mattr_common[@]}"
+    sub "inp_${task}_stopk_unif_${loss}" "sufficient_topk_adam${ls}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule uniform "${mattr_common[@]}"
   done
   # random baseline (MIB tasks only, 3 seeds)
   if [[ "$ds" == mib ]]; then

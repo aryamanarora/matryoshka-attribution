@@ -27,7 +27,7 @@ NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn he
 LOSSES=(ce acc logit_diff)
 GRAD=(ig ixg)
 KS=(log uniform)
-MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd")   # gate:optimizer
+MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd" "topk:adam")   # gate:optimizer (topk = soft fwd)
 
 STEPS=2000
 MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --lr 0.05 --eval-examples 100)
@@ -74,7 +74,7 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
     done
     for cfg in "${MATTR_CONFIGS[@]}"; do
       variant=${cfg%:*}; opt=${cfg#*:}
-      vabbr=$([[ "$variant" == hard_topk_identity ]] && echo idste || echo soft)
+      vabbr=$(case "$variant" in hard_topk_identity) echo idste;; topk) echo stopk;; *) echo soft;; esac)
       for ks in "${KS[@]}"; do
         submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_${loss}" \
           "$(mattr_tag "$variant" "$opt" "$loss" "$ks")" \
