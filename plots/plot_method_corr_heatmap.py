@@ -38,10 +38,10 @@ theme_set(
 # hard (REINFORCE) and log-k MAttr ablations are dropped to declutter.
 METHODS = [
     ("MAttr",             "mib_node_hard_topk",                            "flat"),
-    ("MAttr (log)",       "mib_node_hard_topk_log",                        "flat"),   # L2A headline
+    ("MAttr (log)",       "htklog_lr_0.05",                                "flat"),   # L2A headline (lr=0.05, best from sweep)
     ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
     ("+soft",             "final_node",                                    "flat"),
-    ("+soft-topk (log)",  "mib_node_topk_log",                             "flat"),   # Pareto acc winner
+    ("+soft-topk (log)",  "topklog_lr_0.05",                               "flat"),   # soft-fwd log-k (lr=0.05, best from sweep)
     ("$-c_k$",            "mib_node_detached_tau",                         "flat"),
     ("$-c_k$ (log)",      "mib_node_detached_tau_log",                     "flat"),
     ("+id-STE",           "mib_node_identity_sgd",                         "flat"),
