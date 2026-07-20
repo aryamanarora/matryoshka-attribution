@@ -31,15 +31,15 @@ COLUMNS = [
 # (display_name, results_subdir, level, group)
 # group: "ours" = default, "uniform" = uniform k ablation
 OUR_METHODS = [
-    # Node level (log k-schedule = default)
-    ("\\ourmethod{}", "mib_node_hard_topk_log", "node", "ours"),
-    ("$+$ soft fwd", "mib_node_topk_log", "node", "ours"),
+    # Node level (log k-schedule = default). Swept methods use lr=0.05 (best); llama/ioi capped 200.
+    ("\\ourmethod{}", "htklog_lr_0.05", "node", "ours"),
+    ("$+$ soft fwd", "topklog_lr_0.05", "node", "ours"),
     ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
     ("$+$ id-STE", "mib_node_identity_sgd_log", "node", "ours"),
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_log", "node", "ours"),
-    # Node level (uniform k-schedule = ablation)
-    ("\\ourmethod{}", "mib_node_hard_topk", "node", "uniform"),
+    # Node level (uniform k-schedule = ablation). Swept -> lr=0.05.
+    ("\\ourmethod{}", "htk_lr_0.05", "node", "uniform"),
     ("$+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     ("$+$ soft fwd", "final_node", "node", "uniform"),
     ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
@@ -184,21 +184,27 @@ def main():
         # id-STE variants are trained with SGD; everything else with Adam.
         return "sgd" if "identity" in results_dir else "adam"
 
+    # lr=0.05 swept dirs cap llama/ioi at 200 -> dagger just that cell for those rows.
+    LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05"}
+    LR05_DAGGER = {("ioi", "llama3")}
+
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
         # Split the "Ours" rows into two optimizer sets, each with a header.
         # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
         for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
-            rows_u = [(n, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
-            rows_o = [(n, g) for n, r, _, g in ours_list if opt_of(r) == opt]
+            rows_u = [(n, r, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
+            rows_o = [(n, r, g) for n, r, _, g in ours_list if opt_of(r) == opt]
             if not rows_u and not rows_o:
                 continue
             lines.append(f"\\textbf{{{label}}} \\\\")
-            for n, g in rows_o:
+            for n, r, g in rows_o:
+                dg = LR05_DAGGER if r in LR05_CAPPED else dagger
                 lines.append(make_row(n, all_results.get(f"{n}_{level}_{g}", {}), best, second,
-                                      indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
-            for n, g in rows_u:
+                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs))
+            for n, r, g in rows_u:
+                dg = LR05_DAGGER if r in LR05_CAPPED else dagger
                 lines.append(make_row(unifk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
-                                      indent=True, dagger=dagger, avg_best=avb, avg_second=avs))
+                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs))
 
     # Generate LaTeX
     ncols = len(COLUMNS)
