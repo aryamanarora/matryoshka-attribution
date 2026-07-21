@@ -169,10 +169,12 @@ print("Saved method_corr_heatmap")
 # ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
 # gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
 MAIN_LABELS = [
-    "MAttr (unif)*", "MAttr (log)*", "+soft-topk (log)*", "+Gumbel", "+id-STE (log)",  # learned (5); * = lr 0.05
-    "NAP-IG", "Conductance", "GIM", "I$\\times$G",                                     # gradient (4)
+    "MAttr (log)*", "+soft-topk (log)*", "+Gumbel", "+id-STE (log)",  # learned (4); * = lr 0.05
+    "NAP-IG", "RelP+QK", "GIM", "I$\\times$G",                        # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
+# short display names for the main-text figure (identity labels above stay stable for lookups)
+DISPLAY = {"MAttr (log)*": "MAttr", "+soft-topk (log)*": "+soft", "NAP-IG": "IG"}
 
 # re-cluster the subset on its avg all-node correlation so blocks are tight for these methods
 Msub = df.pivot(index="a", columns="b", values="rho").reindex(index=MAIN_LABELS, columns=MAIN_LABELS).values
@@ -191,9 +193,13 @@ for sublab in SUBSETS:
             srows.append({"subset": sublab, "a": a, "b": b,
                           "rho": np.mean(vals) if vals else np.nan})
 sd = pd.DataFrame(srows)
+# relabel to short display names (after all rho lookups, which use identity labels)
+sd["a"] = sd["a"].map(lambda x: DISPLAY.get(x, x))
+sd["b"] = sd["b"].map(lambda x: DISPLAY.get(x, x))
+ORDER_MAIN_D = [DISPLAY.get(x, x) for x in ORDER_MAIN]
 sd["subset"] = pd.Categorical(sd["subset"], categories=SUBSETS, ordered=True)
-sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN, ordered=True)
-sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN[::-1], ordered=True)
+sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN_D, ordered=True)
+sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
 # sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
 # companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.

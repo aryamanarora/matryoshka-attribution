@@ -13,10 +13,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
 from plotnine import (
     ggplot, aes, geom_point, labs, theme, theme_set, theme_bw, element_text,
-    element_line, element_blank, scale_color_manual, scale_shape_manual, expand_limits,
+    element_line, element_blank, scale_color_manual, expand_limits,
     guides, guide_legend,
 )
 
@@ -39,27 +38,22 @@ theme_set(
         panel_grid_minor=element_blank(),
         legend_position="bottom",
         legend_direction="horizontal",
-        legend_box="vertical",          # stack colour + shape legends so neither overflows width
         legend_title=element_blank(),
         legend_text=element_text(size=5.5),
         legend_key_size=7,
         legend_box_margin=0,
-        legend_box_spacing=0.01,
-        legend_spacing=0,
         legend_margin=0,
     )
 )
 
-# Colour = highlighted method identity (shape already says MAttr, so labels stay short);
-# grey "Other" for the rest. Shape = method type.
-# colours matched to accauc_vs_faithauc.pdf: MAttr-main=blue, +soft=green, IG=brown, I×G=pink
-COLORS = {"hard-log": "#1f77b4", "soft-log": "#2ca02c",
+# Colour = method; grey "Other" for the un-highlighted gradient baselines.
+# colours matched to accauc_vs_faithauc.pdf: MAttr=blue, +soft=green, IG=brown, I×G=pink
+COLORS = {"MAttr": "#1f77b4", "+soft": "#2ca02c",
           "IG": "#8c564b", "I×G": "#e377c2", "Other": "#cccccc"}
-COLOR_ORDER = ["hard-log", "soft-log", "IG", "I×G", "Other"]
-SHAPES = {"Gradient": "^", "MAttr": "o"}
+COLOR_ORDER = ["MAttr", "+soft", "IG", "I×G", "Other"]
 
-# which highlight a method maps to (by MAttr results-dir, or by baseline display name)
-HL_DIR = {"htklog_lr_0.05": "hard-log", "topklog_lr_0.05": "soft-log"}
+# the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
+HL_DIR = {"htklog_lr_0.05": "MAttr", "topklog_lr_0.05": "+soft"}
 HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
 
 
@@ -94,44 +88,38 @@ BASE_CPR = {
 
 def main():
     rows = []
-    # gradient baselines
+    # gradient baselines (all kept; IG / I×G highlighted, rest grey)
     for disp, dacc, sub in A.BASELINES:
         acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
         dn, subn = BASE_CPR[disp]
         cpr = avg(cpr_base(dn, subn))
         if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, group="Gradient",
-                             highlight=HL_BASE.get(disp, "Other")))
-    # MAttr node ablations
+            rows.append(dict(acc=acc, cpr=cpr, method=HL_BASE.get(disp, "Other")))
+    # keep ONLY the two headline MAttr methods (drop all other MAttr ablations)
     for n, d, l, g in M.OUR_METHODS:
-        if l != "node":
+        if l != "node" or d not in HL_DIR:
             continue
         acc = avg({(t, m): A.acc_mattr(d, t, m) for t, m, _ in COLS})
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, group="MAttr",
-                             highlight=HL_DIR.get(d, "Other")))
+            rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
 
     df = pd.DataFrame(rows)
-    df["group"] = pd.Categorical(df["group"], ["Gradient", "MAttr"])
-    df["highlight"] = pd.Categorical(df["highlight"], COLOR_ORDER)
-    rho, _ = spearmanr(df["acc"], df["cpr"])
+    df["method"] = pd.Categorical(df["method"], COLOR_ORDER)
     # draw grey "Other" first so the highlighted points sit on top
-    df = df.sort_values("highlight", ascending=False, key=lambda s: s.cat.codes)
+    df = df.sort_values("method", ascending=False, key=lambda s: s.cat.codes)
 
     p = (
-        ggplot(df, aes("acc", "cpr", color="highlight", shape="group"))
-        + geom_point(size=2.2, alpha=0.9, stroke=0.4)
+        ggplot(df, aes("acc", "cpr", color="method"))
+        + geom_point(size=2.6, alpha=0.9, stroke=0.4)
         + expand_limits(x=0, y=0)
         + scale_color_manual(values=COLORS, name="")
-        + scale_shape_manual(values=SHAPES, name="")
-        + labs(x="acc-AUC (↑)", y="CPR AUC (↑)",
-               title=f"MIB (val), ρ = {rho:.2f}")
-        + guides(color=guide_legend(nrow=3, order=1), shape=guide_legend(nrow=1, order=2))
+        + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
+        + guides(color=guide_legend(nrow=3))
     )
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
-    print(f"wrote {out} ({len(df)} methods, spearman rho={rho:.3f})")
+    print(f"wrote {out} ({len(df)} methods)")
 
 
 if __name__ == "__main__":
