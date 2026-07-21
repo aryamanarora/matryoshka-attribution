@@ -44,8 +44,8 @@ theme_set(
 
 SVA = ["nounpp", "rc", "simple", "within_rc"]
 # (results dir, input-included label)
-SWEEPS = [("results/sva_sweep", "Input excluded"),
-          ("results/sva_sweep_input", "Input included")]
+SWEEPS = [("results/sva_sweep", "−input"),
+          ("results/sva_sweep_input", "+input")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 
 # method key -> (display label, colour); order = legend order
@@ -54,8 +54,8 @@ METHODS = {
     "IxG":        ("I×G",        "#e377c2"),
     "soft-log":   ("MAttr (log)",     "#1f77b4"),
     "soft-unif":  ("MAttr (unif)",    "#aec7e8"),
-    "stopk-log":  ("+soft-topk (log)", "#2ca02c"),
-    "stopk-unif": ("+soft-topk (unif)", "#98df8a"),
+    "stopk-log":  ("+soft (log)", "#2ca02c"),
+    "stopk-unif": ("+soft (unif)", "#98df8a"),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
@@ -116,7 +116,7 @@ def main():
                     r = group_avg(raw, m, lkey, sub)
                     if r is None:
                         continue
-                    facet = f"{slabel}, {inp_label.lower()}"
+                    facet = f"{slabel}, {inp_label}"
                     rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel,
                                      loss=llabel, facet=facet))
     df = pd.DataFrame(rows)
@@ -124,13 +124,13 @@ def main():
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
     df["method"] = pd.Categorical(df["method"], [v[0] for v in METHODS.values()])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
-    facet_order = ["Node, input excluded", "Node, input included",
-                   "MLP, input excluded", "MLP+Attn, input excluded"]
+    facet_order = ["Node, −input", "Node, +input",
+                   "MLP, −input", "MLP+Attn, −input"]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
 
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", color="method", shape="loss"))
-        + geom_point(size=1.8, alpha=0.85, stroke=0.3)
+        + geom_point(size=2.6, alpha=0.85, stroke=0.3)
         + facet_wrap("facet", nrow=1, scales="free")
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
         + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
