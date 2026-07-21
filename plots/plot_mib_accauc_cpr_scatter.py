@@ -16,7 +16,8 @@ import pandas as pd
 from scipy.stats import spearmanr
 from plotnine import (
     ggplot, aes, geom_point, labs, theme, theme_set, theme_bw, element_text,
-    element_line, element_blank, scale_color_manual, expand_limits, guides, guide_legend,
+    element_line, element_blank, scale_color_manual, scale_shape_manual, expand_limits,
+    guides, guide_legend,
 )
 
 sys.path.insert(0, "scripts")
@@ -30,7 +31,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(1.83, 1.9),
+        figure_size=(1.83, 2.15),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         plot_title=element_text(size=7, ha="center"),
@@ -46,7 +47,16 @@ theme_set(
     )
 )
 
-COLORS = {"Gradient": "#999999", "MAttr": "#1f77b4"}  # plain labels (legend renders text)
+# Colour = highlighted method identity (shape already says MAttr, so labels stay short);
+# grey "Other" for the rest. Shape = method type.
+COLORS = {"hard-log": "#e41a1c", "soft-log": "#4daf4a",
+          "IG": "#ff7f00", "I×G": "#984ea3", "Other": "#cccccc"}
+COLOR_ORDER = ["hard-log", "soft-log", "IG", "I×G", "Other"]
+SHAPES = {"Gradient": "^", "MAttr": "o"}
+
+# which highlight a method maps to (by MAttr results-dir, or by baseline display name)
+HL_DIR = {"htklog_lr_0.05": "hard-log", "topklog_lr_0.05": "soft-log"}
+HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
 
 
 def avg(d):
@@ -86,7 +96,8 @@ def main():
         dn, subn = BASE_CPR[disp]
         cpr = avg(cpr_base(dn, subn))
         if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, group="Gradient"))
+            rows.append(dict(acc=acc, cpr=cpr, group="Gradient",
+                             highlight=HL_BASE.get(disp, "Other")))
     # MAttr node ablations
     for n, d, l, g in M.OUR_METHODS:
         if l != "node":
@@ -94,20 +105,25 @@ def main():
         acc = avg({(t, m): A.acc_mattr(d, t, m) for t, m, _ in COLS})
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, group="MAttr"))
+            rows.append(dict(acc=acc, cpr=cpr, group="MAttr",
+                             highlight=HL_DIR.get(d, "Other")))
 
     df = pd.DataFrame(rows)
     df["group"] = pd.Categorical(df["group"], ["Gradient", "MAttr"])
+    df["highlight"] = pd.Categorical(df["highlight"], COLOR_ORDER)
     rho, _ = spearmanr(df["acc"], df["cpr"])
+    # draw grey "Other" first so the highlighted points sit on top
+    df = df.sort_values("highlight", ascending=False, key=lambda s: s.cat.codes)
 
     p = (
-        ggplot(df, aes("acc", "cpr", color="group"))
-        + geom_point(size=2.0, alpha=0.9, stroke=0.3)
+        ggplot(df, aes("acc", "cpr", color="highlight", shape="group"))
+        + geom_point(size=2.2, alpha=0.9, stroke=0.4)
         + expand_limits(x=0, y=0)
-        + scale_color_manual(values=COLORS)
+        + scale_color_manual(values=COLORS, name="")
+        + scale_shape_manual(values=SHAPES, name="")
         + labs(x="acc-AUC (↑)", y="CPR AUC (↑)",
                title=f"MIB (val), ρ = {rho:.2f}")
-        + guides(color=guide_legend(nrow=1))
+        + guides(color=guide_legend(nrow=3, order=1), shape=guide_legend(nrow=2, order=2))
     )
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
