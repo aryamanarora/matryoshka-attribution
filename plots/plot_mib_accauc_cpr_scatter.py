@@ -47,13 +47,14 @@ theme_set(
 )
 
 # Colour = method; grey "Other" for the un-highlighted gradient baselines.
-# colours matched to accauc_vs_faithauc.pdf: MAttr=blue, +soft=green, IG=brown, I×G=pink
-COLORS = {"MAttr": "#1f77b4", "+soft": "#2ca02c",
+# colours matched to accauc_vs_faithauc.pdf: MAttr=blue, +hard=green, IG=brown, I×G=pink
+# MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
+COLORS = {"MAttr": "#1f77b4", "+hard": "#2ca02c",
           "IG": "#8c564b", "I×G": "#e377c2", "Other": "#cccccc"}
-COLOR_ORDER = ["MAttr", "+soft", "IG", "I×G", "Other"]
+COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Other"]
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
-HL_DIR = {"htklog_lr_0.05": "MAttr", "topklog_lr_0.05": "+soft"}
+HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
 HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
 
 

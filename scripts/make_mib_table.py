@@ -32,28 +32,29 @@ COLUMNS = [
 # group: "ours" = default, "uniform" = uniform k ablation
 OUR_METHODS = [
     # Node level (log k-schedule = default). Swept methods use lr=0.05 (best); llama/ioi capped 200.
-    ("\\ourmethod{}", "htklog_lr_0.05", "node", "ours"),
-    ("$+$ soft fwd", "topklog_lr_0.05", "node", "ours"),
-    ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
+    # MAttr headline = SOFT top-k forward, log k. "+ hard" = sigmoid-STE hard forward.
+    ("\\ourmethod{}", "topklog_lr_0.05", "node", "ours"),
+    ("$+$ hard", "htklog_lr_0.05", "node", "ours"),
+    ("$-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
     ("$+$ id-STE", "mib_node_identity_sgd_log", "node", "ours"),
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_log", "node", "ours"),
     # Node level (uniform k-schedule = ablation). Swept -> lr=0.05.
-    ("\\ourmethod{}", "htk_lr_0.05", "node", "uniform"),
-    ("$+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
-    ("$+$ soft fwd", "final_node", "node", "uniform"),
-    ("$+$ soft fwd, $-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
+    ("\\ourmethod{}", "final_node", "node", "uniform"),
+    ("$+$ hard", "htk_lr_0.05", "node", "uniform"),
+    ("$+$ hard, $+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
+    ("$-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
     ("$+$ id-STE", "mib_node_identity_sgd", "node", "uniform"),
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_uniform", "node", "uniform"),
     # Edge level (log k-schedule = default). Swept methods -> lr=0.05.
-    ("\\ourmethod{}", "mib_edge_hard_topk_log_lr05", "edge", "ours"),
-    ("$+$ soft fwd", "mib_edge_topk_log_lr05", "edge", "ours"),
-    ("$+$ soft fwd, $-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
+    ("\\ourmethod{}", "mib_edge_topk_log_lr05", "edge", "ours"),
+    ("$+$ hard", "mib_edge_hard_topk_log_lr05", "edge", "ours"),
+    ("$-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
     ("$+$ id-STE", "mib_edge_identity_sgd_log", "edge", "ours"),
-    # Edge level (uniform k-schedule). Swept -> lr=0.05.
-    ("\\ourmethod{}", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
+    # Edge level (uniform k-schedule). Swept -> lr=0.05. (No soft-fwd uniform edge run.)
+    ("$+$ hard", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
     ("$+$ id-STE", "mib_edge_identity_sgd_uniform", "edge", "uniform"),
 ]
 

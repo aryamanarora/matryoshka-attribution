@@ -66,15 +66,15 @@ EDGE_BASELINES = {
 
 # Our method on test set (train on train, eval on test). The 3 headline MAttr variants at
 # lr=0.05 (best LR from the sweep): (display name, node results dir).
-OUR_NODE_METHODS = [
-    ("\\ourmethod{} (hard, log $k$)",  "test_node_hard_topk_log_lr05"),
-    ("\\ourmethod{} (soft, log $k$)",  "test_node_topk_log_lr05"),
-    ("\\ourmethod{} (hard, unif $k$)", "test_node_hard_topk_uniform_lr05"),
+OUR_NODE_METHODS = [   # MAttr = soft top-k fwd, log k; "+ hard" = sigmoid-STE hard forward
+    ("\\ourmethod{}",                  "test_node_topk_log_lr05"),
+    ("$+$ hard",                       "test_node_hard_topk_log_lr05"),
+    ("$+$ unif $k$, $+$ hard",         "test_node_hard_topk_uniform_lr05"),
 ]
-OUR_EDGE_METHODS = [   # 3 variants at lr=0.05, edge level (test)
-    ("\\ourmethod{} (hard, log $k$)",  "test_edge_hard_topk_log_lr05"),
-    ("\\ourmethod{} (soft, log $k$)",  "test_edge_topk_log_lr05"),
-    ("\\ourmethod{} (hard, unif $k$)", "test_edge_hard_topk_uniform_lr05"),
+OUR_EDGE_METHODS = [   # same 3 variants at lr=0.05, edge level (test)
+    ("\\ourmethod{}",                  "test_edge_topk_log_lr05"),
+    ("$+$ hard",                       "test_edge_hard_topk_log_lr05"),
+    ("$+$ unif $k$, $+$ hard",         "test_edge_hard_topk_uniform_lr05"),
 ]
 
 

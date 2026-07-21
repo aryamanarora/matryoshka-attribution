@@ -21,27 +21,31 @@ Both `--mode`/`sufficient:` labels were originally flipped and were corrected (c
 If you add a new config/script, follow the unified rule above; if a number looks like the
 wrong intervention, check this first.
 
-## CRITICAL: which results dir is the "L2A" / "Ours" baseline
+## CRITICAL: which results dir is the "MAttr" / "Ours" headline
 
-The paper's headline method (**L2A**, the bold "Ours" row in `paper/tabs/mib_results.tex`)
-is **log-uniform `k`**, NOT uniform `k`. The results dirs are named misleadingly:
+**As of 2026-07-21 the headline MAttr is the SOFT top-k forward, log-k schedule, lr=0.05
+variant** (best test CPR avg 1.83, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The
+hard sigmoid-STE forward is now the "$+$ hard" ablation; uniform-k rows are "+ unif k".
 
-| Results dir (`results/...`)      | `k-schedule` | Paper role                              |
-|----------------------------------|--------------|-----------------------------------------|
-| `mib_node_hard_topk_log`         | **log**      | **L2A / "Ours" (main method, line 11)** |
-| `mib_node_hard_topk`             | uniform      | "Ours (uniform `k`)" ablation row       |
-| `mib_node_natural_k`             | log + natural-k 0.2 | natural-k ablation (worse than L2A) |
-| `mib_node_natural_k10`           | log + natural-k 0.1 | natural-k ablation (worse than L2A) |
+| Results dir (`results/...`)        | Variant                     | Paper role            |
+|------------------------------------|-----------------------------|-----------------------|
+| `topklog_lr_0.05`                  | soft fwd, log k (node, val) | **MAttr headline**    |
+| `test_node_topk_log_lr05`          | soft fwd, log k (node, test)| **MAttr headline**    |
+| `mib_edge_topk_log_lr05`           | soft fwd, log k (edge, val) | **MAttr headline**    |
+| `test_edge_topk_log_lr05`          | soft fwd, log k (edge, test)| **MAttr headline**    |
+| `htklog_lr_0.05` (+test/edge twins)| hard STE fwd, log k         | "$+$ hard" ablation   |
+| `htk_lr_0.05`                      | hard STE fwd, uniform k     | "+ unif k, + hard"    |
+| `final_node`                       | soft fwd, uniform k         | "+ unif k"            |
 
-**When comparing anything to "L2A", use `mib_node_hard_topk_log`.** The bare
-`mib_node_hard_topk` dir is the *uniform-k* ablation and is weaker on several tasks
-(esp. MCQA/Gemma 1.53, MCQA/Llama 1.56, IOI/Gemma 1.26 vs the log-k baseline's
-2.17 / 2.34 / 1.70). Using it as "L2A" makes ablations look deceptively good.
+Do NOT use uniform-k dirs as the headline — their CPR averages look strong (esp. edge)
+but acc-AUC is the worst of the three and they collapse on IOI/Qwen test; using them
+as "MAttr" makes ablations look deceptively good. (Pre-2026-07-21 history/artifacts
+used the hard log-k `htklog`/`mib_node_hard_topk_log` as headline — beware stale labels.)
 
 ### Verification anchor
-`mib_node_hard_topk_log` `area_under` values match `mib_results.tex` line 11 exactly
-(ioi/gpt2 1.84, ioi/gemma 1.70, mcqa/gemma 2.17, mcqa/llama 2.34, arc-c/llama 1.85, ...).
-If your "baseline" numbers don't match that table, you're reading the wrong dir.
+`topklog_lr_0.05` `area_under` matches the `\ourmethod{}` row of `mib_results.tex`
+(ioi/gpt2 1.83, ioi/qwen 1.54, mcqa/gemma 1.95, avg 1.81). If your "headline" numbers
+don't match that row, you're reading the wrong dir.
 
 ## Reading CPR AUC apples-to-apples
 

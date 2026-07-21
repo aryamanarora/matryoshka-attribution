@@ -53,10 +53,10 @@ SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 
 # method key -> (display label, colour); order = legend order
 METHODS = {
-    "IG":         ("IG",              "#8c564b"),
-    "IxG":        ("I×G",        "#e377c2"),
-    "soft-log":   ("MAttr (log)",     "#1f77b4"),
-    "stopk-log":  ("+soft (log)", "#2ca02c"),
+    "IG":         ("IG",           "#8c564b"),
+    "IxG":        ("I×G",          "#e377c2"),
+    "stopk-log":  ("MAttr (log)",  "#1f77b4"),   # headline = soft top-k fwd, log k
+    "soft-log":   ("+hard (log)",  "#2ca02c"),   # sigmoid-STE hard forward ablation
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
