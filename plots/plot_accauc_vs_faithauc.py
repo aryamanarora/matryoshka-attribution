@@ -25,7 +25,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 2.0),
+        figure_size=(5.5, 1.6),
         axis_title=element_text(size=8),
         axis_text=element_text(size=6),
         panel_grid_major=element_line(size=0.25, color="#dddddd"),
@@ -37,8 +37,11 @@ theme_set(
         legend_title=element_text(size=7),
         legend_text=element_text(size=6),
         legend_key_size=8,
-        legend_position="right",
+        legend_position="bottom",
+        legend_direction="horizontal",
+        legend_box="horizontal",
         legend_box_margin=0,
+        legend_margin=0,
     )
 )
 
@@ -136,7 +139,7 @@ def main():
         + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
         + labs(x="Accuracy AUC (↑)", y="Faithfulness AUC (↑)")
-        + guides(color=guide_legend(order=1), shape=guide_legend(order=2))
+        + guides(color=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
     out = "plots/accauc_vs_faithauc.pdf"
     p.save(out, dpi=300, verbose=False)
