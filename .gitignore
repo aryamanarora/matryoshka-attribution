@@ -7,3 +7,5 @@ logs/
 plots/*
 !plots/*.py
 .claude/
+paper/
+*.log
