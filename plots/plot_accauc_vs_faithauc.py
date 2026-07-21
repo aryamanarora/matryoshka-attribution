@@ -56,9 +56,7 @@ METHODS = {
     "IG":         ("IG",              "#8c564b"),
     "IxG":        ("I×G",        "#e377c2"),
     "soft-log":   ("MAttr (log)",     "#1f77b4"),
-    "soft-unif":  ("MAttr (unif)",    "#aec7e8"),
     "stopk-log":  ("+soft (log)", "#2ca02c"),
-    "stopk-unif": ("+soft (unif)", "#98df8a"),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
