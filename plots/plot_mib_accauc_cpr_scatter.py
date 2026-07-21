@@ -115,7 +115,7 @@ def main():
         + expand_limits(x=0, y=0)
         + scale_color_manual(values=COLORS, name="")
         + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
-        + guides(color=guide_legend(nrow=3))
+        + guides(color=guide_legend(nrow=2))
     )
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
