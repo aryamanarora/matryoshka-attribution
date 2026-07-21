@@ -49,8 +49,9 @@ theme_set(
 
 # Colour = highlighted method identity (shape already says MAttr, so labels stay short);
 # grey "Other" for the rest. Shape = method type.
-COLORS = {"hard-log": "#e41a1c", "soft-log": "#4daf4a",
-          "IG": "#ff7f00", "I×G": "#984ea3", "Other": "#cccccc"}
+# colours matched to accauc_vs_faithauc.pdf: MAttr-main=blue, +soft=green, IG=brown, I×G=pink
+COLORS = {"hard-log": "#1f77b4", "soft-log": "#2ca02c",
+          "IG": "#8c564b", "I×G": "#e377c2", "Other": "#cccccc"}
 COLOR_ORDER = ["hard-log", "soft-log", "IG", "I×G", "Other"]
 SHAPES = {"Gradient": "^", "MAttr": "o"}
 
