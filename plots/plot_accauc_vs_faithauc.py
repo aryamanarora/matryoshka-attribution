@@ -16,7 +16,7 @@ import re
 import numpy as np
 import pandas as pd
 from plotnine import (
-    ggplot, aes, geom_point, facet_grid, labs, theme, theme_set, theme_bw,
+    ggplot, aes, geom_point, facet_wrap, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_color_manual, scale_shape_manual,
     guides, guide_legend,
 )
@@ -118,20 +118,22 @@ def main():
                     r = group_avg(raw, m, lkey, sub)
                     if r is None:
                         continue
+                    facet = f"{slabel}, {inp_label.lower()}"
                     rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel,
-                                     loss=llabel, substrate=slabel, input=inp_label))
+                                     loss=llabel, facet=facet))
     df = pd.DataFrame(rows)
 
-    # ordering for consistent legends / facets
+    # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
     df["method"] = pd.Categorical(df["method"], [v[0] for v in METHODS.values()])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
-    df["substrate"] = pd.Categorical(df["substrate"], [s for _, s in SUBSTRATES])
-    df["input"] = pd.Categorical(df["input"], [lab for _, lab in SWEEPS])
+    facet_order = ["Node, input excluded", "Node, input included",
+                   "MLP, input excluded", "MLP+Attn, input excluded"]
+    df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
 
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", color="method", shape="loss"))
         + geom_point(size=1.8, alpha=0.85, stroke=0.3)
-        + facet_grid("substrate ~ input")
+        + facet_wrap("facet", ncol=2)
         + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
         + labs(x="Accuracy AUC (↑)", y="Faithfulness AUC (↑)")
@@ -141,7 +143,7 @@ def main():
     p.save(out, dpi=300, verbose=False)
     print("wrote", out, f"({len(df)} points)")
     # quick sanity: points per facet cell
-    print(df.groupby(["substrate", "input"], observed=True).size().to_string())
+    print(df.groupby("facet", observed=True).size().to_string())
 
 
 if __name__ == "__main__":
