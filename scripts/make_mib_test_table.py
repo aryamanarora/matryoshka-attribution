@@ -71,7 +71,11 @@ OUR_NODE_METHODS = [
     ("\\ourmethod{} (soft, log $k$)",  "test_node_topk_log_lr05"),
     ("\\ourmethod{} (hard, unif $k$)", "test_node_hard_topk_uniform_lr05"),
 ]
-OUR_EDGE_DIR = "test_edge_hard_topk_uniform"
+OUR_EDGE_METHODS = [   # 3 variants at lr=0.05, edge level (test)
+    ("\\ourmethod{} (hard, log $k$)",  "test_edge_hard_topk_log_lr05"),
+    ("\\ourmethod{} (soft, log $k$)",  "test_edge_topk_log_lr05"),
+    ("\\ourmethod{} (hard, unif $k$)", "test_edge_hard_topk_uniform_lr05"),
+]
 
 
 def load_cpr_auc(results_dir, task, model):
@@ -107,11 +111,14 @@ def main():
             if v is not None:
                 data[(task, model)] = round(v, 2)
         ours_nodes[name] = data
-    ours_edge = {}
-    for task, model, _ in COLUMNS:
-        v = load_cpr_auc(OUR_EDGE_DIR, task, model)
-        if v is not None:
-            ours_edge[(task, model)] = round(v, 2)
+    ours_edges = {}
+    for name, d in OUR_EDGE_METHODS:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_cpr_auc(d, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        ours_edges[name] = data
 
     # Best per column
     def find_best(baselines, ours_list):
@@ -133,7 +140,7 @@ def main():
         return best, second
 
     best_node, second_node = find_best(NODE_BASELINES, list(ours_nodes.values()))
-    best_edge, second_edge = find_best(EDGE_BASELINES, [ours_edge])
+    best_edge, second_edge = find_best(EDGE_BASELINES, list(ours_edges.values()))
 
     def row_avg(data):
         vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
@@ -183,12 +190,13 @@ def main():
     # Edge level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
-    eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + [ours_edge])
+    eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + list(ours_edges.values()))
     for name, data in EDGE_BASELINES.items():
         lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
     # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
     EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
-    lines.append(make_row("\\ourmethod{}", ours_edge, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
+    for name, data in ours_edges.items():
+        lines.append(make_row(name, data, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")

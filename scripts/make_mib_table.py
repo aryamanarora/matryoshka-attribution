@@ -46,14 +46,14 @@ OUR_METHODS = [
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
     ("$+$ id-STE", "mib_node_identity_sgd", "node", "uniform"),
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_uniform", "node", "uniform"),
-    # Edge level (log k-schedule = default)
-    ("\\ourmethod{}", "mib_edge_hard_topk", "edge", "ours"),
-    ("$+$ soft fwd", "final_edge", "edge", "ours"),
+    # Edge level (log k-schedule = default). Swept methods -> lr=0.05.
+    ("\\ourmethod{}", "mib_edge_hard_topk_log_lr05", "edge", "ours"),
+    ("$+$ soft fwd", "mib_edge_topk_log_lr05", "edge", "ours"),
     ("$+$ soft fwd, $-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
     ("$+$ id-STE", "mib_edge_identity_sgd_log", "edge", "ours"),
-    # Edge level (uniform k-schedule)
-    ("\\ourmethod{}", "mib_edge_hard_topk_uniform", "edge", "uniform"),
+    # Edge level (uniform k-schedule). Swept -> lr=0.05.
+    ("\\ourmethod{}", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
     ("$+$ id-STE", "mib_edge_identity_sgd_uniform", "edge", "uniform"),
 ]
 
