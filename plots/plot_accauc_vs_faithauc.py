@@ -138,7 +138,7 @@ def main():
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
         + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
-        + labs(x="Accuracy AUC (↑)", y="Faithfulness AUC (↑)")
+        + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(color=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
     out = "plots/accauc_vs_faithauc.pdf"
