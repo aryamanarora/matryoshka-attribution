@@ -18,14 +18,14 @@ import pandas as pd
 from plotnine import (
     ggplot, aes, geom_point, facet_wrap, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_color_manual, scale_shape_manual,
-    guides, guide_legend,
+    guides, guide_legend, expand_limits,
 )
 
 theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 3.4),
+        figure_size=(5.5, 2.0),
         axis_title=element_text(size=8),
         axis_text=element_text(size=6),
         panel_grid_major=element_line(size=0.25, color="#dddddd"),
@@ -56,8 +56,6 @@ METHODS = {
     "soft-unif":  ("MAttr (unif)",    "#aec7e8"),
     "stopk-log":  ("+soft-topk (log)", "#2ca02c"),
     "stopk-unif": ("+soft-topk (unif)", "#98df8a"),
-    "idSTE-log":  ("id-STE (log)",    "#ff7f0e"),
-    "idSTE-unif": ("id-STE (unif)",   "#ffbb78"),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
@@ -133,7 +131,8 @@ def main():
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", color="method", shape="loss"))
         + geom_point(size=1.8, alpha=0.85, stroke=0.3)
-        + facet_wrap("facet", ncol=2)
+        + facet_wrap("facet", nrow=1, scales="free")
+        + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
         + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
         + labs(x="Accuracy AUC (↑)", y="Faithfulness AUC (↑)")
