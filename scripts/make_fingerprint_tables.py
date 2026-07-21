@@ -21,11 +21,12 @@ RES = "results/sva_sweep"
 TABDIR = "paper/tabs"
 # (metric key, header label, higher_is_better); k* rendered as % of total
 METRICS = [("acc_auc", "acc", True), ("faith_auc", "faith", True), ("kstar_pct", r"$k^\star$\%", False)]
+# MAttr headline = soft top-k fwd; the STE variants are "+ hard" ablations
 SECTIONS = [
     ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG")]),
-    (r"MAttr (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
-    (r"MAttr (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
     (r"MAttr (soft top-$k$ fwd, Adam)", [(r"log-$k$", "stopk-log"), (r"unif-$k$", "stopk-unif")]),
+    (r"$+$ hard (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
+    (r"$+$ hard (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
 ]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 SVA = ["nounpp", "rc", "simple", "within_rc"]

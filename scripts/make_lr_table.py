@@ -20,16 +20,17 @@ COLUMNS = [
 ]
 
 # method -> list of (lr-label, results-dir). lr=0.01 dirs are the main runs (all tasks).
+# MAttr headline = soft top-k fwd, log k; "+ hard" = sigmoid-STE hard forward.
 METHODS = [
-    ("\\ourmethod{} (hard fwd, log $k$)", [
-        ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
-        ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),
-    ]),
-    ("\\ourmethod{} (soft fwd, log $k$)", [
+    ("\\ourmethod{}", [
         ("0.005", "topklog_lr_0.005"), ("0.01", "mib_node_topk_log"),
         ("0.05", "topklog_lr_0.05"), ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3"),
     ]),
-    ("\\ourmethod{} (hard fwd, uniform $k$)", [
+    ("$+$ hard", [
+        ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
+        ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),
+    ]),
+    ("$+$ unif $k$, $+$ hard", [
         ("0.005", "htk_lr_0.005"), ("0.01", "mib_node_hard_topk"),
         ("0.05", "htk_lr_0.05"), ("0.1", "htk_lr_0.1"), ("0.3", "htk_lr_0.3"),
     ]),
@@ -90,7 +91,7 @@ def main():
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
-        is_mattr = method.startswith("\\ourmethod")   # 3 MAttr blocks cap llama/ioi; REINFORCE does not
+        is_mattr = "REINFORCE" not in method   # 3 MAttr blocks cap llama/ioi; REINFORCE does not
         lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
