@@ -282,7 +282,7 @@ def main():
     metric = get_metric("logit_diff", args.task, model.tokenizer, model)
     attribution_metric = partial(metric, mean=False, loss=False)
 
-    weighted_edge_counts, area_under, area_from_1, average, faithfulnesses = \
+    weighted_edge_counts, area_under, area_from_1, average, faithfulnesses, accuracies, acc_auc = \
         evaluate_area_under_curve(model, graph, dataloader, attribution_metric,
                                   level="edge", absolute=False)
 
@@ -302,6 +302,8 @@ def main():
         "area_from_1": area_from_1,
         "average": average,
         "faithfulnesses": faithfulnesses,
+        "accuracies": accuracies,
+        "acc_auc": acc_auc,
     }
     with open(output_dir / f"{args.task}_{args.model}_{args.split}.pkl", "wb") as f:
         pickle.dump(mib_results, f)
