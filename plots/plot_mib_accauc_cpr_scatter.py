@@ -31,7 +31,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(1.83, 2.15),
+        figure_size=(1.65, 2.0),   # display size at 0.30*textwidth (5.5in); matches heatmap fonts
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         plot_title=element_text(size=7, ha="center"),
@@ -39,10 +39,13 @@ theme_set(
         panel_grid_minor=element_blank(),
         legend_position="bottom",
         legend_direction="horizontal",
+        legend_box="vertical",          # stack colour + shape legends so neither overflows width
         legend_title=element_blank(),
-        legend_text=element_text(size=6),
+        legend_text=element_text(size=5.5),
         legend_key_size=7,
         legend_box_margin=0,
+        legend_box_spacing=0.01,
+        legend_spacing=0,
         legend_margin=0,
     )
 )
@@ -124,7 +127,7 @@ def main():
         + scale_shape_manual(values=SHAPES, name="")
         + labs(x="acc-AUC (↑)", y="CPR AUC (↑)",
                title=f"MIB (val), ρ = {rho:.2f}")
-        + guides(color=guide_legend(nrow=3, order=1), shape=guide_legend(nrow=2, order=2))
+        + guides(color=guide_legend(nrow=3, order=1), shape=guide_legend(nrow=1, order=2))
     )
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)

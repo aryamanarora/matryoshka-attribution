@@ -195,14 +195,16 @@ sd["subset"] = pd.Categorical(sd["subset"], categories=SUBSETS, ordered=True)
 sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN, ordered=True)
 sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN[::-1], ordered=True)
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
+# sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
+# companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=5)
+       + geom_text(aes(label="lab"), size=4.5)
        + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
                               midpoint=0, limits=[-1, 1], na_value="#eeeeee")
        + scale_x_discrete(expand=(0, 0)) + scale_y_discrete(expand=(0, 0))
        + labs(x="", y="", fill="avg ρ")
-       + theme(figure_size=(5.5, 2.9), panel_grid=element_blank(),
+       + theme(figure_size=(3.69, 2.0), panel_grid=element_blank(),
                axis_text_x=element_text(rotation=45, ha="right", size=6),
                axis_text_y=element_text(size=6)))
 p1b.save(OUT / "method_corr_heatmap_bytype.pdf", dpi=300)
