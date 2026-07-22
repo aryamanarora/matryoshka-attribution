@@ -119,6 +119,7 @@ def main():
     colors = {m[0]: m[1] for m in METHODS}
     p = (
         ggplot(df, aes("x", "raw", color="method"))
+        + geom_hline(yintercept=0, color="#000000", size=0.4)  # decision boundary (metric=0)
         + geom_hline(rdf, aes(yintercept="B"), linetype="dashed", color="#666666", size=0.3)
         + geom_hline(rdf, aes(yintercept="C"), linetype="dotted", color="#999999", size=0.3)
         + geom_line(size=0.5) + geom_point(size=1.0)
@@ -126,7 +127,7 @@ def main():
         + scale_x_log10(breaks=[.001, .01, .1, 1], labels=["0.1%", "1%", "10%", "100%"])
         + scale_color_manual(values=colors, name="Method", limits=METHOD_ORDER)
         + labs(x="fraction of nodes kept (denoised)",
-               y="raw logit diff (dashed = clean, dotted = corrupted)")
+               y="raw logit diff (solid = 0, dashed = clean, dotted = corrupted)")
     )
     p.save(OUT / "mib_logitdiff_curves.pdf", dpi=300, verbose=False)
     print(f"wrote {OUT}/mib_logitdiff_curves.pdf ({len(df)} pts, {df['method'].nunique()} methods, "
