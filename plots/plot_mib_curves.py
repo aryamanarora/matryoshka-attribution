@@ -86,6 +86,12 @@ def load(kind, loc, task, model):
         return None
 
 
+# small per-method multiplicative x-offset (evenly spread in log space) so the 5 curves'
+# markers at each sweep point don't sit exactly on top of each other. ±0.06 decade ≈ ±15%.
+JIT = {m: 10 ** off for m, off in
+       zip(METHOD_ORDER, np.linspace(-0.06, 0.06, len(METHOD_ORDER)))}
+
+
 def build():
     rows = []
     for mname, _, kind, loc in METHODS:
@@ -95,7 +101,8 @@ def build():
                 continue
             acc, faith = d.get("accuracies"), d.get("faithfulnesses")
             for i, pct in enumerate(PCT):
-                rows.append(dict(method=mname, facet=flabel, pct=pct,
+                rows.append(dict(method=mname, facet=flabel,
+                                 pct=pct, x=pct * JIT[mname],
                                  acc=acc[i] if acc else None,
                                  cpr=faith[i] if faith else None))
     df = pd.DataFrame(rows)
@@ -108,7 +115,7 @@ def make(df, ycol, ylab, out, hline=None, free_y=False):
     colors = {m[0]: m[1] for m in METHODS}
     sub = df[df[ycol].notna()]
     p = (
-        ggplot(sub, aes("pct", ycol, color="method"))
+        ggplot(sub, aes("x", ycol, color="method"))
         + (geom_hline(yintercept=hline, linetype="dashed", color="#999999", size=0.3)
            if hline is not None else geom_blank())
         + geom_line(size=0.5)
