@@ -9,6 +9,7 @@ from .sigmoid_das import RotateLayer, make_rotate_layer, householder_product, ca
 from .masks import MaskResult, build_mask, build_bias_mask, VARIANTS
 from .schedules import sample_k, sample_k_sum_pow2, natural_k
 from .trainer import learn_scores, TrainResult
+from .edge_pruning import learn_scores_edge_pruning
 from .evaluate import sparsity_sweep
 from .modes import normalize_mode, preferred_mode, MODE_CHOICES, ISO, CAUSE
 
@@ -36,5 +37,6 @@ __all__ = [
     "MaskResult", "build_mask", "build_bias_mask", "VARIANTS",
     "sample_k", "sample_k_sum_pow2", "natural_k",
     "learn_scores", "TrainResult", "sparsity_sweep",
+    "learn_scores_edge_pruning",
     "normalize_mode", "preferred_mode", "MODE_CHOICES", "ISO", "CAUSE",
 ]
