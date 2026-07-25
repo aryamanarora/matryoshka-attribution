@@ -85,6 +85,14 @@ def main():
     parser.add_argument("--eval-examples", type=int, default=None)
     parser.add_argument("--output", type=str, default=None,
                         help="Default: results/edge_pruning_<level>")
+    parser.add_argument("--save-graph", type=str, default=None,
+                        help="Write the scored circuit as a MIB graph.json here, so it can be "
+                             "scored by MIB's run_evaluation.py (the same harness as every "
+                             "other baseline in the tables). Default: <output>/graph_<task>_<model>.json")
+    parser.add_argument("--no-save-graph", action="store_true",
+                        help="Skip the graph.json dump")
+    parser.add_argument("--skip-eval", action="store_true",
+                        help="Train and dump the circuit only; leave scoring to run_evaluation.py")
     args = parser.parse_args()
     if args.target_sparsity is None:
         args.target_sparsity = 0.99 if args.level == "edge" else 0.9
@@ -103,7 +111,9 @@ def main():
     from MIB_circuit_track.evaluation import evaluate_area_under_curve
     from einops import einsum
 
+    # src/ layout: also works when the package is not pip-installed (e.g. under the MIB venv)
     sys.path.insert(0, str(Path(__file__).parent.parent))
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from learning_to_attribute.edge_pruning import learn_scores_edge_pruning
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -343,6 +353,31 @@ def main():
             node_scores_tensor[input_fwd_idx] = scores.data.max().item() + 1.0
         graph.nodes_scores = node_scores_tensor
 
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def save_scores(mib_results):
+        torch.save({
+            "scores": scores.data.cpu(),
+            "args": vars(args),
+            "loss_log": result.loss_log,
+            "k_log": result.k_log,
+            "train_time_s": result.train_time_s,
+            "mib_results": mib_results,
+        }, output_dir / f"{args.task}_{args.model}_scores.pt")
+
+    if not args.no_save_graph:
+        graph_path = Path(args.save_graph) if args.save_graph else (
+            output_dir / f"graph_{args.task}_{args.model}.json")
+        graph_path.parent.mkdir(parents=True, exist_ok=True)
+        graph.to_json(str(graph_path))
+        logger.info("Saved circuit to %s", graph_path)
+
+    if args.skip_eval:
+        save_scores(None)
+        logger.info("Saved scores to %s (skipping in-process eval)", output_dir)
+        return
+
     eval_dataset = HFEAPDataset(hf_task, model.tokenizer, split=args.split,
                                 task=args.task, model_name=args.model)
     if args.eval_examples:
@@ -367,9 +402,6 @@ def main():
     logger.info("  CPR AUC=%.4f  Avg CPR=%.4f", area_under, average)
 
     # Save
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     mib_results = {
         "weighted_edge_counts": weighted_edge_counts,
         "area_under": area_under,
@@ -382,14 +414,7 @@ def main():
     with open(output_dir / f"{args.task}_{args.model}_{args.split}.pkl", "wb") as f:
         pickle.dump(mib_results, f)
 
-    torch.save({
-        "scores": scores.data.cpu(),
-        "args": vars(args),
-        "loss_log": result.loss_log,
-        "k_log": result.k_log,
-        "train_time_s": result.train_time_s,
-        "mib_results": mib_results,
-    }, output_dir / f"{args.task}_{args.model}_scores.pt")
+    save_scores(mib_results)
     logger.info("Saved results to %s", output_dir)
 
 
