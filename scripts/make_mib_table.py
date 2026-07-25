@@ -75,6 +75,11 @@ EAPIG_REPRO_DIR = "eapig_repro_eval"
 # Edge baselines (reproduced on validation set)
 EDGE_BASELINES = {}
 
+# UGS (the only mask-learning baseline in MIB) is edge-level and only runs on gpt2-small/qwen,
+# so it can never fill more than 3 of the 11 columns. See docs/ugs_baseline.md.
+UGS_DIR = "ugs_eval"
+PARTIAL_COVERAGE = {"UGS"}
+
 
 def load_cpr_auc(results_dir, task, model):
     """Load CPR AUC from a MIB results pickle."""
@@ -175,7 +180,9 @@ def main():
             if v is not None and (task, model) in dcells:
                 cell = "$^{\\dagger}$" + cell
             vals.append(cell)
-        a = row_avg(data)
+        # UGS only covers 3 of the 11 cells, so an average over what it has would not be
+        # comparable to the full-coverage rows.
+        a = None if name in PARTIAL_COVERAGE else row_avg(data)
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
         prefix = f"\\quad {name}" if indent else name
@@ -290,6 +297,22 @@ def main():
             except Exception:
                 pass
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
+
+    # UGS: mask learning, reg_lamb=0.001, gpt2/qwen only
+    ugs = {}
+    for task, model, _ in COLUMNS:
+        stask = task.replace("_", "-")
+        pkl = RESULTS_BASE / UGS_DIR / "UGS_patching_edge" / f"{stask}_{model}_validation_abs-False.pkl"
+        if pkl.exists():
+            try:
+                with open(pkl, "rb") as f:
+                    d = pickle.load(f)
+                ugs[(task, model)] = round(d["area_under"], 2)
+            except Exception:
+                pass
+    if ugs:
+        EDGE_BASELINES["UGS"] = ugs
+
     best_edge, second_edge = best_in_col("edge")
     edge_dicts = list(EDGE_BASELINES.values()) \
         + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_uniform] \
@@ -300,7 +323,14 @@ def main():
     EDGE_LLAMA_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
+        if name in PARTIAL_COVERAGE:
+            continue
         lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb, avg_second=eavs))
+    # UGS learns a mask rather than attributing gradients, so it gets its own header.
+    if "UGS" in EDGE_BASELINES:
+        lines.append("\\textbf{Mask learning} \\\\")
+        lines.append(make_row("UGS", EDGE_BASELINES["UGS"], best_edge, second_edge, indent=True,
+                              avg_best=eavb, avg_second=eavs))
     emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs, dagger=EDGE_LLAMA_DAGGER)
 
     lines.append("\\bottomrule")
