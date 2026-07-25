@@ -115,10 +115,14 @@ def main():
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", color="sched", shape="loss"))
         + geom_point(size=2.4, alpha=0.85, stroke=0.3)
-        + facet_grid("ste ~ task", scales="free")
-        # free scales + 6 narrow panels collide with default tick density
-        + scale_x_continuous(breaks=breaks_extended(3))
-        + scale_y_continuous(breaks=breaks_extended(4))
+        # Shared x across all panels so acc-AUC is directly comparable task-to-task; y is free
+        # per row (the two STE families) since only the schedule ordering matters within a row.
+        + facet_grid("ste ~ task", scales="free_y")
+        # Both axes anchored at 0 so panel-to-panel gaps read as absolute, not zoomed. Nothing
+        # is clipped: the data spans acc 0.33-0.60, faith 0.28-1.29 (limits would DROP points
+        # below 0, so re-check these ranges before reusing this on runs that can score negative).
+        + scale_x_continuous(limits=(0, None), breaks=breaks_extended(3))
+        + scale_y_continuous(limits=(0, None), breaks=breaks_extended(4))
         + scale_color_manual(values={lab: col for lab, col in SCHEDULES.values()},
                              name="$k$-schedule")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
