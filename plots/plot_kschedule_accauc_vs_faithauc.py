@@ -1,21 +1,30 @@
-"""Scatter of accuracy-AUC (x) vs faithfulness-AUC (y) for the three k-schedules.
+"""Scatter of accuracy-AUC (x) vs faithfulness-AUC (y) for the three k-schedules, ±input.
 
-Companion to plot_accauc_vs_faithauc.py: same axes, but the contrast is the k-schedule
-{log, uniform, fixed 10%} instead of the method, and points are NOT averaged over task
-groups -- one facet per task, so the schedule effect can be read per task.
+Companion to plot_accauc_vs_faithauc.py: same axes and the same task-group averaging, but
+the contrast is the k-schedule {log, uniform, fixed 10%} instead of the method. One point per
+(schedule, STE family, loss); columns split on whether the input-embedding node is scored and
+ablated, rows split the STE family.
 
 Fixed-k (a single training budget, no schedule) is the setting a mask learner like Edge
 Pruning is stuck in, so this is the like-for-like version of that comparison inside our own
-method. Rows split the STE family, because that is where the interaction lives: the
+method. Rows split the STE family because that is where the interaction lives: the
 sigmoid-STE gate's sigma'-gated gradient only trains nodes near the top-k boundary, so a
 FIXED boundary leaves the rest of the ranking untrained, while identity-STE is far more
 schedule-robust (cf. plot_fixedk_interaction.py).
+
+Averaging, matching plot_accauc_vs_faithauc.py: mean over three task GROUPS -- SVA (itself the
+mean of nounpp/rc/simple/within_rc) + ARC-E + IOI -- so the 4 SVA subtasks together carry the
+same weight as each MIB task. Note this averages over two MODELS: every task here is llama3
+except ioi, which is qwen2.5. The per-task version of this figure (which shows that fixed-k
+identity-STE is actually the *best* config on IOI, against the pooled trend) is at a77b510.
 
 Coverage caveat: --fixed-k-frac was only ever run for the `hard_topk` (STE) variants, not
 for the soft top-k forward that is the MAttr headline -- so this figure is about the STE
 families only. All runs are bs=1, so batch size is not confounded with the schedule.
 
-Data: results/sva_sweep/*_node_*.json (input node excluded from scoring/ablation).
+Data: results/sva_sweep (input excluded) + results/sva_sweep_input (included), *_node_*.json.
+  ±input is NOT recorded in the json fields or the filename tag -- the results DIRECTORY is
+  the only thing that distinguishes them, so never glob across both.
 Run:  uv run python plots/plot_kschedule_accauc_vs_faithauc.py
         -> plots/kschedule_accauc_vs_faithauc.pdf
 """
@@ -24,19 +33,19 @@ import json
 import os
 import re
 
+import numpy as np
 import pandas as pd
-from mizani.breaks import breaks_extended
 from plotnine import (
     ggplot, aes, geom_point, facet_grid, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_color_manual, scale_shape_manual,
-    scale_x_continuous, scale_y_continuous, guides, guide_legend,
+    guides, guide_legend, expand_limits,
 )
 
 theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(6.5, 2.9),
+        figure_size=(6.5, 3.4),   # full text width; appendix figure
         axis_title=element_text(size=8),
         axis_text=element_text(size=6),
         panel_grid_major=element_line(size=0.25, color="#dddddd"),
@@ -56,8 +65,12 @@ theme_set(
     )
 )
 
-RESULTS = "results/sva_sweep"
 OUT = "plots/kschedule_accauc_vs_faithauc.pdf"
+SVA = ["nounpp", "rc", "simple", "within_rc"]
+GROUPS = [SVA, ["arc_easy"], ["ioi"]]
+# (results dir, input-included label); see the ±input warning in the docstring
+SWEEPS = [("results/sva_sweep", "$-$ input"),
+          ("results/sva_sweep_input", "$+$ input")]
 
 # k-schedule -> (display, colour); order = legend order
 SCHEDULES = {
@@ -68,10 +81,6 @@ SCHEDULES = {
 STES = {"soft": "sigmoid-STE", "id": "identity-STE"}
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
-# SVA subtasks first, then the two MIB tasks. Strip labels are plain matplotlib text, not
-# LaTeX, so an escaped underscore would render its backslash -- use a hyphen instead.
-TASK_ORDER = [("nounpp", "nounpp"), ("rc", "rc"), ("simple", "simple"),
-              ("within_rc", "within-rc"), ("arc_easy", "ARC-E"), ("ioi", "IOI")]
 
 
 def parse(fname, d):
@@ -91,38 +100,58 @@ def parse(fname, d):
     return ste, ks
 
 
-def main():
-    rows = []
-    for f in sorted(glob.glob(RESULTS + "/*_node_*.json")):
+def load(res):
+    """(ste, sched, loss, task) -> (acc_auc, faith_auc) for one sweep dir."""
+    raw = {}
+    for f in sorted(glob.glob(res + "/*_node_*.json")):
         d = json.load(open(f))
         p = parse(os.path.basename(f), d)
         if p is None or d["loss"] not in LOSSES:
             continue
-        ste, ks = p
-        task = dict(TASK_ORDER).get(d["task"])
-        if task is None:
-            continue
-        rows.append(dict(acc_auc=d["acc_auc"], faith_auc=d["faith_auc"],
-                         sched=SCHEDULES[ks][0], ste=STES[ste],
-                         loss=LOSSES[d["loss"]], task=task))
+        raw[(p[0], p[1], d["loss"], d["task"])] = (d["acc_auc"], d["faith_auc"])
+    return raw
+
+
+def group_avg(raw, ste, ks, loss):
+    """Mean over task groups, or None if any group is missing (no partial averages)."""
+    gx, gy = [], []
+    for tasks in GROUPS:
+        xs = [raw[(ste, ks, loss, t)] for t in tasks if (ste, ks, loss, t) in raw]
+        if len(xs) != len(tasks):       # a partial SVA mean is not the same quantity
+            return None
+        gx.append(np.mean([v[0] for v in xs]))
+        gy.append(np.mean([v[1] for v in xs]))
+    return float(np.mean(gx)), float(np.mean(gy))
+
+
+def main():
+    rows, missing = [], []
+    for res, inp in SWEEPS:
+        raw = load(res)
+        for ste, ste_lab in STES.items():
+            for ks, (ks_lab, _) in SCHEDULES.items():
+                for loss, loss_lab in LOSSES.items():
+                    r = group_avg(raw, ste, ks, loss)
+                    if r is None:
+                        missing.append(f"{inp} {ste_lab} {ks_lab} {loss_lab}")
+                        continue
+                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], sched=ks_lab,
+                                     ste=ste_lab, loss=loss_lab, inp=inp))
     df = pd.DataFrame(rows)
 
     df["sched"] = pd.Categorical(df["sched"], [v[0] for v in SCHEDULES.values()])
     df["ste"] = pd.Categorical(df["ste"], list(STES.values()))
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
-    df["task"] = pd.Categorical(df["task"], [lab for _, lab in TASK_ORDER])
+    df["inp"] = pd.Categorical(df["inp"], [lab for _, lab in SWEEPS])
 
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", color="sched", shape="loss"))
-        + geom_point(size=2.4, alpha=0.85, stroke=0.3)
-        # Shared x across all panels so acc-AUC is directly comparable task-to-task; y is free
-        # per row (the two STE families) since only the schedule ordering matters within a row.
-        + facet_grid("ste ~ task", scales="free_y")
-        # Both axes anchored at 0 so panel-to-panel gaps read as absolute, not zoomed. Nothing
-        # is clipped: the data spans acc 0.33-0.60, faith 0.28-1.29 (limits would DROP points
-        # below 0, so re-check these ranges before reusing this on runs that can score negative).
-        + scale_x_continuous(limits=(0, None), breaks=breaks_extended(3))
-        + scale_y_continuous(limits=(0, None), breaks=breaks_extended(4))
+        + geom_point(size=2.6, alpha=0.85, stroke=0.3)
+        # scales fixed: every panel shares both axes, so ±input and the two STE families are
+        # directly comparable. expand_limits anchors at 0 WITHOUT dropping points (scale
+        # limits=(0, None) would silently discard anything negative).
+        + facet_grid("ste ~ inp")
+        + expand_limits(x=0, y=0)
         + scale_color_manual(values={lab: col for lab, col in SCHEDULES.values()},
                              name="$k$-schedule")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
@@ -132,7 +161,9 @@ def main():
     p.save(OUT, dpi=300, verbose=False)
     p.save(OUT.replace(".pdf", ".png"), dpi=200, verbose=False)   # preview only
     print(f"wrote {OUT} ({len(df)} points)")
-    print(df.groupby(["ste", "sched"], observed=True)
+    if missing:
+        print(f"NO POINT (incomplete task groups) for {len(missing)}: " + "; ".join(missing))
+    print(df.groupby(["inp", "ste", "sched"], observed=True)
           .agg(n=("acc_auc", "size"), acc=("acc_auc", "mean"), faith=("faith_auc", "mean"))
           .round(3).to_string())
 
