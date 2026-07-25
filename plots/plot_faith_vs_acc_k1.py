@@ -9,9 +9,14 @@ the FIRST point of the curve instead of its log-k integral:
 
 k=1 is the smallest sparsity in eval_sva's sweep (sparsities start at 1/total, and
 _hard_topk_indices takes ki = max(1, int(k))), so exactly one unit is selected. That unit is
-NOT the same granularity in every column: for the `node` substrate it is one
-(layer, module, position) node, while for `mlp` / `mlp+attn_head` it is one neuron at one
-position. Only the two right-hand columns are literally single-neuron.
+NOT the same granularity in every column (models/llama.py:53-65):
+  * `node`: total = layers*heads + layers (+1 if include_input) = 1056 for llama3. There is NO
+    position axis, so one unit is one whole attention HEAD or one whole MLP LAYER, at every
+    position. k=1 here is a big object -- e.g. IG's usual pick, the entire layer-0 MLP.
+  * `mlp`: total = layers*spans*d_mlp = 32*6*14336 = 2,752,512 -- one unit is one neuron at
+    one span. `mlp+attn_head` adds layers*spans*heads on top (2,758,656).
+So only the two right-hand columns are literally single-NEURON, and they are ~0.99 flat
+because one neuron of 2.75M does nothing measurable.
 
 This is the least-averaged view of the cause direction, and it is where a ranking's top-1
 choice is tested directly: iso k=1 asks "is the single best unit sufficient on its own"

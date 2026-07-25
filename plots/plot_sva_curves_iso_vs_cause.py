@@ -66,7 +66,15 @@ theme_set(
 )
 
 SWEEP = os.environ.get("SWEEP", "results/sva_sweep")
-OUT = "plots/sva_curves_iso_vs_cause.pdf"
+# derive OUT from SWEEP so the −input and +input twins cannot overwrite each other (a rendered
+# figure is otherwise indistinguishable -- ±input is not recorded in any json field)
+OUT = ("plots/sva_curves_iso_vs_cause.pdf" if "input" not in SWEEP
+       else "plots/sva_curves_iso_vs_cause_input.pdf")
+# The `node` substrate has NO position axis: total = layers*heads + layers (+1 for the input
+# embedding node), i.e. 1056 for llama3 and 360 for qwen2.5. So one unit is one whole attention
+# HEAD or one whole MLP LAYER, summed over positions -- not a per-position node, and not a
+# neuron (that is the `mlp` substrate, 32*6*14336 = 2.75M units). See models/llama.py:53-65.
+SUBSTRATE_DESC = "attn heads + MLP layers"
 # (metrics dict, key, row label) -- the four curves behind the four AUCs
 CURVES = [
     ("iso_metrics", "faithfulness", "iso: faith (↑)"),
@@ -115,8 +123,11 @@ def main():
         + scale_x_log10(breaks=brk, labels=lambda bs: [f"$10^{{{int(round(np.log10(b)))}}}$"
                                                        for b in bs])
         + scale_color_manual(values={lab: col for lab, col in R.METHODS.values()}, name="Method")
-        + labs(x="$k$ (nodes selected: kept clean for iso, patched for cause)", y="",
-               linetype="Loss")
+        # ±input is recorded NOWHERE in the jsons -- the results dir is the only discriminator
+        # -- so stamp it on the axis, otherwise a rendered figure is unidentifiable later.
+        + labs(x=f"$k$ ({SUBSTRATE_DESC}: kept clean for iso, patched for cause)"
+                 f"   [{'$+$' if 'input' in SWEEP else '$-$'} input embedding node]",
+               y="", linetype="Loss")
         + guides(color=guide_legend(order=1, nrow=1), linetype=guide_legend(order=2, nrow=1))
     )
     p.save(OUT, dpi=300, verbose=False)
