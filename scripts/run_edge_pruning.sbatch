@@ -33,11 +33,15 @@ MIB=/home/guests/aryaman/MIB-circuit-track
 # trains and evaluates through TransformerLens.
 PY=$MIB/.venv/bin/python
 
-# Eval batch size follows the per-model guidance in CLAUDE.md.
+# Eval batch size follows the per-model guidance in CLAUDE.md. HEAD must match the eval
+# subset every other row in the table used (MIB-circuit-track/run_variants.sh): llama3
+# cells are capped at 200 validation examples, everything else runs full validation.
+# Without this the Edge Pruning llama3 cells are scored on a different (10k-example) set
+# than the gradient baselines they sit next to -- not apples-to-apples, and ~50x slower.
 case "$MODEL" in
-  gpt2|qwen2.5) BS=20 ;;
-  gemma2)       BS=4 ;;
-  llama3)       BS=2 ;;
+  gpt2|qwen2.5) BS=20; HEAD="" ;;
+  gemma2)       BS=4;  HEAD="" ;;
+  llama3)       BS=2;  HEAD="--head 200" ;;
   *) echo "unknown model $MODEL"; exit 1 ;;
 esac
 
@@ -53,14 +57,21 @@ EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
 cd "$L2A"
 
-PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
-  scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
-  --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-  --split "$SPLIT" --output "$OUT" $SPARSITY_ARG --skip-eval
+# EVAL_ONLY=1 reuses an already-trained $GRAPH and just rescores it (e.g. after fixing an
+# eval flag), so a 40-minute llama3 training run is not repeated.
+if [ "${EVAL_ONLY:-0}" = "1" ]; then
+  [ -f "$GRAPH" ] || { echo "EVAL_ONLY=1 but $GRAPH is missing"; exit 1; }
+  echo "EVAL_ONLY: reusing $GRAPH"
+else
+  PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
+    scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
+    --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
+    --split "$SPLIT" --output "$OUT" $SPARSITY_ARG --skip-eval
+fi
 
 cd "$MIB"
 PYTHONPATH=.:EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
   run_evaluation.py --models "$MODEL" --tasks "$TASK" --level "$LEVEL" \
   --ablation patching --split "$SPLIT" --method EdgePruning \
-  --circuit-files "$GRAPH" --batch-size "$BS" \
+  --circuit-files "$GRAPH" --batch-size "$BS" $HEAD \
   --output-dir "$EVAL_OUT"
