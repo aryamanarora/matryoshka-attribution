@@ -80,10 +80,29 @@ EDGE_BASELINES = {}
 # never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Edge Pruning is not tied
 # to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
 UGS_DIR = "ugs_eval"
-EPRUN_DIR = "eprun_eval"
 PARTIAL_COVERAGE = {"UGS"}
 MASK_NODE_BASELINES = {}
 MASK_EDGE_BASELINES = {}
+
+# A mask learner optimizes ONE operating point, and its target sparsity is the knob that
+# decides where the circuit switches on -- so each budget is a separate row rather than a
+# hidden default. (label, results dir); the unsuffixed dir is the runner's own default
+# (0.9 node / 0.99 edge), the _s* dirs come from `run_edge_pruning.sbatch ... <sparsity>`.
+EPRUN_SPARSITIES = [
+    ("0.9", "eprun_eval"),
+    ("0.95", "eprun_eval_s0.95"),
+    ("0.99", "eprun_eval_s0.99"),
+]
+
+
+def eprun_rows(level):
+    """[(display, {(task, model): AUC})], one row per target sparsity that has results."""
+    rows = []
+    for label, dirn in EPRUN_SPARSITIES:
+        data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
+        if data:
+            rows.append((f"Edge Pruning ($s{{=}}{label}$)", data))
+    return rows
 
 
 def load_run_eval(results_dir, sub):
@@ -289,10 +308,11 @@ def main():
         NODE_BASELINES[disp] = data
         DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
-    # Mask learning at node level: Edge Pruning (all four models)
-    ep_node = load_run_eval(EPRUN_DIR, "EdgePruning_patching_node")
-    if ep_node:
-        MASK_NODE_BASELINES["Edge Pruning"] = ep_node
+    # Mask learning at node level: Edge Pruning (all four models), one row per sparsity budget.
+    # Its llama3 cells use the same --head 200 subset as the gradient baselines -> same dagger.
+    for name, data in eprun_rows("node"):
+        MASK_NODE_BASELINES[name] = data
+        DAGGER[name] = TILDE_LLAMA3_DAGGER
 
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
@@ -334,9 +354,9 @@ def main():
     ugs = load_run_eval(UGS_DIR, "UGS_patching_edge")
     if ugs:
         MASK_EDGE_BASELINES["UGS"] = ugs
-    ep_edge = load_run_eval(EPRUN_DIR, "EdgePruning_patching_edge")
-    if ep_edge:
-        MASK_EDGE_BASELINES["Edge Pruning"] = ep_edge
+    for name, data in eprun_rows("edge"):
+        MASK_EDGE_BASELINES[name] = data
+        DAGGER[name] = TILDE_LLAMA3_DAGGER
 
     best_edge, second_edge = best_in_col("edge")
     edge_dicts = list(EDGE_BASELINES.values()) + list(MASK_EDGE_BASELINES.values()) \

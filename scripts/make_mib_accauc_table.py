@@ -33,8 +33,11 @@ BASELINES = [  # (display, *_accauc dir, method_saveable)
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
 
 # Mask-learning baselines (own header). UGS is edge-only so it cannot appear in this
-# node-level table at all; Edge Pruning runs at node level on every model.
-MASK_BASELINES = [("Edge Pruning", L2A / "eprun_eval", "EdgePruning_patching_node")]
+# node-level table at all; Edge Pruning runs at node level on every model. One row per
+# target-sparsity budget (M.EPRUN_SPARSITIES) -- the budget, not the ranking, is what a
+# mask learner actually optimizes, so it is a reported setting rather than a hidden default.
+MASK_BASELINES = [(f"Edge Pruning ($s{{=}}{lab}$)", L2A / d, "EdgePruning_patching_node")
+                  for lab, d in M.EPRUN_SPARSITIES]
 
 
 def opt_of(d):   # id-STE variants use SGD; everything else Adam (mirrors make_mib_table)
@@ -95,7 +98,13 @@ def main():
         vals = sorted({dd[(t, m)] for dd in all_data if dd.get((t, m)) is not None}, reverse=True)
         best[(t, m)] = vals[0] if vals else None
         second[(t, m)] = vals[1] if len(vals) > 1 else None
-    avs = sorted({a for a in (row_avg(dd) for dd in all_data) if a is not None}, reverse=True)
+    # An average over a subset of columns is not comparable to one over all 11, so rows with
+    # missing cells neither print an average nor compete for the bolded best average.
+    def full(dd):
+        return all(dd.get((t, m)) is not None for t, m, _ in COLUMNS)
+
+    avs = sorted({a for a in (row_avg(dd) for dd in all_data if full(dd)) if a is not None},
+                 reverse=True)
     abest, asec = (avs[0] if avs else None), (avs[1] if len(avs) > 1 else None)
 
     def emit(disp, data, dcells, indent=True):
@@ -104,7 +113,7 @@ def main():
             v = data.get((t, m))
             cells.append(fmt(v, bold=(v is not None and v == best[(t, m)]),
                              dagger=((t, m) in dcells and v is not None)))
-        a = row_avg(data)
+        a = row_avg(data) if full(data) else None
         cells.append(fmt(a, bold=(a is not None and a == abest)))
         pre = f"\\quad {disp}" if indent else disp
         return f"{pre} & " + " & ".join(cells) + " \\\\"
@@ -125,8 +134,9 @@ def main():
         L.append(emit(disp, data, dc))
     if mask_rows:
         L.append("\\textbf{Mask learning} \\\\")
+        llama_cells = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
         for disp, data in mask_rows:
-            L.append(emit(disp, data, set()))
+            L.append(emit(disp, data, llama_cells))   # llama3 eval is --head 200, as above
 
     llama_ioi = {("ioi", "llama3")}
     for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
