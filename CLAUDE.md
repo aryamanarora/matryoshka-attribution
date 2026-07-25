@@ -57,6 +57,15 @@ values, and do NOT compare a fresh run's log "CPR AUC=..." against the table unl
 both used the same eval. Eval was changed to average over `n_eval` examples (commit
 45db054), so older pkls/table values may differ from a fresh run.
 
+### llama3 cells are evaluated on 200 examples — match it
+`MIB-circuit-track/run_variants.sh` scores every **llama3** cell with `--head 200`
+(full validation crawls/OOMs on 8B); gpt2/qwen2.5/gemma2 cells run full validation.
+That cap is what the `$^{\dagger}$` daggers in the appendix tables mean. Any NEW method or
+baseline must pass `--head 200` for llama3 in `run_evaluation.py`, or its llama3 numbers
+sit in a column next to numbers computed on a 200-example subset — not apples-to-apples.
+(The Edge Pruning runner shipped without it and had to be fixed in `1a0216f`; uncapped
+llama3 eval is also ~50× slower, ~9 h/job vs ~15 min.)
+
 ### Known-still-wrong artifacts (as of 2026-06-09)
 These compare NAP-IG against the **uniform-k** `mib_node_hard_topk` instead of the
 log-k `mib_node_hard_topk_log`, so they're inconsistent with the paper's L2A:
