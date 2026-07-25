@@ -68,9 +68,23 @@ theme_set(
 )
 
 OUT = "plots/accauc_vs_faithauc_cause.pdf"
-# row label -> (x json field, y json field)
-DIRECTIONS = [("iso: keep top-$k$", ("acc_auc", "faith_auc")),
-              ("cause: patch top-$k$", ("cause_accsrc_auc", "cause_auc"))]
+
+
+def auc_of(ys, ks):
+    """eval_sva.py's auc_of: trapezoid over log10(k), normalised by the log-k span."""
+    lx = np.log10(np.asarray(ks, float)); ya = np.asarray(ys, float)
+    return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
+
+
+# row label -> (x, y) getter. Both rows use acc_base on x and faithfulness on y, i.e. the SAME
+# two quantities measured under the two interventions -- so the axes mean the same thing in
+# both rows and only the arrow flips (iso ↑↑, cause ↓↓). cause acc_base has no precomputed
+# scalar in the json (only cause_accsrc_auc, its complement), so integrate the curve here.
+DIRECTIONS = [
+    ("iso: keep top-$k$", lambda d: (d["acc_auc"], d["faith_auc"])),
+    ("cause: patch top-$k$",
+     lambda d: (auc_of(d["cause_metrics"]["acc_base"], d["n_nodes"]), d["cause_auc"])),
+]
 
 
 def load(res):
@@ -85,15 +99,15 @@ def load(res):
     return raw
 
 
-def group_avg(raw, m, loss, sub, xk, yk):
-    """R.group_avg for an arbitrary metric pair; None if no group has data."""
+def group_avg(raw, m, loss, sub, get):
+    """R.group_avg for an arbitrary (x, y) getter; None if no group has data."""
     gx, gy = [], []
     for tasks in [R.SVA, ["arc_easy"], ["ioi"]]:
-        ds = [raw[(m, loss, sub, t)] for t in tasks if (m, loss, sub, t) in raw]
-        ds = [d for d in ds if d.get(xk) is not None and d.get(yk) is not None]
-        if ds:
-            gx.append(np.mean([d[xk] for d in ds]))
-            gy.append(np.mean([d[yk] for d in ds]))
+        vs = [get(raw[(m, loss, sub, t)]) for t in tasks if (m, loss, sub, t) in raw]
+        vs = [v for v in vs if v[0] is not None and v[1] is not None]
+        if vs:
+            gx.append(np.mean([v[0] for v in vs]))
+            gy.append(np.mean([v[1] for v in vs]))
     if not gx:
         return None
     return float(np.mean(gx)), float(np.mean(gy))
@@ -103,11 +117,11 @@ def main():
     rows = []
     for res, inp_label in R.SWEEPS:
         raw = load(res)
-        for dir_label, (xk, yk) in DIRECTIONS:
+        for dir_label, get in DIRECTIONS:
             for m, (mlabel, _) in R.METHODS.items():
                 for lkey, llabel in R.LOSSES.items():
                     for sub, slabel in R.SUBSTRATES:
-                        r = group_avg(raw, m, lkey, sub, xk, yk)
+                        r = group_avg(raw, m, lkey, sub, get)
                         if r is None:
                             continue
                         rows.append(dict(x=r[0], y=r[1], method=mlabel, loss=llabel,
@@ -116,20 +130,22 @@ def main():
 
     df["method"] = pd.Categorical(df["method"], [v[0] for v in R.METHODS.values()])
     df["loss"] = pd.Categorical(df["loss"], list(R.LOSSES.values()))
-    df["direction"] = pd.Categorical(df["direction"], [d for d, _ in DIRECTIONS])
+    df["direction"] = pd.Categorical(df["direction"], [lab for lab, _ in DIRECTIONS])
     facet_order = ["Node, −input", "Node, +input", "MLP, −input", "MLP+Attn, −input"]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
 
     p = (
         ggplot(df, aes("x", "y", color="method", shape="loss"))
         + geom_point(size=2.6, alpha=0.85, stroke=0.3)
-        # x shared (both rows are an accuracy AUC in [0,1], ↑-better); y free per row because
-        # iso and cause faithfulness are different quantities pointing opposite ways.
+        # x shared (both rows are the base-label accuracy AUC, in [0,1]); y free per row
+        # because iso faithfulness is unbounded above while cause faithfulness lives near 0.
         + facet_grid("direction ~ facet", scales="free_y")
         + expand_limits(x=0, y=0)   # anchor at 0 without dropping out-of-range points
         + scale_color_manual(values={lab: col for lab, col in R.METHODS.values()}, name="Method")
         + scale_shape_manual(values=R.LOSS_SHAPE, name="Loss")
-        + labs(x="Accuracy AUC (↑): iso base label / cause source label",
+        # Same two quantities in both rows, so "good" is top-right on the iso row and
+        # bottom-left on the cause row (patching a good top-k should destroy both).
+        + labs(x="Accuracy AUC, base label (iso ↑ / cause ↓)",
                y="Faith AUC (iso ↑ / cause ↓)")
         + guides(color=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
