@@ -78,7 +78,16 @@ def parse_method(fname, d):
             return None
         ks = "unif" if "uniformk" in tag else "log"
         return f"stopk-{ks}"
-    return "IxG" if tag.startswith("ixg") else "IG"
+    # Be STRICT here. This used to fall through to "IG" for anything unrecognised, which meant a
+    # cause-trained MAttr run (tag `necessary_topk_adam_bs1`, from --mode necessary) would be
+    # silently relabelled "IG" and averaged into the IG points. Unknown tags must drop out, not
+    # masquerade as a baseline. All `necessary_*` runs are therefore invisible to these figures
+    # by design -- they belong in a cause-trained figure of their own.
+    if tag.startswith("ixg"):
+        return "IxG"
+    if tag.startswith("ig"):
+        return "IG"
+    return None
 
 
 def load(res):
