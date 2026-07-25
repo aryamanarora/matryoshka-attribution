@@ -75,10 +75,30 @@ EAPIG_REPRO_DIR = "eapig_repro_eval"
 # Edge baselines (reproduced on validation set)
 EDGE_BASELINES = {}
 
-# UGS (the only mask-learning baseline in MIB) is edge-level and only runs on gpt2-small/qwen,
-# so it can never fill more than 3 of the 11 columns. See docs/ugs_baseline.md.
+# Mask-learning baselines, emitted under their own header in both sections.
+# UGS (MIB's own mask baseline) is edge-level and only runs on gpt2-small/qwen, so it can
+# never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Edge Pruning is not tied
+# to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
 UGS_DIR = "ugs_eval"
+EPRUN_DIR = "eprun_eval"
 PARTIAL_COVERAGE = {"UGS"}
+MASK_NODE_BASELINES = {}
+MASK_EDGE_BASELINES = {}
+
+
+def load_run_eval(results_dir, sub):
+    """{(task, model): CPR AUC} from a run_evaluation.py output folder."""
+    data = {}
+    for task, model, _ in COLUMNS:
+        pkl = (RESULTS_BASE / results_dir / sub
+               / f"{task.replace('_', '-')}_{model}_validation_abs-False.pkl")
+        if pkl.exists():
+            try:
+                with open(pkl, "rb") as f:
+                    data[(task, model)] = round(pickle.load(f)["area_under"], 2)
+            except Exception:
+                pass
+    return data
 
 
 def load_cpr_auc(results_dir, task, model):
@@ -125,7 +145,8 @@ def main():
     edge_uniform = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge" and g == "uniform"]
 
     def best_in_col(level):
-        baselines = NODE_BASELINES if level == "node" else EDGE_BASELINES
+        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES} if level == "node" \
+            else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
         our = {f"{n}_{l}_{g}": all_results.get(f"{n}_{l}_{g}", {}) for n, _, l, g in OUR_METHODS if l == level}
         best = {}
         second = {}
@@ -169,7 +190,7 @@ def main():
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
     def make_row(name, data, best_col, second_col, indent=False, dagger=None,
-                 avg_best=None, avg_second=None):
+                 avg_best=None, avg_second=None, suppress_avg=False):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
@@ -180,9 +201,9 @@ def main():
             if v is not None and (task, model) in dcells:
                 cell = "$^{\\dagger}$" + cell
             vals.append(cell)
-        # UGS only covers 3 of the 11 cells, so an average over what it has would not be
-        # comparable to the full-coverage rows.
-        a = None if name in PARTIAL_COVERAGE else row_avg(data)
+        # A row that covers only some cells (UGS: 3 of 11) gets no average -- it would not
+        # be comparable to the full-coverage rows.
+        a = None if (suppress_avg or name in PARTIAL_COVERAGE) else row_avg(data)
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
         prefix = f"\\quad {name}" if indent else name
@@ -268,9 +289,14 @@ def main():
         NODE_BASELINES[disp] = data
         DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
+    # Mask learning at node level: Edge Pruning (all four models)
+    ep_node = load_run_eval(EPRUN_DIR, "EdgePruning_patching_node")
+    if ep_node:
+        MASK_NODE_BASELINES["Edge Pruning"] = ep_node
+
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
-    node_dicts = list(NODE_BASELINES.values()) \
+    node_dicts = list(NODE_BASELINES.values()) + list(MASK_NODE_BASELINES.values()) \
         + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_uniform] \
         + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_ours]
     avb, avs = section_avg_best(node_dicts)
@@ -278,6 +304,12 @@ def main():
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
+    if MASK_NODE_BASELINES:
+        lines.append("\\textbf{Mask learning} \\\\")
+        for name, data in MASK_NODE_BASELINES.items():
+            lines.append(make_row(name, data, best_node, second_node, indent=True,
+                                  avg_best=avb, avg_second=avs,
+                                  suppress_avg=len(data) < len(COLUMNS)))
     emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs)
 
     # === Edge-level section ===
@@ -298,23 +330,16 @@ def main():
                 pass
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
 
-    # UGS: mask learning, reg_lamb=0.001, gpt2/qwen only
-    ugs = {}
-    for task, model, _ in COLUMNS:
-        stask = task.replace("_", "-")
-        pkl = RESULTS_BASE / UGS_DIR / "UGS_patching_edge" / f"{stask}_{model}_validation_abs-False.pkl"
-        if pkl.exists():
-            try:
-                with open(pkl, "rb") as f:
-                    d = pickle.load(f)
-                ugs[(task, model)] = round(d["area_under"], 2)
-            except Exception:
-                pass
+    # Mask learning at edge level: UGS (reg_lamb=0.001, gpt2/qwen only) + Edge Pruning
+    ugs = load_run_eval(UGS_DIR, "UGS_patching_edge")
     if ugs:
-        EDGE_BASELINES["UGS"] = ugs
+        MASK_EDGE_BASELINES["UGS"] = ugs
+    ep_edge = load_run_eval(EPRUN_DIR, "EdgePruning_patching_edge")
+    if ep_edge:
+        MASK_EDGE_BASELINES["Edge Pruning"] = ep_edge
 
     best_edge, second_edge = best_in_col("edge")
-    edge_dicts = list(EDGE_BASELINES.values()) \
+    edge_dicts = list(EDGE_BASELINES.values()) + list(MASK_EDGE_BASELINES.values()) \
         + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_uniform] \
         + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_ours]
     eavb, eavs = section_avg_best(edge_dicts)
@@ -323,14 +348,14 @@ def main():
     EDGE_LLAMA_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
-        if name in PARTIAL_COVERAGE:
-            continue
         lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb, avg_second=eavs))
-    # UGS learns a mask rather than attributing gradients, so it gets its own header.
-    if "UGS" in EDGE_BASELINES:
+    # Mask learners rank by a learned gate rather than a gradient, so they get their own header.
+    if MASK_EDGE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
-        lines.append(make_row("UGS", EDGE_BASELINES["UGS"], best_edge, second_edge, indent=True,
-                              avg_best=eavb, avg_second=eavs))
+        for name, data in MASK_EDGE_BASELINES.items():
+            lines.append(make_row(name, data, best_edge, second_edge, indent=True,
+                                  avg_best=eavb, avg_second=eavs,
+                                  suppress_avg=len(data) < len(COLUMNS)))
     emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs, dagger=EDGE_LLAMA_DAGGER)
 
     lines.append("\\bottomrule")
