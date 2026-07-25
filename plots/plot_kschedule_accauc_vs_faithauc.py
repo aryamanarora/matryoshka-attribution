@@ -3,7 +3,9 @@
 Companion to plot_accauc_vs_faithauc.py: same axes and the same task-group averaging, but
 the contrast is the k-schedule {log, uniform, fixed 10%} instead of the method. One point per
 (schedule, STE family, loss); columns split on whether the input-embedding node is scored and
-ablated, rows split the STE family.
+ablated, rows split the STE family. Both rows use the HARD top-k forward (masks.py's
+`hard_topk` / `hard_topk_identity`) and differ only in the backward: the sigmoid-top-k STE
+(dm/ds = d(soft)/ds) vs the identity STE (dm/ds = 1).
 
 Fixed-k (a single training budget, no schedule) is the setting a mask learner like Edge
 Pruning is stuck in, so this is the like-for-like version of that comparison inside our own
@@ -78,7 +80,10 @@ SCHEDULES = {
     "unif": ("uniform $k$", "#ff7f0e"),
     "fixed": ("fixed $k{=}10\\%$", "#d62728"),
 }
-STES = {"soft": "sigmoid-STE", "id": "identity-STE"}
+# BOTH rows are the HARD top-k forward (masks.py: hard_topk / hard_topk_identity); they differ
+# only in the backward. Spell that out in the strip -- "sigmoid-STE" alone reads as if it were
+# the soft top-k forward, which is the MAttr headline and is absent here (see caveat above).
+STES = {"soft": "hard fwd, sigmoid STE", "id": "hard fwd, identity STE"}
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
 
