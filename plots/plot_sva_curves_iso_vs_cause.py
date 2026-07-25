@@ -72,7 +72,11 @@ CURVES = [
     ("iso_metrics", "faithfulness", "iso: faith (↑)"),
     ("iso_metrics", "acc_base", "iso: acc base (↑)"),
     ("cause_metrics", "faithfulness", "cause: faith (↓)"),
-    ("cause_metrics", "acc_source", "cause: acc source (↑)"),
+    # acc_base in BOTH directions, so rows 2 and 4 are the same quantity and the iso/cause
+    # contrast is apples-to-apples: base-label accuracy rises with k when the top-k is kept
+    # clean and falls when it is patched. (= 1 − acc_source, so ↓ is good here; the AUCs are
+    # exact complements, AUC(acc_base) + AUC(acc_source) = 1 up to ties.)
+    ("cause_metrics", "acc_base", "cause: acc base (↓)"),
 ]
 TASK_ORDER = ["nounpp", "rc", "simple", "within_rc", "arc_easy", "ioi/qwen2.5"]
 
