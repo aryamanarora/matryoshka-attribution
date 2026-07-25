@@ -57,7 +57,14 @@ for spec in "${TASKS[@]}"; do
   IFS=: read -r task model dataset <<< "$spec"
   for cfg in "${VARIANTS[@]}"; do
     variant=${cfg%:*}; opt=${cfg#*:}
-    vabbr=$(case "$variant" in hard_topk_identity) echo idste;; topk) echo stopk;; *) echo soft;; esac)
+    # job-name abbreviation only (the data-bearing tag is mattr_tag). Deliberately NOT the
+    # legacy submit_sva_sweep.sh mapping, which calls hard_topk "soft" (after its sigmoid STE)
+    # -- that reads as the soft-forward headline in squeue and is a trap.
+    vabbr=$(case "$variant" in
+              topk) echo stopk;;                 # soft top-k forward = headline
+              hard_topk) echo hste;;             # hard forward, sigmoid STE = "+hard"
+              hard_topk_identity) echo idste;;   # hard forward, identity STE
+              *) echo "$variant";; esac)
     for loss in "${LOSSES[@]}"; do
       tag=$(mattr_tag "$variant" "$opt" "$loss")
       f="$OUT/${task}_${model}_node_${tag}.json"
