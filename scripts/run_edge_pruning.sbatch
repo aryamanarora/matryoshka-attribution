@@ -8,7 +8,12 @@
 # Edge Pruning (Bhaskar et al., 2024) baseline on MIB: learn hard-concrete gates with the
 # Lagrangian L0 recipe, dump the scored circuit, then score it with MIB's own harness.
 #
-#   sbatch scripts/run_edge_pruning.sbatch <gpt2|qwen2.5|gemma2|llama3> <task> [level] [steps] [split]
+#   sbatch scripts/run_edge_pruning.sbatch <gpt2|qwen2.5|gemma2|llama3> <task> [level] [steps] [split] [target_sparsity]
+#
+# target_sparsity is the L0 budget the Lagrangian anneals to; it is THE knob that decides
+# where the circuit switches on, so runs at different targets must not share output dirs.
+# Omit it for the script default (0.9 node / 0.99 edge) and unsuffixed dirs; pass e.g. 0.95
+# to get results/eprun_node_s0.95/ + results/eprun_eval_s0.95/.
 #
 # Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
@@ -20,6 +25,7 @@ TASK=${2:?task}
 LEVEL=${3:-node}
 STEPS=${4:-3000}
 SPLIT=${5:-validation}
+SPARSITY=${6:-}
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -35,18 +41,26 @@ case "$MODEL" in
   *) echo "unknown model $MODEL"; exit 1 ;;
 esac
 
-OUT=$L2A/results/eprun_${LEVEL}
+if [ -n "$SPARSITY" ]; then
+  SUF=_s${SPARSITY}
+  SPARSITY_ARG="--target-sparsity $SPARSITY"
+else
+  SUF=""
+  SPARSITY_ARG=""
+fi
+OUT=$L2A/results/eprun_${LEVEL}${SUF}
+EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
 cd "$L2A"
 
 PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
   scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
   --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-  --split "$SPLIT" --output "$OUT" --skip-eval
+  --split "$SPLIT" --output "$OUT" $SPARSITY_ARG --skip-eval
 
 cd "$MIB"
 PYTHONPATH=.:EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
   run_evaluation.py --models "$MODEL" --tasks "$TASK" --level "$LEVEL" \
   --ablation patching --split "$SPLIT" --method EdgePruning \
   --circuit-files "$GRAPH" --batch-size "$BS" \
-  --output-dir $L2A/results/eprun_eval
+  --output-dir "$EVAL_OUT"
