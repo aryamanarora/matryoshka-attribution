@@ -57,6 +57,19 @@ values, and do NOT compare a fresh run's log "CPR AUC=..." against the table unl
 both used the same eval. Eval was changed to average over `n_eval` examples (commit
 45db054), so older pkls/table values may differ from a fresh run.
 
+### Never evaluate a gemma2 cell in the L2A venv (TL 3.2.1 Gemma-2 forward bug)
+`.venv` (TL 3.2.1) computes a **wrong Gemma-2 forward** — proved against an HF reference in
+`525673a`; patching itself is faithful, the forward is not. Use
+`MIB-circuit-track/.venv` (TL 2.15.4) for any gemma2 evaluation, training or scoring.
+The L2A venv is fine for gpt2/qwen2.5/llama3 (the bug is Gemma-2-specific), though that
+scoping rests on `525673a`'s diagnosis rather than a per-model cross-check.
+
+All gemma2 cells of the LR sweep + MAttr node dirs were re-evaluated under TL 2.15.4 on
+2026-07-24 by `scripts/reeval_gemma_mib.py` (which asserts TL 2.x and overwrites the pkls
+in place), so `paper/tabs/lr_sweep.tex` and the MAttr rows of `mib_results.tex` are clean.
+`submit_lr_sweep_*.sh` still points at `$ABS/.venv/bin/python` — re-running one of those
+scripts would silently reintroduce the bad Gemma numbers.
+
 ### llama3 cells are evaluated on 200 examples — match it
 `MIB-circuit-track/run_variants.sh` scores every **llama3** cell with `--head 200`
 (full validation crawls/OOMs on 8B); gpt2/qwen2.5/gemma2 cells run full validation.
