@@ -32,6 +32,10 @@ BASELINES = [  # (display, *_accauc dir, method_saveable)
 ]
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
 
+# Mask-learning baselines (own header). UGS is edge-only so it cannot appear in this
+# node-level table at all; Edge Pruning runs at node level on every model.
+MASK_BASELINES = [("Edge Pruning", L2A / "eprun_eval", "EdgePruning_patching_node")]
+
 
 def opt_of(d):   # id-STE variants use SGD; everything else Adam (mirrors make_mib_table)
     return "sgd" if "identity" in d else "adam"
@@ -75,11 +79,17 @@ def main():
     for disp, d, sub in BASELINES:
         rows.append((disp, {(t, m): acc_base(d, sub, t, m) for t, m, _ in COLUMNS},
                      {(t, m) for t, m, _ in COLUMNS if m == "llama3"}))
+    mask_rows = []   # (display, data)
+    for disp, base, sub in MASK_BASELINES:
+        data = {(t, m): _acc(base / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+                for t, m, _ in COLUMNS}
+        if any(v is not None for v in data.values()):
+            mask_rows.append((disp, data))
     mattr = {}   # dir -> data
     for _, d, _ in NODE_METHODS:
         mattr[d] = {(t, m): acc_mattr(d, t, m) for t, m, _ in COLUMNS}
 
-    all_data = [dd for _, dd, _ in rows] + list(mattr.values())
+    all_data = [dd for _, dd, _ in rows] + [dd for _, dd in mask_rows] + list(mattr.values())
     best, second = {}, {}
     for t, m, _ in COLUMNS:
         vals = sorted({dd[(t, m)] for dd in all_data if dd.get((t, m)) is not None}, reverse=True)
@@ -113,6 +123,10 @@ def main():
          "\\textbf{Gradient attribution} \\\\"]
     for disp, data, dc in rows:
         L.append(emit(disp, data, dc))
+    if mask_rows:
+        L.append("\\textbf{Mask learning} \\\\")
+        for disp, data in mask_rows:
+            L.append(emit(disp, data, set()))
 
     llama_ioi = {("ioi", "llama3")}
     for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
