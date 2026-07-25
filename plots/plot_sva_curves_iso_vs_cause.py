@@ -20,9 +20,12 @@ So the cause row's two axes carry ~one degree of freedom, not two -- do not read
 independent pieces of evidence.
 
 Data: results/sva_sweep (−input) by default; SWEEP=results/sva_sweep_input for the +input
-twin. Node substrate only (the substrate with the MIB tasks and the +input variant).
-Run:  uv run python plots/plot_sva_curves_iso_vs_cause.py
-        -> plots/sva_curves_iso_vs_cause.pdf
+twin (node only -- include_input is forced off for the other substrates, llama.py:36).
+SUB selects the substrate: node (default, 6 tasks incl. the MIB ones) | mlp | mlp+attn_head
+(the mlp substrates were only ever run on the 4 SVA tasks, so those figures have 4 columns).
+Run:  uv run python plots/plot_sva_curves_iso_vs_cause.py           -> ..._iso_vs_cause.pdf
+      SWEEP=results/sva_sweep_input  ... .py                        -> ..._input.pdf
+      SUB=mlp ... .py / SUB=mlp+attn_head ... .py                   -> ..._mlp[-attn_head].pdf
 """
 import glob
 import json
@@ -66,15 +69,27 @@ theme_set(
 )
 
 SWEEP = os.environ.get("SWEEP", "results/sva_sweep")
-# derive OUT from SWEEP so the −input and +input twins cannot overwrite each other (a rendered
-# figure is otherwise indistinguishable -- ±input is not recorded in any json field)
-OUT = ("plots/sva_curves_iso_vs_cause.pdf" if "input" not in SWEEP
-       else "plots/sva_curves_iso_vs_cause_input.pdf")
-# The `node` substrate has NO position axis: total = layers*heads + layers (+1 for the input
-# embedding node), i.e. 1056 for llama3 and 360 for qwen2.5. So one unit is one whole attention
-# HEAD or one whole MLP LAYER, summed over positions -- not a per-position node, and not a
-# neuron (that is the `mlp` substrate, 32*6*14336 = 2.75M units). See models/llama.py:53-65.
-SUBSTRATE_DESC = "attn heads + MLP layers"
+SUB = os.environ.get("SUB", "node")           # node | mlp | mlp+attn_head
+# What one unit of k IS, per substrate (models/llama.py:53-65). The `node` substrate has NO
+# position axis -- total = layers*heads + layers (+1 input) = 1056 on llama3, 360 on qwen2.5 --
+# so a unit there is a whole head / whole MLP layer. The mlp substrates ARE per-neuron, at a
+# span (position group) granularity, which is why they run to millions of units.
+SUBSTRATES = {
+    "node":          ("attn heads + MLP layers", "node"),
+    "mlp":           ("MLP neurons per span", "mlp"),
+    "mlp+attn_head": ("MLP neurons + attn heads per span", "mlp-attn_head"),
+}
+if SUB not in SUBSTRATES:
+    raise SystemExit(f"SUB must be one of {list(SUBSTRATES)}, got {SUB!r}")
+SUBSTRATE_DESC, SUB_TAG = SUBSTRATES[SUB]
+# include_input is forced off for every non-node substrate (llama.py:36 `include_input and
+# mask_type == "node"`), so ±input is a node-only distinction and only `node` has a +input twin.
+PLUS_INPUT = SUB == "node" and "input" in SWEEP
+# derive OUT from SWEEP+SUB so the twins cannot overwrite each other (a rendered figure is
+# otherwise indistinguishable -- neither ±input nor the substrate is in the json filename)
+OUT = ("plots/sva_curves_iso_vs_cause"
+       + ("" if SUB == "node" else "_" + SUB_TAG)
+       + ("_input" if PLUS_INPUT else "") + ".pdf")
 # (metrics dict, key, row label) -- the four curves behind the four AUCs
 CURVES = [
     ("iso_metrics", "faithfulness", "iso: faith (↑)"),
@@ -91,7 +106,7 @@ TASK_ORDER = ["nounpp", "rc", "simple", "within_rc", "arc_easy", "ioi/qwen2.5"]
 
 def load():
     rows = []
-    for f in sorted(glob.glob(SWEEP + "/*_node_*.json")):
+    for f in sorted(glob.glob(f"{SWEEP}/*_{SUB_TAG}_*.json")):
         d = json.load(open(f))
         m = R.parse_method(os.path.basename(f), d)
         if m is None or m not in R.METHODS:
@@ -126,14 +141,15 @@ def main():
         # ±input is recorded NOWHERE in the jsons -- the results dir is the only discriminator
         # -- so stamp it on the axis, otherwise a rendered figure is unidentifiable later.
         + labs(x=f"$k$ ({SUBSTRATE_DESC}: kept clean for iso, patched for cause)"
-                 f"   [{'$+$' if 'input' in SWEEP else '$-$'} input embedding node]",
+                 f"   [{'$+$ input embedding node' if PLUS_INPUT else '$-$ input embedding node'}]",
                y="", linetype="Loss")
         + guides(color=guide_legend(order=1, nrow=1), linetype=guide_legend(order=2, nrow=1))
     )
     p.save(OUT, dpi=300, verbose=False)
     p.save(OUT.replace(".pdf", ".png"), dpi=200, verbose=False)   # preview only
     runs = df[["task", "method", "loss"]].drop_duplicates().shape[0]
-    print(f"wrote {OUT} from {SWEEP} ({runs} runs, {len(df)} curve points)")
+    print(f"wrote {OUT} from {SWEEP} sub={SUB} ({runs} runs, {len(df)} curve points, "
+          f"k up to {df['k'].max():,.0f})")
 
 
 if __name__ == "__main__":
