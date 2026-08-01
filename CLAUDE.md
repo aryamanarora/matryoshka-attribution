@@ -24,7 +24,7 @@ wrong intervention, check this first.
 ## CRITICAL: which results dir is the "MAttr" / "Ours" headline
 
 **As of 2026-07-21 the headline MAttr is the SOFT top-k forward, log-k schedule, lr=0.05
-variant** (best test CPR avg 1.83, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The
+variant** (best test CPR avg, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The
 hard sigmoid-STE forward is now the "$+$ hard" ablation; uniform-k rows are "+ unif k".
 
 | Results dir (`results/...`)        | Variant                     | Paper role            |
@@ -43,9 +43,12 @@ as "MAttr" makes ablations look deceptively good. (Pre-2026-07-21 history/artifa
 used the hard log-k `htklog`/`mib_node_hard_topk_log` as headline — beware stale labels.)
 
 ### Verification anchor
-`topklog_lr_0.05` `area_under` matches the `\ourmethod{}` row of `mib_results.tex`
-(ioi/gpt2 1.83, ioi/qwen 1.54, mcqa/gemma 1.95, avg 1.81). If your "headline" numbers
-don't match that row, you're reading the wrong dir.
+`topklog_lr_0.05` `area_under` matches the `\ourmethod{}` row of `paper/tabs/mib_results.tex`
+cell-for-cell. If your "headline" numbers don't match that row, you're reading the wrong dir.
+Compare against the table as it is on disk — do NOT hardcode expected values here or in a
+script. Re-evaluations overwrite pkls in place (e.g. the 2026-07-24 Gemma TL 2.15.4 pass moved
+every gemma cell), so any number copied out of the table goes stale silently and then reads as
+"you're in the wrong dir" when the dir is fine.
 
 ## Reading CPR AUC apples-to-apples
 
