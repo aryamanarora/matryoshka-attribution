@@ -103,7 +103,16 @@ EPRUN_SPARSITIES = [
     ("$s{=}0.9$", "eprun_eval"),
     ("$s{=}0.95$", "eprun_eval_s0.95"),
     ("$s{=}0.99$", "eprun_eval_s0.99"),
+    # logit-diff objective (_ld): MAttr's own training signal instead of Edge Pruning's KL.
+    # Not a side ablation -- on the first cells to land it closes 34-54% of the KL->MAttr gap
+    # (ioi/gpt2 1.02->1.29 vs MAttr-node 1.83; mcqa/qwen2.5 1.11->1.48 vs 1.79), so the KL rows
+    # compare MAttr against a baseline optimizing something other than what CPR measures.
+    # Swept over budgets because _ld converges to a DENSER mask than KL at the same nominal
+    # target (gpt2 keeps 26/156 vs KL's 19/156), so KL's best budget need not be its best.
+    ("$s{=}0.8$, logit-diff", "eprun_eval_s0.8_ld"),
     ("$s{=}0.9$, logit-diff", "eprun_eval_s0.9_ld"),
+    ("$s{=}0.95$, logit-diff", "eprun_eval_s0.95_ld"),
+    ("$s{=}0.99$, logit-diff", "eprun_eval_s0.99_ld"),
 ]
 
 # Best budget by CPR (validation avg over 11 cells: 0.9973 vs 0.9573 / 0.9122). acc-AUC
