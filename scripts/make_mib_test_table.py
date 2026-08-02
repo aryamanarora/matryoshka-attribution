@@ -78,6 +78,32 @@ OUR_EDGE_METHODS = [   # same 3 variants at lr=0.05, edge level (test)
 ]
 
 
+# Mask-learning baseline: Node Pruning (Bhaskar et al., 2024's recipe at node granularity) at
+# the headline budget s=0.9 -- the one that wins CPR AUC on validation (1.00 vs 0.96 / 0.91).
+# Only this budget is carried to test; the other two stay a validation-only sparsity sweep.
+#
+# TWO caveats that make this row not quite like its neighbours, both deliberate:
+#  1. It is scored by MIB's run_evaluation.py, while the \ourmethod{} rows come from our
+#     eval_mib.py. Those harnesses do NOT agree cell-for-cell (worst on Gemma), so a small
+#     gap between this row and a MAttr row is inside harness noise.
+#  2. Its cells are full-split, including llama3. The validation table daggers llama3 because
+#     run_variants.sh caps it at 200 examples there; test splits are <=1188 so nothing is
+#     capped and no dagger is owed.
+NODE_PRUNING = ("Node Pruning ($s{=}0.9$)", "eprun_eval", "EdgePruning_patching_node")
+
+
+def load_run_eval_cpr(results_dir, sub, task, model):
+    """CPR AUC from a run_evaluation.py output pkl (baseline layout, dashed task names)."""
+    pkl_path = RESULTS_BASE / results_dir / sub / f"{task.replace('_', '-')}_{model}_test_abs-False.pkl"
+    if not pkl_path.exists():
+        return None
+    try:
+        with open(pkl_path, "rb") as f:
+            return pickle.load(f)["area_under"]
+    except Exception:
+        return None
+
+
 def load_cpr_auc(results_dir, task, model):
     pkl_path = RESULTS_BASE / results_dir / f"{task}_{model}_test.pkl"
     if not pkl_path.exists():
@@ -111,6 +137,18 @@ def main():
             if v is not None:
                 data[(task, model)] = round(v, 2)
         ours_nodes[name] = data
+    # Node Pruning row (empty dict -> row is skipped entirely, not printed as all-dashes)
+    np_name, np_dir, np_sub = NODE_PRUNING
+    node_pruning = {}
+    for task, model, _ in COLUMNS:
+        v = load_run_eval_cpr(np_dir, np_sub, task, model)
+        if v is not None:
+            node_pruning[(task, model)] = round(v, 2)
+    mask_nodes = {np_name: node_pruning} if node_pruning else {}
+    if node_pruning and len(node_pruning) < len(COLUMNS):
+        print(f"WARNING: {np_name} has {len(node_pruning)}/{len(COLUMNS)} test cells; "
+              f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in node_pruning]}")
+
     ours_edges = {}
     for name, d in OUR_EDGE_METHODS:
         data = {}
@@ -139,7 +177,8 @@ def main():
                 second[(task, model)] = None
         return best, second
 
-    best_node, second_node = find_best(NODE_BASELINES, list(ours_nodes.values()))
+    best_node, second_node = find_best(NODE_BASELINES,
+                                       list(mask_nodes.values()) + list(ours_nodes.values()))
     best_edge, second_edge = find_best(EDGE_BASELINES, list(ours_edges.values()))
 
     def row_avg(data):
@@ -181,8 +220,11 @@ def main():
     # Node level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
-    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(ours_nodes.values()))
+    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(mask_nodes.values())
+                                  + list(ours_nodes.values()))
     for name, data in NODE_BASELINES.items():
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+    for name, data in mask_nodes.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
     for name, data in ours_nodes.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))

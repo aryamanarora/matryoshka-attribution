@@ -81,6 +81,16 @@ baseline must pass `--head 200` for llama3 in `run_evaluation.py`, or its llama3
 sit in a column next to numbers computed on a 200-example subset — not apples-to-apples.
 (The Edge Pruning runner shipped without it and had to be fixed in `1a0216f`; uncapped
 llama3 eval is also ~50× slower, ~9 h/job vs ~15 min.)
+The cap is **validation-only**. Test splits are ≤1188 examples (ioi/arith 1000, arc-e 1188,
+arc-c 586, mcqa 50) and both the MIB paper's test numbers and `submit_test_lr05.sh` are
+full-split, so capping a test cell would make it the only subset-scored row in that table.
+
+### "Node Pruning" vs "Edge Pruning" is a display name, not a different method
+Same recipe and same code (`src/learning_to_attribute/edge_pruning.py`); the paper labels the
+rows by the granularity actually pruned, mapped in `scripts/make_mib_table.py:EPRUN_NAME`
+(`node` → "Node Pruning", `edge` → "Edge Pruning"). Everything on disk keeps the original
+name — `results/eprun_*` and the `EdgePruning_patching_<level>` subfolder MIB's
+`run_evaluation.py --method EdgePruning` writes. Don't rename those; it would orphan the pkls.
 
 ### Known-still-wrong artifacts (as of 2026-06-09)
 These compare NAP-IG against the **uniform-k** `mib_node_hard_topk` instead of the

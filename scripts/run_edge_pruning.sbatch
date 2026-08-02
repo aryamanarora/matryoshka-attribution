@@ -36,14 +36,20 @@ PY=$MIB/.venv/bin/python
 # Eval batch size follows the per-model guidance in CLAUDE.md. HEAD must match the eval
 # subset every other row in the table used (MIB-circuit-track/run_variants.sh): llama3
 # cells are capped at 200 validation examples, everything else runs full validation.
-# Without this the Edge Pruning llama3 cells are scored on a different (10k-example) set
-# than the gradient baselines they sit next to -- not apples-to-apples, and ~50x slower.
+# Without this the llama3 cells are scored on a different (10k-example) set than the
+# gradient baselines they sit next to -- not apples-to-apples, and ~50x slower.
+#
+# The cap is VALIDATION-only. Test splits are small (ioi/arith 1000, arc-e 1188, arc-c 586,
+# mcqa 50), the MIB paper's test numbers are full-split, and scripts/submit_test_lr05.sh runs
+# MAttr's test cells uncapped -- so capping here would make this the only subset-scored row in
+# the test table. Full llama3 test eval is ~6x the 200-example cost, not the 50x validation is.
 case "$MODEL" in
   gpt2|qwen2.5) BS=20; HEAD="" ;;
   gemma2)       BS=4;  HEAD="" ;;
   llama3)       BS=2;  HEAD="--head 200" ;;
   *) echo "unknown model $MODEL"; exit 1 ;;
 esac
+[ "$SPLIT" = "validation" ] || HEAD=""
 
 if [ -n "$SPARSITY" ]; then
   SUF=_s${SPARSITY}

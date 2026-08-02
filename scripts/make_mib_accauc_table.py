@@ -33,10 +33,11 @@ BASELINES = [  # (display, *_accauc dir, method_saveable)
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
 
 # Mask-learning baselines (own header). UGS is edge-only so it cannot appear in this
-# node-level table at all; Edge Pruning runs at node level on every model. One row per
+# node-level table at all; Node Pruning runs at node level on every model. One row per
 # target-sparsity budget (M.EPRUN_SPARSITIES) -- the budget, not the ranking, is what a
 # mask learner actually optimizes, so it is a reported setting rather than a hidden default.
-MASK_BASELINES = [(f"Edge Pruning ($s{{=}}{lab}$)", L2A / d, "EdgePruning_patching_node")
+# Name comes from M.EPRUN_NAME: this table is node-level only, hence "Node Pruning".
+MASK_BASELINES = [(f"{M.EPRUN_NAME['node']} ($s{{=}}{lab}$)", L2A / d, "EdgePruning_patching_node")
                   for lab, d in M.EPRUN_SPARSITIES]
 
 

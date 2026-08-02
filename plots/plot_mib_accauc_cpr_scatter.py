@@ -52,9 +52,9 @@ theme_set(
 # plots/palette.py (single source of truth across all figures) -- no local hex codes.
 # MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
 COLORS = {**P.METHOD, "Other": P.OTHER}
-COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Edge Pruning", "Other"]
+COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Node Pruning", "Other"]
 
-# Edge Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
+# Node Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
 # comparator to MAttr and gets its own colour rather than the grey "Other". It appears as THREE
 # points, one per target sparsity, joined by a dashed path: a mask learner optimizes one
 # operating point, so its budget is a setting to show, not a default to hide. Both metrics come
@@ -66,11 +66,11 @@ HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
 
 # Shape = how the circuit is OBTAINED, which is the axis this figure is really about: score
 # every node with a gradient and rank, vs optimize a mask against an objective. Note this cuts
-# ACROSS ours/baseline -- MAttr, +hard and Edge Pruning share a shape, and the split is what
+# ACROSS ours/baseline -- MAttr, +hard and Node Pruning share a shape, and the split is what
 # makes the upper-right cluster read as "mask learning wins acc-AUC" rather than "ours wins".
 GRADIENT, MASK = "Gradient", "Mask learning"
 FAMILY_SHAPE = {GRADIENT: "o", MASK: "s"}   # both fillable: black edge + method fill
-MASK_METHODS = {"MAttr", "+hard", "Edge Pruning"}
+MASK_METHODS = {"MAttr", "+hard", "Node Pruning"}
 
 
 def avg(d):
@@ -119,7 +119,7 @@ def main():
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
             rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
-    # Edge Pruning: one point per target sparsity, both metrics out of the same pkl.
+    # Node Pruning: one point per target sparsity, both metrics out of the same pkl.
     # M.EPRUN_SPARSITIES is ordered 0.9 -> 0.95 -> 0.99, which is the order the dashed path
     # below connects (geom_path follows frame order), so the line reads sparse-ward.
     ep = []
@@ -130,7 +130,7 @@ def main():
                    for t, m, _ in COLS})
         cpr = avg(cpr_base(dirn, sub))
         if acc is not None and cpr is not None:
-            ep.append(dict(acc=acc, cpr=cpr, method="Edge Pruning", s=si))
+            ep.append(dict(acc=acc, cpr=cpr, method="Node Pruning", s=si))
     rows += ep
 
     df = pd.DataFrame(rows)
@@ -146,7 +146,7 @@ def main():
         # dashed guide across the three sparsity budgets, same visual language as the loss
         # guide in accauc_vs_faithauc. Added BEFORE geom_point so the markers sit on top of
         # it; adds no legend entry (constant colour, inherit_aes=False).
-        p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Edge Pruning"],
+        p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Node Pruning"],
                        linetype="dashed", size=0.3, alpha=0.6, inherit_aes=False)
     p = (
         p
@@ -159,7 +159,7 @@ def main():
         + scale_fill_manual(values=COLORS, name="")
         + scale_shape_manual(values=FAMILY_SHAPE, name="")
         + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
-        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Edge Pruning".
+        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Node Pruning".
         # The two legends stack (legend_box="vertical" in the theme).
         + guides(fill=guide_legend(order=1, nrow=3, override_aes={"shape": "o"}),
                  shape=guide_legend(order=2, nrow=1))
@@ -167,15 +167,15 @@ def main():
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
     print(f"wrote {out} ({len(df)} points, {df['method'].nunique()} series; "
-          f"Edge Pruning at {len(ep)} sparsities)")
+          f"Node Pruning at {len(ep)} sparsities)")
     # The figure's caption quotes this rho, so print it rather than leaving it hand-maintained
-    # -- it drifts with every re-eval, and the Edge Pruning points pull it down (0.98 -> 0.91)
+    # -- it drifts with every re-eval, and the Node Pruning points pull it down (0.98 -> 0.91)
     # because that method's two metrics rank its own sparsity budgets in OPPOSITE directions.
     from scipy.stats import spearmanr
     r_all = spearmanr(df.acc, df.cpr)[0]
-    o = df[df.method != "Edge Pruning"]
+    o = df[df.method != "Node Pruning"]
     print(f"Spearman rho: {r_all:.3f} (all {len(df)}), "
-          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Edge Pruning, {len(o)})")
+          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
 
 
 if __name__ == "__main__":

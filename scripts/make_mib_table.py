@@ -77,8 +77,8 @@ EDGE_BASELINES = {}
 
 # Mask-learning baselines, emitted under their own header in both sections.
 # UGS (MIB's own mask baseline) is edge-level and only runs on gpt2-small/qwen, so it can
-# never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Edge Pruning is not tied
-# to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
+# never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Node/Edge Pruning is not
+# tied to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
 UGS_DIR = "ugs_eval"
 PARTIAL_COVERAGE = {"UGS"}
 MASK_NODE_BASELINES = {}
@@ -95,13 +95,21 @@ EPRUN_SPARSITIES = [
 ]
 
 
+# Bhaskar et al. (2024) named the method for the granularity it prunes at, so the display name
+# follows the level we actually ran: "Node Pruning" for node-level rows, "Edge Pruning" for
+# edge-level ones. Same recipe, same code (src/learning_to_attribute/edge_pruning.py) -- only
+# the label tracks the substrate. Do NOT hardcode one name for both; a node-level row called
+# "Edge Pruning" (or vice versa) misstates what was pruned.
+EPRUN_NAME = {"node": "Node Pruning", "edge": "Edge Pruning"}
+
+
 def eprun_rows(level):
     """[(display, {(task, model): AUC})], one row per target sparsity that has results."""
     rows = []
     for label, dirn in EPRUN_SPARSITIES:
         data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
         if data:
-            rows.append((f"Edge Pruning ($s{{=}}{label}$)", data))
+            rows.append((f"{EPRUN_NAME[level]} ($s{{=}}{label}$)", data))
     return rows
 
 

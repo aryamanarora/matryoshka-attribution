@@ -1,5 +1,13 @@
 # Edge Pruning (Bhaskar et al., 2024) as a MIB mask-learning baseline
 
+> **Naming.** In the paper the node-level rows are called **Node Pruning** and the edge-level
+> rows **Edge Pruning** — same recipe, same code, the label just tracks what was pruned
+> (Bhaskar et al. named the method for its granularity, and every result we currently report
+> is node-level). `scripts/make_mib_table.py:EPRUN_NAME` is the single place that mapping
+> lives. Everything on disk keeps the original name: the `eprun_*` results dirs and the
+> `EdgePruning_patching_<level>` subfolder that MIB's `run_evaluation.py --method EdgePruning`
+> writes. Renaming those would orphan every existing pkl, so don't.
+
 MIB ships exactly one mask-*learning* baseline, UGS, and it covers at most 3 of the 11
 table cells (edge level, gpt2/qwen only — see [ugs_baseline.md](ugs_baseline.md)). Edge
 Pruning is the other obvious mask-learning comparison, and unlike UGS there is nothing
@@ -33,10 +41,19 @@ task loss for MAttr's objective if you want to isolate objective from parameteri
 ## Running it
 
 ```bash
-# <model> <task> [level=node] [steps=3000] [split=validation]
+# <model> <task> [level=node] [steps=3000] [split=validation] [target_sparsity]
 sbatch scripts/run_edge_pruning.sbatch gpt2   ioi   node
 sbatch scripts/run_edge_pruning.sbatch llama3 arc_challenge node
+
+# TEST-set numbers: reuse the already-trained graph, only re-score. The mask is trained on the
+# TRAIN split regardless of --split (--train-split train), so the validation-pass circuit is
+# the same circuit the test set is owed -- retraining would produce a different one.
+bash scripts/submit_test_node_pruning.sh          # all 11 cells, EVAL_ONLY=1, s=0.9
 ```
+
+`--head 200` (the llama3 validation cap the gradient baselines use) is applied on the
+**validation** split only: test splits are ≤1188 examples and the MIB paper's test numbers are
+full-split, so capping there would make ours the only subset-scored row in the test table.
 
 The runner trains, dumps the scored circuit as a MIB `graph.json`, then scores it with
 MIB's `run_evaluation.py`:
