@@ -65,9 +65,11 @@ while True:
             if mt is not None:
                 bits.append(f"MAttr-node {mt:.2f}")
             print("  ".join(bits), flush=True)
-    # Done when every budget dir that has produced anything has produced all 11.
-    live = {lab for lab, ld, _ in BUDGETS if Path(ld).exists()}
-    if live and all(sum(1 for s in seen if s[0] == lab) >= len(CELLS) for lab in live):
+    # Done when EVERY budget listed above has all 11 cells. Do not gate this on the dir
+    # existing: a budget whose jobs are still queued has no dir yet, and treating that as
+    # "nothing to wait for" ends the watch on the first pass whenever the already-finished
+    # budgets are complete -- which is exactly what happened when 0.25/0.1 were added.
+    if all(sum(1 for s in seen if s[0] == lab) >= len(CELLS) for lab, _, _ in BUDGETS):
         break
     time.sleep(60)
 for lab, ds in sorted(deltas.items()):
