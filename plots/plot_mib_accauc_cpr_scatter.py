@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import palette as P
 from plotnine import (
-    ggplot, aes, geom_point, labs, theme, theme_set, theme_bw, element_text,
+    ggplot, aes, geom_point, geom_path, labs, theme, theme_set, theme_bw, element_text,
     element_line, element_blank, scale_color_manual, expand_limits,
     guides, guide_legend,
 )
@@ -51,7 +51,13 @@ theme_set(
 # plots/palette.py (single source of truth across all figures) -- no local hex codes.
 # MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
 COLORS = {**P.METHOD, "Other": P.OTHER}
-COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Other"]
+COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Edge Pruning", "Other"]
+
+# Edge Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
+# comparator to MAttr and gets its own colour rather than the grey "Other". It appears as THREE
+# points, one per target sparsity, joined by a dashed path: a mask learner optimizes one
+# operating point, so its budget is a setting to show, not a default to hide. Both metrics come
+# from the SAME pkl as every other point here (area_under + acc_auc), so nothing extra was run.
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
 HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
@@ -104,11 +110,25 @@ def main():
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
             rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
+    # Edge Pruning: one point per target sparsity, both metrics out of the same pkl.
+    # M.EPRUN_SPARSITIES is ordered 0.9 -> 0.95 -> 0.99, which is the order the dashed path
+    # below connects (geom_path follows frame order), so the line reads sparse-ward.
+    ep = []
+    for si, (label, dirn) in enumerate(M.EPRUN_SPARSITIES):
+        sub = "EdgePruning_patching_node"
+        acc = avg({(t, m): A._acc(RB / dirn / sub /
+                                  f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+                   for t, m, _ in COLS})
+        cpr = avg(cpr_base(dirn, sub))
+        if acc is not None and cpr is not None:
+            ep.append(dict(acc=acc, cpr=cpr, method="Edge Pruning", s=si))
+    rows += ep
 
     df = pd.DataFrame(rows)
     df["method"] = pd.Categorical(df["method"], COLOR_ORDER)
     # draw grey "Other" first so the highlighted points sit on top
     df = df.sort_values("method", ascending=False, key=lambda s: s.cat.codes)
+    epdf = pd.DataFrame(ep).sort_values("s") if ep else None
 
     p = (
         ggplot(df, aes("acc", "cpr", color="method"))
@@ -116,11 +136,18 @@ def main():
         + expand_limits(x=0, y=0)
         + scale_color_manual(values=COLORS, name="")
         + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
-        + guides(color=guide_legend(nrow=2))
+        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Edge Pruning"
+        + guides(color=guide_legend(nrow=3))
     )
+    if epdf is not None and len(epdf) > 1:
+        # dashed guide across the three sparsity budgets, same visual language as the loss
+        # guide in accauc_vs_faithauc; drawn under the markers, adds no legend entry
+        p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Edge Pruning"],
+                       linetype="dashed", size=0.3, alpha=0.6, inherit_aes=False)
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
-    print(f"wrote {out} ({len(df)} methods)")
+    print(f"wrote {out} ({len(df)} points, {df['method'].nunique()} series; "
+          f"Edge Pruning at {len(ep)} sparsities)")
 
 
 if __name__ == "__main__":

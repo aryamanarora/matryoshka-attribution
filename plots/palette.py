@@ -27,6 +27,7 @@ METHOD = {
     "IG":    "#e69f00",   # Wong orange   (light)
     "I×G":   "#882255",   # Tol wine      (dark)
     "GIM":   "#56b4e9",   # Wong sky blue; 5th series, MIB curve figures only
+    "Edge Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter only
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
 
