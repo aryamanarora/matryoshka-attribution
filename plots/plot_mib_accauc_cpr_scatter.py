@@ -56,9 +56,9 @@ COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Node Pruning", "Other"]
 
 # Node Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
 # comparator to MAttr and gets its own colour rather than the grey "Other". Only its best budget
-# (s=0.9) is plotted -- see M.EPRUN_SPARSITIES; widen that list and the extra points reappear,
-# joined by the dashed path below. Both metrics come from the SAME pkl as every other point here
-# (area_under + acc_auc), so nothing extra was run.
+# (M.EPRUN_BEST_SPARSITY) is plotted here, unlike the validation tables which list all three.
+# Both metrics come from the SAME pkl as every other point here (area_under + acc_auc), so
+# nothing extra was run.
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
 HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
@@ -119,11 +119,13 @@ def main():
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
             rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
-    # Node Pruning: one point per target sparsity in M.EPRUN_SPARSITIES (just s=0.9 as
-    # shipped), both metrics out of the same pkl. The list is ordered sparse-ward, which is
-    # the order the dashed path below connects (geom_path follows frame order).
+    # Node Pruning: best budget only (M.EPRUN_BEST_SPARSITY). The validation tables list all
+    # of M.EPRUN_SPARSITIES -- there is room there -- but here the extra budgets are the one
+    # anti-correlated cluster in the figure and would understate the agreement this plot is
+    # about. Swap in M.EPRUN_SPARSITIES to show them all; the dashed path below wakes up and
+    # connects them sparse-ward (geom_path follows frame order).
     ep = []
-    for si, (label, dirn) in enumerate(M.EPRUN_SPARSITIES):
+    for si, (label, dirn) in enumerate([M.EPRUN_BEST_SPARSITY]):
         sub = "EdgePruning_patching_node"
         acc = avg({(t, m): A._acc(RB / dirn / sub /
                                   f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
