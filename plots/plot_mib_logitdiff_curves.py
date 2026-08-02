@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import palette as P
 from plotnine import (
     ggplot, aes, geom_line, geom_point, geom_hline, facet_wrap, labs, theme,
     theme_set, theme_bw, element_text, element_line, element_blank,
@@ -41,11 +42,11 @@ COLUMNS = [
 FACET_ORDER = [c[2] for c in COLUMNS]
 
 METHODS = [
-    ("MAttr", "#0072b2", "mattr", "topklog_lr_0.05"),
-    ("+hard", "#009e73", "mattr", "htklog_lr_0.05"),
-    ("IG",    "#d55e00", "base",  ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
-    ("I×G",   "#cc79a7", "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
-    ("GIM",   "#ff7f0e", "base",  ("gim_accauc",       "GIM_patching_node")),
+    ("MAttr", P.color("MAttr"), "mattr", "topklog_lr_0.05"),
+    ("+hard", P.color("+hard"), "mattr", "htklog_lr_0.05"),
+    ("IG",    P.color("IG"), "base",  ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
+    ("I×G",   P.color("I×G"), "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
+    ("GIM",   P.color("GIM"), "base",  ("gim_accauc",       "GIM_patching_node")),
 ]
 METHOD_ORDER = [m[0] for m in METHODS]
 JIT = {m: 10 ** off for m, off in

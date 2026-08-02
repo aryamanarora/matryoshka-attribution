@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import palette as P
 from plotnine import (
     ggplot, aes, geom_point, labs, theme, theme_set, theme_bw, element_text,
     element_line, element_blank, scale_color_manual, expand_limits,
@@ -46,13 +47,10 @@ theme_set(
     )
 )
 
-# Colour = method; grey "Other" for the un-highlighted gradient baselines.
-# Mirrors the METHODS colour convention in plot_accauc_vs_faithauc.py (Wong colourblind-safe):
-# MAttr=blue, +hard=bluish green, IG=vermillion, I×G=reddish purple. Hand-copied rather than
-# imported because the keys differ ("MAttr" here vs "MAttr (log)" there) -- keep the two in sync.
+# Colour = method; grey "Other" for the un-highlighted gradient baselines. Colours from
+# plots/palette.py (single source of truth across all figures) -- no local hex codes.
 # MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
-COLORS = {"MAttr": "#0072b2", "+hard": "#009e73",
-          "IG": "#d55e00", "I×G": "#cc79a7", "Other": "#cccccc"}
+COLORS = {**P.METHOD, "Other": P.OTHER}
 COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Other"]
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines

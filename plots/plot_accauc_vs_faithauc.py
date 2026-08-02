@@ -15,6 +15,7 @@ import re
 
 import numpy as np
 import pandas as pd
+import palette as P
 from plotnine import (
     ggplot, aes, geom_point, facet_wrap, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_fill_manual, scale_shape_manual,
@@ -52,17 +53,14 @@ SWEEPS = [("results/sva_sweep", "−input"),
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 
 # method key -> (display label, colour); order = legend order.
-# Wong's colourblind-safe palette, not matplotlib's tab10: the old brown/pink pair (#8c564b /
-# #e377c2) was the least separable thing in the figure, and both are muted enough that a black
-# marker edge swallowed them. These four stay distinct under deuteranopia and at 2.6pt markers.
-# THIS IS THE CROSS-FIGURE COLOUR CONVENTION -- plot_accauc_vs_faithauc_cause.py and
-# plot_faith_vs_acc_k1.py read it straight from here, and plot_mib_accauc_cpr_scatter.py keeps
-# a hand-copied mirror of it. Change one, change that one too.
+# Colours come from plots/palette.py -- the single source of truth for every figure. Do not
+# write hex codes here; plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py read this
+# dict directly, and three more figures read palette.py, so a local override desyncs the paper.
 METHODS = {
-    "IG":         ("IG",           "#d55e00"),   # vermillion
-    "IxG":        ("I×G",          "#cc79a7"),   # reddish purple
-    "stopk-log":  ("MAttr (log)",  "#0072b2"),   # blue; headline = soft top-k fwd, log k
-    "soft-log":   ("+hard (log)",  "#009e73"),   # bluish green; sigmoid-STE hard fwd ablation
+    "IG":         ("IG",           P.color("IG")),
+    "IxG":        ("I×G",          P.color("I×G")),
+    "stopk-log":  ("MAttr (log)",  P.color("MAttr")),   # headline = soft top-k fwd, log k
+    "soft-log":   ("+hard (log)",  P.color("+hard")),   # sigmoid-STE hard forward ablation
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
