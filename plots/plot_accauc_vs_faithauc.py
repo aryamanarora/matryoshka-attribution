@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from plotnine import (
     ggplot, aes, geom_point, facet_wrap, labs, theme, theme_set, theme_bw,
-    element_text, element_line, element_blank, scale_color_manual, scale_shape_manual,
+    element_text, element_line, element_blank, scale_fill_manual, scale_shape_manual,
     guides, guide_legend, expand_limits,
 )
 
@@ -59,7 +59,15 @@ METHODS = {
     "soft-log":   ("+hard (log)",  "#2ca02c"),   # sigmoid-STE hard forward ablation
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
-LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}
+LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
+
+# Methods drawn in THIS figure. METHODS itself stays the full registry -- it is the shared
+# method set/colour map that plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py
+# iterate, so deleting a key there would silently drop the series from those figures too.
+# "+hard (log)" is omitted here only: it sits nearly on top of the MAttr (log) points in every
+# facet, so it costs a legend entry and 12 overlapping markers without separating anything.
+# It is still the "$+$ hard" ablation row in the tables, and still drawn in the cause figure.
+FIGURE_METHODS = [k for k in METHODS if k != "soft-log"]
 
 
 def parse_method(fname, d):
@@ -120,7 +128,8 @@ def main():
     rows = []
     for res, inp_label in SWEEPS:
         raw = load(res)
-        for m, (mlabel, _) in METHODS.items():
+        for m in FIGURE_METHODS:
+            mlabel = METHODS[m][0]
             for lkey, llabel in LOSSES.items():
                 for sub, slabel in SUBSTRATES:
                     r = group_avg(raw, m, lkey, sub)
@@ -132,21 +141,26 @@ def main():
     df = pd.DataFrame(rows)
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
-    df["method"] = pd.Categorical(df["method"], [v[0] for v in METHODS.values()])
+    df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in FIGURE_METHODS])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
     facet_order = ["Node, −input", "Node, +input",
                    "MLP, −input", "MLP+Attn, −input"]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
 
     p = (
-        ggplot(df, aes("acc_auc", "faith_auc", color="method", shape="loss"))
-        + geom_point(size=2.6, alpha=0.85, stroke=0.3)
+        ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
+        # Black edge on every marker: method is carried by FILL, not colour, so points stay
+        # legible where two methods land on top of each other and against the grid lines.
+        # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
+        # wherever markers overlap, which is exactly where the distinction has to hold.
+        + geom_point(size=2.6, color="#000000", stroke=0.35)
         + facet_wrap("facet", nrow=1, scales="free")
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
-        + scale_color_manual(values={lab: col for lab, col in METHODS.values()}, name="Method")
+        + scale_fill_manual(values={METHODS[m][0]: METHODS[m][1] for m in FIGURE_METHODS},
+                            name="Method")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
-        + guides(color=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
+        + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
     out = "plots/accauc_vs_faithauc.pdf"
     p.save(out, dpi=300, verbose=False)
