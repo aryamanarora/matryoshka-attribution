@@ -33,13 +33,19 @@ theme_set(
     )
 )
 
-# Node Pruning learns ONE mask per target sparsity and the three budgets do NOT agree with each
-# other (avg rho between budgets: 0.52/0.48 on MLPs, 0.56/0.39 on attention), so picking a
-# budget is a real choice, not a formality -- and it moves the headline number: rho vs MAttr on
-# MLPs is 0.24 at s=0.9 but 0.49 at s=0.99. We show the budget that wins the metric the paper
-# leads with, CPR AUC (0.997 / 0.957 / 0.912 for 0.9 / 0.95 / 0.99). acc-AUC would instead pick
-# s=0.99 (0.459 vs 0.403) -- change the line below and re-run if the headline metric changes.
-EPRUN_BEST = ("eprun_node", "0.9")     # (results dir, target sparsity); see EPRUN_SPARSITIES
+# Node Pruning learns ONE mask per (objective, target sparsity) and those runs do NOT agree with
+# each other, so picking one is a real choice, not a formality -- and it moves this figure a lot.
+# We show the run that wins the metric the paper leads with, CPR AUC; per mib_results.tex that is
+# the logit-diff s=0.5 row (1.67 avg) and NOT the KL s=0.9 row (1.00) this used to point at.
+# rho vs MAttr, averaged over the 11 cells:
+#     eprun_node        (KL,  s=0.9)  all +0.255  attn +0.191  MLPs +0.240
+#     eprun_node_s0.5_ld (ld, s=0.5)  all +0.567  attn +0.546  MLPs +0.386
+#     eprun_node_s0.8_ld (ld, s=0.8)  all +0.493  attn +0.451  MLPs +0.481
+#     eprun_node_s0.99_ld(ld, s=0.99) all +0.390  attn +0.329  MLPs +0.481
+# So most of the old "Node Pruning ranks nodes unlike MAttr" signal was the OBJECTIVE mismatch
+# (KL vs logit-diff), not the mask parameterization -- the honest comparison holds the loss fixed.
+# Change the line below and re-run if the headline metric or the winning budget changes.
+EPRUN_BEST = ("eprun_node_s0.5_ld", "0.5")   # (results dir, target sparsity); see EPRUN_SPARSITIES
 
 # (label, dir/subfolder, layout). flat  = {task}_{model}_importances.json
 #                                 nested = <sub>/{stask}_{model}/importances.json
