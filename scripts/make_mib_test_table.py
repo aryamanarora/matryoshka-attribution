@@ -89,7 +89,13 @@ OUR_EDGE_METHODS = [   # same 3 variants at lr=0.05, edge level (test)
 #  2. Its cells are full-split, including llama3. The validation table daggers llama3 because
 #     run_variants.sh caps it at 200 examples there; test splits are <=1188 so nothing is
 #     capped and no dagger is owed.
-NODE_PRUNING = ("Node Pruning ($s{=}0.9$)", "eprun_eval", "EdgePruning_patching_node")
+#  3. Only the best budget appears (make_mib_table.EPRUN_BEST_SPARSITY); the validation tables
+#     carry the full budget sweep and the logit-diff objective ablation. Note this row trains
+#     on Edge Pruning's KL, not MAttr's logit-diff -- see EPRUN_SPARSITIES on that confound.
+import make_mib_table as _M   # noqa: E402  (label/dir are defined there, one source of truth)
+
+NODE_PRUNING = (_M.eprun_label("node", _M.EPRUN_BEST_SPARSITY[0]),
+                _M.EPRUN_BEST_SPARSITY[1], "EdgePruning_patching_node")
 
 
 def load_run_eval_cpr(results_dir, sub, task, model):
@@ -189,7 +195,8 @@ def main():
         avs = sorted({a for a in (row_avg(d) for d in data_dicts) if a is not None}, reverse=True)
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
-    def make_row(name, data, best_col, second_col, dagger=None, avg_best=None, avg_second=None, indent=False):
+    def make_row(name, data, best_col, second_col, dagger=None, avg_best=None, avg_second=None,
+                 indent=False, suppress_avg=False):
         dcells = dagger or set()
         vals = []
         for task, model, _ in COLUMNS:
@@ -200,7 +207,11 @@ def main():
             if v is not None and (task, model) in dcells:
                 cell = "$^{\\dagger}$" + cell
             vals.append(cell)
-        a = row_avg(data)
+        # suppress_avg is for a row that is partial RELATIVE TO ITS SECTION -- e.g. a Node
+        # Pruning sweep still running. It is NOT keyed off "missing any cell": every
+        # edge-level row is missing the same two ARC/llama3 cells (no edge circuits there),
+        # and those averages are comparable to each other, so blanket-dashing them is wrong.
+        a = None if suppress_avg else row_avg(data)
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
         prefix = f"\\quad {name}" if indent else name
@@ -225,7 +236,10 @@ def main():
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
     for name, data in mask_nodes.items():
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+        # Node level has all 11 cells, so anything missing here is an unfinished job rather
+        # than a cell the method cannot do -- dash the Avg until the sweep completes.
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs,
+                              suppress_avg=len(data) < len(COLUMNS)))
     for name, data in ours_nodes.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
 

@@ -37,8 +37,8 @@ NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (n
 # target-sparsity budget (M.EPRUN_SPARSITIES) -- the budget, not the ranking, is what a
 # mask learner actually optimizes, so it is a reported setting rather than a hidden default.
 # Name comes from M.EPRUN_NAME: this table is node-level only, hence "Node Pruning".
-MASK_BASELINES = [(f"{M.EPRUN_NAME['node']} ($s{{=}}{lab}$)", L2A / d, "EdgePruning_patching_node")
-                  for lab, d in M.EPRUN_SPARSITIES]
+MASK_BASELINES = [(M.eprun_label("node", suf), L2A / d, "EdgePruning_patching_node")
+                  for suf, d in M.EPRUN_SPARSITIES]
 
 
 def opt_of(d):   # id-STE variants use SGD; everything else Adam (mirrors make_mib_table)

@@ -15,6 +15,9 @@
 # Omit it for the script default (0.9 node / 0.99 edge) and unsuffixed dirs; pass e.g. 0.95
 # to get results/eprun_node_s0.95/ + results/eprun_eval_s0.95/.
 #
+# LOSS=logit_diff (env var) trains on MAttr's objective instead of Edge Pruning's KL and adds
+# an _ld suffix to both dirs, e.g. LOSS=logit_diff ... 0.9 -> results/eprun_node_s0.9_ld/.
+#
 # Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
 # Writes results/eprun_eval/EdgePruning_patching_<level>/<task-dash>_<model>_<split>_abs-False.pkl,
@@ -26,6 +29,11 @@ LEVEL=${3:-node}
 STEPS=${4:-3000}
 SPLIT=${5:-validation}
 SPARSITY=${6:-}
+# LOSS=logit_diff trains the gates on MAttr's objective instead of Edge Pruning's KL. Every
+# run before 2026-08-02 was KL, so the MIB tables compare Node Pruning to MAttr across BOTH a
+# different objective and a different mask parameterization; this isolates the second.
+# It gets its own dirs (suffix _ld) -- a different objective is a different circuit.
+LOSS=${LOSS:-kl}
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -58,6 +66,7 @@ else
   SUF=""
   SPARSITY_ARG=""
 fi
+[ "$LOSS" = "kl" ] || SUF="${SUF}_ld"
 OUT=$L2A/results/eprun_${LEVEL}${SUF}
 EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
@@ -72,7 +81,7 @@ else
   PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
     scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
     --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-    --split "$SPLIT" --output "$OUT" $SPARSITY_ARG --skip-eval
+    --split "$SPLIT" --output "$OUT" --loss "$LOSS" $SPARSITY_ARG --skip-eval
 fi
 
 cd "$MIB"

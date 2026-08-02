@@ -61,6 +61,13 @@ METHODS = {
     "IxG":        ("I×G",          P.color("I×G")),
     "stopk-log":  ("MAttr (log)",  P.color("MAttr")),   # headline = soft top-k fwd, log k
     "soft-log":   ("+hard (log)",  P.color("+hard")),   # sigmoid-STE hard forward ablation
+    # Node Pruning trained through the SAME loss_fn as MAttr (eval_sva.py --method edge_pruning),
+    # so its points move along the loss axis like every other series here and the ONLY difference
+    # from MAttr is how the mask is parameterized: hard-concrete gates under an annealed L0
+    # budget vs top-k. The budget is in the key rather than hidden -- s=0.9 of the SUBSTRATE
+    # (MLP neurons, or +attn heads), a far larger unit count than MIB's ~156 nodes, so this is
+    # NOT the same absolute circuit size as the results/eprun_node_s0.9 rows in the tables.
+    "eprun-s090": ("Node Pruning", P.color("Node Pruning")),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
@@ -84,6 +91,8 @@ def parse_method(fname, d):
     tag = fname.split("_" + d["nodes"].replace("+", "-") + "_", 1)[1].rsplit(".json", 1)[0]
     if tag.startswith(("random", "conductance")) or "fixedk" in tag:
         return None
+    if tag.startswith("eprun_s"):        # eprun_s090[_ce|_acc] -> one key per budget
+        return "eprun-s" + tag.split("_")[1][1:]
     if "hard_topk" in tag:
         if re.search(r"_ig\d+", tag):
             return None

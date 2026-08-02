@@ -86,14 +86,24 @@ MASK_EDGE_BASELINES = {}
 
 # A mask learner optimizes ONE operating point, and its target sparsity is the knob that
 # decides where the circuit switches on -- so each budget is a separate row rather than a
-# hidden default. (label, results dir); the unsuffixed dir is the runner's own default
-# (0.9 node / 0.99 edge), the _s* dirs come from `run_edge_pruning.sbatch ... <sparsity>`.
-# The full-size VALIDATION tables show all three; the space-constrained figures and the
-# test table show EPRUN_BEST_SPARSITY only.
+# hidden default. (latex label suffix, results dir); the unsuffixed dir is the runner's own
+# default (0.9 node / 0.99 edge), the _s* dirs come from `run_edge_pruning.sbatch ... <S>`
+# and _ld from `LOSS=logit_diff`. The full-size VALIDATION tables show every variant that has
+# results; the space-constrained figures and the test table show EPRUN_BEST_SPARSITY only.
+#
+# Ordered sparse-ward, then the objective ablation last. A dir with no results is skipped by
+# eprun_rows, so entries can be listed here before their jobs land.
+#
+# The _ld row matters more than it looks: every Node Pruning run before 2026-08-02 trained on
+# Edge Pruning's KL while MAttr trains on logit-diff, so the KL rows differ from \ourmethod{}
+# in BOTH objective and mask parameterization. Only the _ld row isolates the parameterization.
 EPRUN_SPARSITIES = [
-    ("0.9", "eprun_eval"),
-    ("0.95", "eprun_eval_s0.95"),
-    ("0.99", "eprun_eval_s0.99"),
+    ("$s{=}0.5$", "eprun_eval_s0.5"),
+    ("$s{=}0.8$", "eprun_eval_s0.8"),
+    ("$s{=}0.9$", "eprun_eval"),
+    ("$s{=}0.95$", "eprun_eval_s0.95"),
+    ("$s{=}0.99$", "eprun_eval_s0.99"),
+    ("$s{=}0.9$, logit-diff", "eprun_eval_s0.9_ld"),
 ]
 
 # Best budget by CPR (validation avg over 11 cells: 0.9973 vs 0.9573 / 0.9122). acc-AUC
@@ -101,7 +111,12 @@ EPRUN_SPARSITIES = [
 # the CPR-vs-acc-AUC scatter drags its rank correlation down -- that method's own budgets
 # are the anti-correlated points. Budgets also disagree with each other on the ranking
 # itself (cross-budget rho 0.39-0.56), so "best" here means best-by-CPR, nothing stronger.
-EPRUN_BEST_SPARSITY = EPRUN_SPARSITIES[0]
+EPRUN_BEST_SPARSITY = ("$s{=}0.9$", "eprun_eval")
+
+
+def eprun_label(level, suffix):
+    """Row label for one Node/Edge Pruning variant -- the single formatting site."""
+    return f"{EPRUN_NAME[level]} ({suffix})"
 
 
 # Bhaskar et al. (2024) named the method for the granularity it prunes at, so the display name
@@ -113,12 +128,23 @@ EPRUN_NAME = {"node": "Node Pruning", "edge": "Edge Pruning"}
 
 
 def eprun_rows(level):
-    """[(display, {(task, model): AUC})], one row per target sparsity that has results."""
+    """[(display, {(task, model): AUC})], one row per variant that has any results.
+
+    Partial variants ARE shown -- a half-finished sweep is visible progress. But note the
+    dashes mean something different here than for UGS: UGS is in PARTIAL_COVERAGE because it
+    genuinely cannot run those cells, whereas a dashed Node Pruning cell just has not finished
+    yet. The count is printed so an in-progress row is never mistaken for a final one, and the
+    Avg column of a partial row averages only the cells present.
+    """
     rows = []
-    for label, dirn in EPRUN_SPARSITIES:
+    for suffix, dirn in EPRUN_SPARSITIES:
         data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
-        if data:
-            rows.append((f"{EPRUN_NAME[level]} ($s{{=}}{label}$)", data))
+        if not data:
+            continue
+        label = eprun_label(level, suffix)
+        if len(data) < len(COLUMNS):
+            print(f"  NOTE {label}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
+        rows.append((label, data))
     return rows
 
 

@@ -18,6 +18,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import learn_scores, sparsity_sweep
+from learning_to_attribute.edge_pruning import learn_scores_edge_pruning
 from learning_to_attribute.schedules import AdaptiveLogK, FixedK
 from learning_to_attribute.losses import attribution_loss, resolve_direction, LOSS_CHOICES
 from learning_to_attribute.data import SVADataset, CausalGymDataset
@@ -324,7 +325,16 @@ def main():
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
-    p.add_argument("--method", default="mattr", choices=["mattr", "ixg", "relp", "ig", "conductance", "random"])
+    p.add_argument("--method", default="mattr",
+                   choices=["mattr", "ixg", "relp", "ig", "conductance", "random", "edge_pruning"])
+    # Node/Edge Pruning (Bhaskar et al., 2024) on this harness: hard-concrete gates + a
+    # Lagrangian L0 budget instead of MAttr's top-k. It takes the SAME loss_fn as MAttr, so
+    # --loss still selects the objective and the only thing that differs is how the mask is
+    # parameterized and constrained -- which is the comparison the figure is about. `total`
+    # here is the substrate size (MLP neurons, or neurons + attn heads), not MIB's ~156 nodes,
+    # so the budget is on a very different absolute scale than results/eprun_node_s*.
+    p.add_argument("--target-sparsity", type=float, default=0.9,
+                   help="edge_pruning: fraction of units the L0 Lagrangian anneals to PRUNING.")
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--train-eval-every", type=int, default=0,
                    help="MAttr: every N steps, run the FULL eval-metric suite on a fixed tiny "
@@ -622,6 +632,24 @@ def main():
                                  ig_steps=args.ig_steps if args.method in ("ig", "conductance") else 1,
                                  loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
                                  conductance=cond)
+    elif args.method == "edge_pruning":
+        # Same loss_fn as MAttr -- only the mask parameterization differs (hard-concrete gates
+        # under an annealed L0 budget vs top-k). No k_sampler: the budget IS the L0 target, and
+        # the returned log-alphas are ranked by the sweep below exactly like any other score.
+        logger.info("Edge Pruning: %d steps, target sparsity %.3f over %d units",
+                    args.steps, args.target_sparsity, total)
+        res = learn_scores_edge_pruning(total, loss_fn, steps=args.steps,
+                                        target_sparsity=args.target_sparsity, device=device,
+                                        logger=logger, log_every=200)
+        scores = res.scores.detach()
+        train_loss_log = res.loss_log
+        kept = res.train_log[-1][1] if getattr(res, "train_log", None) else None
+        if kept is not None:
+            # The Lagrangian does NOT always bind: at node level on MIB it misses s=0.99 on 10
+            # of 11 cells. Log achieved vs requested so an unconverged run is visible here
+            # rather than being read off the tag as a budget it never reached.
+            logger.info("achieved sparsity %.3f (kept %.1f of %d; requested %.3f)",
+                        1 - kept / total, kept, total, args.target_sparsity)
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
@@ -677,6 +705,8 @@ def main():
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
     if args.method == "random":
         tag = f"random_s{args.seed}"
+    if args.method == "edge_pruning":   # e.g. eprun_s090 -- budget is part of the identity
+        tag = f"eprun_s{int(round(args.target_sparsity * 100)):03d}"
     if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
     if args.method == "mattr" and args.mattr_ig_steps > 1:
