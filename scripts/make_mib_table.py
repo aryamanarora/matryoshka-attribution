@@ -105,18 +105,29 @@ EPRUN_SPARSITIES = [
     ("$s{=}0.99$", "eprun_eval_s0.99"),
     # logit-diff objective (_ld): MAttr's own training signal instead of Edge Pruning's KL.
     # Not a side ablation -- the KL rows compare MAttr against a baseline optimizing something
-    # other than what CPR measures, and matching the objective is worth a lot: mean +0.46 CPR
-    # AUC at s=0.8 and +0.26 at s=0.9 (over the cells landed 2026-08-02).
+    # other than what CPR measures, and matching the objective is worth a lot. All five budgets
+    # complete 2026-08-02 (row avg over 11 cells, KL row at the same budget in parens):
     #
-    # Report "mean delta vs KL", NOT "% of the MAttr gap closed". The delta is roughly constant
-    # per budget and uncorrelated with how far behind a cell starts (corr(gap, delta) = +0.09,
-    # n=8), so the percentage is a constant numerator over a varying denominator and invents a
-    # per-cell story that is not there (it ranges -5% to 62% purely from the denominator).
+    #   s=0.5  1.67 (0.86, 6/11)   s=0.8  1.46 (--, 9/11)   s=0.9  1.28 (1.00)
+    #   s=0.95 1.36 (0.96)         s=0.99 1.24 (0.91)       MAttr node row: 1.88
     #
-    # Budgets are swept because _ld converges DENSER than KL at the same nominal target (gpt2
-    # keeps 26/156 vs KL's 19/156) and, unlike KL, prefers denser circuits: s=0.8 beats s=0.9 on
-    # 5 of 6 cells, where KL peaks at 0.9. So KL's best budget is NOT _ld's, and the sparse-ward
-    # entries (0.95/0.99) are likely the wrong direction -- s=0.5_ld is the one to watch.
+    # So the honest node-level gap is 1.88 vs 1.67, not 1.88 vs 1.00, and at s=0.5 the baseline
+    # beats MAttr on 3 of 11 cells (all llama3: mcqa 2.41/1.90, arc_easy 2.11/2.04,
+    # arc_challenge 2.07/1.79). Lower budgets (0.25, 0.1) are registered below to find the peak.
+    #
+    # Report "mean delta vs KL", NOT "% of the MAttr gap closed" -- the delta is uncorrelated
+    # with how far behind a cell starts (corr = +0.09, n=8), so the percentage is a constant
+    # numerator over a varying denominator and invents a per-cell story that is not there.
+    #
+    # And do NOT read per-cell budget-to-budget differences as budget effects. The L0 anneal
+    # does not bind at high targets on the 1056-unit llama3 cells, so nominally different runs
+    # land on the same circuit and differ only by seed: mcqa/llama3 keeps 380 units at target
+    # 0.8 and 379 at target 0.9, yet scores 1.34 vs 0.67. Per-cell spread at fixed size is
+    # ~0.7 AUC; only ROW MEANS (SE ~0.10 over 11 cells) are interpretable. s=0.5 is different --
+    # there the constraint does bind (mcqa/llama3 keeps 561/1056, achieved 0.469), which is why
+    # its lead over s=0.8/0.9 is a real budget effect rather than the same artifact.
+    ("$s{=}0.1$, logit-diff", "eprun_eval_s0.1_ld"),
+    ("$s{=}0.25$, logit-diff", "eprun_eval_s0.25_ld"),
     ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld"),
     ("$s{=}0.8$, logit-diff", "eprun_eval_s0.8_ld"),
     ("$s{=}0.9$, logit-diff", "eprun_eval_s0.9_ld"),
