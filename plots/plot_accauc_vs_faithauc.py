@@ -17,9 +17,9 @@ import numpy as np
 import pandas as pd
 import palette as P
 from plotnine import (
-    ggplot, aes, geom_point, facet_wrap, labs, theme, theme_set, theme_bw,
+    ggplot, aes, geom_point, geom_path, facet_wrap, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_fill_manual, scale_shape_manual,
-    guides, guide_legend, expand_limits,
+    scale_color_manual, guides, guide_legend, expand_limits,
 )
 
 theme_set(
@@ -64,6 +64,11 @@ METHODS = {
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
+# Order the dashed guide visits a method's three points. NOT the legend order (that stays
+# LOSSES order) and not sorted by x -- it is the loss's own sharpness ordering, CE (softest
+# training signal) -> acc -> logit-diff (hardest), so the line reads as a trajectory rather
+# than a shape. geom_path honours row order, which is why the frame is sorted by it.
+LOSS_PATH = ["CE", "acc", "logit-diff"]
 
 # Methods drawn in THIS figure. METHODS itself stays the full registry -- it is the shared
 # method set/colour map that plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py
@@ -150,18 +155,29 @@ def main():
     facet_order = ["Node, −input", "Node, +input",
                    "MLP, −input", "MLP+Attn, −input"]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
+    # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
+    # a plotnine setting. Sorting by facet/method too keeps each method's three rows contiguous.
+    df["_path"] = pd.Categorical(df["loss"], LOSS_PATH).codes
+    df = df.sort_values(["facet", "method", "_path"])
 
+    colors = {METHODS[m][0]: METHODS[m][1] for m in FIGURE_METHODS}
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
+        # Dashed guide joining a method's three losses, drawn BEFORE the points so markers sit
+        # on top. It carries no information the markers do not -- it groups them, so it is thin,
+        # dashed and semi-transparent, and adds no legend entry (the colour scale has guide=None;
+        # method is already keyed by fill).
+        + geom_path(aes(color="method", group="method"), linetype="dashed",
+                    size=0.3, alpha=0.55, show_legend=False)
         # Black edge on every marker: method is carried by FILL, not colour, so points stay
         # legible where two methods land on top of each other and against the grid lines.
         # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
         # wherever markers overlap, which is exactly where the distinction has to hold.
-        + geom_point(size=2.6, color="#000000", stroke=0.35)
+        + geom_point(size=1.9, color="#000000", stroke=0.3)
         + facet_wrap("facet", nrow=1, scales="free")
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
-        + scale_fill_manual(values={METHODS[m][0]: METHODS[m][1] for m in FIGURE_METHODS},
-                            name="Method")
+        + scale_fill_manual(values=colors, name="Method")
+        + scale_color_manual(values=colors, guide=None)   # line colour only; no second legend
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
