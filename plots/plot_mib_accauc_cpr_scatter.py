@@ -47,10 +47,12 @@ theme_set(
 )
 
 # Colour = method; grey "Other" for the un-highlighted gradient baselines.
-# colours matched to accauc_vs_faithauc.pdf: MAttr=blue, +hard=green, IG=brown, I×G=pink
+# Mirrors the METHODS colour convention in plot_accauc_vs_faithauc.py (Wong colourblind-safe):
+# MAttr=blue, +hard=bluish green, IG=vermillion, I×G=reddish purple. Hand-copied rather than
+# imported because the keys differ ("MAttr" here vs "MAttr (log)" there) -- keep the two in sync.
 # MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
-COLORS = {"MAttr": "#1f77b4", "+hard": "#2ca02c",
-          "IG": "#8c564b", "I×G": "#e377c2", "Other": "#cccccc"}
+COLORS = {"MAttr": "#0072b2", "+hard": "#009e73",
+          "IG": "#d55e00", "I×G": "#cc79a7", "Other": "#cccccc"}
 COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Other"]
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines

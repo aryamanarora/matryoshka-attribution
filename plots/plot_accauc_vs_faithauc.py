@@ -37,7 +37,7 @@ theme_set(
         legend_title=element_text(size=7),
         legend_text=element_text(size=6),
         legend_key_size=8,
-        legend_position="bottom",
+        legend_position="top",
         legend_direction="horizontal",
         legend_box="horizontal",
         legend_box_margin=0,
@@ -51,12 +51,18 @@ SWEEPS = [("results/sva_sweep", "−input"),
           ("results/sva_sweep_input", "+input")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 
-# method key -> (display label, colour); order = legend order
+# method key -> (display label, colour); order = legend order.
+# Wong's colourblind-safe palette, not matplotlib's tab10: the old brown/pink pair (#8c564b /
+# #e377c2) was the least separable thing in the figure, and both are muted enough that a black
+# marker edge swallowed them. These four stay distinct under deuteranopia and at 2.6pt markers.
+# THIS IS THE CROSS-FIGURE COLOUR CONVENTION -- plot_accauc_vs_faithauc_cause.py and
+# plot_faith_vs_acc_k1.py read it straight from here, and plot_mib_accauc_cpr_scatter.py keeps
+# a hand-copied mirror of it. Change one, change that one too.
 METHODS = {
-    "IG":         ("IG",           "#8c564b"),
-    "IxG":        ("I×G",          "#e377c2"),
-    "stopk-log":  ("MAttr (log)",  "#1f77b4"),   # headline = soft top-k fwd, log k
-    "soft-log":   ("+hard (log)",  "#2ca02c"),   # sigmoid-STE hard forward ablation
+    "IG":         ("IG",           "#d55e00"),   # vermillion
+    "IxG":        ("I×G",          "#cc79a7"),   # reddish purple
+    "stopk-log":  ("MAttr (log)",  "#0072b2"),   # blue; headline = soft top-k fwd, log k
+    "soft-log":   ("+hard (log)",  "#009e73"),   # bluish green; sigmoid-STE hard fwd ablation
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
