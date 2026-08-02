@@ -16,7 +16,11 @@ from pathlib import Path
 SUB = "EdgePruning_patching_node"
 # (budget label, _ld eval dir, KL eval dir at the same budget). The s=0.9 KL runs live in the
 # UNSUFFIXED dir -- run_edge_pruning.sbatch only appends _s<S> when sparsity is passed.
-BUDGETS = [("0.8", f"results/eprun_eval_s0.8_ld/{SUB}", f"results/eprun_eval_s0.8/{SUB}"),
+# Every budget that make_mib_table.py's EPRUN_SPARSITIES registers must appear here, or its
+# cells land in the table without ever being emitted as an event -- and, worse, the exit check
+# below ignores that dir, so the watch ends while it is still filling. s=0.5 was missing.
+BUDGETS = [("0.5", f"results/eprun_eval_s0.5_ld/{SUB}", f"results/eprun_eval_s0.5/{SUB}"),
+           ("0.8", f"results/eprun_eval_s0.8_ld/{SUB}", f"results/eprun_eval_s0.8/{SUB}"),
            ("0.9", f"results/eprun_eval_s0.9_ld/{SUB}", f"results/eprun_eval/{SUB}"),
            ("0.95", f"results/eprun_eval_s0.95_ld/{SUB}", f"results/eprun_eval_s0.95/{SUB}"),
            ("0.99", f"results/eprun_eval_s0.99_ld/{SUB}", f"results/eprun_eval_s0.99/{SUB}")]
