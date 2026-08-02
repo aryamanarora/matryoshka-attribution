@@ -55,10 +55,10 @@ COLORS = {**P.METHOD, "Other": P.OTHER}
 COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Node Pruning", "Other"]
 
 # Node Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
-# comparator to MAttr and gets its own colour rather than the grey "Other". It appears as THREE
-# points, one per target sparsity, joined by a dashed path: a mask learner optimizes one
-# operating point, so its budget is a setting to show, not a default to hide. Both metrics come
-# from the SAME pkl as every other point here (area_under + acc_auc), so nothing extra was run.
+# comparator to MAttr and gets its own colour rather than the grey "Other". Only its best budget
+# (s=0.9) is plotted -- see M.EPRUN_SPARSITIES; widen that list and the extra points reappear,
+# joined by the dashed path below. Both metrics come from the SAME pkl as every other point here
+# (area_under + acc_auc), so nothing extra was run.
 
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
 HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
@@ -119,9 +119,9 @@ def main():
         cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
         if acc is not None and cpr is not None:
             rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
-    # Node Pruning: one point per target sparsity, both metrics out of the same pkl.
-    # M.EPRUN_SPARSITIES is ordered 0.9 -> 0.95 -> 0.99, which is the order the dashed path
-    # below connects (geom_path follows frame order), so the line reads sparse-ward.
+    # Node Pruning: one point per target sparsity in M.EPRUN_SPARSITIES (just s=0.9 as
+    # shipped), both metrics out of the same pkl. The list is ordered sparse-ward, which is
+    # the order the dashed path below connects (geom_path follows frame order).
     ep = []
     for si, (label, dirn) in enumerate(M.EPRUN_SPARSITIES):
         sub = "EdgePruning_patching_node"
@@ -143,7 +143,8 @@ def main():
 
     p = ggplot(df, aes("acc", "cpr", fill="method", shape="family"))
     if epdf is not None and len(epdf) > 1:
-        # dashed guide across the three sparsity budgets, same visual language as the loss
+        # dashed guide across the sparsity budgets (drawn only if >1 is plotted), same
+        # visual language as the loss
         # guide in accauc_vs_faithauc. Added BEFORE geom_point so the markers sit on top of
         # it; adds no legend entry (constant colour, inherit_aes=False).
         p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Node Pruning"],
@@ -169,8 +170,8 @@ def main():
     print(f"wrote {out} ({len(df)} points, {df['method'].nunique()} series; "
           f"Node Pruning at {len(ep)} sparsities)")
     # The figure's caption quotes this rho, so print it rather than leaving it hand-maintained
-    # -- it drifts with every re-eval, and the Node Pruning points pull it down (0.98 -> 0.91)
-    # because that method's two metrics rank its own sparsity budgets in OPPOSITE directions.
+    # -- it drifts with every re-eval, and Node Pruning pulls it down (its two metrics rank
+    # its own sparsity budgets in OPPOSITE directions, so extra budgets cost more than one).
     from scipy.stats import spearmanr
     r_all = spearmanr(df.acc, df.cpr)[0]
     o = df[df.method != "Node Pruning"]
