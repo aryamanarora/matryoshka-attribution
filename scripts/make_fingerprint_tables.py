@@ -24,6 +24,9 @@ METRICS = [("acc_auc", "acc", True), ("faith_auc", "faith", True), ("kstar_pct",
 # MAttr headline = soft top-k fwd; the STE variants are "+ hard" ablations
 SECTIONS = [
     ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG")]),
+    # Node Pruning through eval_sva.py's own loss_fn, so it shares MAttr's objective and
+    # substrate exactly and differs only in mask parameterization (annealed L0 vs top-k).
+    ("Mask learning", [("Node Pruning", "eprun-s090")]),
     (r"MAttr (soft top-$k$ fwd, Adam)", [(r"log-$k$", "stopk-log"), (r"unif-$k$", "stopk-unif")]),
     (r"$+$ hard (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
     (r"$+$ hard (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
@@ -50,6 +53,11 @@ def parse_method(fname, d):
             return None
         ks = "unif" if "uniformk" in tag else "log"
         return f"stopk-{ks}"
+    # eprun_s090[_ce|_acc] -> one key per budget. This branch must stay ABOVE the catch-all:
+    # the tag matches none of the tests above, so without it every Node Pruning run is
+    # silently averaged into the IG rows.
+    if tag.startswith("eprun_s"):
+        return "eprun-s" + tag.split("_")[1][1:]
     return "IxG" if tag.startswith("ixg") else "IG"
 
 

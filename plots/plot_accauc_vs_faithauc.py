@@ -193,6 +193,9 @@ def main():
     )
     out = "plots/accauc_vs_faithauc.pdf"
     p.save(out, dpi=300, verbose=False)
+    # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
+    # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
+    p.save(out.replace(".pdf", ".png"), dpi=200, verbose=False)
     print("wrote", out, f"({len(df)} points)")
     # quick sanity: points per facet cell
     print(df.groupby("facet", observed=True).size().to_string())
