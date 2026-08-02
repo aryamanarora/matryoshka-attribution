@@ -1,17 +1,25 @@
-"""Emit one line per Node Pruning logit-diff (_ld) cell as its MIB eval lands.
+"""Emit one line per Node Pruning logit-diff (_ld) cell as its MIB eval lands, across budgets.
 
-Each line pairs the new _ld CPR AUC with the KL run's AUC on the same cell, so the
-objective ablation is readable while it fills in rather than only at 11/11. Exits at 11.
+Each line pairs the new _ld CPR AUC with the KL run at the SAME budget and with MAttr's
+node headline, so the objective ablation is readable while it fills in rather than only at
+11/11. Exits once every budget dir that exists on disk is complete.
+
+Node Pruning here is node-level, so MAttr's edge-level \\ourmethod{} row is NOT its
+comparator -- reading across granularities overstates the gap ~5x (1.79 vs 7.17 on
+mcqa/qwen2.5). MATTR below is the node headline per CLAUDE.md.
 
   uv run python scripts/watch_ld_scores.py
 """
-import pickle, sys, time
+import pickle, time
 from pathlib import Path
 
-LD = Path("results/eprun_eval_s0.9_ld/EdgePruning_patching_node")
-KL = Path("results/eprun_eval/EdgePruning_patching_node")
-# MAttr's NODE headline (CLAUDE.md). Node Pruning here is node-level, so the edge-level
-# \ourmethod{} row is NOT its comparator -- mixing them overstates the gap by ~5x.
+SUB = "EdgePruning_patching_node"
+# (budget label, _ld eval dir, KL eval dir at the same budget). The s=0.9 KL runs live in the
+# UNSUFFIXED dir -- run_edge_pruning.sbatch only appends _s<S> when sparsity is passed.
+BUDGETS = [("0.8", f"results/eprun_eval_s0.8_ld/{SUB}", f"results/eprun_eval_s0.8/{SUB}"),
+           ("0.9", f"results/eprun_eval_s0.9_ld/{SUB}", f"results/eprun_eval/{SUB}"),
+           ("0.95", f"results/eprun_eval_s0.95_ld/{SUB}", f"results/eprun_eval_s0.95/{SUB}"),
+           ("0.99", f"results/eprun_eval_s0.99_ld/{SUB}", f"results/eprun_eval_s0.99/{SUB}")]
 MATTR = Path("results/topklog_lr_0.05")
 CELLS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
          ("arithmetic-subtraction", "llama3"), ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
@@ -20,9 +28,9 @@ CELLS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3
 
 
 def auc(base, task, model):
-    p = base / f"{task}_{model}_validation_abs-False.pkl"
+    p = Path(base) / f"{task}_{model}_validation_abs-False.pkl"
     if not p.exists():                              # MAttr dir uses the eval_mib layout
-        p = base / f"{task.replace('-', '_')}_{model}_validation.pkl"
+        p = Path(base) / f"{task.replace('-', '_')}_{model}_validation.pkl"
     if not p.exists():
         return None
     try:
@@ -31,27 +39,30 @@ def auc(base, task, model):
         return None            # mid-write; picked up on the next poll
 
 
-seen, gaps = set(), []
-while len(seen) < len(CELLS):
-    for task, model in CELLS:
-        if (task, model) in seen:
-            continue
-        a = auc(LD, task, model)
-        if a is None:
-            continue
-        seen.add((task, model))
-        k, mt = auc(KL, task, model), auc(MATTR, task, model)
-        # "closed" = how much of the KL->MAttr gap the objective swap accounts for. This is
-        # the number the objective-confound question actually turns on.
-        if k is not None and mt is not None and mt != k:
-            frac = f"closes {(a - k) / (mt - k) * 100:4.0f}% of gap"
-        else:
-            frac = "n/a"
-        gaps.append((a - k) / (mt - k) if k is not None and mt is not None and mt != k else None)
-        print(f"[{len(seen):2d}/11] {task}/{model:8s} ld {a:5.2f}  KL {k if k is None else round(k,2)}"
-              f"  MAttr-node {mt if mt is None else round(mt,2)}   {frac}", flush=True)
-    if len(seen) < len(CELLS):
-        time.sleep(60)
-ok = [g for g in gaps if g is not None]
-print(f"ALL 11 done. mean fraction of KL->MAttr gap closed by logit-diff: "
-      f"{sum(ok)/len(ok)*100:.0f}% (n={len(ok)})", flush=True)
+seen, deltas = set(), {}
+while True:
+    for label, ld_dir, kl_dir in BUDGETS:
+        for task, model in CELLS:
+            key = (label, task, model)
+            if key in seen:
+                continue
+            a = auc(ld_dir, task, model)
+            if a is None:
+                continue
+            seen.add(key)
+            k, mt = auc(kl_dir, task, model), auc(MATTR, task, model)
+            n = sum(1 for s in seen if s[0] == label)
+            bits = [f"[s={label} {n:2d}/11] {task}/{model:8s} ld {a:5.2f}"]
+            if k is not None:
+                bits.append(f"KL {k:.2f} ({a - k:+.2f})")
+                deltas.setdefault(label, []).append(a - k)
+            if mt is not None:
+                bits.append(f"MAttr-node {mt:.2f}")
+            print("  ".join(bits), flush=True)
+    # Done when every budget dir that has produced anything has produced all 11.
+    live = {lab for lab, ld, _ in BUDGETS if Path(ld).exists()}
+    if live and all(sum(1 for s in seen if s[0] == lab) >= len(CELLS) for lab in live):
+        break
+    time.sleep(60)
+for lab, ds in sorted(deltas.items()):
+    print(f"ALL s={lab}: mean delta vs KL {sum(ds)/len(ds):+.2f} over {len(ds)} cells", flush=True)
