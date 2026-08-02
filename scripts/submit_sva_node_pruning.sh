@@ -26,7 +26,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
 S=${S:-0.9}
-STEPS=${STEPS:-2000}          # matches MATTR_COMMON in submit_sva_sweep.sh
+# NOT 2000 (MATTR_COMMON in submit_sva_sweep.sh). The L0 Lagrangian anneals its target over
+# the run, and on this substrate -- ~10^5-10^6 units, vs MIB's ~157 nodes -- the gates cannot
+# track a 2000-step anneal. Measured on qwen2.5/nounpp/mlp (583,680 units), target s=0.9:
+#   steps=600  -> achieved 0.709,  faith AUC 0.527, acc-AUC 0.154
+#   steps=2000 -> achieved 0.842,  faith AUC 0.999, acc-AUC 0.209
+#   steps=4000 -> achieved 0.892,  faith AUC 1.302, acc-AUC 0.263
+# At 2000 the baseline misses its own constraint and both metrics are still climbing, so a
+# step-matched run would report a budget it never reached and understate the baseline. 4000 is
+# the count at which the constraint binds; it is baseline tuning, not extra accuracy budget.
+STEPS=${STEPS:-4000}
 TAG="eprun_s$(printf '%03d' "$(python3 -c "print(round($S*100))")")"
 
 # (sweep_dir, nodes, task, model, dataset, loss) for every headline-MAttr cell on disk.
@@ -58,7 +67,9 @@ while read -r res nodes task model loss; do
   extra=(); [ "$res" = "results/sva_sweep_input" ] && extra=(--include-input)
   name="npsva_${task}_${nodes//+/-}_${loss}"
   if [ "${DRY:-0}" = "1" ]; then
-    echo "sbatch -J $name sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method edge_pruning --loss $loss --target-sparsity $S ${extra[*]-} --output $res"
+    # Keep this in sync with the real sbatch below -- a preview that hides --steps is how a
+    # step-count change ships unnoticed.
+    echo "sbatch -J $name sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method edge_pruning --loss $loss --target-sparsity $S --mode sufficient --train-batch-size 1 --steps $STEPS --eval-examples 100 ${extra[*]-} --output $res"
   else
     sbatch -J "$name" sva_sweep.sbatch \
       --model "$model" --task "$task" --dataset "$ds" --nodes "$nodes" \
