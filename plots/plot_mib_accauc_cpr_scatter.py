@@ -16,7 +16,7 @@ import pandas as pd
 import palette as P
 from plotnine import (
     ggplot, aes, geom_point, geom_path, labs, theme, theme_set, theme_bw, element_text,
-    element_line, element_blank, scale_color_manual, expand_limits,
+    element_line, element_blank, scale_fill_manual, scale_shape_manual, expand_limits,
     guides, guide_legend,
 )
 
@@ -39,6 +39,7 @@ theme_set(
         panel_grid_minor=element_blank(),
         legend_position="bottom",
         legend_direction="horizontal",
+        legend_box="vertical",   # method legend above the gradient/mask shape legend
         legend_title=element_blank(),
         legend_text=element_text(size=5.5),
         legend_key_size=7,
@@ -62,6 +63,14 @@ COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Edge Pruning", "Other"]
 # the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
 HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
 HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
+
+# Shape = how the circuit is OBTAINED, which is the axis this figure is really about: score
+# every node with a gradient and rank, vs optimize a mask against an objective. Note this cuts
+# ACROSS ours/baseline -- MAttr, +hard and Edge Pruning share a shape, and the split is what
+# makes the upper-right cluster read as "mask learning wins acc-AUC" rather than "ours wins".
+GRADIENT, MASK = "Gradient", "Mask learning"
+FAMILY_SHAPE = {GRADIENT: "o", MASK: "s"}   # both fillable: black edge + method fill
+MASK_METHODS = {"MAttr", "+hard", "Edge Pruning"}
 
 
 def avg(d):
@@ -125,29 +134,48 @@ def main():
     rows += ep
 
     df = pd.DataFrame(rows)
+    df["family"] = np.where(df.method.isin(MASK_METHODS), MASK, GRADIENT)
     df["method"] = pd.Categorical(df["method"], COLOR_ORDER)
+    df["family"] = pd.Categorical(df["family"], [GRADIENT, MASK])
     # draw grey "Other" first so the highlighted points sit on top
     df = df.sort_values("method", ascending=False, key=lambda s: s.cat.codes)
     epdf = pd.DataFrame(ep).sort_values("s") if ep else None
 
-    p = (
-        ggplot(df, aes("acc", "cpr", color="method"))
-        + geom_point(size=2.6, alpha=0.9, stroke=0.4)
-        + expand_limits(x=0, y=0)
-        + scale_color_manual(values=COLORS, name="")
-        + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
-        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Edge Pruning"
-        + guides(color=guide_legend(nrow=3))
-    )
+    p = ggplot(df, aes("acc", "cpr", fill="method", shape="family"))
     if epdf is not None and len(epdf) > 1:
         # dashed guide across the three sparsity budgets, same visual language as the loss
-        # guide in accauc_vs_faithauc; drawn under the markers, adds no legend entry
+        # guide in accauc_vs_faithauc. Added BEFORE geom_point so the markers sit on top of
+        # it; adds no legend entry (constant colour, inherit_aes=False).
         p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Edge Pruning"],
                        linetype="dashed", size=0.3, alpha=0.6, inherit_aes=False)
+    p = (
+        p
+        # Method on FILL with a black edge (matching accauc_vs_faithauc): shape is now spoken
+        # for by the family split, and an edge keeps the crowded 0.28-0.35 baseline cluster
+        # readable at this size. alpha=1 -- translucent fill under a black edge muddies the
+        # colour exactly where points overlap.
+        + geom_point(size=1.9, color="#000000", stroke=0.3)
+        + expand_limits(x=0, y=0)
+        + scale_fill_manual(values=COLORS, name="")
+        + scale_shape_manual(values=FAMILY_SHAPE, name="")
+        + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
+        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Edge Pruning".
+        # The two legends stack (legend_box="vertical" in the theme).
+        + guides(fill=guide_legend(order=1, nrow=3, override_aes={"shape": "o"}),
+                 shape=guide_legend(order=2, nrow=1))
+    )
     out = "plots/mib_accauc_cpr_scatter.pdf"
     p.save(out, dpi=300, verbose=False)
     print(f"wrote {out} ({len(df)} points, {df['method'].nunique()} series; "
           f"Edge Pruning at {len(ep)} sparsities)")
+    # The figure's caption quotes this rho, so print it rather than leaving it hand-maintained
+    # -- it drifts with every re-eval, and the Edge Pruning points pull it down (0.98 -> 0.91)
+    # because that method's two metrics rank its own sparsity budgets in OPPOSITE directions.
+    from scipy.stats import spearmanr
+    r_all = spearmanr(df.acc, df.cpr)[0]
+    o = df[df.method != "Edge Pruning"]
+    print(f"Spearman rho: {r_all:.3f} (all {len(df)}), "
+          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Edge Pruning, {len(o)})")
 
 
 if __name__ == "__main__":

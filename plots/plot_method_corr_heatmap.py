@@ -33,8 +33,17 @@ theme_set(
     )
 )
 
-# (label, dir/subfolder, layout). flat = {task}_{model}_importances.json
+# Edge Pruning learns ONE mask per target sparsity and the three budgets do NOT agree with each
+# other (avg rho between budgets: 0.52/0.48 on MLPs, 0.56/0.39 on attention), so picking a
+# budget is a real choice, not a formality -- and it moves the headline number: rho vs MAttr on
+# MLPs is 0.24 at s=0.9 but 0.49 at s=0.99. We show the budget that wins the metric the paper
+# leads with, CPR AUC (0.997 / 0.957 / 0.912 for 0.9 / 0.95 / 0.99). acc-AUC would instead pick
+# s=0.99 (0.459 vs 0.403) -- change the line below and re-run if the headline metric changes.
+EPRUN_BEST = ("eprun_node", "0.9")     # (results dir, target sparsity); see EPRUN_SPARSITIES
+
+# (label, dir/subfolder, layout). flat  = {task}_{model}_importances.json
 #                                 nested = <sub>/{stask}_{model}/importances.json
+#                                 graph  = graph_{task}_{model}.json  (Edge Pruning mask logits)
 # hard (REINFORCE) and log-k MAttr ablations are dropped to declutter.
 METHODS = [
     ("+hard (unif)*",     "htk_lr_0.05",                                   "flat"),   # hard-STE uniform-k (lr=0.05, best from sweep)
@@ -55,6 +64,7 @@ METHODS = [
     ("RelP+QK",           "relp_qkgrad/RelP-qkgrad_patching_node",         "nested"),
     ("AttnRLP",           "attnrlp/AttnRLP_patching_node",                 "nested"),
     ("GIM",               "gim/GIM_patching_node",                         "nested"),
+    ("Edge Pruning",      EPRUN_BEST[0],                                   "graph"),
 ]
 TASKS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
          ("arithmetic_subtraction", "llama3"), ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
@@ -74,6 +84,10 @@ def scores_for(spec, task, model):
     _, loc, layout = spec
     if layout == "flat":
         return load(R / loc / f"{task}_{model}_importances.json")
+    if layout == "graph":
+        # Edge Pruning writes its learned per-node mask logits into the graph json under the
+        # same {"nodes": {name: {"score": ...}}} schema, so load() needs no special case.
+        return load(R / loc / f"graph_{task}_{model}.json")
     return load(R_MIB / loc / f"{task.replace('_', '-')}_{model}" / "importances.json")
 
 
@@ -168,13 +182,18 @@ print("Saved method_corr_heatmap")
 # ---- (1b) MAIN-TEXT figure: curated subset, Attn vs MLP facets only ----
 # ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
 # gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
+# +Gumbel and +id-STE (log) are dropped: they are MAttr *ablations*, so their rows only restated
+# that the learned family agrees with itself, and the row they displace now buys an outside
+# mask learner. Both are still in the full-set appendix heatmaps above.
 MAIN_LABELS = [
-    "MAttr (log)*", "+hard (log)*", "+Gumbel", "+id-STE (log)",  # learned (4); * = lr 0.05
+    "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
+    "Edge Pruning",                                              # learned, external baseline
     "NAP-IG", "RelP+QK", "GIM", "I$\\times$G",                   # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups)
-DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard", "NAP-IG": "IG"}
+DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard", "NAP-IG": "IG",
+           "Edge Pruning": "EdgePrune"}
 
 # re-cluster the subset on its avg all-node correlation so blocks are tight for these methods
 Msub = df.pivot(index="a", columns="b", values="rho").reindex(index=MAIN_LABELS, columns=MAIN_LABELS).values
