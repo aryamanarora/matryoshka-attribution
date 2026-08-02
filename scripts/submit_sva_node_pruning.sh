@@ -26,16 +26,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
 S=${S:-0.9}
-# NOT 2000 (MATTR_COMMON in submit_sva_sweep.sh). The L0 Lagrangian anneals its target over
-# the run, and on this substrate -- ~10^5-10^6 units, vs MIB's ~157 nodes -- the gates cannot
-# track a 2000-step anneal. Measured on qwen2.5/nounpp/mlp (583,680 units), target s=0.9:
+STEPS=${STEPS:-2000}          # matches MATTR_COMMON in submit_sva_sweep.sh -- keep it matched
+# Known caveat, do NOT "fix" it by raising STEPS here: the L0 Lagrangian anneals its target
+# over the run, and on this substrate (~10^5-10^6 units, vs MIB's ~157 nodes) the gates do not
+# fully track a 2000-step anneal. Measured on qwen2.5/nounpp/mlp (583,680 units), target 0.9:
 #   steps=600  -> achieved 0.709,  faith AUC 0.527, acc-AUC 0.154
 #   steps=2000 -> achieved 0.842,  faith AUC 0.999, acc-AUC 0.209
 #   steps=4000 -> achieved 0.892,  faith AUC 1.302, acc-AUC 0.263
-# At 2000 the baseline misses its own constraint and both metrics are still climbing, so a
-# step-matched run would report a budget it never reached and understate the baseline. 4000 is
-# the count at which the constraint binds; it is baseline tuning, not extra accuracy budget.
-STEPS=${STEPS:-4000}
+# So s=0.9 here means "annealed toward 0.9", and the achieved value is what the run should be
+# reported as. Every method in this comparison gets the same step budget; handing the baseline
+# 2x the optimization steps would break the comparison in the other direction, which matters
+# more than the baseline hitting its nominal target exactly.
 TAG="eprun_s$(printf '%03d' "$(python3 -c "print(round($S*100))")")"
 
 # (sweep_dir, nodes, task, model, dataset, loss) for every headline-MAttr cell on disk.
