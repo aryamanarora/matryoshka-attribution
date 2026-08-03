@@ -62,14 +62,17 @@ TASKS = [("simple", "Simple"), ("nounpp", "Noun PP"),
 # the loss, and no suffix = logit-diff, the loss every headline SVA number in the paper uses.
 # Same four series as plot_accauc_vs_faithauc's FIGURE_METHODS, so this table and that figure
 # describe the same runs.
-METHODS = [("IG", "ig"), ("IxG", "ixg"),
-           ("eprun-s090", "eprun_s090"), ("stopk-log", "sufficient_topk_adam_bs1")]
+METHODS = [("IG", "ig"), ("IxG", "ixg"), ("eprun-s090", "eprun_s090"),
+           ("stopk-log", "sufficient_topk_adam_bs1"),
+           ("stopk-unif", "sufficient_topk_adam_uniformk_bs1")]
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
-          "stopk-log": r"\ourmethod{}"}
+          "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$"}
 # Truncation budget per description. The layout is one column per METHOD, so this shrinks with
-# the number of methods -- four columns across \textwidth leaves ~0.21\textwidth each, which is
-# roughly 55 characters over two typeset lines at \footnotesize.
-DESC_CHARS = 55
+# the number of methods: five columns across \textwidth leave ~0.176\textwidth each, i.e. ~68pt,
+# i.e. ~15 characters per typeset line at \small -- so 45 wraps to about three lines.
+DESC_CHARS = 45
+# Transluce's neuron browser, the same URL scheme tabs/arith_mlp_neuron_table.tex links to.
+NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
 
 
 def load_run(task, tag):
@@ -267,19 +270,47 @@ def main():
     # One column per method, read left to right; rank 1-5 down the rows, task as a row group.
     # Each cell stacks the neuron's identity over its two descriptions via \newline (legal in a
     # p-column, unlike \\ which would end the table row). Rank rows alternate a faint shade
-    # because a cell is 5-6 typeset lines tall and unshaded rows of that height are hard to
-    # track across four columns.
+    # because a cell runs 6-8 typeset lines tall and unshaded rows of that height are hard to
+    # track across five columns.
+    #
+    # longtable, not tabular: 20 rows of that height is several pages, and a tabular would
+    # simply overflow off the bottom of one. That also means iclr2026_conference.tex must keep
+    # \input-ing this file at top level -- a longtable inside a table float is an error.
+    # The method header is repeated on every continuation page (\endhead) since a reader landing
+    # mid-table otherwise has no way to tell which column is which.
     ncol = len(METHODS)
-    W = 0.21                       # p-column width as a fraction of \textwidth
-    L = [r"{\footnotesize",
-         r"\setlength{\tabcolsep}{4pt}",
+    # \textwidth is ~397pt here. tabcolsep is added on both sides of all 6 columns except at the
+    # two @{} edges (2*6-2 = 10 gaps = 30pt = 0.076), and the rank column takes ~0.02, so the
+    # method columns share what is left. Overshooting shows up as an Overfull \hbox, not as a
+    # visibly broken table, so this is computed rather than eyeballed.
+    W = (1.0 - 0.076 - 0.02) / ncol
+    # Columns are ragged-right, not justified. At ~68pt a justified column cannot stretch its
+    # interword glue enough to absorb a long word and overflows into its neighbour instead --
+    # that alone accounted for most of the Overfull \hbox warnings this table used to emit.
+    # >{...} needs the array package, which colortbl already \RequirePackage's (verified in the
+    # build log), so this adds no preamble requirement beyond what \rowcolor already forces.
+    col = r">{\raggedright\arraybackslash}p{%.3f\textwidth}" % W
+    hdr = ["& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\", r"\midrule"]
+    L = [r"% Requires \usepackage{booktabs,longtable,colortbl,hyperref}; \input at top level "
+         r"(NOT inside a table float).",
+         r"{\small",
+         r"\setlength{\tabcolsep}{3pt}",
          r"\renewcommand{\arraystretch}{1.15}",
-         r"\begin{tabular}{@{}l *{%d}{p{%.2f\textwidth}}@{}}" % (ncol, W), r"\toprule",
-         "& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\"]
+         r"\begin{longtable}{@{}l *{%d}{%s}@{}}" % (ncol, col),
+         r"\toprule", *hdr, r"\endfirsthead",
+         r"\toprule", *hdr, r"\endhead",
+         r"\bottomrule", r"\endlastfoot"]
     for task, tlabel, rows in blocks:
         by = {mk: ns for mk, ns in rows}
-        L.append(r"\midrule")
-        L.append(r"\multicolumn{%d}{@{}l}{\textbf{%s}} \\[2pt]" % (ncol + 1, tlabel))
+        # One subtask per page. A block is ~45 typeset lines and a page body holds ~53, so left
+        # to itself longtable breaks a block roughly in half and the continuation page opens on
+        # "2." with nothing saying which subtask it belongs to (the \endhead repeats the method
+        # names, not the row-group label). Forcing the break makes every page self-labelling.
+        if task != blocks[0][0]:
+            L.append(r"\newpage")
+        # \\* forbids a page break directly after the task header, so a subtask name can never
+        # be orphaned at the foot of a page from the rows it labels.
+        L.append(r"\multicolumn{%d}{@{}l}{\textbf{%s}} \\*[2pt]" % (ncol + 1, tlabel))
         for r_i in range(TOPN):
             cells = []
             for mkey, _ in METHODS:
@@ -290,14 +321,18 @@ def main():
                 n = ns[r_i]
                 pos_desc = describe(n["layer"], n["neuron"], "+", fetch=False)
                 neg_desc = describe(n["layer"], n["neuron"], "-", fetch=False)
+                url = NEURON_URL % (n["layer"], n["neuron"])
+                # A plain space, not ~, between the id and the pos/score: "l30.n11158 p5 / 0.523"
+                # is ~95pt of text in a 68pt column, so tying it together guarantees an overfull
+                # box. A breakable space lets it sit on one line when it fits and wrap when not.
                 cells.append(
-                    r"\textbf{$\ell$%d.n%d}~\textcolor{gray}{\scriptsize p%d\;/\;%.3g}\newline "
-                    r"%s\newline %s"
-                    % (n["layer"], n["neuron"], n["pos"], n["score"],
+                    r"\href{%s}{\textbf{$\ell$%d.n%d}}"
+                    r" \textcolor{gray}{\scriptsize p%d\,/\,%.3g}\newline %s\newline %s"
+                    % (url, n["layer"], n["neuron"], n["pos"], n["score"],
                        fmt_desc(pos_desc, "+"), fmt_desc(neg_desc, "-")))
             shade = r"\rowcolor[HTML]{F7F7F7}" if r_i % 2 else ""
             L.append(f"{shade}{r_i + 1}. & " + " & ".join(cells) + r" \\")
-    L += [r"\bottomrule", r"\end{tabular}", r"}"]
+    L += [r"\end{longtable}", r"}"]
 
     TABDIR.mkdir(parents=True, exist_ok=True)
     out = TABDIR / "sva_top_neurons.tex"
