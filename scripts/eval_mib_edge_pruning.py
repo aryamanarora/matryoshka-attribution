@@ -10,6 +10,11 @@ corrupted activation (z*clean + (1-z)*corrupted).
 
 Denoising-only (mask=1 keeps clean, 0 patches corrupted), i.e. the `sufficient`
 intervention MIB CPR measures — Edge Pruning is inherently this intervention.
+
+``--gate sigmoid`` swaps the mask parameterization for pyvene's SigmoidMaskIntervention
+(deterministic sigmoid gate, annealed temperature, no sparsity term) while keeping the same
+patching environment, task loss and step count — so the two rows differ only in how the mask
+is learned. See learning_to_attribute/edge_pruning.py:learn_scores_sigmoid_mask.
 """
 
 import argparse
@@ -54,10 +59,19 @@ def main():
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True, choices=list(TASKS_TO_HF.keys()))
     parser.add_argument("--level", type=str, default="edge", choices=["edge", "node"])
+    parser.add_argument("--gate", type=str, default="hard_concrete",
+                        choices=["hard_concrete", "sigmoid"],
+                        help="Mask parameterization. hard_concrete = Edge Pruning (stochastic "
+                             "concrete gates + Lagrangian L0). sigmoid = pyvene's "
+                             "SigmoidMaskIntervention (deterministic sigmoid(mask/temp), "
+                             "temperature annealed 50->0.1, NO sparsity term); with --gate "
+                             "sigmoid every --target-sparsity/--reg-lr/--*-warmup-frac flag "
+                             "is inert.")
     parser.add_argument("--steps", type=int, default=3000,
                         help="Training steps (Edge-Pruning default: 3000; one example/step)")
-    parser.add_argument("--lr", type=float, default=0.8,
-                        help="AdamW lr for the log-alphas (Edge-Pruning default 0.8)")
+    parser.add_argument("--lr", type=float, default=None,
+                        help="lr for the mask parameters (default: 0.8 for hard_concrete, "
+                             "pyvene's 1e-3 for sigmoid)")
     parser.add_argument("--reg-lr", type=float, default=0.8,
                         help="AdamW lr for the Lagrange multipliers (ascended)")
     parser.add_argument("--target-sparsity", type=float, default=None,
@@ -94,6 +108,8 @@ def main():
     parser.add_argument("--skip-eval", action="store_true",
                         help="Train and dump the circuit only; leave scoring to run_evaluation.py")
     args = parser.parse_args()
+    if args.lr is None:
+        args.lr = 0.8 if args.gate == "hard_concrete" else 1e-3
     if args.target_sparsity is None:
         args.target_sparsity = 0.99 if args.level == "edge" else 0.9
     if args.output is None:
@@ -114,7 +130,8 @@ def main():
     # src/ layout: also works when the package is not pip-installed (e.g. under the MIB venv)
     sys.path.insert(0, str(Path(__file__).parent.parent))
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from learning_to_attribute.edge_pruning import learn_scores_edge_pruning
+    from learning_to_attribute.edge_pruning import (
+        learn_scores_edge_pruning, learn_scores_sigmoid_mask)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     random.seed(args.seed)
@@ -182,8 +199,12 @@ def main():
     score_fwd_idxs_t = torch.tensor(score_fwd_idxs, dtype=torch.long, device=device)
 
     total = n_real if args.level == "edge" else len(score_fwd_idxs)
-    logger.info("%s-level Edge Pruning: %d log-alpha parameters, target sparsity %.4f",
-                args.level, total, args.target_sparsity)
+    if args.gate == "sigmoid":
+        logger.info("%s-level pyvene sigmoid mask: %d mask logits (no sparsity target)",
+                    args.level, total)
+    else:
+        logger.info("%s-level Edge Pruning: %d log-alpha parameters, target sparsity %.4f",
+                    args.level, total, args.target_sparsity)
 
     n_examples = len(dataset)
 
@@ -325,17 +346,24 @@ def main():
         return task_loss(logits, clean_tokens, attention_mask, labels)
 
     loss_fn = edge_loss_fn if args.level == "edge" else node_loss_fn
-    logger.info("Training for %d steps (loss=%s, lr=%.3g, reg_lr=%.3g, warmup_type=%s)...",
-                args.steps, args.loss, args.lr, args.reg_lr, args.warmup_type)
-
-    result = learn_scores_edge_pruning(
-        total, loss_fn, steps=args.steps,
-        target_sparsity=args.target_sparsity, start_sparsity=args.start_sparsity,
-        lr=args.lr, reg_lr=args.reg_lr,
-        lr_warmup_frac=args.lr_warmup_frac, sparsity_warmup_frac=args.sparsity_warmup_frac,
-        warmup_type=args.warmup_type,
-        device=device, logger=logger, log_every=50,
-    )
+    if args.gate == "sigmoid":
+        logger.info("Training for %d steps (pyvene sigmoid mask, loss=%s, lr=%.3g, "
+                    "temp 50->0.1, no sparsity term)...", args.steps, args.loss, args.lr)
+        result = learn_scores_sigmoid_mask(
+            total, loss_fn, steps=args.steps, lr=args.lr,
+            device=device, logger=logger, log_every=50,
+        )
+    else:
+        logger.info("Training for %d steps (loss=%s, lr=%.3g, reg_lr=%.3g, warmup_type=%s)...",
+                    args.steps, args.loss, args.lr, args.reg_lr, args.warmup_type)
+        result = learn_scores_edge_pruning(
+            total, loss_fn, steps=args.steps,
+            target_sparsity=args.target_sparsity, start_sparsity=args.start_sparsity,
+            lr=args.lr, reg_lr=args.reg_lr,
+            lr_warmup_frac=args.lr_warmup_frac, sparsity_warmup_frac=args.sparsity_warmup_frac,
+            warmup_type=args.warmup_type,
+            device=device, logger=logger, log_every=50,
+        )
     scores = result.scores
     logger.info("Training complete in %.1fs", result.train_time_s)
 

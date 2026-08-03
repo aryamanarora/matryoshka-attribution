@@ -18,6 +18,10 @@
 # LOSS=logit_diff (env var) trains on MAttr's objective instead of Edge Pruning's KL and adds
 # an _ld suffix to both dirs, e.g. LOSS=logit_diff ... 0.9 -> results/eprun_node_s0.9_ld/.
 #
+# GATE=sigmoid (env var) swaps the hard-concrete gates for pyvene's SigmoidMaskIntervention
+# (deterministic sigmoid, temperature 50->0.1, no sparsity term) and adds a _sig suffix. It
+# ignores target_sparsity, so pass none: GATE=sigmoid LOSS=logit_diff ... -> eprun_node_ld_sig/.
+#
 # Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
 # Writes results/eprun_eval/EdgePruning_patching_<level>/<task-dash>_<model>_<split>_abs-False.pkl,
@@ -34,6 +38,9 @@ SPARSITY=${6:-}
 # different objective and a different mask parameterization; this isolates the second.
 # It gets its own dirs (suffix _ld) -- a different objective is a different circuit.
 LOSS=${LOSS:-kl}
+# GATE=sigmoid is pyvene's SigmoidMaskIntervention recipe instead of the hard-concrete gates;
+# same environment, same task loss, same step count, different mask parameterization.
+GATE=${GATE:-hard_concrete}
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -67,6 +74,11 @@ else
   SPARSITY_ARG=""
 fi
 [ "$LOSS" = "kl" ] || SUF="${SUF}_ld"
+# GATE=sigmoid has no sparsity target at all; a _s<S> dir name would be a lie.
+if [ "$GATE" != "hard_concrete" ]; then
+  [ -z "$SPARSITY" ] || { echo "GATE=$GATE ignores target_sparsity; drop arg 6"; exit 1; }
+  SUF="${SUF}_sig"
+fi
 OUT=$L2A/results/eprun_${LEVEL}${SUF}
 EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
@@ -81,7 +93,7 @@ else
   PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
     scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
     --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-    --split "$SPLIT" --output "$OUT" --loss "$LOSS" $SPARSITY_ARG --skip-eval
+    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $SPARSITY_ARG --skip-eval
 fi
 
 cd "$MIB"

@@ -19,6 +19,11 @@ This module owns everything else from the original recipe:
 
 The final ``log_alphas`` are returned as ``TrainResult.scores``: they are the latent
 importance scores, ranked as-is by the MIB eval (higher = keep clean).
+
+``learn_scores_sigmoid_mask`` is a second, unrelated mask parameterization living in the
+same file because it plugs into the same ``loss_fn(z)`` interface: pyvene's
+``SigmoidMaskIntervention`` + its ``train_alignment`` temperature anneal (see that
+function's docstring).
 """
 
 import math
@@ -166,4 +171,99 @@ def learn_scores_edge_pruning(
         logger.info("Final deterministic mask keeps %d/%d units (sparsity %.4f)",
                     det_kept, total, 1 - det_kept / total)
     result.scores = log_alphas.data.cpu()
+    return result
+
+
+def learn_scores_sigmoid_mask(
+    total: int,
+    loss_fn: Callable[[torch.Tensor], Optional[torch.Tensor]],
+    *,
+    steps: int,
+    lr: float = 1e-3,
+    warmup_frac: float = 0.1,
+    init_value: float = 0.0,
+    init_temperature: float = 0.01,
+    temperature_start: float = 50.0,
+    temperature_end: float = 0.1,
+    device="cpu",
+    on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
+    log_every: int = 0,
+    logger=None,
+) -> TrainResult:
+    """pyvene's ``SigmoidMaskIntervention`` recipe, verbatim, over ``total`` units.
+
+    A deliberately literal port of https://github.com/stanfordnlp/pyvene — the point of this
+    baseline is that it is the *other* published way to learn a binary mask over model
+    components, so the knobs are theirs, not ours:
+
+      - ``mask = nn.Parameter(torch.zeros(embed_dim))`` and gate ``z = sigmoid(mask / temp)``
+        (``models/interventions.py:SigmoidMaskIntervention``). Deterministic — no concrete
+        noise — and no L0/Lagrangian term anywhere: the *only* loss is ``loss_fn(z)``.
+      - temperature annealed ``torch.linspace(50.0, 0.1, steps).to(torch.bfloat16)``, read
+        AFTER each ``optimizer.step()`` (``models/intervenable_base.py:train_alignment``), so
+        step 0 runs at the intervention's own ``__init__`` temperature of 0.01 and step ``t``
+        runs at ``schedule[t-1]``. The bf16 cast is theirs and is kept: it quantizes the
+        schedule to ~3 significant bits.
+      - ``Adam(lr=1e-3)`` + HF ``get_linear_schedule_with_warmup`` with 10% warmup.
+
+    Note what the anneal does and does not do. It anneals how *binary* the gate is (a mask
+    of 1.0 gives z=0.51 at temp 50 and z≈1 at temp 0.1); it does not anneal, or in any way
+    constrain, how *sparse* the mask is — that is the axis Edge Pruning's Lagrangian owns and
+    this method simply has no opinion about. With a task loss alone the optimum is the dense
+    mask; the baseline is usable in the MIB eval because the eval ranks units by score and
+    sweeps sparsity itself.
+
+    In pyvene ``temperature`` is an ``nn.Parameter``, but the forward reads it through
+    ``torch.tensor(self.temperature)``, which detaches — so it never receives gradient and is
+    only ever written by the scheduler. It is a plain buffer here, which is what it is there.
+
+    Returns a :class:`TrainResult` whose ``scores`` are the final mask logits (higher = keep
+    clean, matching the log-alpha convention above).
+    """
+    from transformers import get_linear_schedule_with_warmup
+
+    mask = nn.Parameter(torch.full((total,), init_value, device=device))
+    optimizer = torch.optim.Adam([mask], lr=lr)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=warmup_frac * steps, num_training_steps=steps)
+    temperature_schedule = torch.linspace(
+        temperature_start, temperature_end, steps).to(torch.bfloat16).to(device)
+    temperature = torch.tensor(init_temperature, device=device)
+
+    result = TrainResult(scores=mask)
+    t0 = time.time()
+    for step in range(steps):
+        optimizer.zero_grad()
+        z = torch.sigmoid(mask / temperature)
+        task_loss = loss_fn(z)
+        if task_loss is None:              # caller signalled skip (e.g. length mismatch)
+            scheduler.step()               # keep the lr schedule aligned with `step`
+            temperature = temperature_schedule[step]
+            continue
+        task_loss.backward()
+        optimizer.step()
+        scheduler.step()
+        temperature = temperature_schedule[step]   # theirs: set after the step, index total_step
+
+        kept = float(z.detach().sum().item())
+        loss_val = float(task_loss.item())
+        result.loss_log.append(loss_val)
+        result.k_log.append(kept)
+        result.train_log.append((step, kept, kept / total, loss_val, 0))
+        if on_step is not None:
+            on_step(step, kept, loss_val, mask)
+        if log_every and logger is not None and ((step + 1) % log_every == 0 or step == 0):
+            rate = (step + 1) / (time.time() - t0)
+            logger.info(
+                "Step %4d/%d  task=%.4f  soft-kept=%.1f/%d  temp=%.3g  mask[min/mean/max]="
+                "%.3f/%.3f/%.3f  (%.1f step/s)",
+                step + 1, steps, loss_val, kept, total, float(temperature),
+                float(mask.min()), float(mask.mean()), float(mask.max()), rate)
+
+    result.train_time_s = time.time() - t0
+    if logger is not None:
+        hard_kept = int((mask.data > 0).sum().item())
+        logger.info("Final mask has %d/%d units with logit > 0 (sparsity %.4f)",
+                    hard_kept, total, 1 - hard_kept / total)
+    result.scores = mask.data.cpu()
     return result
