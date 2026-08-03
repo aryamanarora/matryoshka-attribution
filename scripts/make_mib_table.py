@@ -135,12 +135,26 @@ EPRUN_SPARSITIES = [
     ("$s{=}0.99$, logit-diff", "eprun_eval_s0.99_ld"),
 ]
 
-# Best budget by CPR (validation avg over 11 cells: 0.9973 vs 0.9573 / 0.9122). acc-AUC
-# ranks them the OTHER way (0.4027 vs 0.4582 / 0.4592), which is why plotting all three on
-# the CPR-vs-acc-AUC scatter drags its rank correlation down -- that method's own budgets
-# are the anti-correlated points. Budgets also disagree with each other on the ranking
-# itself (cross-budget rho 0.39-0.56), so "best" here means best-by-CPR, nothing stronger.
-EPRUN_BEST_SPARSITY = ("$s{=}0.9$", "eprun_eval")
+# The single config the test table and the figures show. Best by CPR AUC, which is the metric
+# the paper leads with -- validation row avg over 11 cells is 1.67 for logit-diff s=0.5 against
+# 1.00 for the KL s=0.9 run this used to name, and 1.67 is an interior optimum (s=0.25 -> 0.84
+# below it, s=0.8 -> 1.46 above), not the edge of the swept range.
+#
+# Picking the KL run made \ourmethod{}'s margin look like 1.88 vs 1.00 when the honest node-level
+# comparison is 1.88 vs 1.67: most of that apparent gap was the OBJECTIVE mismatch (Edge
+# Pruning's KL vs MAttr's logit-diff), not the mask parameterization. Holding the loss fixed is
+# the comparison the paper actually wants to make, and it costs us most of the headline gap.
+# plot_method_corr_heatmap.EPRUN_BEST was moved for the same reason (rho vs MAttr 0.26 -> 0.57).
+#
+# Flipped 2026-08-03, once all 11 test cells existed. Order matters: make_mib_test_table and
+# plot_mib_accauc_cpr_scatter both read this, so pointing it at a dir with no test pkls would
+# silently drop the only mask-learning baseline out of the headline test table rather than
+# error. Test row avg for this config is 1.655 over 11/11 cells.
+#
+# Caveat kept from the old comment: acc-AUC ranks the budgets differently from CPR, and the
+# budgets disagree with each other on the node ranking itself (cross-budget rho 0.39-0.56), so
+# "best" here means best-by-CPR and nothing stronger.
+EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 
 
 def eprun_label(level, suffix):
