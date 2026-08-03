@@ -257,7 +257,11 @@ def main_full():
                     color=FULL_COLORS[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
     ax.set_ylim(yr)
-    ax.set_xlabel("acc-AUC (↑)", fontsize=9)
+    # "IIA log-AUC", not "acc-AUC": the paper's prose calls this metric IIA AUC, and the AUC is
+    # taken over the 10 LOG-spaced sparsity points (0.1...100%), not a linear sweep. The compact
+    # figure above still says "acc-AUC" -- change both together or the two versions of the same
+    # figure disagree about what their shared x axis measures.
+    ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
     ax.set_ylabel("CPR AUC (↑)", fontsize=9)
     ax.tick_params(labelsize=8)
     ax.grid(True, lw=0.25, color="#dddddd")
