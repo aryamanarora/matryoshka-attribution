@@ -33,9 +33,31 @@ SECTIONS = [
 ]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 SVA = ["nounpp", "rc", "simple", "within_rc"]
-SUBSTRATES = [("node", [("SVA", set(SVA)), ("ARC-E", {"arc_easy"}), ("IOI", {"ioi"})]),
-              ("mlp", [(t, {t}) for t in SVA]),
-              ("mlp+attn_head", [(t, {t}) for t in SVA])]
+
+# ---------------------------------------------------------------------------
+# "Bwd." = backward passes needed to produce one circuit, counted in SEQUENCES
+# (sum over steps of batch size for the mask learners; attribution examples x IG
+# steps for the gradient methods). Steps alone would not be comparable: a mask
+# step here is one sequence, but a gradient "step" is a batch of 32--100.
+#
+#   mask learners  submit_sva_sweep.sh STEPS=2000 --train-batch-size 1, and
+#                  submit_sva_node_pruning.sh STEPS=2000 ("keep it matched")
+#                  -> 2000 for every MAttr and Node Pruning row, every table.
+#   gradient       eval_sva.py runs all n_examples as ONE batch and loops
+#                  alphas = --ig-steps times (default 10; every method except
+#                  ig/conductance is forced to 1). n_examples is --eval-examples
+#                  100, except the MIB-sourced tasks (arc_easy, ioi), which pass
+#                  --grad-examples 32 -- hence the ranges in the node table.
+#   +input         --include-input adds input_node_effect(), a second pass of S
+#                  backwards over the embedding path, i.e. exactly double.
+COST_MASK = "2k"                                        # 2000 steps x batch 1
+COSTS_SVA = {"IG": "1k", "IxG": "100"}                  # 100 x 10 / 100 x 1
+COSTS_MIXED = {"IG": "0.3--1k", "IxG": "32--100"}       # 32 examples on arc_easy/ioi
+COSTS_INPUT = {"IG": "0.6--2k", "IxG": "64--200"}       # the above, doubled
+
+SUBSTRATES = [("node", [("SVA", set(SVA)), ("ARC-E", {"arc_easy"}), ("IOI", {"ioi"})], COSTS_MIXED),
+              ("mlp", [(t, {t}) for t in SVA], COSTS_SVA),
+              ("mlp+attn_head", [(t, {t}) for t in SVA], COSTS_SVA)]
 
 
 def parse_method(fname, d):
@@ -83,7 +105,7 @@ def hexcol(g):
     return "%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
-def make(nodes, groups, res=RES, suffix=""):
+def make(nodes, groups, costs=COSTS_SVA, res=RES, suffix=""):
     raw = load(nodes, res)
     rows = [(mk, lk) for _, ms in SECTIONS for _, mk in ms for lk, _ in LOSSES]
     ncol = 3 * len(groups)
@@ -117,24 +139,26 @@ def make(nodes, groups, res=RES, suffix=""):
             s = r"\textbf{%s}" % s
         return (r"\cellcolor[HTML]{%s}%s" % (hexcol(g), s)) if g is not None else s
 
-    hdr_groups, cmids, c = [], [], 3
+    hdr_groups, cmids, c = [], [], 4   # 4: Method, Loss, Bwd. come first
     for gl, _ in groups:
         hdr_groups.append(r"\multicolumn{3}{c}{%s}" % gl.replace("_", r"\_"))
         cmids.append(r"\cmidrule(lr){%d-%d}" % (c, c + 2)); c += 3
     L = [r"\begin{adjustbox}{max width=\textwidth}",
-         r"\begin{tabular}{ll *{%d}{c}}" % ncol, r"\toprule",
-         "& & " + " & ".join(hdr_groups) + r" \\", " ".join(cmids),
-         r"\textbf{Method} & \textbf{Loss} & "
+         r"\begin{tabular}{llr *{%d}{c}}" % ncol, r"\toprule",
+         "& & & " + " & ".join(hdr_groups) + r" \\", " ".join(cmids),
+         r"\textbf{Method} & \textbf{Loss} & \textbf{Bwd.} & "
          + " & ".join(ml for _ in groups for _, ml, _ in METRICS) + r" \\", r"\midrule"]
     for si, (sec, methods) in enumerate(SECTIONS):
         if si:
             L.append(r"\midrule")
-        L.append(r"\multicolumn{%d}{l}{\textit{%s}} \\" % (ncol + 2, sec))
+        L.append(r"\multicolumn{%d}{l}{\textit{%s}} \\" % (ncol + 3, sec))
         for mlabel, mk in methods:
             for li, (lk, ll) in enumerate(LOSSES):
                 cells = [cell(mk, lk, gi, mt) for gi in range(len(groups)) for mt, _, _ in METRICS]
-                name = mlabel if li == 0 else ""
-                L.append(f"{name} & {ll} & " + " & ".join(cells) + r" \\")
+                # cost is a property of the method, not the loss: print it once per block,
+                # on the same row as the method name.
+                name, cost = (mlabel, costs.get(mk, COST_MASK)) if li == 0 else ("", "")
+                L.append(f"{name} & {ll} & {cost} & " + " & ".join(cells) + r" \\")
     L += [r"\bottomrule", r"\end{tabular}", r"\end{adjustbox}"]
     out = f"{TABDIR}/fingerprint_{nodes.replace('+', '-')}{suffix}.tex"
     os.makedirs(TABDIR, exist_ok=True)
@@ -143,8 +167,8 @@ def make(nodes, groups, res=RES, suffix=""):
 
 
 if __name__ == "__main__":
-    for nodes, groups in SUBSTRATES:
-        make(nodes, groups)
+    for nodes, groups, costs in SUBSTRATES:
+        make(nodes, groups, costs)
     # +input node runs (input-embedding node scored+ablated; learnable-input, harder mode)
     node_groups = SUBSTRATES[0][1]
-    make("node", node_groups, res="results/sva_sweep_input", suffix="_input")
+    make("node", node_groups, COSTS_INPUT, res="results/sva_sweep_input", suffix="_input")
