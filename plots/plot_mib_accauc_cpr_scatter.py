@@ -178,6 +178,24 @@ def repel(x, y, labels, xr, yr, n=900):
 def main_full():
     import matplotlib.pyplot as plt
 
+    # Inter, matching the plotnine theme every other figure in the paper uses (`family="Inter"`
+    # in theme_set above). This figure is raw matplotlib rather than plotnine because the label
+    # placement needs per-annotation control, so the font has to be set on rcParams by hand --
+    # plotnine's theme does not reach it. mathtext gets Inter too: leaving it on the DejaVu
+    # default would render "$-c_k$" and the legend's "$k$" in a visibly different face from the
+    # text right next to them. fonttype 42 embeds the actual TrueType outlines instead of
+    # Type-3, which is what arXiv and most camera-ready checkers want.
+    plt.rcParams.update({
+        "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
+        "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
+        # cal/sf/tt are unused here but a "custom" fontset resolves all of them at import time,
+        # and the cal default is the generic "cursive", which is not installed -- leaving them
+        # emits a findfont fallback warning on every run.
+        "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
+        "pdf.fonttype": 42, "text.color": "#000000",
+        "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
+    })
+
     rows = []
     for disp, dacc, sub in A.BASELINES:
         acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
