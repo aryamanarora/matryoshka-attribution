@@ -157,6 +157,42 @@ EPRUN_SPARSITIES = [
 EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 
 
+# === Training-cost column ===
+#
+# Unit: BACKWARD PASSES THROUGH THE MODEL, counted in sequences, for fitting ONE cell -- i.e.
+# summed over optimizer steps of (batch size x mask samples per step) for the mask learners,
+# and (attribution examples x IG steps) for the gradient methods. Counting optimizer *steps*
+# instead would flatter whichever method batches hardest (UGS by a factor of 60), since a
+# backward over a batch of 20 costs ~20x one over a batch of 1.
+#
+# Where each number comes from:
+#   gradient methods  MIB-circuit-track/run_variants.sh (and run_relp/gim/attnrlp.sh, which
+#                     share its CELLS): --num-examples 1000 on the IOI cells and 100 on all
+#                     others (mcqa's "full" train split is 100 examples), times --ig-steps
+#                     (5 for NAP-IG/Conductance, 1 for the rest). The range is a property of
+#                     the dataset sizes, not of the method.
+#   \ourmethod{}      scripts/eval_mib.py --steps with --train-batch-size 1, --k-avg 1. NODE
+#                     runs are 500 steps but EDGE runs are 5000 -- read off the saved `args`
+#                     in results/<dir>/*_scores.pt; do not assume one number for both levels.
+#   Node/Edge Pruning scripts/run_edge_pruning.sbatch STEPS=3000, one example per step.
+#   UGS               ~/optimalablation/edge_pruning_unif_mib.py makes one pass over the train
+#                     split at batch_size 5 (gpt2) / 2 (qwen), and EdgeInferenceConfig sets
+#                     n_samples=12 mask draws per batch, so a step is 60 (24) sequences:
+#                     ioi = 9500 x 12 = 114k, mcqa = 100 examples x 6 repeats x 12 = 7.2k.
+#
+# Compute-proportional, NOT wall clock: the gradient methods run their passes in large batches
+# on an unhooked model while the mask learners go one example at a time through patching
+# hooks, and Edge Pruning's KL variant adds an unmasked forward per step that is not counted
+# here. An order-of-magnitude column.
+COST_GRAD_IG5 = "0.5--5k"    # 5 IG steps x 100--1000 examples
+COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
+COST_EPRUN = "3k"            # 3000 steps x batch 1
+COST_UGS = "7--114k"         # the 12 mask samples per step are what make this so large
+COST_OURS = {"node": "0.5k", "edge": "5k"}
+# ig_steps=5 rows; every other gradient row is a single backward per example.
+COST_IG5_ROWS = {"NAP-IG", "Conductance", "EAP-IG-inp (CF, repro)"}
+
+
 def eprun_label(level, suffix):
     """Row label for one Node/Edge Pruning variant -- the single formatting site."""
     return f"{EPRUN_NAME[level]} ({suffix})"
@@ -295,7 +331,7 @@ def main():
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
     def make_row(name, data, best_col, second_col, indent=False, dagger=None,
-                 avg_best=None, avg_second=None, suppress_avg=False):
+                 avg_best=None, avg_second=None, suppress_avg=False, cost=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
@@ -312,7 +348,13 @@ def main():
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
         prefix = f"\\quad {name}" if indent else name
-        return f"{prefix} & " + " & ".join(vals) + " \\\\"
+        return f"{prefix} & {cost or '---'} & " + " & ".join(vals) + " \\\\"
+
+    def grad_cost(name):
+        return COST_GRAD_IG5 if name in COST_IG5_ROWS else COST_GRAD_IG1
+
+    def mask_cost(name):
+        return COST_UGS if name == "UGS" else COST_EPRUN
 
     def opt_of(results_dir):
         # id-STE variants are trained with SGD; everything else with Adam.
@@ -334,26 +376,30 @@ def main():
             for n, r, g in rows_o:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
                 lines.append(make_row(n, all_results.get(f"{n}_{level}_{g}", {}), best, second,
-                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs))
+                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs,
+                                      cost=COST_OURS[level]))
             for n, r, g in rows_u:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
                 lines.append(make_row(unifk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
-                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs))
+                                      indent=True, dagger=dg, avg_best=avb, avg_second=avs,
+                                      cost=COST_OURS[level]))
 
     # Generate LaTeX
     ncols = len(COLUMNS)
     lines = []
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
-    lines.append("\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}")
+    # Column 2 is the training-cost column, so every cmidrule below is shifted by one.
+    lines.append("\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "@{\\quad}r}")
     lines.append("\\toprule")
-    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
-    lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
-    header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"
+    lines.append("& & \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
+    lines.append("\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} \\cmidrule(lr){11-12} \\cmidrule(lr){13-13}")
+    header = ("\\textbf{Method} & \\textbf{Bwd.} & "
+              + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\")
     lines.append(header)
 
     # === Node-level section ===
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 3}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     # Load NAP-IG repro results
     napig_repro = {}
     for task, model, _ in COLUMNS:
@@ -409,18 +455,20 @@ def main():
 
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb, avg_second=avs))
+        lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb,
+                              avg_second=avs, cost=grad_cost(name)))
     if MASK_NODE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
         for name, data in MASK_NODE_BASELINES.items():
             lines.append(make_row(name, data, best_node, second_node, indent=True,
                                   avg_best=avb, avg_second=avs,
-                                  suppress_avg=len(data) < len(COLUMNS)))
+                                  suppress_avg=len(data) < len(COLUMNS),
+                                  cost=mask_cost(name)))
     emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs)
 
     # === Edge-level section ===
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 3}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
 
     # Load EAP-IG repro results
     eapig_repro = {}
@@ -454,14 +502,16 @@ def main():
     EDGE_LLAMA_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb, avg_second=eavs))
+        lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb,
+                              avg_second=eavs, cost=grad_cost(name)))
     # Mask learners rank by a learned gate rather than a gradient, so they get their own header.
     if MASK_EDGE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
         for name, data in MASK_EDGE_BASELINES.items():
             lines.append(make_row(name, data, best_edge, second_edge, indent=True,
                                   avg_best=eavb, avg_second=eavs,
-                                  suppress_avg=len(data) < len(COLUMNS)))
+                                  suppress_avg=len(data) < len(COLUMNS),
+                                  cost=mask_cost(name)))
     emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs, dagger=EDGE_LLAMA_DAGGER)
 
     lines.append("\\bottomrule")
