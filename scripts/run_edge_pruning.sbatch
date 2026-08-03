@@ -22,6 +22,9 @@
 # (deterministic sigmoid, temperature 50->0.1, no sparsity term) and adds a _sig suffix. It
 # ignores target_sparsity, so pass none: GATE=sigmoid LOSS=logit_diff ... -> eprun_node_ld_sig/.
 #
+# LR=<x> (env var) overrides the mask learning rate and adds an _lr<x> suffix, e.g.
+# GATE=sigmoid LOSS=logit_diff LR=0.1 ... -> results/eprun_node_ld_sig_lr0.1/.
+#
 # Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
 # Writes results/eprun_eval/EdgePruning_patching_<level>/<task-dash>_<model>_<split>_abs-False.pkl,
@@ -41,6 +44,9 @@ LOSS=${LOSS:-kl}
 # GATE=sigmoid is pyvene's SigmoidMaskIntervention recipe instead of the hard-concrete gates;
 # same environment, same task loss, same step count, different mask parameterization.
 GATE=${GATE:-hard_concrete}
+# LR overrides the mask learning rate (default 0.8 hard_concrete / 1e-3 sigmoid) and adds an
+# _lr<LR> suffix. Different lr = different circuit, so it must not share a dir.
+LR=${LR:-}
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -79,6 +85,12 @@ if [ "$GATE" != "hard_concrete" ]; then
   [ -z "$SPARSITY" ] || { echo "GATE=$GATE ignores target_sparsity; drop arg 6"; exit 1; }
   SUF="${SUF}_sig"
 fi
+if [ -n "$LR" ]; then
+  SUF="${SUF}_lr${LR}"
+  LR_ARG="--lr $LR"
+else
+  LR_ARG=""
+fi
 OUT=$L2A/results/eprun_${LEVEL}${SUF}
 EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
@@ -93,7 +105,7 @@ else
   PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
     scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
     --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $SPARSITY_ARG --skip-eval
+    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $LR_ARG $SPARSITY_ARG --skip-eval
 fi
 
 cd "$MIB"
