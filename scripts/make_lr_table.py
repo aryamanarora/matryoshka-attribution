@@ -1,8 +1,11 @@
 """LaTeX table: how learning rate influences node CPR AUC, per task, for each method
-we swept LR on (hard_topk / MAttr and bernoulli_reinforce / +hard bwd).
+we swept LR on (hard_topk / MAttr, bernoulli_reinforce / +hard bwd, and the pyvene
+sigmoid-mask baseline).
 
-Reads results/<dir>/<task>_<model>_validation.pkl. lr-sweep dirs (htk_lr_*, bern_lr_*)
-currently only hold ioi/gpt2; the lr=0.01 baselines hold all tasks.
+Reads results/<dir>/<task>_<model>_validation.pkl, or MIB's own
+<dir>/**/<task-with-dashes>_<model>_validation_abs-*.pkl for the eprun_eval_* dirs.
+lr-sweep dirs (htk_lr_*, bern_lr_*) currently only hold ioi/gpt2; the lr=0.01 baselines
+hold all tasks.
 Run from repo root on sc:  uv run python scripts/make_lr_table.py
 """
 import pickle
@@ -41,6 +44,16 @@ METHODS = [
         ("0.3", "bern_lr_0.3"),
         ("0.1, 2k", "bern_lr_0.1_2k"),
     ]),
+    # pyvene's SigmoidMaskIntervention baseline. Its published lr=1e-3 was chosen for a few
+    # rotation parameters at one intervention site; here it drives 156--1056 gate logits
+    # against a task loss, so it is swept like everything else. Only the 0.001 row runs all
+    # 11 cells -- the sweep is on the three cheap gpt2/qwen2.5 cells (submit_sigmoid_mask_lr.sh).
+    ("Sigmoid mask (pyvene)", [
+        ("0.001 (pyvene)", "eprun_eval_ld_sig"),
+        ("0.01", "eprun_eval_ld_sig_lr0.01"),
+        ("0.1", "eprun_eval_ld_sig_lr0.1"),
+        ("1.0", "eprun_eval_ld_sig_lr1.0"),
+    ]),
 ]
 
 
@@ -58,7 +71,14 @@ def cpr(d, task, model):
     d = DIR_OVERRIDE.get((d, task, model), d)
     p = RESULTS_BASE / d / f"{task}_{model}_validation.pkl"
     if not p.exists():
-        return None
+        # MIB's own run_evaluation.py (what the eprun_eval_* dirs come from) writes a
+        # different layout: <dir>/EdgePruning_patching_node/<task-with-dashes>_<model>_
+        # validation_abs-False.pkl. Same "area_under" key inside.
+        hits = list((RESULTS_BASE / d).glob(
+            f"**/{task.replace('_', '-')}_{model}_validation_abs-*.pkl"))
+        if not hits:
+            return None
+        p = hits[0]
     try:
         return round(pickle.load(open(p, "rb"))["area_under"], 2)
     except Exception:
@@ -91,14 +111,16 @@ def main():
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
-        is_mattr = "REINFORCE" not in method   # 3 MAttr blocks cap llama/ioi; REINFORCE does not
+        # 3 MAttr blocks cap llama/ioi at 200 val examples, and so does the sigmoid-mask
+        # block (run_edge_pruning.sbatch passes --head 200); the REINFORCE runs do not.
+        is_capped = "REINFORCE" not in method
         lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
             avg = f"{sum(present) / len(present):.2f}" if present else "---"
             cells = [fmt(data[lr][(t, m)],
                          bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
-                         dagger=(is_mattr and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
+                         dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
                      for t, m, _ in COLUMNS]
             lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
