@@ -40,6 +40,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from collections import Counter
 from pathlib import Path
 
 import torch
@@ -73,6 +74,27 @@ LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
 DESC_CHARS = 45
 # Transluce's neuron browser, the same URL scheme tabs/arith_mlp_neuron_table.tex links to.
 NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
+
+# Neurons that surface in many (subtask, method) cells get a categorical highlight, so that
+# "these two columns keep picking the SAME unit" is visible at a glance instead of something
+# you verify by reading 100 six-digit ids. Colour = identity, nothing else: it does not encode
+# rank, score or count.
+#
+# The threshold is 4 of the 20 cells because the recurrence distribution has a clean gap there
+# -- 8 neurons appear 4-7 times, then it drops straight to 2 with nothing at 3 -- so this is
+# reading a break in the data, not imposing a cutoff. It also happens to land exactly on the
+# palette size. If a rerun changes that, main() says so rather than silently recolouring.
+RECUR_MIN = 4
+# ColorBrewer Pastel1, with two substitutions made after looking at a rendered page. Pastels
+# because the link text sits ON these and hyperref renders it darkblue (colorlinks=true in the
+# preamble), so saturated chips would bury it -- but pastel has a floor: Pastel1's FFFFCC and
+# F2F2F2 are so close to white that a chip in them reads as no chip at all, and on an F7F7F7
+# shaded row it disappears outright. FFFFCC -> a yellow with enough body to survive the
+# shading, F2F2F2 was already unused, and FDDAEC (pink) -> teal, since against FBB4AE (salmon)
+# it was the one pair that needed a second look. Hues are spread so that the three most
+# frequent neurons -- which take slots 0-2 -- land on red/blue/green.
+PALETTE = ["FBB4AE", "B3CDE3", "CCEBC5", "DECBE4",
+           "FED9A6", "8DD3C7", "E8DE6B", "DCC49A"]
 
 
 def load_run(task, tag):
@@ -255,6 +277,22 @@ def main():
         if rows:
             blocks.append((task, tlabel, rows))
 
+    # Recurrence over every (subtask, method) cell, and the colour each recurring neuron keeps
+    # everywhere it appears. Ordered by (count desc, layer, neuron) so a rerun on unchanged
+    # scores reproduces the same assignment byte for byte -- a table whose colours shuffle
+    # between renders is worse than no colours, because the reader's memory of "the pink one"
+    # silently goes stale.
+    counts = Counter((n["layer"], n["neuron"])
+                     for _, _, rs in blocks for _, ns in rs for n in ns)
+    recur = sorted((k for k, v in counts.items() if v >= RECUR_MIN),
+                   key=lambda k: (-counts[k], k))
+    if len(recur) > len(PALETTE):
+        print(f"NOTE: {len(recur)} neurons recur >={RECUR_MIN}x but the palette holds "
+              f"{len(PALETTE)}; colouring the {len(PALETTE)} most frequent, rest left plain.",
+              file=sys.stderr)
+        recur = recur[:len(PALETTE)]
+    color = {k: f"recur{i}" for i, k in enumerate(recur)}
+
     todo = {(n["layer"], n["neuron"]) for _, _, rs in blocks for _, ns in rs for n in ns}
     todo = sorted(k for k in todo if any(f"{k[0]}/{k[1]}/{s}" not in _cache for s in "+-"))
     if todo and not args.no_fetch:
@@ -291,15 +329,33 @@ def main():
     # build log), so this adds no preamble requirement beyond what \rowcolor already forces.
     col = r">{\raggedright\arraybackslash}p{%.3f\textwidth}" % W
     hdr = ["& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\", r"\midrule"]
+    def chip(key, body):
+        """Wrap a neuron id in its recurrence colour, or leave it plain if it does not recur."""
+        return r"\colorbox{%s}{%s}" % (color[key], body) if key in color else body
+
     L = [r"% Requires \usepackage{booktabs,longtable,colortbl,hyperref}; \input at top level "
          r"(NOT inside a table float).",
+         *[r"\definecolor{recur%d}{HTML}{%s}" % (i, PALETTE[i]) for i in range(len(recur))],
          r"{\small",
          r"\setlength{\tabcolsep}{3pt}",
+         # \colorbox's default 3pt padding would push the chips into the neighbouring column and
+         # open up the line spacing inside every cell; 1pt keeps the highlight tight to the id.
+         r"\setlength{\fboxsep}{1pt}",
          r"\renewcommand{\arraystretch}{1.15}",
          r"\begin{longtable}{@{}l *{%d}{%s}@{}}" % (ncol, col),
          r"\toprule", *hdr, r"\endfirsthead",
          r"\toprule", *hdr, r"\endhead",
-         r"\bottomrule", r"\endlastfoot"]
+         r"\bottomrule",
+         # Legend, so a colour is decodable without hunting for its other occurrences. It goes in
+         # \endlastfoot rather than \endfoot: repeating it under all four pages would cost a
+         # quarter of the vertical space the \newpage-per-subtask layout just bought.
+         r"\multicolumn{%d}{@{}p{0.97\textwidth}@{}}{\scriptsize Recurring in $\geq$%d of the "
+         r"%d cells:~%s} \\" % (
+             ncol + 1, RECUR_MIN, len(blocks) * ncol,
+             r"\quad ".join(
+                 r"\colorbox{%s}{$\ell$%d.n%d}~$\times$%d" % (color[k], k[0], k[1], counts[k])
+                 for k in recur)),
+         r"\endlastfoot"]
     for task, tlabel, rows in blocks:
         by = {mk: ns for mk, ns in rows}
         # One subtask per page. A block is ~45 typeset lines and a page body holds ~53, so left
@@ -325,10 +381,11 @@ def main():
                 # A plain space, not ~, between the id and the pos/score: "l30.n11158 p5 / 0.523"
                 # is ~95pt of text in a 68pt column, so tying it together guarantees an overfull
                 # box. A breakable space lets it sit on one line when it fits and wrap when not.
+                ident = chip((n["layer"], n["neuron"]),
+                             r"\href{%s}{\textbf{$\ell$%d.n%d}}" % (url, n["layer"], n["neuron"]))
                 cells.append(
-                    r"\href{%s}{\textbf{$\ell$%d.n%d}}"
-                    r" \textcolor{gray}{\scriptsize p%d\,/\,%.3g}\newline %s\newline %s"
-                    % (url, n["layer"], n["neuron"], n["pos"], n["score"],
+                    r"%s \textcolor{gray}{\scriptsize p%d\,/\,%.3g}\newline %s\newline %s"
+                    % (ident, n["pos"], n["score"],
                        fmt_desc(pos_desc, "+"), fmt_desc(neg_desc, "-")))
             shade = r"\rowcolor[HTML]{F7F7F7}" if r_i % 2 else ""
             L.append(f"{shade}{r_i + 1}. & " + " & ".join(cells) + r" \\")
