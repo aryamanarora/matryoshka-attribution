@@ -66,7 +66,10 @@ METHODS = [("IG", "ig"), ("IxG", "ixg"),
            ("eprun-s090", "eprun_s090"), ("stopk-log", "sufficient_topk_adam_bs1")]
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
           "stopk-log": r"\ourmethod{}"}
-DESC_CHARS = 88          # truncation budget per description cell
+# Truncation budget per description. The layout is one column per METHOD, so this shrinks with
+# the number of methods -- four columns across \textwidth leaves ~0.21\textwidth each, which is
+# roughly 55 characters over two typeset lines at \footnotesize.
+DESC_CHARS = 55
 
 
 def load_run(task, tag):
@@ -127,40 +130,67 @@ def top_neurons(scores, meta, n=TOPN):
 
 
 # ---------------------------------------------------------------- Transluce descriptions
-_cache = json.load(open(CACHE)) if CACHE.exists() else {}
+# Cache format version. v1 stored only the single best description per (layer, neuron, sign);
+# v2 stores the full ranked candidate list, which is what makes the renderability fallback in
+# describe() possible. A v1 file on disk is discarded rather than misread.
+CACHE_V = 2
+_raw = json.load(open(CACHE)) if CACHE.exists() else {}
+_cache = _raw.get("data", {}) if _raw.get("v") == CACHE_V else {}
+
+# pdflatex-renderability. The paper builds with pdfTeX and loads neither inputenc nor fontenc
+# (checked in iclr2026_conference.log), so a Cyrillic or CJK codepoint in a description is not
+# a cosmetic issue -- it is "Unicode character ... not set up for use with LaTeX" and a failed
+# Overleaf build. Many descriptions quote non-Latin activating tokens, so this is not rare.
+_PUNCT = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "--",
+          "—": "---", "…": "...", " ": " ", "→": "->", "·": "."}
+
+
+def normalize(s):
+    for a, b in _PUNCT.items():
+        s = s.replace(a, b)
+    return s
+
+
+def renderable(s):
+    """True if pdflatex can typeset s with this preamble (ASCII + Latin-1/Extended-A)."""
+    return all(ord(c) < 0x180 for c in normalize(s))
 
 
 def describe(layer, neuron, sign, fetch=True):
-    """Best-scoring description for one (layer, neuron, sign), or None. Disk-cached.
+    """Best-scoring RENDERABLE description for one (layer, neuron, sign), or None.
 
-    Cached failures are stored as None and NOT retried on later runs -- a neuron with no
-    description is a fact about the database, not a transient error, and re-requesting the
-    whole missing set on every render would hammer a service we do not own.
+    The API returns five candidate descriptions ranked by score, so when the top one quotes a
+    non-Latin token we fall back to the next renderable candidate instead of mangling the text
+    with elisions. Only if all five are unrenderable do we give up and return None -- that
+    loses one cell rather than corrupting every cell that mentions a Russian token.
+
+    Cached failures are stored and NOT retried -- a neuron with no description is a fact about
+    the database, not a transient error, and re-requesting the whole missing set on every
+    render would hammer a service we do not own.
     """
     key = f"{layer}/{neuron}/{sign}"
-    if key in _cache:
-        return _cache[key]
-    if not fetch:
-        return None
-    url = f"{API}?" + urllib.parse.urlencode({"layer": layer, "neuron": neuron, "sign": sign})
-    val = None
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(url, timeout=60) as r:
-                summary = json.load(r).get("explanation_summary") or []
-            val = summary[0][0] if summary else None
-            break
-        except Exception as e:                       # noqa: BLE001 - network, any failure retries
-            if attempt == 2:
-                print(f"  ! {key}: {type(e).__name__} {e}", file=sys.stderr)
-            time.sleep(2 * (attempt + 1))
-    _cache[key] = val
-    return val
+    if key not in _cache:
+        if not fetch:
+            return None
+        url = f"{API}?" + urllib.parse.urlencode(
+            {"layer": layer, "neuron": neuron, "sign": sign})
+        cands = []
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(url, timeout=60) as r:
+                    cands = json.load(r).get("explanation_summary") or []
+                break
+            except Exception as e:                   # noqa: BLE001 - network, any failure retries
+                if attempt == 2:
+                    print(f"  ! {key}: {type(e).__name__} {e}", file=sys.stderr)
+                time.sleep(2 * (attempt + 1))
+        _cache[key] = cands
+    return next((normalize(c[0]) for c in _cache[key] if c and c[0] and renderable(c[0])), None)
 
 
 def save_cache():
     CACHE.parent.mkdir(parents=True, exist_ok=True)
-    json.dump(_cache, open(CACHE, "w"))
+    json.dump({"v": CACHE_V, "data": _cache}, open(CACHE, "w"))
 
 
 # ---------------------------------------------------------------- LaTeX
@@ -172,10 +202,20 @@ def tex_escape(s):
     return s
 
 
-def fmt_desc(s):
-    """Escape, bold the {{...}} activating-token markers, truncate on a word boundary."""
+def fmt_desc(s, sign):
+    """Escape, bold the {{...}} activating-token markers, truncate on a word boundary.
+
+    `sign` prefixes the line with + / - so the two descriptions in a stacked cell stay
+    distinguishable without a header to point at.
+    """
+    # The negative line is grayed WHOLE (mark included) here rather than by the caller -- the
+    # caller used to wrap this return value in a second \textcolor{gray}{...}, which nested and
+    # left the marker double-wrapped.
+    grey = sign == "-"
+    mark = r"$%s$~" % ("+" if sign == "+" else "-")
+    wrap = (lambda x: r"\textcolor{gray}{%s}" % x) if grey else (lambda x: x)
     if not s:
-        return r"\textcolor{gray}{---}"
+        return wrap(mark + "---")
     s = " ".join(s.split())
     if len(s) > DESC_CHARS:
         cut = s[:DESC_CHARS]
@@ -185,7 +225,11 @@ def fmt_desc(s):
         s = (cut[:sp] if sp > DESC_CHARS * 0.6 else cut) + "..."
     s = tex_escape(s)
     # Transluce wraps the activating token as {{tok}}; escaping turned those into \{\{tok\}\}.
-    return re.sub(r"\\\{\\\{(.*?)\\\}\\\}", r"\\textbf{\1}", s)
+    s = re.sub(r"\\\{\\\{(.*?)\\\}\\\}", r"\\textbf{\1}", s)
+    # Some descriptions also carry raw markdown bold from the explainer model (e.g. **"creepy"**),
+    # which would otherwise print as literal asterisks.
+    s = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", s)
+    return wrap(mark + s)
 
 
 def main():
@@ -220,24 +264,40 @@ def main():
                 save_cache()
         save_cache()
 
-    L = [r"\begin{adjustbox}{max width=\textwidth}",
-         r"\begin{tabular}{llrr p{0.29\textwidth} p{0.29\textwidth}}", r"\toprule",
-         r"\textbf{Method} & \textbf{Neuron} & \textbf{Pos} & \textbf{Score} & "
-         r"\textbf{Top $+$ description} & \textbf{Top $-$ description} \\"]
-    for bi, (task, tlabel, rows) in enumerate(blocks):
+    # One column per method, read left to right; rank 1-5 down the rows, task as a row group.
+    # Each cell stacks the neuron's identity over its two descriptions via \newline (legal in a
+    # p-column, unlike \\ which would end the table row). Rank rows alternate a faint shade
+    # because a cell is 5-6 typeset lines tall and unshaded rows of that height are hard to
+    # track across four columns.
+    ncol = len(METHODS)
+    W = 0.21                       # p-column width as a fraction of \textwidth
+    L = [r"{\footnotesize",
+         r"\setlength{\tabcolsep}{4pt}",
+         r"\renewcommand{\arraystretch}{1.15}",
+         r"\begin{tabular}{@{}l *{%d}{p{%.2f\textwidth}}@{}}" % (ncol, W), r"\toprule",
+         "& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\"]
+    for task, tlabel, rows in blocks:
+        by = {mk: ns for mk, ns in rows}
         L.append(r"\midrule")
-        L.append(r"\multicolumn{6}{l}{\textit{%s}} \\" % tlabel)
-        for mkey, ns in rows:
-            for i, n in enumerate(ns):
-                L.append(" & ".join([
-                    LABELS[mkey] if i == 0 else "",
-                    r"$\ell$%d.n%d" % (n["layer"], n["neuron"]),
-                    str(n["pos"]),
-                    "%.3g" % n["score"],
-                    fmt_desc(describe(n["layer"], n["neuron"], "+", fetch=False)),
-                    fmt_desc(describe(n["layer"], n["neuron"], "-", fetch=False)),
-                ]) + r" \\")
-    L += [r"\bottomrule", r"\end{tabular}", r"\end{adjustbox}"]
+        L.append(r"\multicolumn{%d}{@{}l}{\textbf{%s}} \\[2pt]" % (ncol + 1, tlabel))
+        for r_i in range(TOPN):
+            cells = []
+            for mkey, _ in METHODS:
+                ns = by.get(mkey) or []
+                if r_i >= len(ns):
+                    cells.append("")
+                    continue
+                n = ns[r_i]
+                pos_desc = describe(n["layer"], n["neuron"], "+", fetch=False)
+                neg_desc = describe(n["layer"], n["neuron"], "-", fetch=False)
+                cells.append(
+                    r"\textbf{$\ell$%d.n%d}~\textcolor{gray}{\scriptsize p%d\;/\;%.3g}\newline "
+                    r"%s\newline %s"
+                    % (n["layer"], n["neuron"], n["pos"], n["score"],
+                       fmt_desc(pos_desc, "+"), fmt_desc(neg_desc, "-")))
+            shade = r"\rowcolor[HTML]{F7F7F7}" if r_i % 2 else ""
+            L.append(f"{shade}{r_i + 1}. & " + " & ".join(cells) + r" \\")
+    L += [r"\bottomrule", r"\end{tabular}", r"}"]
 
     TABDIR.mkdir(parents=True, exist_ok=True)
     out = TABDIR / "sva_top_neurons.tex"
