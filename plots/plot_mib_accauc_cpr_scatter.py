@@ -7,6 +7,7 @@ title) — a companion to the MLP/Attn Spearman heatmap. Sized ~1/3 text width (
 acc-AUC sources mirror make_mib_accauc_table; CPR = `area_under` (mirrors make_mib_table).
 Run:  uv run python plots/plot_mib_accauc_cpr_scatter.py  ->  plots/mib_accauc_cpr_scatter.pdf
 """
+import re
 import sys
 import pickle
 from pathlib import Path
@@ -102,6 +103,161 @@ BASE_CPR = {
 }
 
 
+# ---------------------------------------------------------------------------------------
+# Appendix (--full): the same two metrics, but nothing dropped -- every node-level MAttr
+# ablation, every gradient baseline, and all 12 Node Pruning budgets, at ~full page size with
+# every point named. The compact figure above answers "do the metrics agree?"; this one is the
+# audit trail behind that answer, and is where the disagreement (Node Pruning's two objectives
+# ranking their own budgets in opposite directions) is actually legible.
+#
+# Colour here means GROUP, not method -- 32 points cannot carry 32 hues, and the direct labels
+# already give identity. Shape still splits gradient vs mask learning, as in the compact figure.
+G_MLOG, G_MUNI = "MAttr (log $k$)", "MAttr (unif. $k$)"
+G_GRAD, G_NPKL, G_NPLD = "Gradient baseline", "Node Pruning (KL)", "Node Pruning (logit-diff)"
+FULL_ORDER = [G_MLOG, G_MUNI, G_GRAD, G_NPKL, G_NPLD]
+FULL_COLORS = {
+    G_MLOG: P.METHOD["MAttr"], G_MUNI: P.METHOD["+hard"], G_GRAD: P.METHOD["IG"],
+    G_NPLD: P.METHOD["Node Pruning"], G_NPKL: "#9d95d1",   # tint of the same indigo
+}
+FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD}
+
+
+def delatex(s):
+    """Table label -> matplotlib point label. Math mode survives only where it carries meaning
+    (the $c_k$ subscript); everything else is flattened, because repel() estimates label width
+    from the character count and every stray $..$ makes that estimate worse."""
+    s = re.sub(r"\$s\{=\}([\d.]+)\$", r"s=\1", s)
+    for a, b in ((r"\ourmethod{}", "MAttr"), (r"$+$ ", "+"), (r"$-$ $c_k$", "$-c_k$"),
+                 (r"$\times$", "x")):
+        s = s.replace(a, b)
+    return s.strip()
+
+
+# normalized-axes label geometry for 6.5pt text in a 5.4x6.9in figure
+DX, CHAR_W, LAB_H, MARK_R = 0.016, 0.0092, 0.021, 0.011
+
+
+def repel(x, y, labels, xr, yr, n=900):
+    """Label de-overlap by rectangle separation in normalized [0,1]^2 axes space (adjustText is
+    not installed here, and a Gaussian point-repulsion does not converge on this figure -- the
+    long labels like "+id-STE, Gumbel sel." are ~10x wider than tall, so what matters is BOX
+    overlap, not centre distance). Each label is a box anchored right of its marker; overlapping
+    boxes are pushed apart along whichever axis needs the smaller move, labels are also pushed
+    off markers, and a weak spring pulls each back to its anchor. Leader lines make any residual
+    drift unambiguous. Deterministic -- no RNG, so the figure is reproducible."""
+    ax = (np.asarray(x) - xr[0]) / (xr[1] - xr[0])
+    ay = (np.asarray(y) - yr[0]) / (yr[1] - yr[0])
+    w = np.array([len(s.replace("$", "")) * CHAR_W for s in labels])
+    lx, ly = ax + DX, ay.copy()
+    for _ in range(n):
+        # half-extents of the pair boxes (labels are left-anchored, so x-centre = lx + w/2)
+        cx = lx + w / 2
+        dx, dy = cx[:, None] - cx[None, :], ly[:, None] - ly[None, :]
+        ox = (w[:, None] + w[None, :]) / 2 - np.abs(dx)     # >0 = overlapping in x
+        oy = LAB_H - np.abs(dy)
+        hit = (ox > 0) & (oy > 0)
+        np.fill_diagonal(hit, False)
+        # resolve along the cheaper axis; ties in position (dy==0) break upward
+        sy = np.where(dy >= 0, 1.0, -1.0)
+        sx = np.where(dx >= 0, 1.0, -1.0)
+        useY = oy <= ox
+        px = np.where(hit & ~useY, 0.5 * sx * ox, 0.0).sum(1)
+        py = np.where(hit & useY, 0.5 * sy * oy, 0.0).sum(1)
+        # keep labels off every marker (not just their own)
+        mdx, mdy = cx[:, None] - ax[None, :], ly[:, None] - ay[None, :]
+        mox = w[:, None] / 2 + MARK_R - np.abs(mdx)
+        moy = LAB_H / 2 + MARK_R - np.abs(mdy)
+        mhit = (mox > 0) & (moy > 0)
+        py += np.where(mhit, np.where(mdy >= 0, 1.0, -1.0) * moy, 0.0).sum(1)
+        lx += 0.28 * px + 0.05 * (ax + DX - lx)
+        ly += 0.28 * py + 0.05 * (ay - ly)
+        ly = np.clip(ly, LAB_H / 2, 1 - LAB_H / 2)
+    return lx * (xr[1] - xr[0]) + xr[0], ly * (yr[1] - yr[0]) + yr[0]
+
+
+def main_full():
+    import matplotlib.pyplot as plt
+
+    rows = []
+    for disp, dacc, sub in A.BASELINES:
+        acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
+        dn, subn = BASE_CPR[disp]
+        cpr = avg(cpr_base(dn, subn))
+        if acc is not None and cpr is not None:
+            rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD, label=delatex(disp), path=None, s=0))
+    for name, d, level, g in M.OUR_METHODS:
+        if level != "node":
+            continue
+        acc = avg({(t, m): A.acc_mattr(d, t, m) for t, m, _ in COLS})
+        cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
+        if acc is None or cpr is None:
+            print(f"  skip {d}: acc={acc} cpr={cpr}", file=sys.stderr)
+            continue
+        rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
+                         label=delatex(name), path=None, s=0))
+    # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
+    for label, dirn in M.EPRUN_SPARSITIES:
+        sub = "EdgePruning_patching_node"
+        acc = avg({(t, m): A._acc(RB / dirn / sub /
+                                  f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+                   for t, m, _ in COLS})
+        cpr = avg(cpr_base(dirn, sub))
+        if acc is None or cpr is None:
+            print(f"  skip {dirn}: acc={acc} cpr={cpr}", file=sys.stderr)
+            continue
+        ld = "logit-diff" in label
+        rows.append(dict(acc=acc, cpr=cpr, grp=G_NPLD if ld else G_NPKL,
+                         label=delatex(label).replace(", logit-diff", ""),
+                         path="ld" if ld else "kl",
+                         s=float(delatex(label).split("s=")[1].split(",")[0])))
+
+    df = pd.DataFrame(rows)
+    df["fam"] = np.where(df.grp.isin(FULL_MASK), MASK, GRADIENT)
+
+    fig, ax = plt.subplots(figsize=(5.4, 6.9))
+    for key, ls in (("kl", "dashed"), ("ld", "dashed")):
+        sub = df[df.path == key].sort_values("s")
+        if len(sub) > 1:
+            ax.plot(sub.acc, sub.cpr, ls=ls, lw=0.7, alpha=0.55, zorder=1,
+                    color=FULL_COLORS[sub.grp.iloc[0]])
+    for grp in FULL_ORDER:
+        sub = df[df.grp == grp]
+        if not len(sub):
+            continue
+        ax.scatter(sub.acc, sub.cpr, s=46, marker=FAMILY_SHAPE[MASK if grp in FULL_MASK
+                                                               else GRADIENT],
+                   c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
+                   label=grp)
+
+    xr, yr = ax.get_xlim(), ax.get_ylim()
+    xr = (xr[0], xr[1] + 0.22 * (xr[1] - xr[0]))    # room for labels on the right
+    ax.set_xlim(xr)
+    lx, ly = repel(df.acc.values, df.cpr.values, df.label.tolist(), xr, yr)
+    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
+        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
+        ax.annotate(lab, (lxi, lyi), fontsize=6.5, va="center", ha="left",
+                    color=FULL_COLORS[grp], zorder=4,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
+    ax.set_ylim(yr)
+    ax.set_xlabel("acc-AUC (↑)", fontsize=9)
+    ax.set_ylabel("CPR AUC (↑)", fontsize=9)
+    ax.tick_params(labelsize=8)
+    ax.grid(True, lw=0.25, color="#dddddd")
+    ax.set_axisbelow(True)
+    for sp in ax.spines.values():
+        sp.set_linewidth(0.5)
+    ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
+              borderpad=0.5, handletextpad=0.4)
+    fig.tight_layout()
+    out = "plots/mib_accauc_cpr_scatter_full.pdf"
+    fig.savefig(out, dpi=300)
+    from scipy.stats import spearmanr
+    o = df[~df.grp.isin({G_NPKL, G_NPLD})]
+    print(f"wrote {out} ({len(df)} points)\n"
+          f"Spearman rho: {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
+          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
+
+
 def main():
     rows = []
     # gradient baselines (all kept; IG / I×G highlighted, rest grey)
@@ -182,4 +338,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_full() if "--full" in sys.argv else main()

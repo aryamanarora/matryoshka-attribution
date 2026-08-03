@@ -1,13 +1,18 @@
-"""Top-5 MLP neurons by attribution, per SVA subtask x method, with Transluce descriptions.
+"""Top-5 MLP neurons by attribution, per SVA subtask x method.
 
 Reads the per-unit score tensors the SVA sweep already writes
 (results/sva_sweep/<task>_llama3_mlp_<tag>.scores.pt) and reports, for each subtask and
 method, the five neurons each method ranks FIRST -- i.e. the first units it puts into the
-circuit. For llama3 each neuron is annotated with its top positive and top negative
-description from Transluce's neuron-description database.
+circuit.
+
+DEFAULT LAYOUT IS COMPACT (one page): identity + position/score only. `--descriptions` adds
+each neuron's top positive and negative description from Transluce, which is a much richer
+table but runs to four pages -- one per subtask -- because a described cell is 6-8 typeset
+lines instead of 2. Every neuron id is a hyperlink to Transluce either way, so the compact
+table does not lose access to the descriptions, only their inlining.
 
 Run:  uv run python scripts/make_sva_neuron_table.py   ->  paper/tabs/sva_top_neurons.tex
-      (add --no-fetch to render from the cache only, e.g. offline)
+      (--descriptions for the 4-page version; --no-fetch renders from cache only, e.g. offline)
 
 WHY llama3-only: the `mlp` substrate was only ever swept on llama3 (the other MIB models are
 node-level), so there is exactly one model here and no cross-model column to add.
@@ -260,7 +265,10 @@ def fmt_desc(s, sign):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-fetch", action="store_true", help="render from cache only")
+    ap.add_argument("--descriptions", action="store_true",
+                    help="inline the Transluce descriptions (4 pages instead of 1)")
     args = ap.parse_args()
+    desc_mode = args.descriptions
 
     blocks, missing = [], []
     for task, tlabel in TASKS:
@@ -295,7 +303,7 @@ def main():
 
     todo = {(n["layer"], n["neuron"]) for _, _, rs in blocks for _, ns in rs for n in ns}
     todo = sorted(k for k in todo if any(f"{k[0]}/{k[1]}/{s}" not in _cache for s in "+-"))
-    if todo and not args.no_fetch:
+    if todo and desc_mode and not args.no_fetch:
         print(f"fetching {len(todo)} neurons from Transluce ({2 * len(todo)} requests)...")
         for i, (layer, neuron) in enumerate(todo, 1):
             for sign in "+-":
@@ -306,14 +314,17 @@ def main():
         save_cache()
 
     # One column per method, read left to right; rank 1-5 down the rows, task as a row group.
-    # Each cell stacks the neuron's identity over its two descriptions via \newline (legal in a
-    # p-column, unlike \\ which would end the table row). Rank rows alternate a faint shade
-    # because a cell runs 6-8 typeset lines tall and unshaded rows of that height are hard to
-    # track across five columns.
+    # Each cell stacks its lines with \newline (legal in a p-column, unlike \\ which would end
+    # the table row): identity over position/score in compact mode, plus the two descriptions
+    # under them in --descriptions mode. Rank rows alternate a faint shade -- in description
+    # mode because a cell is 6-8 lines tall and rows that deep are hard to track across five
+    # columns, in compact mode because five columns of near-identical "l30.n11158" strings are
+    # easy to slip a row on.
     #
-    # longtable, not tabular: 20 rows of that height is several pages, and a tabular would
-    # simply overflow off the bottom of one. That also means iclr2026_conference.tex must keep
-    # \input-ing this file at top level -- a longtable inside a table float is an error.
+    # longtable, not tabular, in BOTH modes: description mode is four pages, and while compact
+    # mode fits on one, a tabular that later stops fitting overflows off the bottom of the page
+    # silently rather than breaking. That also means iclr2026_conference.tex must keep \input-ing
+    # this file at top level -- a longtable inside a table float is an error.
     # The method header is repeated on every continuation page (\endhead) since a reader landing
     # mid-table otherwise has no way to tell which column is which.
     ncol = len(METHODS)
@@ -358,12 +369,16 @@ def main():
          r"\endlastfoot"]
     for task, tlabel, rows in blocks:
         by = {mk: ns for mk, ns in rows}
-        # One subtask per page. A block is ~45 typeset lines and a page body holds ~53, so left
-        # to itself longtable breaks a block roughly in half and the continuation page opens on
-        # "2." with nothing saying which subtask it belongs to (the \endhead repeats the method
-        # names, not the row-group label). Forcing the break makes every page self-labelling.
-        if task != blocks[0][0]:
+        # One subtask per page, in description mode only. A described block is ~45 typeset lines
+        # and a page body holds ~53, so left to itself longtable breaks a block roughly in half
+        # and the continuation page opens on "2." with nothing saying which subtask it belongs
+        # to (the \endhead repeats the method names, not the row-group label). Forcing the break
+        # makes every page self-labelling. Compact mode is ~50 lines TOTAL, so the same \newpage
+        # would turn a one-page table into four near-empty ones.
+        if desc_mode and task != blocks[0][0]:
             L.append(r"\newpage")
+        elif task != blocks[0][0]:
+            L.append(r"\addlinespace[3pt]")
         # \\* forbids a page break directly after the task header, so a subtask name can never
         # be orphaned at the foot of a page from the rows it labels.
         L.append(r"\multicolumn{%d}{@{}l}{\textbf{%s}} \\*[2pt]" % (ncol + 1, tlabel))
@@ -375,18 +390,28 @@ def main():
                     cells.append("")
                     continue
                 n = ns[r_i]
-                pos_desc = describe(n["layer"], n["neuron"], "+", fetch=False)
-                neg_desc = describe(n["layer"], n["neuron"], "-", fetch=False)
                 url = NEURON_URL % (n["layer"], n["neuron"])
                 # A plain space, not ~, between the id and the pos/score: "l30.n11158 p5 / 0.523"
                 # is ~95pt of text in a 68pt column, so tying it together guarantees an overfull
                 # box. A breakable space lets it sit on one line when it fits and wrap when not.
                 ident = chip((n["layer"], n["neuron"]),
                              r"\href{%s}{\textbf{$\ell$%d.n%d}}" % (url, n["layer"], n["neuron"]))
-                cells.append(
-                    r"%s \textcolor{gray}{\scriptsize p%d\,/\,%.3g}\newline %s\newline %s"
-                    % (ident, n["pos"], n["score"],
-                       fmt_desc(pos_desc, "+"), fmt_desc(neg_desc, "-")))
+                # Compact mode forces the break before the position/score instead of letting it
+                # wrap. The two together are ~80pt of text in a 68pt column, so SOME cells
+                # wrapped and some (short ids) did not, and a row whose five cells break
+                # differently reads as noise. It costs no vertical space: every row already
+                # contained a wrapped cell, so the row was two lines tall regardless. Description
+                # mode keeps the breakable space -- there the id line is followed by two more
+                # lines anyway, so a forced break buys nothing and would add 20 lines to a
+                # layout that is already at the page limit.
+                sep = " " if desc_mode else r"\newline "
+                cell = (r"%s%s\textcolor{gray}{\scriptsize p%d\,/\,%.3g}"
+                        % (ident, sep, n["pos"], n["score"]))
+                if desc_mode:
+                    cell += r"\newline %s\newline %s" % (
+                        fmt_desc(describe(n["layer"], n["neuron"], "+", fetch=False), "+"),
+                        fmt_desc(describe(n["layer"], n["neuron"], "-", fetch=False), "-"))
+                cells.append(cell)
             shade = r"\rowcolor[HTML]{F7F7F7}" if r_i % 2 else ""
             L.append(f"{shade}{r_i + 1}. & " + " & ".join(cells) + r" \\")
     L += [r"\end{longtable}", r"}"]
@@ -395,10 +420,13 @@ def main():
     out = TABDIR / "sva_top_neurons.tex"
     out.write_text("\n".join(L) + "\n")
     n_rows = sum(len(ns) for _, _, rs in blocks for _, ns in rs)
-    n_desc = sum(1 for _, _, rs in blocks for _, ns in rs for n in ns
-                 if describe(n["layer"], n["neuron"], "+", fetch=False))
+    extra = ""
+    if desc_mode:
+        n_desc = sum(1 for _, _, rs in blocks for _, ns in rs for n in ns
+                     if describe(n["layer"], n["neuron"], "+", fetch=False))
+        extra = f", {n_desc}/{n_rows} with a + description"
     print(f"wrote {out}  ({len(blocks)} subtasks, {n_rows} neuron rows, "
-          f"{n_desc}/{n_rows} with a + description)")
+          f"{'descriptions' if desc_mode else 'compact'}{extra})")
     if missing:
         print("MISSING runs:", ", ".join(missing))
 
