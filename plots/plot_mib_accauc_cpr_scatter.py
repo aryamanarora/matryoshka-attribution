@@ -161,18 +161,26 @@ def _pair(dirn, t, m):
     run_evaluation.py (every eprun_eval*/DBM dir) nests under a
     <Method>_patching_<level>/ subfolder and spells the task with dashes. Both pkls carry
     acc_auc and area_under, so one reader covers both once the path is resolved.
+
+    Third layout: node acc-AUC produced by run_accauc_mattr.sh lives OUTSIDE this repo, in
+    MIB-circuit-track/results/mattr_accauc/, and never made it back into the trainer's pkl.
+    So acc falls back to A.acc_mattr while CPR still comes from the local pkl -- probing only
+    the local file drops whole LR series out of the figure as "incomplete" when they are not.
     """
     p = RB / dirn / f"{t}_{m}_validation.pkl"
     if not p.exists():
         hits = list((RB / dirn).glob(f"**/{t.replace('_', '-')}_{m}_validation_abs-*.pkl"))
         if not hits:
-            return None, None
+            return None, None   # no pkl at all means no CPR either -- a genuinely missing cell
         p = hits[0]
     try:
         r = pickle.load(open(p, "rb"))
     except Exception:
         return None, None
-    return r.get("acc_auc"), r.get("area_under")
+    acc = r.get("acc_auc")
+    if acc is None:
+        acc = A.acc_mattr(dirn, t, m)
+    return acc, r.get("area_under")
 
 
 def build_lr_rows(series=LR_SERIES, level="node"):
