@@ -12,7 +12,12 @@
 # Hyperparameters are NOT re-chosen here: each row below is copied verbatim from the `args` dict
 # inside that dir's existing mcqa_llama3_scores.pt, so the new ARC cells are trained exactly like
 # their nine siblings and the row average stays internally comparable. llama3 keeps the
-# eval-examples 200 cap (the dagger) and batch 2, as every other llama3 edge cell does.
+# eval-examples 200 cap (the dagger), as every other llama3 edge cell does.
+#
+# BATCH 1, not the siblings' 2: at batch 2 this OOMs on the FIRST forward (79 GiB, before step 1
+# -- ARC contexts are long and an edge mask over 8B keeps every edge's activation live). Batch is
+# the one hyperparameter that could not be copied. It changes gradient noise, not the objective
+# or the 5000-step budget, so the cells stay comparable in the way that matters for the row.
 #
 #   bash scripts/submit_edge_arc_llama3.sh            # submit
 #   DRYRUN=1 bash scripts/submit_edge_arc_llama3.sh   # preview
@@ -48,7 +53,7 @@ for c in "${CONFIGS[@]}"; do
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/eval_mib_edge.py --model llama3 --task $task --steps 5000 --k-schedule $sched \
 --masking $mask --mode sufficient --lr $lr --optimizer $opt --split $split --train-split train \
---batch-size 2 --eval-examples 200 --output results/$out"
+--batch-size 1 --eval-examples 200 --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       echo "DRY $name -> $out"
     else
