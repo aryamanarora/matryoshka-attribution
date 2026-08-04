@@ -114,12 +114,86 @@ BASE_CPR = {
 # already give identity. Shape still splits gradient vs mask learning, as in the compact figure.
 G_MLOG, G_MUNI = "MAttr (log $k$)", "MAttr (unif. $k$)"
 G_GRAD, G_NPKL, G_NPLD = "Gradient baseline", "Node Pruning (KL)", "Node Pruning (logit-diff)"
-FULL_ORDER = [G_MLOG, G_MUNI, G_GRAD, G_NPKL, G_NPLD]
+G_DBM = "DBM"
+FULL_ORDER = [G_MLOG, G_MUNI, G_GRAD, G_NPKL, G_NPLD, G_DBM]
 FULL_COLORS = {
     G_MLOG: P.METHOD["MAttr"], G_MUNI: P.METHOD["+hard"], G_GRAD: P.METHOD["IG"],
     G_NPLD: P.METHOD["Node Pruning"], G_NPKL: "#9d95d1",   # tint of the same indigo
+    G_DBM: "#d98d3a",   # warm, so it reads as neither MAttr (green) nor Node Pruning (indigo)
 }
-FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD}
+FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
+
+# === LR series ===
+# Every lr we swept whose dir is COMPLETE on both axes (11/11 cells for acc_auc AND
+# area_under). Completeness is the bar because this figure averages each method over the cells
+# it has, so a 3-cell point would sit in the same space as an 11-cell one and read as
+# comparable when it is not. What that excludes, as of 2026-08-04:
+#
+#   + unif k, + hard (htk_lr_*)   acc_auc on 4/11   -- never re-eval'd for acc
+#   + hard bwd (bern_lr_*)        acc_auc on 2-3/11, and cpr itself is partial (7-10/11)
+#   MAttr/+hard at lr=0.01        acc_auc on 3/11   (mib_node_topk_log / _hard_topk_log)
+#   DBM at lr=0.01 / 0.1 / 1.0    3/11 -- swept on the cheap cells only, by design
+#
+# so the plotted series are MAttr log-k and +hard log-k at {0.005, 0.05, 0.1, 0.3} and DBM at
+# {0.001, 0.3}. build_lr_rows() prints every exclusion rather than dropping it silently.
+#
+# lr=0.05 is deliberately NOT listed: those two dirs are already plotted from M.OUR_METHODS as
+# the headline "MAttr" and "+hard" points, and a second point at the same coordinates would
+# double-count them in the Spearman.
+LR_SERIES = [
+    (G_MLOG, "MAttr", [("0.005", "topklog_lr_0.005"), ("0.1", "topklog_lr_0.1"),
+                       ("0.3", "topklog_lr_0.3")]),
+    (G_MLOG, "+hard", [("0.005", "htklog_lr_0.005"), ("0.1", "htklog_lr_0.1"),
+                       ("0.3", "htklog_lr_0.3")]),
+    (G_DBM, "DBM", [("0.001", "eprun_eval_ld_sig"), ("0.3", "eprun_eval_ld_sig_lr0.3")]),
+]
+
+# The lr=0.05 headline points come from M.OUR_METHODS (see above), so to draw one unbroken
+# path per method they have to be tagged into the same series as the swept points -- otherwise
+# the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
+LR_ANCHOR = {"topklog_lr_0.05": ("MAttr", 0.05), "htklog_lr_0.05": ("+hard", 0.05)}
+
+
+def _pair(dirn, t, m):
+    """(acc_auc, area_under) for one cell, from whichever layout this dir uses.
+
+    Our own trainer writes results/<dir>/<task>_<model>_validation.pkl; MIB's
+    run_evaluation.py (every eprun_eval*/DBM dir) nests under a
+    <Method>_patching_<level>/ subfolder and spells the task with dashes. Both pkls carry
+    acc_auc and area_under, so one reader covers both once the path is resolved.
+    """
+    p = RB / dirn / f"{t}_{m}_validation.pkl"
+    if not p.exists():
+        hits = list((RB / dirn).glob(f"**/{t.replace('_', '-')}_{m}_validation_abs-*.pkl"))
+        if not hits:
+            return None, None
+        p = hits[0]
+    try:
+        r = pickle.load(open(p, "rb"))
+    except Exception:
+        return None, None
+    return r.get("acc_auc"), r.get("area_under")
+
+
+def build_lr_rows(series=LR_SERIES, level="node"):
+    """Points for every swept lr whose dir is complete on BOTH metrics.
+
+    Incomplete dirs are skipped WITH a printed reason -- an lr silently missing from the
+    figure looks like an lr we never ran, which is the one thing this figure must not imply.
+    """
+    rows = []
+    for grp, base, lrs in series:
+        for lr, dirn in lrs:
+            pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
+            acc = [a for a, _ in pairs if a is not None]
+            cpr = [c for _, c in pairs if c is not None]
+            if len(acc) < len(COLS) or len(cpr) < len(COLS):
+                print(f"  skip {base} lr={lr} ({dirn}): acc {len(acc)}/{len(COLS)}, "
+                      f"cpr {len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
+                continue
+            rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
+                             label=f"{base} lr={lr}", path=f"lr:{base}", s=float(lr)))
+    return rows
 
 
 def delatex(s):
@@ -211,8 +285,9 @@ def main_full():
         if acc is None or cpr is None:
             print(f"  skip {d}: acc={acc} cpr={cpr}", file=sys.stderr)
             continue
+        base, lr = LR_ANCHOR.get(d, (None, 0.0))
         rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
-                         label=delatex(name), path=None, s=0))
+                         label=delatex(name), path=f"lr:{base}" if base else None, s=lr))
     # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
     for label, dirn in M.EPRUN_SPARSITIES:
         sub = "EdgePruning_patching_node"
@@ -228,15 +303,21 @@ def main_full():
                          label=delatex(label).replace(", logit-diff", ""),
                          path="ld" if ld else "kl",
                          s=float(delatex(label).split("s=")[1].split(",")[0])))
+    # every complete swept lr, incl. both complete DBM points (the only DBM source here)
+    rows += build_lr_rows()
 
     df = pd.DataFrame(rows)
     df["fam"] = np.where(df.grp.isin(FULL_MASK), MASK, GRADIENT)
 
     fig, ax = plt.subplots(figsize=(5.4, 6.9))
-    for key, ls in (("kl", "dashed"), ("ld", "dashed")):
+    # Dashed guides through every ordered series: the two Node Pruning objectives ordered
+    # sparse-ward ("kl"/"ld"), and each swept method ordered by learning rate ("lr:<method>").
+    # Same visual language for both because they are the same statement -- points joined by a
+    # line differ only in ONE hyperparameter, so the line's direction is the sensitivity to it.
+    for key in [k for k in df.path.dropna().unique()]:
         sub = df[df.path == key].sort_values("s")
         if len(sub) > 1:
-            ax.plot(sub.acc, sub.cpr, ls=ls, lw=0.7, alpha=0.55, zorder=1,
+            ax.plot(sub.acc, sub.cpr, ls="dashed", lw=0.7, alpha=0.55, zorder=1,
                     color=FULL_COLORS[sub.grp.iloc[0]])
     for grp in FULL_ORDER:
         sub = df[df.grp == grp]

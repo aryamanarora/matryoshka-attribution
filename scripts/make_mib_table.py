@@ -157,10 +157,16 @@ EPRUN_SPARSITIES = [
 EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 
 
-# pyvene's SigmoidMaskIntervention: a third mask parameterization (deterministic
-# sigmoid(mask/tau), tau annealed 50->0.1, NO sparsity term), same 3000 steps and same
-# logit-diff loss as the _ld Node Pruning rows. Not an EPRUN_SPARSITIES entry -- those are all
-# one method at different budgets and get labelled "Node Pruning (...)", which this is not.
+# DBM = differentiable binary masking, i.e. pyvene's SigmoidMaskIntervention: a third mask
+# parameterization (deterministic sigmoid(mask/tau), tau annealed 50->0.1, NO sparsity term),
+# same 3000 steps and same logit-diff loss as the _ld Node Pruning rows. Not an
+# EPRUN_SPARSITIES entry -- those are all one method at different budgets and get labelled
+# "Node Pruning (...)", which this is not.
+#
+# "DBM" is the DISPLAY name only. Everything on disk keeps the implementation name (gate
+# "sigmoid", results/eprun_*_sig* dirs, the EdgePruning_patching_node subfolder MIB's
+# run_evaluation.py writes) -- same rule as EPRUN_NAME above. Renaming those would orphan
+# every pkl.
 #
 # The lr shown is swept, not pyvene's published 1e-3, and the label says so because the
 # difference is large enough to change the ranking: 0.74 avg at 1e-3 vs 1.32 at 0.3 (11 vs 10
@@ -175,7 +181,7 @@ EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 # many units survive -- which is why this cannot reach the L0-annealed rows no matter how it
 # is tuned. That argument does not depend on any hyperparameter choice.
 SIGMOID_MASK_ROWS = [
-    ("Sigmoid mask (pyvene, tuned LR)", "eprun_eval_ld_sig_lr0.3"),
+    ("DBM (tuned LR)", "eprun_eval_ld_sig_lr0.3"),
 ]
 
 

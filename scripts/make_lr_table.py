@@ -48,7 +48,7 @@ METHODS = [
     # rotation parameters at one intervention site; here it drives 156--1056 gate logits
     # against a task loss, so it is swept like everything else. Only the 0.001 row runs all
     # 11 cells -- the sweep is on the three cheap gpt2/qwen2.5 cells (submit_sigmoid_mask_lr.sh).
-    ("Sigmoid mask (pyvene)", [
+    ("DBM", [
         ("0.001 (pyvene)", "eprun_eval_ld_sig"),
         ("0.01", "eprun_eval_ld_sig_lr0.01"),
         ("0.1", "eprun_eval_ld_sig_lr0.1"),
