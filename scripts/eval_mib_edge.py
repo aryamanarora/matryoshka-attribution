@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+from torch.utils.checkpoint import checkpoint
 
 logging.basicConfig(
     level=logging.INFO,
@@ -215,41 +216,73 @@ def main():
                 return act
             return hook
 
-        # One diff_stack per prev_index instead of one per destination hook. The q/k/v hooks of a
-        # layer share a prev_index and fire before any new source hook does, so the tensors they
-        # used to build were bit-identical -- yet autograd retained each separately. On llama3 a
-        # single stack is [batch, pos, prev, d_model]; at ARC's 63-106 tokens that is ~0.5 GB, and
-        # ~128 of them is ~35 GB on top of 16 GB of weights, which is exactly what made the ARC
-        # cells OOM at 79 GB while mcqa's 38 tokens fit. Caching is safe because clean_acts entries
-        # are write-once: whatever is available at one hook with a given prev_index is available
-        # and unchanged at every other. The dict lives in the per-batch scope alongside
-        # corrupted_acts/clean_acts, so it is rebuilt with them and never leaks across batches.
+        # Memoize each source's `corrupted - clean` difference for the whole batch. torch.stack
+        # COPIES, but autograd still retains the tensors it was handed, so before this every
+        # destination rebuilt its own subtractions and each one stayed live alongside the stack
+        # holding a copy of it -- ~sum(prev_index) ~= 34k intermediates on llama3, matching the
+        # stacks byte for byte. Per source there are only ~1k, one per forward node.
         #
-        # Verified, not assumed. corrupted_acts is filled by a separate forward before this one, so
-        # only clean_acts could go stale; a 30-step gpt2/ioi run with an assert on every cache hit
-        # (cached stack must equal a freshly rebuilt one) never tripped it. The hoist does NOT
-        # reproduce the pre-hoist scores bit-for-bit: max |diff| 3.2e-04 on a 0.20 scale, mean
-        # 3.3e-06. The same code run twice against itself is exactly 0.0, so that gap is caused by
-        # this change -- specifically by the backward pass, where gradient into a shared clean_acts
-        # entry now sums inside one stack instead of arriving as three separate contributions.
-        # Forward values are unchanged (step-1 loss matches). Consequence worth knowing: re-running
-        # an EXISTING edge cell moves its scores at the ~1e-5 relative level, so a small drift in a
-        # re-run is this, not a regression.
-        stack_cache = {}
+        # This change is bit-identical to not having it (verified on gpt2/ioi); it is purely a
+        # memory measure, as is the checkpointing below. Together they reproduce the ORIGINAL
+        # per-hook-stack scores exactly -- max |diff| 0.000e+00 on a 30-step gpt2/ioi run -- so no
+        # stored edge result moves when it is re-run. (An intermediate version that shared retained
+        # stacks across a prev_index did drift by 3.2e-04 on a 0.20 scale, because gradient into a
+        # shared clean_acts entry summed in one place instead of arriving as three contributions.
+        # Checkpointing removes that: each destination rebuilds its own stack in backward, which is
+        # the original accumulation order. The drift was never a bug, but not having it is better.)
+        #
+        # Only cache the well-defined case. The zeros fallback below covers a source that is in
+        # corrupted_acts but whose clean hook has not fired yet; per prev_index that is frozen
+        # safely (verified), but a per-source entry outlives its prev_index, and the same source
+        # CAN be populated by the time a later prev_index asks for it. Caching a zeros-fallback
+        # would leak it forward, so those are rebuilt each time and never stored.
+        diff_cache = {}
+        zeros_cache = {}
 
-        def diff_stack_for(prev_idx, n_pos, dtype):
-            cached = stack_cache.get(prev_idx)
+        def diff_for(src_i, n_pos, dtype):
+            cached = diff_cache.get(src_i)
             if cached is not None:
                 return cached
-            diffs = []
-            for src_i in range(prev_idx):
-                if src_i in corrupted_acts:
-                    clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
-                    diffs.append(corrupted_acts[src_i] - clean)
-                else:
-                    diffs.append(torch.zeros(1, n_pos, d_model, device=device, dtype=dtype))
-            stack_cache[prev_idx] = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
-            return stack_cache[prev_idx]
+            if src_i not in corrupted_acts:
+                z = zeros_cache.get((n_pos, dtype))
+                if z is None:
+                    z = torch.zeros(1, n_pos, d_model, device=device, dtype=dtype)
+                    zeros_cache[(n_pos, dtype)] = z
+                return z          # constant, shared: torch.stack copies it anyway
+            clean = clean_acts.get(src_i)
+            if clean is None:
+                return corrupted_acts[src_i] - torch.zeros_like(corrupted_acts[src_i])
+            d = corrupted_acts[src_i] - clean
+            diff_cache[src_i] = d
+            return d
+
+        # The stacks are RECOMPUTED in backward rather than retained. Sharing them per prev_index
+        # and memoizing the per-source diffs were both real savings, but neither could fix this,
+        # because the binding constraint is not a constant factor -- it is the length TAIL. Stack
+        # memory is linear in sequence length (~286 MB per token position on llama3), and loss_fn
+        # draws a random example per step: ARC medians are 52/61 tokens but the maxima are 178/186,
+        # a 3.4x/3.0x tail. A median example needs ~17 GB of stacks, a tail example ~53 GB, which
+        # is why step 1 passed and a later step died. mcqa (1.19x) and ioi (1.53x) have no tail
+        # worth speaking of, which is exactly why those cells never showed this.
+        #
+        # Checkpointing makes peak memory independent of how many destinations there are: one stack
+        # is live at a time instead of ~65, so the term drops from ~53 GB to ~1.6 GB at the worst
+        # observed length. The einsum saves its inputs for backward, so no dict eviction can free
+        # them -- discarding and recomputing is the only thing that does. Gradients are unchanged:
+        # the recomputation is deterministic and sees identical inputs (the diffs are cached, and
+        # clean_acts stay alive as graph inputs), which the gpt2 check confirms bit-for-bit.
+        #
+        # Checked at the worst case, not the average: a probe pinned to the LONGEST example in each
+        # split (arc_challenge 186 tokens, arc_easy 178) trains at batch 2. An earlier probe drew
+        # examples at random, passed step 1, and proved nothing -- against a 3x length tail a random
+        # draw is a lottery over the exact thing being tested.
+        def _stack_and_weight(weights, *diffs):
+            stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
+            if weights.dim() == 1:
+                return einsum(stack, weights,
+                              'batch pos src hidden, src -> batch pos hidden')
+            return einsum(stack, weights,
+                          'batch pos src hidden, src heads -> batch pos heads hidden')
 
         def make_dest_hook(dest_node, letter=None):
             prev_idx = graph.prev_index(dest_node)
@@ -257,13 +290,9 @@ def main():
             weights = corruption_mask[:prev_idx, bwd_idx]  # [prev, ...] or [prev, n_heads]
 
             def hook(activations, hook):
-                diff_stack = diff_stack_for(prev_idx, activations.shape[1], activations.dtype)
-                if weights.dim() == 1:
-                    update = einsum(diff_stack, weights,
-                                    'batch pos src hidden, src -> batch pos hidden')
-                else:
-                    update = einsum(diff_stack, weights,
-                                    'batch pos src hidden, src heads -> batch pos heads hidden')
+                diffs = [diff_for(src_i, activations.shape[1], activations.dtype)
+                         for src_i in range(prev_idx)]
+                update = checkpoint(_stack_and_weight, weights, *diffs, use_reentrant=False)
                 return activations + update
             return hook
 

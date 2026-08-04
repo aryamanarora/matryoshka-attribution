@@ -14,13 +14,16 @@
 # their nine siblings and the row average stays internally comparable. llama3 keeps the
 # eval-examples 200 cap (the dagger), as every other llama3 edge cell does.
 #
-# BATCH 1, not the siblings' 2. The first two waves of this script OOM'd on the FIRST forward
-# (79 GiB, before step 1) at batch 2 AND at batch 1, which is what proved batch was never the
-# driver: ARC prompts are 63/106 tokens against mcqa's 38, and eval_mib_edge.py was building one
-# retained [batch, pos, prev, d_model] stack per destination hook. That is fixed at the source now
-# (the stacks are shared per prev_index), and batch 1 is kept as headroom rather than as the fix.
-# Batch is the one hyperparameter that could not be copied from the siblings. It changes gradient
-# noise, not the objective or the 5000-step budget, so the row stays comparable where it matters.
+# BATCH 2, same as the nine siblings -- so nothing about these cells is re-chosen at all.
+#
+# Getting here took three OOM waves and two wrong diagnoses. Batch was blamed first (it OOM'd at
+# batch 1 too), then a constant factor in eval_mib_edge.py's memory (halving it did not help). The
+# actual driver is the LENGTH TAIL: stacks cost ~286 MB per token position on llama3, ARC medians
+# are 52/61 tokens but the maxima are 178/186, and loss_fn draws a random example per step. So a
+# median step fit and a tail step did not, which is why a run could pass step 1 and die later, and
+# why mcqa (1.19x tail) and ioi (1.53x) never showed it. eval_mib_edge.py now checkpoints the
+# stacks, making peak memory independent of destination count; a probe pinned to the longest
+# example in each split trains at batch 2 with room, so the deviation is no longer needed.
 #
 #   bash scripts/submit_edge_arc_llama3.sh            # submit
 #   DRYRUN=1 bash scripts/submit_edge_arc_llama3.sh   # preview
@@ -56,7 +59,7 @@ for c in "${CONFIGS[@]}"; do
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/eval_mib_edge.py --model llama3 --task $task --steps 5000 --k-schedule $sched \
 --masking $mask --mode sufficient --lr $lr --optimizer $opt --split $split --train-split train \
---batch-size 1 --eval-examples 200 --output results/$out"
+--batch-size 2 --eval-examples 200 --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       echo "DRY $name -> $out"
     else
