@@ -12,6 +12,11 @@
 # bernoulli_reinforce, k-schedule uniform, steps 500 (2000 for the _2k row), --include-input, and
 # the per-model batch sizes the sweep already used. lr comes from the dir name.
 #
+# GEMMA2 CELLS NEED A FOLLOW-UP: this runs eval_mib.py, which only exists in the L2A venv
+# (TL 3.2.1), whose Gemma-2 forward is wrong. Training there matches every sibling cell of
+# these rows, but the eval does not -- run scripts/reeval_bern_gemma.sh afterwards to redo it
+# under TL 2.15.4, the same fix reeval_gemma_mib.py applied to the rest of the sweep.
+#
 #   bash scripts/submit_bern_fill.sh            # submit
 #   DRYRUN=1 bash scripts/submit_bern_fill.sh   # preview
 set -u
