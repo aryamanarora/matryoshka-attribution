@@ -52,6 +52,7 @@ METHODS = [
         ("0.001 (pyvene)", "eprun_eval_ld_sig"),
         ("0.01", "eprun_eval_ld_sig_lr0.01"),
         ("0.1", "eprun_eval_ld_sig_lr0.1"),
+        ("0.3", "eprun_eval_ld_sig_lr0.3"),   # added to bracket the 0.1 peak against 1.0
         ("1.0", "eprun_eval_ld_sig_lr1.0"),
     ]),
 ]
