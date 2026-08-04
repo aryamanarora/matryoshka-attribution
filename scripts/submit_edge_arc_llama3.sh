@@ -14,10 +14,13 @@
 # their nine siblings and the row average stays internally comparable. llama3 keeps the
 # eval-examples 200 cap (the dagger), as every other llama3 edge cell does.
 #
-# BATCH 1, not the siblings' 2: at batch 2 this OOMs on the FIRST forward (79 GiB, before step 1
-# -- ARC contexts are long and an edge mask over 8B keeps every edge's activation live). Batch is
-# the one hyperparameter that could not be copied. It changes gradient noise, not the objective
-# or the 5000-step budget, so the cells stay comparable in the way that matters for the row.
+# BATCH 1, not the siblings' 2. The first two waves of this script OOM'd on the FIRST forward
+# (79 GiB, before step 1) at batch 2 AND at batch 1, which is what proved batch was never the
+# driver: ARC prompts are 63/106 tokens against mcqa's 38, and eval_mib_edge.py was building one
+# retained [batch, pos, prev, d_model] stack per destination hook. That is fixed at the source now
+# (the stacks are shared per prev_index), and batch 1 is kept as headroom rather than as the fix.
+# Batch is the one hyperparameter that could not be copied from the siblings. It changes gradient
+# noise, not the objective or the 5000-step budget, so the row stays comparable where it matters.
 #
 #   bash scripts/submit_edge_arc_llama3.sh            # submit
 #   DRYRUN=1 bash scripts/submit_edge_arc_llama3.sh   # preview
