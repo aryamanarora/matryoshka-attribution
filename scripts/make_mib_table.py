@@ -157,6 +157,28 @@ EPRUN_SPARSITIES = [
 EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 
 
+# pyvene's SigmoidMaskIntervention: a third mask parameterization (deterministic
+# sigmoid(mask/tau), tau annealed 50->0.1, NO sparsity term), same 3000 steps and same
+# logit-diff loss as the _ld Node Pruning rows. Not an EPRUN_SPARSITIES entry -- those are all
+# one method at different budgets and get labelled "Node Pruning (...)", which this is not.
+#
+# The lr shown is swept, not pyvene's published 1e-3, and the label says so because the
+# difference is large enough to change the ranking: 0.74 avg at 1e-3 vs 1.32 at 0.3 (11 vs 10
+# cells), i.e. untuned it loses to KL Node Pruning (1.00) and tuned it clearly beats it.
+# pyvene chose 1e-3 for a few rotation parameters at one intervention site; here the same
+# optimizer drives 156--1056 gate logits, so that value has no reason to transfer and
+# reporting it would be measuring our tuning rather than the method. Both points are in
+# paper/tabs/lr_sweep.tex; only the tuned one belongs in the headline table.
+#
+# Structural caveat for the prose: because there is no sparsity term, achieved density is
+# 38--54% at EVERY lr. lr changes how well-ordered the logits are within that half, not how
+# many units survive -- which is why this cannot reach the L0-annealed rows no matter how it
+# is tuned. That argument does not depend on any hyperparameter choice.
+SIGMOID_MASK_ROWS = [
+    ("Sigmoid mask (pyvene, tuned LR)", "eprun_eval_ld_sig_lr0.3"),
+]
+
+
 # === Training-cost column ===
 #
 # Unit: BACKWARD PASSES THROUGH THE MODEL, counted in sequences, for fitting ONE cell -- i.e.
@@ -443,6 +465,15 @@ def main():
     # Mask learning at node level: Edge Pruning (all four models), one row per sparsity budget.
     # Its llama3 cells use the same --head 200 subset as the gradient baselines -> same dagger.
     for name, data in eprun_rows("node"):
+        MASK_NODE_BASELINES[name] = data
+        DAGGER[name] = TILDE_LLAMA3_DAGGER
+    # pyvene sigmoid mask -- same runner, so same --head 200 llama3 subset and same dagger.
+    for name, dirn in SIGMOID_MASK_ROWS:
+        data = load_run_eval(dirn, "EdgePruning_patching_node")
+        if not data:
+            continue
+        if len(data) < len(COLUMNS):
+            print(f"  NOTE {name}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
         MASK_NODE_BASELINES[name] = data
         DAGGER[name] = TILDE_LLAMA3_DAGGER
 
