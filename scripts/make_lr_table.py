@@ -55,6 +55,28 @@ METHODS = [
         ("0.3", "eprun_eval_ld_sig_lr0.3"),   # added to bracket the 0.1 peak against 1.0
         ("1.0", "eprun_eval_ld_sig_lr1.0"),
     ]),
+    # Node Pruning's rows in mib_results.tex are a SPARSITY sweep at ONE learning rate, so
+    # "Node Pruning underperforms \ourmethod{}" rested on its default LR being a good one.
+    # These two blocks close that gap (submit_node_pruning_lr.sh). Budgets s=0.5 and s=0.8 are
+    # the best and second-best logit-diff rows by Avg CPR, and they bracket the peak.
+    #
+    # The 0.8 row is the EXISTING default-LR run, not a new one: 0.8 is the hard-concrete
+    # default. That differs from the sigmoid default of 1e-3, so this grid is deliberately NOT
+    # the DBM grid -- each gate is swept around its own default rather than on a shared one.
+    ("Node Pruning ($s{=}0.5$, logit-diff)", [
+        ("0.1", "eprun_eval_s0.5_ld_lr0.1"),
+        ("0.3", "eprun_eval_s0.5_ld_lr0.3"),
+        ("0.8 (default)", "eprun_eval_s0.5_ld"),
+        ("1.5", "eprun_eval_s0.5_ld_lr1.5"),
+        ("3.0", "eprun_eval_s0.5_ld_lr3.0"),
+    ]),
+    ("Node Pruning ($s{=}0.8$, logit-diff)", [
+        ("0.1", "eprun_eval_s0.8_ld_lr0.1"),
+        ("0.3", "eprun_eval_s0.8_ld_lr0.3"),
+        ("0.8 (default)", "eprun_eval_s0.8_ld"),
+        ("1.5", "eprun_eval_s0.8_ld_lr1.5"),
+        ("3.0", "eprun_eval_s0.8_ld_lr3.0"),
+    ]),
 ]
 
 
