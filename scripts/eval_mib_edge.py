@@ -215,21 +215,49 @@ def main():
                 return act
             return hook
 
+        # One diff_stack per prev_index instead of one per destination hook. The q/k/v hooks of a
+        # layer share a prev_index and fire before any new source hook does, so the tensors they
+        # used to build were bit-identical -- yet autograd retained each separately. On llama3 a
+        # single stack is [batch, pos, prev, d_model]; at ARC's 63-106 tokens that is ~0.5 GB, and
+        # ~128 of them is ~35 GB on top of 16 GB of weights, which is exactly what made the ARC
+        # cells OOM at 79 GB while mcqa's 38 tokens fit. Caching is safe because clean_acts entries
+        # are write-once: whatever is available at one hook with a given prev_index is available
+        # and unchanged at every other. The dict lives in the per-batch scope alongside
+        # corrupted_acts/clean_acts, so it is rebuilt with them and never leaks across batches.
+        #
+        # Verified, not assumed. corrupted_acts is filled by a separate forward before this one, so
+        # only clean_acts could go stale; a 30-step gpt2/ioi run with an assert on every cache hit
+        # (cached stack must equal a freshly rebuilt one) never tripped it. The hoist does NOT
+        # reproduce the pre-hoist scores bit-for-bit: max |diff| 3.2e-04 on a 0.20 scale, mean
+        # 3.3e-06. The same code run twice against itself is exactly 0.0, so that gap is caused by
+        # this change -- specifically by the backward pass, where gradient into a shared clean_acts
+        # entry now sums inside one stack instead of arriving as three separate contributions.
+        # Forward values are unchanged (step-1 loss matches). Consequence worth knowing: re-running
+        # an EXISTING edge cell moves its scores at the ~1e-5 relative level, so a small drift in a
+        # re-run is this, not a regression.
+        stack_cache = {}
+
+        def diff_stack_for(prev_idx, n_pos, dtype):
+            cached = stack_cache.get(prev_idx)
+            if cached is not None:
+                return cached
+            diffs = []
+            for src_i in range(prev_idx):
+                if src_i in corrupted_acts:
+                    clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
+                    diffs.append(corrupted_acts[src_i] - clean)
+                else:
+                    diffs.append(torch.zeros(1, n_pos, d_model, device=device, dtype=dtype))
+            stack_cache[prev_idx] = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
+            return stack_cache[prev_idx]
+
         def make_dest_hook(dest_node, letter=None):
             prev_idx = graph.prev_index(dest_node)
             bwd_idx = graph.backward_index(dest_node, qkv=letter, attn_slice=True)
             weights = corruption_mask[:prev_idx, bwd_idx]  # [prev, ...] or [prev, n_heads]
 
             def hook(activations, hook):
-                diffs = []
-                for src_i in range(prev_idx):
-                    if src_i in corrupted_acts:
-                        clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
-                        diffs.append(corrupted_acts[src_i] - clean)
-                    else:
-                        diffs.append(torch.zeros(1, activations.shape[1], d_model,
-                                                 device=device, dtype=activations.dtype))
-                diff_stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
+                diff_stack = diff_stack_for(prev_idx, activations.shape[1], activations.dtype)
                 if weights.dim() == 1:
                     update = einsum(diff_stack, weights,
                                     'batch pos src hidden, src -> batch pos hidden')
