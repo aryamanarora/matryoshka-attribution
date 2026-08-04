@@ -11,6 +11,12 @@ A dir/cell with no circuit is reported and skipped -- that is a training gap, wh
 deliberately cannot paper over (see the printed TRAIN lines; scripts/submit_edge_arc_llama3.sh
 covers the edge ones).
 
+RUN IT AGAIN after any training wave lands. Each job bakes its --dirs list in at submit time,
+so a cell that had no circuit when this ran is a TRAIN line, not a job -- and stays missing
+until a second pass discovers it. Wait for the current wave to DRAIN first: gaps are detected
+by "no acc_auc on disk", which is still true for cells an already-queued job is about to fill,
+so re-running early duplicates work rather than extending it.
+
   uv run python scripts/submit_accauc_backfill.py            # submit
   DRYRUN=1 uv run python scripts/submit_accauc_backfill.py   # print the plan only
 """
