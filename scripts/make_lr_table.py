@@ -149,12 +149,21 @@ def main():
              "\\textbf{Method / LR} & \\textbf{Avg} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
              "\\midrule"]
 
-    for mi, entry in enumerate(METHODS):
+    emitted = 0
+    for entry in METHODS:
         method, lrs = entry[0], entry[1]
         prefix = entry[2] if len(entry) > 2 else "LR$=$"
-        if mi:
-            lines.append("\\midrule")
         data = {lr: {(t, m): cpr(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
+        # A block whose only populated row is the control (an existing run reused as the
+        # sweep's zero point) is not yet a sweep -- it would render as one row of numbers
+        # over four rows of "---". Skip it until a second point lands; it then appears on
+        # the next regeneration with no edit here.
+        if sum(any(v is not None for v in data[lr].values()) for lr, _ in lrs) < 2:
+            print(f"SKIP block {method!r}: <2 populated rows (jobs still pending)")
+            continue
+        if emitted:
+            lines.append("\\midrule")
+        emitted += 1
         best = {}
         for t, m, _ in COLUMNS:
             vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
