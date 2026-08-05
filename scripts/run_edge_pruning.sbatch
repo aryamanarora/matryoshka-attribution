@@ -25,6 +25,11 @@
 # LR=<x> (env var) overrides the mask learning rate and adds an _lr<x> suffix, e.g.
 # GATE=sigmoid LOSS=logit_diff LR=0.1 ... -> results/eprun_node_ld_sig_lr0.1/.
 #
+# L1=<x> (env var, GATE=sigmoid only) adds an L1 sparsity penalty of weight <x> on the gate
+# and an _l1<x> suffix; L1_TARGET=logit switches to pyvene's ||mask||_1 form. See
+# eval_mib_edge_pruning.py --l1-coeff. GATE=sigmoid LOSS=logit_diff LR=0.3 L1=0.5 ...
+# -> results/eprun_node_ld_sig_lr0.3_l10.5/.
+#
 # Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
 # Writes results/eprun_eval/EdgePruning_patching_<level>/<task-dash>_<model>_<split>_abs-False.pkl,
@@ -47,6 +52,11 @@ GATE=${GATE:-hard_concrete}
 # LR overrides the mask learning rate (default 0.8 hard_concrete / 1e-3 sigmoid) and adds an
 # _lr<LR> suffix. Different lr = different circuit, so it must not share a dir.
 LR=${LR:-}
+# L1 is the sigmoid gate's sparsity penalty weight. pyvene's library trains this mask with no
+# penalty at all, but its own tutorial for the class uses loss + 1.0*||mask||_1 -- so the
+# unpenalised runs are a choice we made, and this is the variant that closes that gap.
+L1=${L1:-}
+L1_TARGET=${L1_TARGET:-gate}
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -91,6 +101,18 @@ if [ -n "$LR" ]; then
 else
   LR_ARG=""
 fi
+# The penalty only exists for the sigmoid gate; hard_concrete's Lagrangian owns sparsity.
+if [ -n "$L1" ]; then
+  [ "$GATE" = "sigmoid" ] || { echo "L1=$L1 requires GATE=sigmoid (hard_concrete uses target_sparsity)"; exit 1; }
+  case "$L1_TARGET" in
+    gate)  SUF="${SUF}_l1${L1}" ;;
+    logit) SUF="${SUF}_l1logit${L1}" ;;
+    *) echo "L1_TARGET must be gate or logit, got $L1_TARGET"; exit 1 ;;
+  esac
+  L1_ARG="--l1-coeff $L1 --l1-target $L1_TARGET"
+else
+  L1_ARG=""
+fi
 OUT=$L2A/results/eprun_${LEVEL}${SUF}
 EVAL_OUT=$L2A/results/eprun_eval${SUF}
 GRAPH=$OUT/graph_${TASK}_${MODEL}.json
@@ -105,7 +127,7 @@ else
   PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
     scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
     --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $LR_ARG $SPARSITY_ARG --skip-eval
+    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $LR_ARG $L1_ARG $SPARSITY_ARG --skip-eval
 fi
 
 cd "$MIB"

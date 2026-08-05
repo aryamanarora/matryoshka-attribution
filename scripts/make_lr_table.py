@@ -22,7 +22,9 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama"),
 ]
 
-# method -> list of (lr-label, results-dir). lr=0.01 dirs are the main runs (all tasks).
+# method -> list of (lr-label, results-dir), optionally followed by the row-label prefix for
+# blocks that sweep something other than the learning rate (default "LR$=$").
+# lr=0.01 dirs are the main runs (all tasks).
 # MAttr headline = soft top-k fwd, log k; "+ hard" = sigmoid-STE hard forward.
 METHODS = [
     ("\\ourmethod{}", [
@@ -55,6 +57,27 @@ METHODS = [
         ("0.3", "eprun_eval_ld_sig_lr0.3"),   # added to bracket the 0.1 peak against 1.0
         ("1.0", "eprun_eval_ld_sig_lr1.0"),
     ]),
+    # DBM with the sparsity penalty it is normally trained with (submit_dbm_l1.sh). The rows
+    # above have none, which is faithful to the pyvene *library* but not to how pyvene trains
+    # this class: its own tutorial uses loss + 1.0*||mask||_1, and Boundless DAS uses
+    # 2.0*intervention_boundaries.sum(). The penalty here is Boundless DAS's -- coeff*z.mean(),
+    # i.e. L1 on the density -- because their `intervention_boundaries` scalar IS the density,
+    # so the constant transfers and 2.0 is a published default, not a guess. (The mask
+    # tutorial's ||mask||_1 penalises pre-sigmoid logits that init at 0, so it drives gates to
+    # z=0.5 -- toward the ~50% density the unpenalised rows already show. It cannot sparsify;
+    # L1_TARGET=logit runs it if we ever want that row.)
+    #
+    # Swept at lr=0.3, the best of the five DBM LRs by Avg CPR over all 11 cells, so the
+    # penalty is not confounded with a bad LR. The 0 row is the existing lr=0.3 run reused as
+    # the control, not a new job.
+    ("DBM $+$ L1 (lr $=$ 0.3)", [
+        ("0 (no penalty)", "eprun_eval_ld_sig_lr0.3"),
+        ("0.2", "eprun_eval_ld_sig_lr0.3_l10.2"),
+        ("0.6", "eprun_eval_ld_sig_lr0.3_l10.6"),
+        ("2.0 (Boundless DAS)", "eprun_eval_ld_sig_lr0.3_l12.0"),
+        ("6.0", "eprun_eval_ld_sig_lr0.3_l16.0"),
+        ("20.0", "eprun_eval_ld_sig_lr0.3_l120.0"),
+    ], "$\\lambda_{\\mathrm{L1}}{=}$"),
     # Node Pruning's rows in mib_results.tex are a SPARSITY sweep at ONE learning rate, so
     # "Node Pruning underperforms \ourmethod{}" rested on its default LR being a good one.
     # These two blocks close that gap (submit_node_pruning_lr.sh). Budgets s=0.5 and s=0.8 are
@@ -126,7 +149,9 @@ def main():
              "\\textbf{Method / LR} & \\textbf{Avg} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
              "\\midrule"]
 
-    for mi, (method, lrs) in enumerate(METHODS):
+    for mi, entry in enumerate(METHODS):
+        method, lrs = entry[0], entry[1]
+        prefix = entry[2] if len(entry) > 2 else "LR$=$"
         if mi:
             lines.append("\\midrule")
         data = {lr: {(t, m): cpr(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
@@ -145,7 +170,7 @@ def main():
                          bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
                          dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
                      for t, m, _ in COLUMNS]
-            lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
+            lines.append(f"\\quad {prefix}{lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
     lines.append("\\bottomrule")
     lines += ["\\end{tabular}", "\\end{adjustbox}"]

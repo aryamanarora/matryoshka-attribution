@@ -12,9 +12,11 @@ Denoising-only (mask=1 keeps clean, 0 patches corrupted), i.e. the `sufficient`
 intervention MIB CPR measures — Edge Pruning is inherently this intervention.
 
 ``--gate sigmoid`` swaps the mask parameterization for pyvene's SigmoidMaskIntervention
-(deterministic sigmoid gate, annealed temperature, no sparsity term) while keeping the same
-patching environment, task loss and step count — so the two rows differ only in how the mask
-is learned. See learning_to_attribute/edge_pruning.py:learn_scores_sigmoid_mask.
+(deterministic sigmoid gate, annealed temperature) while keeping the same patching
+environment, task loss and step count — so the two rows differ only in how the mask is
+learned. By default it carries no sparsity penalty (pyvene's library adds none); ``--l1-coeff``
+restores one, since pyvene's own tutorial for the class does. See
+learning_to_attribute/edge_pruning.py:learn_scores_sigmoid_mask.
 """
 
 import argparse
@@ -74,6 +76,18 @@ def main():
                              "pyvene's 1e-3 for sigmoid)")
     parser.add_argument("--reg-lr", type=float, default=0.8,
                         help="AdamW lr for the Lagrange multipliers (ascended)")
+    parser.add_argument("--l1-coeff", type=float, default=0.0,
+                        help="--gate sigmoid only: weight on an L1 sparsity penalty. pyvene's "
+                             "library adds none, but its own tutorial for this class trains it "
+                             "with loss + 1.0*||mask||_1, so 0 is a choice, not a given. "
+                             "Inert for --gate hard_concrete (the Lagrangian owns sparsity there).")
+    parser.add_argument("--l1-target", type=str, default="gate", choices=["gate", "logit"],
+                        help="What the L1 penalises. gate = coeff*z.mean() (L1 relaxation of "
+                             "L0; normalised so one coeff transfers across models). logit = "
+                             "coeff*||mask||_1, pyvene's tutorial term verbatim -- but since "
+                             "logits init at 0 that pulls gates toward z=0.5, i.e. toward the "
+                             "~50%% density the unpenalised runs already show. See "
+                             "edge_pruning.py:learn_scores_sigmoid_mask.")
     parser.add_argument("--target-sparsity", type=float, default=None,
                         help="Final sparsity target (default: 0.99 edge, 0.9 node)")
     parser.add_argument("--start-sparsity", type=float, default=0.0)
@@ -108,6 +122,9 @@ def main():
     parser.add_argument("--skip-eval", action="store_true",
                         help="Train and dump the circuit only; leave scoring to run_evaluation.py")
     args = parser.parse_args()
+    if args.l1_coeff and args.gate != "sigmoid":
+        parser.error("--l1-coeff applies to --gate sigmoid only; hard_concrete's Lagrangian "
+                     "already owns sparsity via --target-sparsity")
     if args.lr is None:
         args.lr = 0.8 if args.gate == "hard_concrete" else 1e-3
     if args.target_sparsity is None:
@@ -348,9 +365,11 @@ def main():
     loss_fn = edge_loss_fn if args.level == "edge" else node_loss_fn
     if args.gate == "sigmoid":
         logger.info("Training for %d steps (pyvene sigmoid mask, loss=%s, lr=%.3g, "
-                    "temp 50->0.1, no sparsity term)...", args.steps, args.loss, args.lr)
+                    "temp 50->0.1, l1=%.3g on %s)...", args.steps, args.loss, args.lr,
+                    args.l1_coeff, args.l1_target if args.l1_coeff else "n/a")
         result = learn_scores_sigmoid_mask(
             total, loss_fn, steps=args.steps, lr=args.lr,
+            l1_coeff=args.l1_coeff, l1_target=args.l1_target,
             device=device, logger=logger, log_every=50,
         )
     else:

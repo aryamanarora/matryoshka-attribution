@@ -185,6 +185,8 @@ def learn_scores_sigmoid_mask(
     init_temperature: float = 0.01,
     temperature_start: float = 50.0,
     temperature_end: float = 0.1,
+    l1_coeff: float = 0.0,
+    l1_target: str = "gate",
     device="cpu",
     on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
     log_every: int = 0,
@@ -198,7 +200,10 @@ def learn_scores_sigmoid_mask(
 
       - ``mask = nn.Parameter(torch.zeros(embed_dim))`` and gate ``z = sigmoid(mask / temp)``
         (``models/interventions.py:SigmoidMaskIntervention``). Deterministic — no concrete
-        noise — and no L0/Lagrangian term anywhere: the *only* loss is ``loss_fn(z)``.
+        noise — and no L0/Lagrangian term in the *library*: with ``l1_coeff=0`` (the default)
+        the only loss is ``loss_fn(z)``. See the ``l1_coeff`` note below before repeating the
+        claim that "pyvene has no sparsity term" — the library doesn't, but pyvene's own
+        tutorial for this class does.
       - temperature annealed ``torch.linspace(50.0, 0.1, steps).to(torch.bfloat16)``, read
         AFTER each ``optimizer.step()`` (``models/intervenable_base.py:train_alignment``), so
         step 0 runs at the intervention's own ``__init__`` temperature of 0.01 and step ``t``
@@ -213,6 +218,25 @@ def learn_scores_sigmoid_mask(
     mask; the baseline is usable in the MIB eval because the eval ranks units by score and
     sweeps sparsity itself.
 
+    ``l1_coeff > 0`` adds a penalty, which is what pyvene's *tutorial* for this class does
+    (``tutorials/advanced_tutorials/IOI_with_Mask_Intervention.ipynb``:
+    ``loss + coeff * torch.norm(v.mask, 1)`` at ``coeff=1``; Boundless DAS gets the same
+    treatment via ``2.0 * v.intervention_boundaries.sum()``, which is the L1 the paper
+    describes). Two targets, because they are not the same thing:
+
+      - ``l1_target="logit"`` is the tutorial's term verbatim, ``coeff * mask.abs().sum()``.
+        Beware: our logits init at 0 and the gate is ``sigmoid(mask/temp)``, so shrinking
+        ``|mask|`` drives every gate toward ``z=0.5``, i.e. toward ~50% density — the exact
+        band the unpenalised runs already sit in. It is a magnitude regulariser, not a
+        sparsity one. Kept for the "we ran pyvene's own term" row, not because it can sparsify.
+      - ``l1_target="gate"`` (default) is ``coeff * z.mean()``, the standard L1 relaxation of
+        L0 and the term that actually pushes density down. Normalised by ``total`` so one
+        coefficient means the same thing across the 156--1056 gates of different MIB models;
+        pyvene does not normalise because it masks one 768-dim site.
+
+    Either way the penalty is excluded from ``loss_log``/the logged ``task=`` figure, so those
+    stay comparable with the ``l1_coeff=0`` runs.
+
     In pyvene ``temperature`` is an ``nn.Parameter``, but the forward reads it through
     ``torch.tensor(self.temperature)``, which detaches — so it never receives gradient and is
     only ever written by the scheduler. It is a plain buffer here, which is what it is there.
@@ -221,6 +245,9 @@ def learn_scores_sigmoid_mask(
     clean, matching the log-alpha convention above).
     """
     from transformers import get_linear_schedule_with_warmup
+
+    if l1_target not in ("gate", "logit"):
+        raise ValueError(f"l1_target must be 'gate' or 'logit', got {l1_target!r}")
 
     mask = nn.Parameter(torch.full((total,), init_value, device=device))
     optimizer = torch.optim.Adam([mask], lr=lr)
@@ -240,13 +267,19 @@ def learn_scores_sigmoid_mask(
             scheduler.step()               # keep the lr schedule aligned with `step`
             temperature = temperature_schedule[step]
             continue
-        task_loss.backward()
+        if l1_coeff:
+            penalty = l1_coeff * (z.mean() if l1_target == "gate" else mask.abs().sum())
+            pen_val = float(penalty.item())
+            (task_loss + penalty).backward()
+        else:
+            pen_val = 0.0
+            task_loss.backward()
         optimizer.step()
         scheduler.step()
         temperature = temperature_schedule[step]   # theirs: set after the step, index total_step
 
         kept = float(z.detach().sum().item())
-        loss_val = float(task_loss.item())
+        loss_val = float(task_loss.item())      # task only -- comparable across l1_coeff
         result.loss_log.append(loss_val)
         result.k_log.append(kept)
         result.train_log.append((step, kept, kept / total, loss_val, 0))
@@ -255,9 +288,10 @@ def learn_scores_sigmoid_mask(
         if log_every and logger is not None and ((step + 1) % log_every == 0 or step == 0):
             rate = (step + 1) / (time.time() - t0)
             logger.info(
-                "Step %4d/%d  task=%.4f  soft-kept=%.1f/%d  temp=%.3g  mask[min/mean/max]="
-                "%.3f/%.3f/%.3f  (%.1f step/s)",
-                step + 1, steps, loss_val, kept, total, float(temperature),
+                "Step %4d/%d  task=%.4f  l1=%.4f  soft-kept=%.1f/%d (density %.3f)  temp=%.3g  "
+                "mask[min/mean/max]=%.3f/%.3f/%.3f  (%.1f step/s)",
+                step + 1, steps, loss_val, pen_val, kept, total, kept / total,
+                float(temperature),
                 float(mask.min()), float(mask.mean()), float(mask.max()), rate)
 
     result.train_time_s = time.time() - t0
