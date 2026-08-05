@@ -369,6 +369,120 @@ def main_full():
           f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
 
 
+def main_full_edge():
+    """--full --edge: the same two metrics at EDGE level, full page, every point named.
+
+    Why this is a separate function and not a `level` argument to main_full(): almost nothing
+    it does survives the switch. There is no Edge Pruning or DBM at edge level (no
+    results/*/EdgePruning_patching_edge anywhere on disk), so the two sparsity paths and the
+    DBM series vanish; there are no edge lr sweeps, so build_lr_rows has nothing to draw; and
+    the single gradient baseline reads from eapig_repro_accauc, a dir the node reader knows
+    nothing about. What is left is the shared theme, delatex() and repel().
+
+    That leaves 8 points -- 7 MAttr variants + EAP-IG-inp -- against the node figure's 32. It
+    is thin, and the honest reading is that this is a scatter of ONE baseline against our own
+    ablations, not a survey. It earns its place anyway because of where that one baseline
+    lands: see the rho printed at the end.
+    """
+    import matplotlib.pyplot as plt
+    from scipy.stats import spearmanr
+
+    plt.rcParams.update({
+        "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
+        "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
+        "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
+        "pdf.fonttype": 42, "text.color": "#000000",
+        "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
+    })
+
+    def edge_pair_avg(dirn):
+        pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
+        acc = [a for a, _ in pairs if a is not None]
+        cpr = [c for _, c in pairs if c is not None]
+        return acc, cpr
+
+    rows = []
+    # Same completeness bar as build_lr_rows: 11/11 on BOTH axes, because every point here is a
+    # mean over cells and a 3-cell mean is not comparable to an 11-cell one. UGS is the casualty
+    # (3/11 -- it only runs on gpt2/qwen2.5 ioi + mcqa), so the edge figure has exactly one
+    # non-MAttr point. That is a property of the baseline, not an omission; it is printed below.
+    EDGE_BASELINES = [("EAP-IG-inp", "eapig_repro_accauc", G_GRAD),
+                      ("UGS", "ugs_eval", G_GRAD)]
+    for disp, dirn, grp in EDGE_BASELINES:
+        acc, cpr = edge_pair_avg(dirn)
+        if len(acc) < len(COLS) or len(cpr) < len(COLS):
+            print(f"  skip {disp} ({dirn}): acc {len(acc)}/{len(COLS)}, cpr {len(cpr)}/"
+                  f"{len(COLS)} -- incomplete", file=sys.stderr)
+            continue
+        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
+                         label=delatex(disp)))
+    for name, d, level, g in M.OUR_METHODS:
+        if level != "edge":
+            continue
+        acc, cpr = edge_pair_avg(d)
+        if len(acc) < len(COLS) or len(cpr) < len(COLS):
+            print(f"  skip {delatex(name)} ({d}): acc {len(acc)}/{len(COLS)}, cpr "
+                  f"{len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
+            continue
+        # "$+$ hard" and "$+$ id-STE" each appear twice in OUR_METHODS -- once log-k, once
+        # uniform-k -- and the table disambiguates them by which block they sit in. A scatter
+        # has no blocks, so the uniform ones carry the prefix the table's row label would.
+        label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
+        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
+                         grp=G_MLOG if g == "ours" else G_MUNI, label=label))
+
+    df = pd.DataFrame(rows)
+
+    fig, ax = plt.subplots(figsize=(5.4, 6.9))
+    for grp in FULL_ORDER:
+        sub = df[df.grp == grp]
+        if not len(sub):
+            continue
+        ax.scatter(sub.acc, sub.cpr, s=46,
+                   marker=FAMILY_SHAPE[MASK if grp in FULL_MASK else GRADIENT],
+                   c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
+                   label=grp)
+
+    xr, yr = ax.get_xlim(), ax.get_ylim()
+    xr = (xr[0], xr[1] + 0.22 * (xr[1] - xr[0]))
+    ax.set_xlim(xr)
+    lx, ly = repel(df.acc.values, df.cpr.values, df.label.tolist(), xr, yr)
+    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
+        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
+        ax.annotate(lab, (lxi, lyi), fontsize=6.5, va="center", ha="left",
+                    color=FULL_COLORS[grp], zorder=4,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
+    ax.set_ylim(yr)
+    ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
+    ax.set_ylabel("CPR AUC (↑)", fontsize=9)
+    ax.tick_params(labelsize=8)
+    ax.grid(True, lw=0.25, color="#dddddd")
+    ax.set_axisbelow(True)
+    for sp in ax.spines.values():
+        sp.set_linewidth(0.5)
+    ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
+              borderpad=0.5, handletextpad=0.4)
+    fig.tight_layout()
+    out = "plots/mib_accauc_cpr_scatter_edge_full.pdf"
+    fig.savefig(out, dpi=300)
+
+    # Three rhos, because one would be misleading. "+hard bwd" (REINFORCE) sits at the origin
+    # on BOTH axes -- it is the collapsed run, not a point on the trade-off -- and a single
+    # far outlier consistent on both axes manufactures a high rank correlation on its own.
+    # Dropping it is what shows whether the remaining points agree at all.
+    nb = df[df.label != "+hard bwd"]
+    om = df[df.grp != G_GRAD]
+    print(f"wrote {out} ({len(df)} points)")
+    print(f"Spearman rho: {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
+          f"{spearmanr(nb.acc, nb.cpr)[0]:.3f} (excl. +hard bwd, {len(nb)}), "
+          f"{spearmanr(om.acc, om.cpr)[0]:.3f} (MAttr only, {len(om)})")
+    g = df[df.grp == G_GRAD]
+    if len(g):
+        print(f"EAP-IG-inp at acc={g.acc.iloc[0]:.3f} cpr={g.cpr.iloc[0]:.2f}; "
+              f"MAttr variants span acc {om.acc.min():.3f}-{om.acc.max():.3f}, "
+              f"cpr {om.cpr.min():.2f}-{om.cpr.max():.2f}")
+
+
 def main():
     rows = []
     # gradient baselines (all kept; IG / I×G highlighted, rest grey)
@@ -449,4 +563,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main_full() if "--full" in sys.argv else main()
+    if "--edge" in sys.argv:
+        main_full_edge()      # always full-page; there is no compact edge variant
+    elif "--full" in sys.argv:
+        main_full()
+    else:
+        main()
