@@ -146,12 +146,25 @@ LR_SERIES = [
     (G_MLOG, "+hard", [("0.005", "htklog_lr_0.005"), ("0.1", "htklog_lr_0.1"),
                        ("0.3", "htklog_lr_0.3")]),
     (G_DBM, "DBM", [("0.001", "eprun_eval_ld_sig"), ("0.3", "eprun_eval_ld_sig_lr0.3")]),
+    # Node Pruning was swept on LR too (submit_node_pruning_lr.sh), at its two best logit-diff
+    # budgets. Without these the indigo cloud is a pure SPARSITY sweep, which quietly credits
+    # the baseline's single default LR (0.8, the hard-concrete default) with being a good one.
+    # lr=1.5 (8/11) and lr=3.0 (3/11) are still filling and drop out on the completeness bar.
+    (G_NPLD, "NP s=0.5", [("0.1", "eprun_eval_s0.5_ld_lr0.1"), ("0.3", "eprun_eval_s0.5_ld_lr0.3"),
+                          ("1.5", "eprun_eval_s0.5_ld_lr1.5"), ("3.0", "eprun_eval_s0.5_ld_lr3.0")]),
+    (G_NPLD, "NP s=0.8", [("0.1", "eprun_eval_s0.8_ld_lr0.1"), ("0.3", "eprun_eval_s0.8_ld_lr0.3"),
+                          ("1.5", "eprun_eval_s0.8_ld_lr1.5"), ("3.0", "eprun_eval_s0.8_ld_lr3.0")]),
 ]
 
 # The lr=0.05 headline points come from M.OUR_METHODS (see above), so to draw one unbroken
 # path per method they have to be tagged into the same series as the swept points -- otherwise
 # the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
 LR_ANCHOR = {"topklog_lr_0.05": ("MAttr", 0.05), "htklog_lr_0.05": ("+hard", 0.05)}
+# Same trick for Node Pruning, except the anchor is a point that ALREADY sits on another path:
+# eprun_eval_s0.5_ld is the s=0.5 node of the sparsity path AND the lr=0.8 node of its own LR
+# path. That is why rows carry a list of (path, sort-key) pairs rather than one of each.
+EPRUN_LR_ANCHOR = {"eprun_eval_s0.5_ld": ("NP s=0.5", 0.8),
+                   "eprun_eval_s0.8_ld": ("NP s=0.8", 0.8)}
 
 
 def _pair(dirn, t, m):
@@ -200,7 +213,7 @@ def build_lr_rows(series=LR_SERIES, level="node"):
                       f"cpr {len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
                 continue
             rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
-                             label=f"{base} lr={lr}", path=f"lr:{base}", s=float(lr)))
+                             label=f"{base} lr={lr}", paths=[(f"lr:{base}", float(lr))]))
     return rows
 
 
@@ -284,7 +297,7 @@ def main_full():
         dn, subn = BASE_CPR[disp]
         cpr = avg(cpr_base(dn, subn))
         if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD, label=delatex(disp), path=None, s=0))
+            rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD, label=delatex(disp), paths=[]))
     for name, d, level, g in M.OUR_METHODS:
         if level != "node":
             continue
@@ -295,7 +308,8 @@ def main_full():
             continue
         base, lr = LR_ANCHOR.get(d, (None, 0.0))
         rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
-                         label=delatex(name), path=f"lr:{base}" if base else None, s=lr))
+                         label=delatex(name),
+                         paths=[(f"lr:{base}", lr)] if base else []))
     # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
     for label, dirn in M.EPRUN_SPARSITIES:
         sub = "EdgePruning_patching_node"
@@ -307,10 +321,13 @@ def main_full():
             print(f"  skip {dirn}: acc={acc} cpr={cpr}", file=sys.stderr)
             continue
         ld = "logit-diff" in label
+        paths = [("ld" if ld else "kl",
+                  float(delatex(label).split("s=")[1].split(",")[0]))]
+        if dirn in EPRUN_LR_ANCHOR:           # also the lr=0.8 node of its own LR path
+            b, lr = EPRUN_LR_ANCHOR[dirn]
+            paths.append((f"lr:{b}", lr))
         rows.append(dict(acc=acc, cpr=cpr, grp=G_NPLD if ld else G_NPKL,
-                         label=delatex(label).replace(", logit-diff", ""),
-                         path="ld" if ld else "kl",
-                         s=float(delatex(label).split("s=")[1].split(",")[0])))
+                         label=delatex(label).replace(", logit-diff", ""), paths=paths))
     # every complete swept lr, incl. both complete DBM points (the only DBM source here)
     rows += build_lr_rows()
 
@@ -322,11 +339,18 @@ def main_full():
     # sparse-ward ("kl"/"ld"), and each swept method ordered by learning rate ("lr:<method>").
     # Same visual language for both because they are the same statement -- points joined by a
     # line differ only in ONE hyperparameter, so the line's direction is the sensitivity to it.
-    for key in [k for k in df.path.dropna().unique()]:
-        sub = df[df.path == key].sort_values("s")
-        if len(sub) > 1:
-            ax.plot(sub.acc, sub.cpr, ls="dashed", lw=0.7, alpha=0.55, zorder=1,
-                    color=FULL_COLORS[sub.grp.iloc[0]])
+    # A point may belong to more than one series (eprun_eval_s0.5_ld is both the s=0.5 node of
+    # the sparsity path and the lr=0.8 node of its LR path), so paths are collected off the raw
+    # rows rather than by grouping the frame on a single column.
+    segs = {}
+    for r in rows:
+        for key, sval in r["paths"]:
+            segs.setdefault(key, []).append((sval, r["acc"], r["cpr"], r["grp"]))
+    for key, pts in segs.items():
+        pts.sort()
+        if len(pts) > 1:
+            ax.plot([p[1] for p in pts], [p[2] for p in pts], ls="dashed", lw=0.7,
+                    alpha=0.55, zorder=1, color=FULL_COLORS[pts[0][3]])
     for grp in FULL_ORDER:
         sub = df[df.grp == grp]
         if not len(sub):
