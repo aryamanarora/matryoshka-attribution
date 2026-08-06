@@ -97,6 +97,19 @@ import make_mib_table as _M   # noqa: E402  (label/dir are defined there, one so
 NODE_PRUNING = (_M.eprun_label("node", _M.EPRUN_BEST_SPARSITY[0]),
                 _M.EPRUN_BEST_SPARSITY[1], "EdgePruning_patching_node")
 
+# Gradient node baselines WE ran (unlike the NODE_BASELINES literals above, which are
+# transcribed from MIB's Table 1). Same circuits as the validation table -- both methods
+# attribute on the train split, so the test pass is eval-only and the circuit is unchanged
+# across the two splits (MIB-circuit-track/run_gim_relpqk_test.sh).
+#
+# These carry the same harness caveat as the Node Pruning row: they are scored by MIB's
+# run_evaluation.py while the \ourmethod{} rows come from our eval_mib.py, and the two do not
+# agree cell-for-cell (worst on Gemma). A small gap either way is inside harness noise.
+GRAD_NODE_BASELINES = [
+    ("GIM",      "gim_eval",         "GIM_patching_node"),
+    ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
+]
+
 
 def load_run_eval_cpr(results_dir, sub, task, model):
     """CPR AUC from a run_evaluation.py output pkl (baseline layout, dashed task names)."""
@@ -155,6 +168,23 @@ def main():
         print(f"WARNING: {np_name} has {len(node_pruning)}/{len(COLUMNS)} test cells; "
               f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in node_pruning]}")
 
+    # GIM / RelP+QK, same loader and same "no cells -> no row" rule as Node Pruning: a row of
+    # eleven dashes reads as "the method scored nothing", not "the jobs have not landed yet".
+    grad_nodes = {}
+    for name, d, sub in GRAD_NODE_BASELINES:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_run_eval_cpr(d, sub, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        if not data:
+            print(f"SKIP {name}: no test cells in results/{d}/{sub} (jobs still pending)")
+            continue
+        if len(data) < len(COLUMNS):
+            print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
+                  f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in data]}")
+        grad_nodes[name] = data
+
     ours_edges = {}
     for name, d in OUR_EDGE_METHODS:
         data = {}
@@ -184,7 +214,8 @@ def main():
         return best, second
 
     best_node, second_node = find_best(NODE_BASELINES,
-                                       list(mask_nodes.values()) + list(ours_nodes.values()))
+                                       list(grad_nodes.values()) + list(mask_nodes.values())
+                                       + list(ours_nodes.values()))
     best_edge, second_edge = find_best(EDGE_BASELINES, list(ours_edges.values()))
 
     def row_avg(data):
@@ -231,10 +262,15 @@ def main():
     # Node level
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
-    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(mask_nodes.values())
-                                  + list(ours_nodes.values()))
+    navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(grad_nodes.values())
+                                  + list(mask_nodes.values()) + list(ours_nodes.values()))
     for name, data in NODE_BASELINES.items():
         lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+    for name, data in grad_nodes.items():
+        # Same Avg rule as the mask rows below: every node cell exists, so a gap is an
+        # unfinished job rather than something the method cannot do.
+        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs,
+                              suppress_avg=len(data) < len(COLUMNS)))
     for name, data in mask_nodes.items():
         # Node level has all 11 cells, so anything missing here is an unfinished job rather
         # than a cell the method cannot do -- dash the Avg until the sweep completes.
