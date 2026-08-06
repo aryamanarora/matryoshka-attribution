@@ -110,7 +110,7 @@ BASE_CPR = {
 # audit trail behind that answer, and is where the disagreement (Node Pruning's two objectives
 # ranking their own budgets in opposite directions) is actually legible.
 #
-# Colour here means GROUP, not method -- 32 points cannot carry 32 hues, and the direct labels
+# Colour here means GROUP, not method -- ~50 points cannot carry ~50 hues, and the direct labels
 # already give identity. Shape still splits gradient vs mask learning, as in the compact figure.
 G_MLOG, G_MUNI = "MAttr (log $k$)", "MAttr (unif. $k$)"
 G_GRAD, G_NPKL, G_NPLD = "Gradient baseline", "Node Pruning (KL)", "Node Pruning (logit-diff)"
@@ -156,6 +156,29 @@ LR_SERIES = [
                           ("1.5", "eprun_eval_s0.8_ld_lr1.5"), ("3.0", "eprun_eval_s0.8_ld_lr3.0")]),
 ]
 
+# === DBM sparsity-penalty series ===
+# The DBM points above are trained with NO sparsity term, which is why they sit in a narrow
+# density band whatever the lr; submit_dbm_l1.sh adds the L1 that pyvene's own tutorial (and
+# Boundless DAS) trains this mask with. Plotted as a second dashed path off the same lr=0.3
+# point, so the figure separates the two knobs: the "lr:DBM" path is "tune the optimiser", the
+# "l1:DBM" path is "give the baseline a sparsity objective at its best lr".
+#
+# Same completeness bar as everything else here -- as of 2026-08-06 that admits lambda=0.2 and
+# 0.6 and excludes 2.0 (9/11), 6.0 (6/11) and 20.0 (0/11), which are still on the cluster.
+# build_lr_rows prints each exclusion, so a lambda missing from the figure is never silent.
+L1_SERIES = [
+    (G_DBM, "DBM", [("0.2", "eprun_eval_ld_sig_lr0.3_l10.2"),
+                    ("0.6", "eprun_eval_ld_sig_lr0.3_l10.6"),
+                    ("2.0", "eprun_eval_ld_sig_lr0.3_l12.0"),
+                    ("6.0", "eprun_eval_ld_sig_lr0.3_l16.0"),
+                    ("20.0", "eprun_eval_ld_sig_lr0.3_l120.0")]),
+]
+
+# lambda=0 IS the unpenalised lr=0.3 run, already plotted by the LR series -- the same trick as
+# EPRUN_LR_ANCHOR below. Without this the L1 path floats free of the point it departs from and
+# the figure cannot show whether the penalty helped relative to no penalty.
+DBM_L1_ANCHOR = {"eprun_eval_ld_sig_lr0.3": ("l1:DBM", 0.0)}
+
 # The lr=0.05 headline points come from M.OUR_METHODS (see above), so to draw one unbroken
 # path per method they have to be tagged into the same series as the swept points -- otherwise
 # the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
@@ -196,31 +219,38 @@ def _pair(dirn, t, m):
     return acc, r.get("area_under")
 
 
-def build_lr_rows(series=LR_SERIES, level="node"):
-    """Points for every swept lr whose dir is complete on BOTH metrics.
+def build_lr_rows(series=LR_SERIES, level="node", key="lr", knob="lr"):
+    """Points for every swept value of one hyperparameter whose dir is complete on BOTH metrics.
 
-    Incomplete dirs are skipped WITH a printed reason -- an lr silently missing from the
-    figure looks like an lr we never ran, which is the one thing this figure must not imply.
+    `key` names the dashed path the points join ("lr" or "l1"); `knob` is what the label says.
+    They are separate arguments only because a point can sit on more than one path, and the path
+    key is what identifies it there.
+
+    Incomplete dirs are skipped WITH a printed reason -- a swept value silently missing from the
+    figure looks like one we never ran, which is the one thing this figure must not imply.
     """
     rows = []
-    for grp, base, lrs in series:
-        for lr, dirn in lrs:
+    for grp, base, vals in series:
+        for v, dirn in vals:
             pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
             acc = [a for a, _ in pairs if a is not None]
             cpr = [c for _, c in pairs if c is not None]
             if len(acc) < len(COLS) or len(cpr) < len(COLS):
-                print(f"  skip {base} lr={lr} ({dirn}): acc {len(acc)}/{len(COLS)}, "
+                print(f"  skip {base} {knob}={v} ({dirn}): acc {len(acc)}/{len(COLS)}, "
                       f"cpr {len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
                 continue
+            paths = [(f"{key}:{base}", float(v))]
+            if dirn in DBM_L1_ANCHOR:      # unpenalised lr=0.3 run = the L1 path's lambda=0 node
+                paths.append(DBM_L1_ANCHOR[dirn])
             rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
-                             label=f"{base} lr={lr}", paths=[(f"lr:{base}", float(lr))]))
+                             label=f"{base} {knob}={v}", paths=paths))
     return rows
 
 
 def delatex(s):
     """Table label -> matplotlib point label. Math mode survives only where it carries meaning
-    (the $c_k$ subscript); everything else is flattened, because repel() estimates label width
-    from the character count and every stray $..$ makes that estimate worse."""
+    (the $c_k$ subscript and the "unif $k$" prefix); everything else is flattened, because a
+    stray $..$ buys nothing and mathtext sets a different face from the surrounding label."""
     s = re.sub(r"\$s\{=\}([\d.]+)\$", r"s=\1", s)
     for a, b in ((r"\ourmethod{}", "MAttr"), (r"$+$ ", "+"), (r"$-$ $c_k$", "$-c_k$"),
                  (r"$\times$", "x")):
@@ -228,21 +258,58 @@ def delatex(s):
     return s.strip()
 
 
-# normalized-axes label geometry for 6.5pt text in a 5.4x6.9in figure
-DX, CHAR_W, LAB_H, MARK_R = 0.016, 0.0092, 0.021, 0.011
+# Figure size. Both full-page variants go in at width=\\linewidth (~5.5in), so the width is
+# fixed and the HEIGHT is the only free parameter -- and height is what buys label room, since
+# the binding constraint at ~50 points is vertical crowding, not horizontal (measured: widening
+# XPAD from 0.34 to 0.60 changes the residual overlap count by one, raising FIG_H from 6.9 to
+# 8.4 removes a third of them). 8.4in renders at ~8.5in after the width scale-up, which still
+# leaves room for the caption inside ICLR's ~9in text height.
+FIG_W, FIG_H = 5.4, 8.4
+
+# normalized-axes label geometry. Widths are MEASURED, not estimated (see label_boxes) -- the
+# old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
+# clean layout while "MAttr" and "+id-STE" visibly sat on top of each other in the PDF.
+LAB_PT = 6.5
+DX, MARK_R = 0.016, 0.011
+# Blank space added to the right of the data as a fraction of the x range, for the labels.
+XPAD = 0.34
 
 
-def repel(x, y, labels, xr, yr, n=900):
+def label_boxes(ax, labels, fig):
+    """(widths, height) of each rendered label in axes-fraction units.
+
+    Draws each annotation with the exact fontsize/bbox the real call uses, measures it through
+    the renderer, and removes it. Costs one throwaway draw of ~50 short strings and removes the
+    only calibration constant in this file: nothing here has to be re-tuned when the font, the
+    figure size or a label's text changes.
+    """
+    r = fig.canvas.get_renderer()
+    axb = ax.get_window_extent(renderer=r)
+    ws, hs = [], []
+    for lab in labels:
+        t = ax.annotate(lab, (0.5, 0.5), fontsize=LAB_PT, va="center", ha="left",
+                        bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none"))
+        bb = t.get_window_extent(renderer=r)
+        ws.append(bb.width / axb.width)
+        hs.append(bb.height / axb.height)
+        t.remove()
+    return np.array(ws), float(max(hs))
+
+
+def repel(x, y, w, lab_h, xr, yr, n=900):
     """Label de-overlap by rectangle separation in normalized [0,1]^2 axes space (adjustText is
     not installed here, and a Gaussian point-repulsion does not converge on this figure -- the
     long labels like "+id-STE, Gumbel sel." are ~10x wider than tall, so what matters is BOX
     overlap, not centre distance). Each label is a box anchored right of its marker; overlapping
     boxes are pushed apart along whichever axis needs the smaller move, labels are also pushed
     off markers, and a weak spring pulls each back to its anchor. Leader lines make any residual
-    drift unambiguous. Deterministic -- no RNG, so the figure is reproducible."""
+    drift unambiguous. Deterministic -- no RNG, so the figure is reproducible.
+
+    `w` are the measured label widths and `lab_h` the label height, both axes-fraction
+    (label_boxes)."""
     ax = (np.asarray(x) - xr[0]) / (xr[1] - xr[0])
     ay = (np.asarray(y) - yr[0]) / (yr[1] - yr[0])
-    w = np.array([len(s.replace("$", "")) * CHAR_W for s in labels])
+    LAB_H = lab_h
     lx, ly = ax + DX, ay.copy()
     for _ in range(n):
         # half-extents of the pair boxes (labels are left-anchored, so x-centre = lx + w/2)
@@ -267,6 +334,40 @@ def repel(x, y, labels, xr, yr, n=900):
         lx += 0.28 * px + 0.05 * (ax + DX - lx)
         ly += 0.28 * py + 0.05 * (ay - ly)
         ly = np.clip(ly, LAB_H / 2, 1 - LAB_H / 2)
+
+    # Greedy sweep to finish the job. The simultaneous update above stalls at a handful of
+    # residual overlaps no matter how long it runs (measured: identical at n=900, 3000 and 8000)
+    # because a label sandwiched between two others receives equal and opposite pushes that
+    # cancel exactly. Placing labels one at a time, bottom-up, cannot hit that symmetry: each
+    # label only ever moves against boxes already fixed. It is what takes the count to 0.
+    # Markers are obstacles too, and fixed ones -- a label that clears every other label but
+    # sits on a marker is just as unreadable, and that was the failure left in the dense lr=0.05
+    # cluster. Each label scans a ladder of offsets around where the relaxation left it and takes
+    # the first slot that clears BOTH sets of obstacles, rather than being nudged off whichever
+    # one it currently touches: nudging can cycle (clear the label, land on a marker, clear the
+    # marker, land back on the label), and did, on the edge figure's tight upper-right cluster.
+    sep = LAB_H / 2 + MARK_R
+    ladder = [0.0] + [s * d * LAB_H * 0.6 for s in range(1, 40) for d in (1, -1)]
+    order = np.argsort(ly)
+    placed = []
+    for i in order:
+        y0, ci = ly[i], lx[i] + w[i] / 2
+        best, best_cost = y0, None
+        for off in ladder:
+            cand = y0 + off
+            cost = sum(1 for j in placed
+                       if abs(ci - (lx[j] + w[j] / 2)) < (w[i] + w[j]) / 2
+                       and abs(cand - ly[j]) < LAB_H)
+            cost += sum(1 for j in range(len(ax))
+                        if abs(ci - ax[j]) < w[i] / 2 + MARK_R and abs(cand - ay[j]) < sep)
+            if cost == 0:
+                best = cand
+                break
+            if best_cost is None or cost < best_cost:   # fall back to the least-bad slot
+                best, best_cost = cand, cost
+        ly[i] = best
+        placed.append(i)
+    ly = np.clip(ly, LAB_H / 2, 1 - LAB_H / 2)
     return lx * (xr[1] - xr[0]) + xr[0], ly * (yr[1] - yr[0]) + yr[0]
 
 
@@ -307,8 +408,15 @@ def main_full():
             print(f"  skip {d}: acc={acc} cpr={cpr}", file=sys.stderr)
             continue
         base, lr = LR_ANCHOR.get(d, (None, 0.0))
+        # Every ablation name in OUR_METHODS appears TWICE -- once in the log-k block, once in
+        # the uniform-k block -- and the table tells them apart by which block the row sits in.
+        # A scatter has no blocks, so without this prefix the figure carries two points labelled
+        # "MAttr" and two labelled "+hard" whose only distinction is a legend colour. Same fix
+        # as main_full_edge(). It became load-bearing when the uniform rows were repointed to
+        # the lr=0.05 dirs, which put both copies of each name at plotted-and-complete status.
+        label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
         rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
-                         label=delatex(name),
+                         label=label,
                          paths=[(f"lr:{base}", lr)] if base else []))
     # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
     for label, dirn in M.EPRUN_SPARSITIES:
@@ -330,11 +438,13 @@ def main_full():
                          label=delatex(label).replace(", logit-diff", ""), paths=paths))
     # every complete swept lr, incl. both complete DBM points (the only DBM source here)
     rows += build_lr_rows()
+    # ...and the DBM sparsity-penalty sweep at that best lr ("L1=" rather than "lr=")
+    rows += build_lr_rows(L1_SERIES, key="l1", knob="L1")
 
     df = pd.DataFrame(rows)
     df["fam"] = np.where(df.grp.isin(FULL_MASK), MASK, GRADIENT)
 
-    fig, ax = plt.subplots(figsize=(5.4, 6.9))
+    fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
     # Dashed guides through every ordered series: the two Node Pruning objectives ordered
     # sparse-ward ("kl"/"ld"), and each swept method ordered by learning rate ("lr:<method>").
     # Same visual language for both because they are the same statement -- points joined by a
@@ -361,12 +471,16 @@ def main_full():
                    label=grp)
 
     xr, yr = ax.get_xlim(), ax.get_ylim()
-    xr = (xr[0], xr[1] + 0.22 * (xr[1] - xr[0]))    # room for labels on the right
+    # Room for labels on the right. 0.22 was enough at 32 points; the "unif k, " prefix and the
+    # DBM L1 points push the widest labels past the frame at that value, and repel() has nowhere
+    # to send the seven-deep blue cluster at acc~0.47 when its boxes are already at the edge.
+    xr = (xr[0], xr[1] + XPAD * (xr[1] - xr[0]))
     ax.set_xlim(xr)
-    lx, ly = repel(df.acc.values, df.cpr.values, df.label.tolist(), xr, yr)
+    lw_, lh_ = label_boxes(ax, df.label.tolist(), fig)
+    lx, ly = repel(df.acc.values, df.cpr.values, lw_, lh_, xr, yr)
     for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
         ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
-        ax.annotate(lab, (lxi, lyi), fontsize=6.5, va="center", ha="left",
+        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
                     color=FULL_COLORS[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
     ax.set_ylim(yr)
@@ -457,7 +571,7 @@ def main_full_edge():
 
     df = pd.DataFrame(rows)
 
-    fig, ax = plt.subplots(figsize=(5.4, 6.9))
+    fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
     for grp in FULL_ORDER:
         sub = df[df.grp == grp]
         if not len(sub):
@@ -470,10 +584,11 @@ def main_full_edge():
     xr, yr = ax.get_xlim(), ax.get_ylim()
     xr = (xr[0], xr[1] + 0.22 * (xr[1] - xr[0]))
     ax.set_xlim(xr)
-    lx, ly = repel(df.acc.values, df.cpr.values, df.label.tolist(), xr, yr)
+    lw_, lh_ = label_boxes(ax, df.label.tolist(), fig)
+    lx, ly = repel(df.acc.values, df.cpr.values, lw_, lh_, xr, yr)
     for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
         ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
-        ax.annotate(lab, (lxi, lyi), fontsize=6.5, va="center", ha="left",
+        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
                     color=FULL_COLORS[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
     ax.set_ylim(yr)
