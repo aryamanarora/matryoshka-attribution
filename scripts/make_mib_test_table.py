@@ -64,17 +64,24 @@ EDGE_BASELINES = {
     },
 }
 
-# Our method on test set (train on train, eval on test). The 3 headline MAttr variants at
-# lr=0.05 (best LR from the sweep): (display name, node results dir).
-OUR_NODE_METHODS = [   # MAttr = soft top-k fwd, log k; "+ hard" = sigmoid-STE hard forward
-    ("\\ourmethod{}",                  "test_node_topk_log_lr05"),
-    ("$+$ hard",                       "test_node_hard_topk_log_lr05"),
-    ("$+$ unif $k$, $+$ hard",         "test_node_hard_topk_uniform_lr05"),
+# Our method on test set (train on train, eval on test), at lr=0.05 (best LR from the sweep).
+#
+# SOFT FORWARD ONLY. The hard sigmoid-STE variants (test_*_hard_topk_*_lr05) are deliberately
+# not here: the headline method is the soft forward, and the hard forward is an ablation whose
+# place is the validation tables, which carry the full ablation grid. They stay on disk and in
+# make_mib_table.py -- dropping them here removes two rows from one table, not any result.
+#
+# So the test table shows the k-schedule contrast at a fixed (soft) forward: log k vs uniform k.
+# The uniform-k dirs come from submit_softuni_lr05.sh -- soft + uniform k had never been run at
+# lr=0.05 on either split, nor at edge level at all, so the row could not simply be pointed at
+# an existing dir.
+OUR_NODE_METHODS = [
+    ("\\ourmethod{}",          "test_node_topk_log_lr05"),
+    ("$+$ unif $k$",           "test_node_topk_uniform_lr05"),
 ]
-OUR_EDGE_METHODS = [   # same 3 variants at lr=0.05, edge level (test)
-    ("\\ourmethod{}",                  "test_edge_topk_log_lr05"),
-    ("$+$ hard",                       "test_edge_hard_topk_log_lr05"),
-    ("$+$ unif $k$, $+$ hard",         "test_edge_hard_topk_uniform_lr05"),
+OUR_EDGE_METHODS = [
+    ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
+    ("$+$ unif $k$",           "test_edge_topk_uniform_lr05"),
 ]
 
 
@@ -155,6 +162,11 @@ def main():
             v = load_cpr_auc(d, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
+        # Same rule as the baseline rows: a dir with nothing in it yet is a pending job, and a
+        # row of eleven dashes under our own method name reads as a method that scored nothing.
+        if not data:
+            print(f"SKIP {name} (node): no test cells in results/{d} (jobs still pending)")
+            continue
         ours_nodes[name] = data
     # Node Pruning row (empty dict -> row is skipped entirely, not printed as all-dashes)
     np_name, np_dir, np_sub = NODE_PRUNING
@@ -192,6 +204,9 @@ def main():
             v = load_cpr_auc(d, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
+        if not data:
+            print(f"SKIP {name} (edge): no test cells in results/{d} (jobs still pending)")
+            continue
         ours_edges[name] = data
 
     # Best per column

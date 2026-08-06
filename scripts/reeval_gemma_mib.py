@@ -33,17 +33,21 @@ DIRS = {
         "mib_node_identity_gumbel_sgd_log", "final_node", "htk_lr_0.05",
         "mib_node_hard_topk_gumbel", "mib_node_detached_tau", "mib_node_bernoulli_reinforce",
         "mib_node_identity_sgd", "mib_node_identity_gumbel_sgd_uniform",
+        "mib_node_topk_uniform_lr05",   # soft fwd + uniform k at lr=0.05 (submit_softuni_lr05.sh)
     ],
     ("node", "test"): [
         "test_node_topk_log_lr05", "test_node_hard_topk_log_lr05", "test_node_hard_topk_uniform_lr05",
+        "test_node_topk_uniform_lr05",
     ],
     ("edge", "validation"): [
         "mib_edge_topk_log_lr05", "mib_edge_hard_topk_log_lr05", "mib_edge_detached_tau",
         "mib_edge_bernoulli_reinforce", "mib_edge_identity_sgd_log",
         "mib_edge_hard_topk_uniform_lr05", "mib_edge_identity_sgd_uniform",
+        "mib_edge_topk_uniform_lr05",
     ],
     ("edge", "test"): [
         "test_edge_topk_log_lr05", "test_edge_hard_topk_log_lr05", "test_edge_hard_topk_uniform_lr05",
+        "test_edge_topk_uniform_lr05",
     ],
     # extra dirs used ONLY by cpr_summary.tex + lr_sweep.tex (val only). All Gemma cells here
     # were also eval'd under the buggy L2A venv. Some (e.g. bern_lr_0.05) lack a circuit for
