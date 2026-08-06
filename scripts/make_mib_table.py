@@ -12,6 +12,32 @@ from pathlib import Path
 RESULTS_BASE = Path("results")
 OUTPUT = Path("paper/tabs/mib_results.tex")
 
+# Dirs produced by a wave that ran in the L2A venv, whose gemma2 cells are therefore computed
+# with TL 3.2.1's broken Gemma-2 forward until scripts/reeval_gemma_mib.py has been run over
+# them. Gated on the stamp that script writes, so an entry clears itself when the re-eval lands.
+#
+# ADD EVERY NEW DIR HERE at the same time you add it to reeval_gemma_mib.py's DIRS. The
+# condition is not detectable from the pkls -- a re-evaluated pkl and an L2A-venv pkl are both
+# just a pkl, and the numbers differ by less than the amount that would look obviously wrong.
+# (mtime was tried and rejected: it misreports every dir whose non-gemma cells were topped up
+# after the re-eval, which is most of the edge dirs.)
+#
+# Defined here rather than in make_mib_test_table.py because that module already imports this
+# one, so this is the side of the dependency that can hold shared state.
+GEMMA_REEVAL_PENDING = {
+    "mib_node_topk_uniform_lr05", "test_node_topk_uniform_lr05",
+    "mib_edge_topk_uniform_lr05", "test_edge_topk_uniform_lr05",
+}
+GEMMA_TASKS = ("ioi", "mcqa", "arc_easy")
+
+
+def gemma_unstamped(d, level, split):
+    """Gemma tasks in results/<d> still awaiting re-evaluation under the MIB venv."""
+    if d not in GEMMA_REEVAL_PENDING:
+        return []
+    return [t for t in GEMMA_TASKS
+            if not (RESULTS_BASE / d / f".gemma_reeval_{level}_{split}_{t}").exists()]
+
 # Column definitions: (task, model, col_header)
 COLUMNS = [
     ("ioi", "gpt2", "GPT"),
@@ -40,7 +66,11 @@ OUR_METHODS = [
     ("$+$ id-STE", "mib_node_identity_sgd_log", "node", "ours"),
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_log", "node", "ours"),
     # Node level (uniform k-schedule = ablation). Swept -> lr=0.05.
-    ("\\ourmethod{}", "final_node", "node", "uniform"),
+    # Was final_node, which is the SAME variant at the default lr=0.01 -- the one dir in this
+    # block not at lr=0.05, so "\ourmethod{}, uniform k" silently meant a different LR here than
+    # everywhere else, and than the test table's row of the same name. Repointed once
+    # submit_softuni_lr05.sh produced the lr=0.05 run. final_node stays on disk.
+    ("\\ourmethod{}", "mib_node_topk_uniform_lr05", "node", "uniform"),
     ("$+$ hard", "htk_lr_0.05", "node", "uniform"),
     ("$+$ hard, $+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     ("$-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
@@ -53,7 +83,8 @@ OUR_METHODS = [
     ("$-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
     ("$+$ id-STE", "mib_edge_identity_sgd_log", "edge", "ours"),
-    # Edge level (uniform k-schedule). Swept -> lr=0.05. (No soft-fwd uniform edge run.)
+    # Edge level (uniform k-schedule). Swept -> lr=0.05.
+    ("\\ourmethod{}", "mib_edge_topk_uniform_lr05", "edge", "uniform"),
     ("$+$ hard", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
     ("$+$ id-STE", "mib_edge_identity_sgd_uniform", "edge", "uniform"),
 ]
@@ -305,6 +336,15 @@ def main():
             v = load_cpr_auc(results_dir, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
+        # Drop gemma2 cells that have not been re-evaluated under the MIB venv yet: they were
+        # computed with TL 3.2.1's broken Gemma-2 forward. Dashes for a pending job are honest;
+        # a plausible wrong number is not, and nothing downstream can tell the two apart.
+        pend = gemma_unstamped(results_dir, level, "validation")
+        for t in pend:
+            data.pop((t, "gemma2"), None)
+        if pend:
+            print(f"HOLD {method_name} ({level}, {group}): gemma2 cells {pend} in "
+                  f"results/{results_dir} await scripts/reeval_gemma_mib.py")
         all_results[key] = data
 
     # Find best per column per level
@@ -401,15 +441,26 @@ def main():
             if not rows_u and not rows_o:
                 continue
             lines.append(f"\\textbf{{{label}}} \\\\")
+            # suppress_avg on partial rows, same rule the mask-baseline rows already use. An Avg
+            # over whatever cells happen to be present is not comparable to the full-coverage row
+            # above it, and the bias is not zero-mean: the cells that go missing are the gemma
+            # ones held for re-eval and the slow llama3 ones, which sit at opposite ends of the
+            # range, so a partial row can read as either better or worse than it is. The edge
+            # "+ unif k" row showed 7.90 over 8 cells against 6.99 over 11 purely because its
+            # three held gemma cells are the lowest-scoring columns in that section.
             for n, r, g in rows_o:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
-                lines.append(make_row(n, all_results.get(f"{n}_{level}_{g}", {}), best, second,
+                d = all_results.get(f"{n}_{level}_{g}", {})
+                lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
+                                      suppress_avg=len(d) < len(COLUMNS),
                                       cost=COST_OURS[level]))
             for n, r, g in rows_u:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
-                lines.append(make_row(unifk(n), all_results.get(f"{n}_{level}_{g}", {}), best, second,
+                d = all_results.get(f"{n}_{level}_{g}", {})
+                lines.append(make_row(unifk(n), d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
+                                      suppress_avg=len(d) < len(COLUMNS),
                                       cost=COST_OURS[level]))
 
     # Generate LaTeX

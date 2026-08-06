@@ -154,29 +154,8 @@ def fmt(v, bold=False, underline=False):
 
 
 
-# Dirs produced by a wave that ran in the L2A venv and whose gemma2 cells are therefore wrong
-# until scripts/reeval_gemma_mib.py has been run over them. Gated on the stamp that script
-# writes, so an entry clears itself once the re-eval lands -- nothing here has to be pruned by
-# hand, and a dir that never gets re-evaluated never silently publishes bad Gemma numbers.
-#
-# ADD EVERY NEW DIR HERE at the same time you add it to reeval_gemma_mib.py's DIRS. There is no
-# way to detect the condition from the pkls: a re-evaluated pkl and an L2A-venv pkl are both
-# just a pkl, and the numbers differ by less than the amount that would look obviously wrong.
-# (mtime nearly works and was tried; it misreports any dir whose non-gemma cells were topped up
-# after the re-eval, which is most of the edge dirs.)
-GEMMA_REEVAL_PENDING = {
-    "mib_node_topk_uniform_lr05", "test_node_topk_uniform_lr05",
-    "mib_edge_topk_uniform_lr05", "test_edge_topk_uniform_lr05",
-}
-GEMMA_TASKS = ("ioi", "mcqa", "arc_easy")
 
-
-def gemma_unstamped(d, level, split):
-    """Gemma tasks in dir `d` still awaiting re-eval under the MIB venv."""
-    if d not in GEMMA_REEVAL_PENDING:
-        return []
-    return [t for t in GEMMA_TASKS
-            if not (RESULTS_BASE / d / f".gemma_reeval_{level}_{split}_{t}").exists()]
+gemma_unstamped = _M.gemma_unstamped   # single source of truth, see make_mib_table.py
 
 
 def complete_or_skip(name, level, d, data, split="test"):
