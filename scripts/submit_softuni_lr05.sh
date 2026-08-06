@@ -37,11 +37,17 @@ NODE_PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction"
   "qwen2.5 mcqa" "gemma2 mcqa" "llama3 mcqa" "gemma2 arc_easy" "llama3 arc_easy" "llama3 arc_challenge"
 )
-# Edge drops the two llama3 ARC cells: no edge circuits exist there, which is why every
-# edge-level row in the tables is missing exactly those two columns.
+# Edge is 11 cells, same as node. An earlier version of this list had 9, copied from
+# submit_edge_lr05.sh's header ("no llama arc") -- that is WRONG for us and the header was
+# wrong too. The 9-cell restriction belongs to the MIB *baselines* (EAP-IG and friends read a
+# circuit file, and none is published for llama3 ARC at edge level); we learn the mask
+# ourselves and need no circuit, which is why results/{mib,test}_edge_topk_log_lr05 each hold
+# 11 pkls. Dropping the two llama3 ARC cells would have left "+ unif k" permanently 9/11 and
+# thus never comparable to the \ourmethod{} row it exists to be read against.
 EDGE_PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction"
   "qwen2.5 mcqa" "gemma2 mcqa" "llama3 mcqa" "gemma2 arc_easy"
+  "llama3 arc_easy" "llama3 arc_challenge"
 )
 
 n=0

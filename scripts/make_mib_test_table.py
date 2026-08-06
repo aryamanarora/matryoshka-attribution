@@ -153,6 +153,24 @@ def fmt(v, bold=False, underline=False):
     return s
 
 
+def complete_or_skip(name, level, d, data):
+    """Hold one of OUR rows until every cell has landed. Returns False to skip it.
+
+    Stricter than the baseline rows, which print with a suppressed Avg when partial, and
+    deliberately so. A baseline's missing cell can be a real limitation (UGS genuinely has no
+    number for most columns), so the dashes are informative. Ours are always run to completion,
+    so a gap is only ever a pending job -- and a partial row of ours is actively misleading
+    twice over: its Avg is not comparable to the row above it, and its gemma2 cells come out of
+    the L2A venv's broken Gemma-2 forward until reeval_gemma_mib.py has been run over the dir,
+    which by construction cannot have happened while jobs are still landing in it.
+    """
+    if len(data) == len(COLUMNS):
+        return True
+    why = "no test cells" if not data else f"only {len(data)}/{len(COLUMNS)} test cells"
+    print(f"SKIP {name} ({level}): {why} in results/{d} (jobs still pending)")
+    return False
+
+
 def main():
     # Load our test results: 3 node variants (name -> {cell: cpr}) + 1 edge.
     ours_nodes = {}
@@ -162,10 +180,7 @@ def main():
             v = load_cpr_auc(d, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
-        # Same rule as the baseline rows: a dir with nothing in it yet is a pending job, and a
-        # row of eleven dashes under our own method name reads as a method that scored nothing.
-        if not data:
-            print(f"SKIP {name} (node): no test cells in results/{d} (jobs still pending)")
+        if not complete_or_skip(name, "node", d, data):
             continue
         ours_nodes[name] = data
     # Node Pruning row (empty dict -> row is skipped entirely, not printed as all-dashes)
@@ -204,8 +219,7 @@ def main():
             v = load_cpr_auc(d, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
-        if not data:
-            print(f"SKIP {name} (edge): no test cells in results/{d} (jobs still pending)")
+        if not complete_or_skip(name, "edge", d, data):
             continue
         ours_edges[name] = data
 
