@@ -112,6 +112,30 @@ DIR_OVERRIDE = {("mib_node_hard_topk_log", "ioi", "llama3"): "htklog_lr_0.01",
                 ("mib_node_hard_topk", "ioi", "llama3"): "htk_lr_0.01"}
 DAGGER_CELLS = {("ioi", "llama3")}  # capped at 200 in all 3 MAttr blocks (not REINFORCE)
 
+# Training steps per block. This is NOT cosmetic: the mask baselines get 3000 steps and every
+# MAttr variant gets 500, a 6x budget gap that runs in the BASELINES' favour, so a reader
+# comparing block Avgs without it is reading a handicapped-in-our-disfavour comparison as if it
+# were matched. Verified from the runs themselves rather than the submit scripts -- last row of
+# results/<dir>/*_trainlog.csv is step 499 (1999 for bern_lr_0.1_2k) for the MAttr blocks, and
+# logs/eprun_*.out counts to /3000 for every eprun_* dir including the default-LR rows.
+STEPS = {
+    "\\ourmethod{}": "500 steps",
+    "$+$ hard": "500 steps",
+    "$+$ unif $k$, $+$ hard": "500 steps",
+    "$+$ hard bwd (REINFORCE)": "500 steps; 2000 in the last row",
+    "DBM": "3000 steps",
+    "DBM $+$ L1 (lr $=$ 0.3)": "3000 steps",
+    "Node Pruning ($s{=}0.5$, logit-diff)": "3000 steps",
+    "Node Pruning ($s{=}0.8$, logit-diff)": "3000 steps",
+}
+
+
+def steps_note(method):
+    """Upright, small parenthetical after the italic block header. A block with no STEPS entry
+    renders exactly as before, so adding a block does not silently claim a step count."""
+    v = STEPS.get(method)
+    return "" if v is None else f"\\quad{{\\footnotesize ({v})}}"
+
 
 def cpr(d, task, model):
     d = DIR_OVERRIDE.get((d, task, model), d)
@@ -171,7 +195,8 @@ def main():
         # 3 MAttr blocks cap llama/ioi at 200 val examples, and so does the sigmoid-mask
         # block (run_edge_pruning.sbatch passes --head 200); the REINFORCE runs do not.
         is_capped = "REINFORCE" not in method
-        lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}}} \\\\")
+        lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}"
+                     f"{steps_note(method)}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
             avg = f"{sum(present) / len(present):.2f}" if present else "---"
