@@ -150,6 +150,15 @@ def main():
             pickle.dump(rec, open(ap2, "wb"))
             print(f"      + acc-AUC pkl -> {base.name}/{ap2.parent.name}/{ap2.name}")
 
+        # Stamp the cell as re-evaluated. The table generators refuse to print a gemma2 cell
+        # without this, because there is otherwise NO way to tell a re-evaluated pkl from one
+        # the L2A venv wrote -- both are just a pkl, and the numbers differ by less than the
+        # amount that would look obviously wrong. mtime nearly works (re-eval overwrites gemma
+        # days after the wave) but breaks the moment a re-eval runs the same day as its wave,
+        # which is the normal case for a fresh wave.
+        stamp = R / d / f".gemma_reeval_{args.level}_{split}_{task}"
+        stamp.write_text(f"transformer_lens {M.version('transformer_lens')}\n")
+
 
 if __name__ == "__main__":
     main()
