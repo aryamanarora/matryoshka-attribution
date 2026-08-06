@@ -199,7 +199,19 @@ def main():
                      f"{steps_note(method)}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
-            avg = f"{sum(present) / len(present):.2f}" if present else "---"
+            # An Avg over populated cells only is NOT comparable to the row above it when the two
+            # rows have different cell counts, and the bias is not even zero-mean: the columns that
+            # go missing are the slow llama3 ones, which are also the high-CPR ones, so a partial
+            # row reads as a worse LR than it is. Suppress it until the row is complete rather than
+            # print a number that invites exactly the comparison it cannot support.
+            if len(present) == len(COLUMNS):
+                avg = f"{sum(present) / len(present):.2f}"
+            else:
+                avg = "---"
+                if present:
+                    print(f"WARNING: {method} {prefix}{lr} has {len(present)}/{len(COLUMNS)} cells; "
+                          f"Avg suppressed (missing "
+                          f"{[f'{t}/{m}' for t, m, _ in COLUMNS if data[lr][(t, m)] is None]})")
             cells = [fmt(data[lr][(t, m)],
                          bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
                          dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
