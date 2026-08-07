@@ -266,10 +266,15 @@ def delatex(s):
 # leaves room for the caption inside ICLR's ~9in text height.
 FIG_W, FIG_H = 5.4, 8.4
 # --both stacks both levels in one float, so the two panels have to share one page. The node
-# panel carries 49 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.6in total
-# leaves the node panel ~5.6in, i.e. LESS room than the standalone 8.4in figure, which is why
+# panel carries 49 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.5in total
+# leaves the node panel ~5.5in, i.e. LESS room than the standalone 8.4in figure, which is why
 # the ladder pass in place_labels matters more here than it does for --full.
-FIG_H_BOTH = 8.6
+# This is a HARD ceiling, not a preference: the float goes in at width=\\linewidth, so LaTeX
+# scales it by \\linewidth/FIG_W (~5.5/5.4 = 1.019) and the height goes up with it. 8.6in
+# overfull'd the page by 3.6pt; every 0.1in shaved here buys ~7.3pt on the page, so 8.5in
+# clears it with ~4pt to spare. Raising it again needs the same arithmetic redone against
+# whatever caption is on that page.
+FIG_H_BOTH = 8.5
 
 # normalized-axes label geometry. Widths are MEASURED, not estimated (see label_boxes) -- the
 # old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
