@@ -134,7 +134,7 @@ METHODS = [
     # 0.1 is the published LR and is identical in Prakash et al. and belief_dynamics, so
     # unlike pyvene's 1e-3 there is a real prior here; the grid brackets it either way.
     #
-    # READ THE $\emptyset$ MARKS BEFORE READING THE NUMBERS. Where the PID overshoots, the
+    # READ THE $\varnothing$ MARKS BEFORE READING THE NUMBERS. Where the PID overshoots, the
     # mask collapses to zero units and MIB still scores the run -- on the pruning-order
     # tie-break, which is a trajectory ranking rather than any circuit DCM converged to.
     # Those scores are not just meaningless but ANTI-correlated with success: the collapsed
@@ -247,20 +247,50 @@ def fmt(v, bold=False, dagger=False, empty=False):
         return "---"
     s = f"\\textbf{{{v:.2f}}}" if bold else f"{v:.2f}"
     if empty:
-        return "$^{\\emptyset}$" + s
+        return "$^{\\varnothing}$" + s
     return ("$^{\\dagger}$" + s) if dagger else s
 
 
 def main():
     ncols = len(COLUMNS)
-    lines = ["\\begin{adjustbox}{max width=\\textwidth}",
-             "\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "}", "\\toprule",
-             "& & \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
-             "\\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\",
-             "\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} "
-             "\\cmidrule(lr){11-12} \\cmidrule(lr){13-13}",
-             "\\textbf{Method / LR} & \\textbf{Avg} & " + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
-             "\\midrule"]
+    span = ncols + 2
+    # longtable, not tabular-in-a-float: at 12 blocks this is ~80 lines, which overruns a
+    # page even at \scriptsize, and a `table` float cannot break across pages. That also
+    # rules out adjustbox (it cannot break either), so the fit is done with \footnotesize
+    # and a tighter \tabcolsep instead of by scaling the whole box.
+    #
+    # The caption TEXT deliberately does not live here. This file is regenerated on every
+    # run, so a caption written into it would be silently reverted the next time the sweep
+    # finishes. It is referenced through \lrsweepcaption, which is defined next to the
+    # \input in sections/detailed-mib.tex; the \providecommand below is only a fallback so
+    # this table still compiles standalone, and is a no-op whenever that definition exists.
+    header = ["\\toprule",
+              "& & \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
+              "\\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\",
+              "\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} "
+              "\\cmidrule(lr){11-12} \\cmidrule(lr){13-13}",
+              "\\textbf{Method / LR} & \\textbf{Avg} & "
+              + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
+              "\\midrule"]
+    lines = ["\\providecommand{\\lrsweepcaption}{\\textbf{Learning rate sweep of "
+             "\\ourmethod{} variants on MIB.}}",
+             "\\begingroup",
+             "\\footnotesize",
+             "\\setlength{\\tabcolsep}{4pt}",
+             "\\begin{longtable}{lr@{\\quad}" + "r" * ncols + "}",
+             # \normalsize so the caption matches every other table's rather than
+             # inheriting the \footnotesize the table body needs to fit the width.
+             "\\caption{{\\normalsize\\lrsweepcaption}}",
+             "\\label{tab:lr-sweep} \\\\"]
+    lines += header + ["\\endfirsthead"]
+    lines += [f"\\multicolumn{{{span}}}{{l}}{{\\textit{{Table \\ref{{tab:lr-sweep}}, "
+              f"continued from the previous page.}}}} \\\\"]
+    lines += header + ["\\endhead"]
+    lines += ["\\midrule",
+              f"\\multicolumn{{{span}}}{{r}}{{\\textit{{continued on the next page}}}} \\\\",
+              "\\endfoot",
+              "\\bottomrule",
+              "\\endlastfoot"]
 
     emitted = 0
     for entry in METHODS:
@@ -321,11 +351,11 @@ def main():
                 print(f"WARNING: {method} {prefix}{lr} has {n_empty}/{len(present)} cells whose "
                       f"circuit is EMPTY; those scores are the pruning-order tie-break")
                 if avg != "---" and n_empty == len(present):
-                    avg = "$^{\\emptyset}$" + avg
+                    avg = "$^{\\varnothing}$" + avg
             lines.append(f"\\quad {prefix}{lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
-    lines.append("\\bottomrule")
-    lines += ["\\end{tabular}", "\\end{adjustbox}"]
+    # \bottomrule is in \endlastfoot, so longtable draws it once, after the final page.
+    lines += ["\\end{longtable}", "\\endgroup"]
     table = "\n".join(lines) + "\n"
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(table)
