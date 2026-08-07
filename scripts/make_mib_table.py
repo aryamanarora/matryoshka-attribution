@@ -189,8 +189,8 @@ EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 
 
 # DBM = differentiable binary masking, i.e. pyvene's SigmoidMaskIntervention: a third mask
-# parameterization (deterministic sigmoid(mask/tau), tau annealed 50->0.1, NO sparsity term),
-# same 3000 steps and same logit-diff loss as the _ld Node Pruning rows. Not an
+# parameterization (deterministic sigmoid(mask/tau), tau annealed 50->0.1, plus an L1 on the
+# gate), same 3000 steps and same logit-diff loss as the _ld Node Pruning rows. Not an
 # EPRUN_SPARSITIES entry -- those are all one method at different budgets and get labelled
 # "Node Pruning (...)", which this is not.
 #
@@ -199,20 +199,30 @@ EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 # run_evaluation.py writes) -- same rule as EPRUN_NAME above. Renaming those would orphan
 # every pkl.
 #
-# The lr shown is swept, not pyvene's published 1e-3, and the label says so because the
-# difference is large enough to change the ranking: 0.74 avg at 1e-3 vs 1.32 at 0.3 (11 vs 10
-# cells), i.e. untuned it loses to KL Node Pruning (1.00) and tuned it clearly beats it.
-# pyvene chose 1e-3 for a few rotation parameters at one intervention site; here the same
-# optimizer drives 156--1056 gate logits, so that value has no reason to transfer and
-# reporting it would be measuring our tuning rather than the method. Both points are in
-# paper/tabs/lr_sweep.tex; only the tuned one belongs in the headline table.
+# BOTH knobs are swept, not pyvene's published defaults, because both change the ranking:
+#   lr      1e-3 -> 0.3 moves avg CPR 0.74 -> 1.32. pyvene chose 1e-3 for a few rotation
+#           parameters at one intervention site; here the same optimizer drives 156--1056 gate
+#           logits, so that value has no reason to transfer.
+#   lambda  0 -> 6.0 moves validation avg CPR 1.31 -> 1.50, best of {0, 0.2, 0.6, 2, 6, 20},
+#           interior to the grid.
+# The headline row is that tuned point, and the test table names the same recipe "DBM".
 #
-# Structural caveat for the prose: because there is no sparsity term, achieved density is
-# 38--54% at EVERY lr. lr changes how well-ordered the logits are within that half, not how
-# many units survive -- which is why this cannot reach the L0-annealed rows no matter how it
-# is tuned. That argument does not depend on any hyperparameter choice.
+# Why the PENALISED recipe carries the name (changed 2026-08-07): the pyvene class ships with
+# no sparsity term, but pyvene's own masking tutorial and Boundless DAS both put an L1 on the
+# mask, so the penalty is the library's practice even if it is not the class default. Naming
+# the unpenalised run "DBM" would hand the baseline its weakest operating point on a
+# technicality. lambda=0 stays visible as the anchor of the lambda sweep in tabs/lr_sweep.tex
+# and as a point in plot_mib_accauc_cpr_scatter's DBM series -- it is still reported, it is
+# just no longer what the name refers to.
+#
+# Caveat for the prose: lambda also drops achieved density 0.56 -> 0.30, so the CPR gain is
+# confounded with the sparsity change. The sweep fixes the best-tuned operating point; it does
+# not establish that the penalty per se is what helps. (The old comment here claimed density
+# was 38--54% "at EVERY lr" and concluded DBM structurally could not reach the L0-annealed
+# rows. That held for the unpenalised mask only, and the lambda sweep is exactly what refutes
+# it -- do not carry that argument into the prose.)
 SIGMOID_MASK_ROWS = [
-    ("DBM (tuned LR)", "eprun_eval_ld_sig_lr0.3"),
+    ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0"),
 ]
 
 

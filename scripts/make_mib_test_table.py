@@ -122,19 +122,25 @@ GRAD_NODE_BASELINES = [
 # and the same "no cells -> no row" rule, so an entry can be declared here before its jobs land
 # and it appears on the next regeneration with no edit.
 #
-# Two rows on purpose, NOT one tuned row. The unpenalised run is the DBM the paper describes
-# (pyvene ships this mask with no sparsity term at all); the L1 row is a separate variant, so
-# folding the penalty into "DBM" would attribute to the library a term it does not have. The
-# validation tables make the same split.
+# ONE row, the tuned one: lr=0.3 (best Avg CPR of {0.001..1.0} on validation) and lambda=6.0
+# (best of {0, 0.2, 0.6, 2.0, 6.0, 20.0}; validation Avg CPR 1.50 vs 1.31 unpenalised), both
+# peaks interior to their grids.
 #
-# lr=0.3 is the swept LR for both (best Avg CPR of {0.001..1.0} on validation), and lambda=6.0
-# is the best of {0, 0.2, 0.6, 2.0, 6.0, 20.0} -- validation Avg CPR 1.50 vs 1.31 unpenalised,
-# both peaks interior to their grids. Caveat for the prose: lambda also drops achieved density
-# 0.56 -> 0.30, so the CPR gain is confounded with the sparsity change and this sweep alone
-# does not establish that the penalty *helps*; it establishes the best-tuned operating point.
+# This file used to carry the unpenalised run as "DBM" and the penalised one as "DBM $+$ L1",
+# on the argument that folding the penalty into "DBM" attributes to pyvene a term it does not
+# have. That split was dropped on 2026-08-07: pyvene's own masking tutorial and Boundless DAS
+# both put an L1 on the mask, so the penalty is the library's practice even though it is not
+# the class default, and naming the unpenalised run "DBM" gives the baseline its weakest
+# operating point. See the longer note above SIGMOID_MASK_ROWS in make_mib_table.py, which
+# this must agree with -- the two tables naming the same baseline after different recipes is
+# the exact failure that motivated the change. lambda=0 is still reported, as the anchor of the
+# lambda sweep in tabs/lr_sweep.tex and as a point in the scatter's DBM series.
+#
+# Caveat for the prose: lambda also drops achieved density 0.56 -> 0.30, so the CPR gain is
+# confounded with the sparsity change and this sweep alone does not establish that the penalty
+# *helps*; it establishes the best-tuned operating point.
 MASK_NODE_BASELINES = [
-    ("DBM",            "eprun_eval_ld_sig_lr0.3",        "EdgePruning_patching_node"),
-    ("DBM $+$ L1",     "eprun_eval_ld_sig_lr0.3_l16.0",  "EdgePruning_patching_node"),
+    ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node"),
 ]
 
 
