@@ -697,9 +697,16 @@ COMPACT = {
 }
 
 # 0.30\textwidth = 1.65in on the page, and the float goes in at width=\linewidth, so authoring
-# at exactly that width renders 1:1 -- fonts here are page points. Height is free; 2.2in is what
-# eight labels need vertically at 5.5pt once the legend is gone (direct labels replace it).
-FIG_W_C, FIG_H_C = 1.65, 2.2
+# at exactly that width renders 1:1 -- fonts here are page points, and the height set here is
+# the height on the page.
+#
+# 2.0in is not free choice: this is the right-hand subfigure of fig:mib-combined, and the
+# left-hand one (method_corr_heatmap_bytype, 3.69 x 2.0in at 0.67\textwidth) renders 1.997in
+# tall. Matching it means the two panels' frames line up instead of one floating 0.2in above
+# the other over a shared row of captions. The 0.003in residual is 0.2pt -- below anything
+# visible, and not worth carrying an odd number for. Re-measure if either subfigure's width
+# fraction changes.
+FIG_W_C, FIG_H_C = 1.65, 2.0
 LAB_PT_C, MSIZE_C = 5.5, 18
 # Labels are ~as wide as they are on the full page but the panel is a third the width, so they
 # need proportionally far more room: 0.34 leaves "Node Pruning" hanging off the frame.
