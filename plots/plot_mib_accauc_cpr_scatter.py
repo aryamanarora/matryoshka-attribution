@@ -265,6 +265,11 @@ def delatex(s):
 # 8.4 removes a third of them). 8.4in renders at ~8.5in after the width scale-up, which still
 # leaves room for the caption inside ICLR's ~9in text height.
 FIG_W, FIG_H = 5.4, 8.4
+# --both stacks both levels in one float, so the two panels have to share one page. The node
+# panel carries 49 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.6in total
+# leaves the node panel ~5.6in, i.e. LESS room than the standalone 8.4in figure, which is why
+# the ladder pass in place_labels matters more here than it does for --full.
+FIG_H_BOTH = 8.6
 
 # normalized-axes label geometry. Widths are MEASURED, not estimated (see label_boxes) -- the
 # old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
@@ -346,15 +351,23 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
     # the first slot that clears BOTH sets of obstacles, rather than being nudged off whichever
     # one it currently touches: nudging can cycle (clear the label, land on a marker, clear the
     # marker, land back on the label), and did, on the edge figure's tight upper-right cluster.
+    # The ladder scans candidate offsets, so it has to respect the same panel bounds the final
+    # clip enforces -- otherwise it happily "resolves" a label to y=1.08, the clip drags it back
+    # to 1-LAB_H/2, and it lands right back on the neighbour it was supposed to clear. That is
+    # invisible in a tall panel (few labels ever reach the edge) and dominates a short one: it is
+    # what left 6 of the edge panel's 9 labels stacked in the top-right corner under --both.
+    LO, HI = LAB_H / 2, 1 - LAB_H / 2
     sep = LAB_H / 2 + MARK_R
     ladder = [0.0] + [s * d * LAB_H * 0.6 for s in range(1, 40) for d in (1, -1)]
     order = np.argsort(ly)
     placed = []
     for i in order:
-        y0, ci = ly[i], lx[i] + w[i] / 2
+        y0, ci = min(max(ly[i], LO), HI), lx[i] + w[i] / 2
         best, best_cost = y0, None
         for off in ladder:
             cand = y0 + off
+            if cand < LO or cand > HI:
+                continue
             cost = sum(1 for j in placed
                        if abs(ci - (lx[j] + w[j] / 2)) < (w[i] + w[j]) / 2
                        and abs(cand - ly[j]) < LAB_H)
@@ -371,27 +384,26 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
     return lx * (xr[1] - xr[0]) + xr[0], ly * (yr[1] - yr[0]) + yr[0]
 
 
-def main_full():
-    import matplotlib.pyplot as plt
+# Font setup, shared by every raw-matplotlib figure here. Inter matches the plotnine theme the
+# rest of the paper's figures use (`family="Inter"` in theme_set above); these figures are raw
+# matplotlib rather than plotnine because the label placement needs per-annotation control, so
+# the font has to be set on rcParams by hand -- plotnine's theme does not reach it. mathtext
+# gets Inter too: on the DejaVu default, "$-c_k$" and the legend's "$k$" would render in a
+# visibly different face from the text right next to them. cal/sf/tt are unused, but a "custom"
+# fontset resolves all of them at import time and the cal default ("cursive") is not installed,
+# so leaving them emits a findfont warning on every run. fonttype 42 embeds real TrueType
+# outlines instead of Type-3, which is what arXiv and most camera-ready checkers want.
+RC = {
+    "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
+    "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
+    "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
+    "pdf.fonttype": 42, "text.color": "#000000",
+    "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
+}
 
-    # Inter, matching the plotnine theme every other figure in the paper uses (`family="Inter"`
-    # in theme_set above). This figure is raw matplotlib rather than plotnine because the label
-    # placement needs per-annotation control, so the font has to be set on rcParams by hand --
-    # plotnine's theme does not reach it. mathtext gets Inter too: leaving it on the DejaVu
-    # default would render "$-c_k$" and the legend's "$k$" in a visibly different face from the
-    # text right next to them. fonttype 42 embeds the actual TrueType outlines instead of
-    # Type-3, which is what arXiv and most camera-ready checkers want.
-    plt.rcParams.update({
-        "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
-        "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
-        # cal/sf/tt are unused here but a "custom" fontset resolves all of them at import time,
-        # and the cal default is the generic "cursive", which is not installed -- leaving them
-        # emits a findfont fallback warning on every run.
-        "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
-        "pdf.fonttype": 42, "text.color": "#000000",
-        "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
-    })
 
+def node_rows():
+    """One row per node-level point: gradient baselines, MAttr ablations, Node Pruning, DBM."""
     rows = []
     for disp, dacc, sub in A.BASELINES:
         acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
@@ -411,9 +423,9 @@ def main_full():
         # Every ablation name in OUR_METHODS appears TWICE -- once in the log-k block, once in
         # the uniform-k block -- and the table tells them apart by which block the row sits in.
         # A scatter has no blocks, so without this prefix the figure carries two points labelled
-        # "MAttr" and two labelled "+hard" whose only distinction is a legend colour. Same fix
-        # as main_full_edge(). It became load-bearing when the uniform rows were repointed to
-        # the lr=0.05 dirs, which put both copies of each name at plotted-and-complete status.
+        # "MAttr" and two labelled "+hard" whose only distinction is a legend colour. It became
+        # load-bearing when the uniform rows were repointed to the lr=0.05 dirs, which put both
+        # copies of each name at plotted-and-complete status.
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
         rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
                          label=label,
@@ -440,18 +452,69 @@ def main_full():
     rows += build_lr_rows()
     # ...and the DBM sparsity-penalty sweep at that best lr ("L1=" rather than "lr=")
     rows += build_lr_rows(L1_SERIES, key="l1", knob="L1")
+    return rows
 
+
+def edge_rows():
+    """One row per edge-level point: 7 MAttr variants + EAP-IG-inp.
+
+    Far thinner than node_rows(), and not because anything was left out. There is no Edge
+    Pruning or DBM at edge level (no results/*/EdgePruning_patching_edge anywhere on disk) and
+    no edge lr sweeps, so the sparsity paths, the DBM series and build_lr_rows all have nothing
+    to contribute; UGS exists but covers 3/11 cells (gpt2/qwen2.5 on ioi + mcqa only) and falls
+    to the completeness bar below, which is printed rather than silent. The honest reading of
+    the edge panel is therefore "our ablations against ONE baseline", not a survey -- but where
+    that one baseline lands is the point.
+    """
+    def pair_avg(dirn):
+        pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
+        return ([a for a, _ in pairs if a is not None],
+                [c for _, c in pairs if c is not None])
+
+    rows = []
+    # Same completeness bar as build_lr_rows: 11/11 on BOTH axes, because every point here is a
+    # mean over cells and a 3-cell mean is not comparable to an 11-cell one.
+    EDGE_BASELINES = [("EAP-IG-inp", "eapig_repro_accauc", G_GRAD),
+                      ("UGS", "ugs_eval", G_GRAD)]
+    for disp, dirn, grp in EDGE_BASELINES:
+        acc, cpr = pair_avg(dirn)
+        if len(acc) < len(COLS) or len(cpr) < len(COLS):
+            print(f"  skip {disp} ({dirn}): acc {len(acc)}/{len(COLS)}, cpr {len(cpr)}/"
+                  f"{len(COLS)} -- incomplete", file=sys.stderr)
+            continue
+        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
+                         label=delatex(disp), paths=[]))
+    for name, d, level, g in M.OUR_METHODS:
+        if level != "edge":
+            continue
+        acc, cpr = pair_avg(d)
+        if len(acc) < len(COLS) or len(cpr) < len(COLS):
+            print(f"  skip {delatex(name)} ({d}): acc {len(acc)}/{len(COLS)}, cpr "
+                  f"{len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
+            continue
+        label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
+        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
+                         grp=G_MLOG if g == "ours" else G_MUNI, label=label, paths=[]))
+    return rows
+
+
+def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True):
+    """Markers, dashed series, axes furniture. Returns the frame; labels come later.
+
+    Split from place_labels() because label geometry is measured in axes-fraction units, so it
+    is only valid once the axes has its final size -- i.e. after tight_layout(). Drawing points
+    for every panel first, then laying out, then labelling is the only order that gets the same
+    answer in a one-panel and a two-panel figure.
+    """
     df = pd.DataFrame(rows)
-    df["fam"] = np.where(df.grp.isin(FULL_MASK), MASK, GRADIENT)
-
-    fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
     # Dashed guides through every ordered series: the two Node Pruning objectives ordered
-    # sparse-ward ("kl"/"ld"), and each swept method ordered by learning rate ("lr:<method>").
-    # Same visual language for both because they are the same statement -- points joined by a
-    # line differ only in ONE hyperparameter, so the line's direction is the sensitivity to it.
-    # A point may belong to more than one series (eprun_eval_s0.5_ld is both the s=0.5 node of
-    # the sparsity path and the lr=0.8 node of its LR path), so paths are collected off the raw
-    # rows rather than by grouping the frame on a single column.
+    # sparse-ward ("kl"/"ld"), each swept method ordered by learning rate ("lr:<method>"), and
+    # DBM ordered by sparsity coefficient ("l1:DBM"). Same visual language for all three because
+    # they are the same statement -- points joined by a line differ in ONE hyperparameter, so the
+    # line's direction is the sensitivity to it. A point may belong to more than one series
+    # (eprun_eval_s0.5_ld is both the s=0.5 node of the sparsity path and the lr=0.8 node of its
+    # LR path; the unpenalised DBM lr=0.3 run is also the L1 path's lambda=0 node), so paths are
+    # collected off the raw rows rather than by grouping the frame on a single column.
     segs = {}
     for r in rows:
         for key, sval in r["paths"]:
@@ -465,8 +528,8 @@ def main_full():
         sub = df[df.grp == grp]
         if not len(sub):
             continue
-        ax.scatter(sub.acc, sub.cpr, s=46, marker=FAMILY_SHAPE[MASK if grp in FULL_MASK
-                                                               else GRADIENT],
+        ax.scatter(sub.acc, sub.cpr, s=46,
+                   marker=FAMILY_SHAPE[MASK if grp in FULL_MASK else GRADIENT],
                    c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
                    label=grp)
 
@@ -474,152 +537,131 @@ def main_full():
     # Room for labels on the right. 0.22 was enough at 32 points; the "unif k, " prefix and the
     # DBM L1 points push the widest labels past the frame at that value, and repel() has nowhere
     # to send the seven-deep blue cluster at acc~0.47 when its boxes are already at the edge.
-    xr = (xr[0], xr[1] + XPAD * (xr[1] - xr[0]))
-    ax.set_xlim(xr)
-    lw_, lh_ = label_boxes(ax, df.label.tolist(), fig)
-    lx, ly = repel(df.acc.values, df.cpr.values, lw_, lh_, xr, yr)
-    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
-        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
-        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
-                    color=FULL_COLORS[grp], zorder=4,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
+    ax.set_xlim((xr[0], xr[1] + xpad * (xr[1] - xr[0])))
     ax.set_ylim(yr)
-    # "IIA log-AUC", not "acc-AUC": the paper's prose calls this metric IIA AUC, and the AUC is
-    # taken over the 10 LOG-spaced sparsity points (0.1...100%), not a linear sweep. The compact
-    # figure above still says "acc-AUC" -- change both together or the two versions of the same
-    # figure disagree about what their shared x axis measures.
-    ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
+    if xlabel:
+        # "IIA log-AUC", not "acc-AUC": the paper's prose calls this metric IIA AUC, and the AUC
+        # is taken over the 10 LOG-spaced sparsity points (0.1...100%), not a linear sweep. The
+        # compact figure still says "acc-AUC" -- change both together or the two versions of the
+        # same figure disagree about what their shared x axis measures.
+        ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
     ax.set_ylabel("CPR AUC (↑)", fontsize=9)
+    if title:
+        ax.set_title(title, fontsize=9, loc="left", pad=4)
     ax.tick_params(labelsize=8)
     ax.grid(True, lw=0.25, color="#dddddd")
     ax.set_axisbelow(True)
     for sp in ax.spines.values():
         sp.set_linewidth(0.5)
-    ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
-              borderpad=0.5, handletextpad=0.4)
-    fig.tight_layout()
-    out = "plots/mib_accauc_cpr_scatter_full.pdf"
-    fig.savefig(out, dpi=300)
+    if legend:
+        ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
+                  borderpad=0.5, handletextpad=0.4)
+    return df
+
+
+def place_labels(fig, ax, df):
+    """Direct labels with leader lines. Call AFTER the figure is laid out (see draw_points)."""
+    xr, yr = ax.get_xlim(), ax.get_ylim()
+    w, h = label_boxes(ax, df.label.tolist(), fig)
+    lx, ly = repel(df.acc.values, df.cpr.values, w, h, xr, yr)
+    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
+        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
+        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
+                    color=FULL_COLORS[grp], zorder=4,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
+    # Report what the layout could not solve. A label sitting under another one is the failure
+    # mode this whole file exists to avoid, and it is invisible in the console otherwise -- the
+    # PDF just quietly ships with two names on top of each other, as it did before widths were
+    # measured rather than estimated.
+    nx = (lx - xr[0]) / (xr[1] - xr[0]) + w / 2
+    ny = (ly - yr[0]) / (yr[1] - yr[0])
+    hit = ((np.abs(nx[:, None] - nx[None, :]) < (w[:, None] + w[None, :]) / 2)
+           & (np.abs(ny[:, None] - ny[None, :]) < h))
+    np.fill_diagonal(hit, False)
+    n = int(np.triu(hit).sum())
+    print(f"  label overlaps after layout: {n}", file=sys.stderr)
+
+
+def node_rho(df):
     from scipy.stats import spearmanr
     o = df[~df.grp.isin({G_NPKL, G_NPLD})]
-    print(f"wrote {out} ({len(df)} points)\n"
-          f"Spearman rho: {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
-          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
+    return (f"Spearman rho (node): {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
+            f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
+
+
+def edge_rho(df):
+    # Three rhos, because one would be misleading. "+hard bwd" (REINFORCE) sits at the origin on
+    # BOTH axes -- it is the collapsed run, not a point on the trade-off -- and a single far
+    # outlier consistent on both axes manufactures a high rank correlation on its own. Dropping
+    # it is what shows whether the remaining points agree at all.
+    from scipy.stats import spearmanr
+    nb = df[df.label != "+hard bwd"]
+    om = df[df.grp != G_GRAD]
+    out = (f"Spearman rho (edge): {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
+           f"{spearmanr(nb.acc, nb.cpr)[0]:.3f} (excl. +hard bwd, {len(nb)}), "
+           f"{spearmanr(om.acc, om.cpr)[0]:.3f} (MAttr only, {len(om)})")
+    g = df[df.grp == G_GRAD]
+    if len(g):
+        out += (f"\n  EAP-IG-inp at acc={g.acc.iloc[0]:.3f} cpr={g.cpr.iloc[0]:.2f}; "
+                f"MAttr variants span acc {om.acc.min():.3f}-{om.acc.max():.3f}, "
+                f"cpr {om.cpr.min():.2f}-{om.cpr.max():.2f}")
+    return out
+
+
+def main_full():
+    """--full: node level alone, full page, every point named."""
+    import matplotlib.pyplot as plt
+    plt.rcParams.update(RC)
+    fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
+    df = draw_points(ax, node_rows())
+    fig.tight_layout()
+    place_labels(fig, ax, df)
+    out = "plots/mib_accauc_cpr_scatter_full.pdf"
+    fig.savefig(out, dpi=300)
+    print(f"wrote {out} ({len(df)} points)\n{node_rho(df)}")
 
 
 def main_full_edge():
-    """--full --edge: the same two metrics at EDGE level, full page, every point named.
-
-    Why this is a separate function and not a `level` argument to main_full(): almost nothing
-    it does survives the switch. There is no Edge Pruning or DBM at edge level (no
-    results/*/EdgePruning_patching_edge anywhere on disk), so the two sparsity paths and the
-    DBM series vanish; there are no edge lr sweeps, so build_lr_rows has nothing to draw; and
-    the single gradient baseline reads from eapig_repro_accauc, a dir the node reader knows
-    nothing about. What is left is the shared theme, delatex() and repel().
-
-    That leaves 8 points -- 7 MAttr variants + EAP-IG-inp -- against the node figure's 32. It
-    is thin, and the honest reading is that this is a scatter of ONE baseline against our own
-    ablations, not a survey. It earns its place anyway because of where that one baseline
-    lands: see the rho printed at the end.
-    """
+    """--full --edge: the same two metrics at edge level, full page, every point named."""
     import matplotlib.pyplot as plt
-    from scipy.stats import spearmanr
-
-    plt.rcParams.update({
-        "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
-        "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
-        "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
-        "pdf.fonttype": 42, "text.color": "#000000",
-        "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
-    })
-
-    def edge_pair_avg(dirn):
-        pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
-        acc = [a for a, _ in pairs if a is not None]
-        cpr = [c for _, c in pairs if c is not None]
-        return acc, cpr
-
-    rows = []
-    # Same completeness bar as build_lr_rows: 11/11 on BOTH axes, because every point here is a
-    # mean over cells and a 3-cell mean is not comparable to an 11-cell one. UGS is the casualty
-    # (3/11 -- it only runs on gpt2/qwen2.5 ioi + mcqa), so the edge figure has exactly one
-    # non-MAttr point. That is a property of the baseline, not an omission; it is printed below.
-    EDGE_BASELINES = [("EAP-IG-inp", "eapig_repro_accauc", G_GRAD),
-                      ("UGS", "ugs_eval", G_GRAD)]
-    for disp, dirn, grp in EDGE_BASELINES:
-        acc, cpr = edge_pair_avg(dirn)
-        if len(acc) < len(COLS) or len(cpr) < len(COLS):
-            print(f"  skip {disp} ({dirn}): acc {len(acc)}/{len(COLS)}, cpr {len(cpr)}/"
-                  f"{len(COLS)} -- incomplete", file=sys.stderr)
-            continue
-        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
-                         label=delatex(disp)))
-    for name, d, level, g in M.OUR_METHODS:
-        if level != "edge":
-            continue
-        acc, cpr = edge_pair_avg(d)
-        if len(acc) < len(COLS) or len(cpr) < len(COLS):
-            print(f"  skip {delatex(name)} ({d}): acc {len(acc)}/{len(COLS)}, cpr "
-                  f"{len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
-            continue
-        # "$+$ hard" and "$+$ id-STE" each appear twice in OUR_METHODS -- once log-k, once
-        # uniform-k -- and the table disambiguates them by which block they sit in. A scatter
-        # has no blocks, so the uniform ones carry the prefix the table's row label would.
-        label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
-        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
-                         grp=G_MLOG if g == "ours" else G_MUNI, label=label))
-
-    df = pd.DataFrame(rows)
-
+    plt.rcParams.update(RC)
     fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
-    for grp in FULL_ORDER:
-        sub = df[df.grp == grp]
-        if not len(sub):
-            continue
-        ax.scatter(sub.acc, sub.cpr, s=46,
-                   marker=FAMILY_SHAPE[MASK if grp in FULL_MASK else GRADIENT],
-                   c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
-                   label=grp)
-
-    xr, yr = ax.get_xlim(), ax.get_ylim()
-    xr = (xr[0], xr[1] + 0.22 * (xr[1] - xr[0]))
-    ax.set_xlim(xr)
-    lw_, lh_ = label_boxes(ax, df.label.tolist(), fig)
-    lx, ly = repel(df.acc.values, df.cpr.values, lw_, lh_, xr, yr)
-    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
-        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
-        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
-                    color=FULL_COLORS[grp], zorder=4,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
-    ax.set_ylim(yr)
-    ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
-    ax.set_ylabel("CPR AUC (↑)", fontsize=9)
-    ax.tick_params(labelsize=8)
-    ax.grid(True, lw=0.25, color="#dddddd")
-    ax.set_axisbelow(True)
-    for sp in ax.spines.values():
-        sp.set_linewidth(0.5)
-    ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
-              borderpad=0.5, handletextpad=0.4)
+    df = draw_points(ax, edge_rows(), xpad=0.22)
     fig.tight_layout()
+    place_labels(fig, ax, df)
     out = "plots/mib_accauc_cpr_scatter_edge_full.pdf"
     fig.savefig(out, dpi=300)
+    print(f"wrote {out} ({len(df)} points)\n{edge_rho(df)}")
 
-    # Three rhos, because one would be misleading. "+hard bwd" (REINFORCE) sits at the origin
-    # on BOTH axes -- it is the collapsed run, not a point on the trade-off -- and a single
-    # far outlier consistent on both axes manufactures a high rank correlation on its own.
-    # Dropping it is what shows whether the remaining points agree at all.
-    nb = df[df.label != "+hard bwd"]
-    om = df[df.grp != G_GRAD]
-    print(f"wrote {out} ({len(df)} points)")
-    print(f"Spearman rho: {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
-          f"{spearmanr(nb.acc, nb.cpr)[0]:.3f} (excl. +hard bwd, {len(nb)}), "
-          f"{spearmanr(om.acc, om.cpr)[0]:.3f} (MAttr only, {len(om)})")
-    g = df[df.grp == G_GRAD]
-    if len(g):
-        print(f"EAP-IG-inp at acc={g.acc.iloc[0]:.3f} cpr={g.cpr.iloc[0]:.2f}; "
-              f"MAttr variants span acc {om.acc.min():.3f}-{om.acc.max():.3f}, "
-              f"cpr {om.cpr.min():.2f}-{om.cpr.max():.2f}")
+
+def main_both():
+    """--both: node and edge in ONE full-page figure, node on top.
+
+    The two panels answer the same question at the two granularities MIB scores, and reading
+    them against each other is the whole point (mask learning dominates acc-AUC at node level;
+    at edge level the one complete gradient baseline lands at comparable acc-AUC but a quarter
+    of the CPR). Two separate float environments put them on different pages as often as not.
+
+    Height is split 2:1, not evenly. The node panel carries 49 labelled points against the edge
+    panel's 9, and vertical room is what label placement is actually short of -- an even split
+    would spend half the page resolving nine labels that have never collided.
+
+    The legend lives on the node panel only: the edge panel's groups are a subset of it, and the
+    colours and shapes mean the same thing in both.
+    """
+    import matplotlib.pyplot as plt
+    plt.rcParams.update(RC)
+    fig, (ax_n, ax_e) = plt.subplots(
+        2, 1, figsize=(FIG_W, FIG_H_BOTH), gridspec_kw=dict(height_ratios=[2, 1]))
+    dfn = draw_points(ax_n, node_rows(), title="(a) Node level", xlabel=False)
+    dfe = draw_points(ax_e, edge_rows(), xpad=0.22, legend=False, title="(b) Edge level")
+    fig.tight_layout()
+    place_labels(fig, ax_n, dfn)
+    place_labels(fig, ax_e, dfe)
+    out = "plots/mib_accauc_cpr_scatter_both.pdf"
+    fig.savefig(out, dpi=300)
+    print(f"wrote {out} ({len(dfn)} node + {len(dfe)} edge points)\n"
+          f"{node_rho(dfn)}\n{edge_rho(dfe)}")
 
 
 def main():
@@ -702,7 +744,9 @@ def main():
 
 
 if __name__ == "__main__":
-    if "--edge" in sys.argv:
+    if "--both" in sys.argv:
+        main_both()           # always full-page: node and edge panels in one figure
+    elif "--edge" in sys.argv:
         main_full_edge()      # always full-page; there is no compact edge variant
     elif "--full" in sys.argv:
         main_full()
