@@ -47,6 +47,14 @@ theme_set(
 # Change the line below and re-run if the headline metric or the winning budget changes.
 EPRUN_BEST = ("eprun_node_s0.5_ld", "0.5")   # (results dir, target sparsity); see EPRUN_SPARSITIES
 
+# DBM (pyvene's sigmoid mask) has the same "which run?" problem and gets the same answer: the
+# setting that wins CPR AUC on validation, lr=0.3 with L1 6.0 (Avg 1.50 vs 1.31 unpenalised,
+# and both sweeps peak in the interior of their grids). This is the exact run the main-text
+# scatter plots and the test table reports, so all three artifacts describe one circuit.
+# The gate is sigmoid(mask/temperature), monotone in the stored logits, so ranking these raw
+# `score` values is the same ranking as the gates themselves -- nothing to rescale for Spearman.
+DBM_BEST = "eprun_node_ld_sig_lr0.3_l16.0"
+
 # (label, dir/subfolder, layout). flat  = {task}_{model}_importances.json
 #                                 nested = <sub>/{stask}_{model}/importances.json
 #                                 graph  = graph_{task}_{model}.json  (Node Pruning mask logits)
@@ -71,6 +79,7 @@ METHODS = [
     ("AttnRLP",           "attnrlp/AttnRLP_patching_node",                 "nested"),
     ("GIM",               "gim/GIM_patching_node",                         "nested"),
     ("Node Pruning",      EPRUN_BEST[0],                                   "graph"),
+    ("DBM",               DBM_BEST,                                        "graph"),
 ]
 TASKS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
          ("arithmetic_subtraction", "llama3"), ("mcqa", "qwen2.5"), ("mcqa", "gemma2"),
@@ -193,7 +202,7 @@ print("Saved method_corr_heatmap")
 # mask learner. Both are still in the full-set appendix heatmaps above.
 MAIN_LABELS = [
     "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
-    "Node Pruning",                                              # learned, external baseline
+    "Node Pruning", "DBM",                                       # learned, external baselines (2)
     "NAP-IG", "RelP+QK", "GIM", "I$\\times$G",                   # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
