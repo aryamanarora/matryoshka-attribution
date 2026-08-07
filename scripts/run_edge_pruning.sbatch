@@ -25,6 +25,12 @@
 # LR=<x> (env var) overrides the mask learning rate and adds an _lr<x> suffix, e.g.
 # GATE=sigmoid LOSS=logit_diff LR=0.1 ... -> results/eprun_node_ld_sig_lr0.1/.
 #
+# GATE=dcm is DCM (Prakash et al. 2024 / roonbug/belief_dynamics): a raw coefficient clamped
+# to [0,1], no sigmoid/temperature/lr-schedule, with a PID controller driving the sparsity
+# term until round(mask) hits DENSITY. It has no ranking (clamp piles scores on 0 and 1), so
+# it is only apples-to-apples at that density. DENSITY=<d> is REQUIRED and goes in the dir
+# name: GATE=dcm LOSS=logit_diff DENSITY=0.05 LR=0.1 ... -> results/eprun_node_ld_dcm_d0.05_lr0.1/.
+#
 # L1=<x> (env var, GATE=sigmoid only) adds an L1 sparsity penalty of weight <x> on the gate
 # and an _l1<x> suffix; L1_TARGET=logit switches to pyvene's ||mask||_1 form. See
 # eval_mib_edge_pruning.py --l1-coeff. GATE=sigmoid LOSS=logit_diff LR=0.3 L1=0.5 ...
@@ -57,6 +63,15 @@ LR=${LR:-}
 # unpenalised runs are a choice we made, and this is the variant that closes that gap.
 L1=${L1:-}
 L1_TARGET=${L1_TARGET:-gate}
+# DENSITY is the fraction of units GATE=dcm's PID controller pins the circuit to. Required
+# for that gate and inert otherwise; different density = different circuit = different dir.
+DENSITY=${DENSITY:-}
+DENSITY_ARG=""
+if [ "$GATE" = "dcm" ]; then
+  [ -n "$DENSITY" ] || { echo "GATE=dcm requires DENSITY=<fraction>"; exit 1; }
+elif [ -n "$DENSITY" ]; then
+  echo "DENSITY=$DENSITY requires GATE=dcm"; exit 1
+fi
 
 L2A=/home/guests/aryaman/learning-to-attribute
 MIB=/home/guests/aryaman/MIB-circuit-track
@@ -90,10 +105,15 @@ else
   SPARSITY_ARG=""
 fi
 [ "$LOSS" = "kl" ] || SUF="${SUF}_ld"
-# GATE=sigmoid has no sparsity target at all; a _s<S> dir name would be a lie.
+# GATE=sigmoid has no sparsity target at all; a _s<S> dir name would be a lie. GATE=dcm has
+# one, but it is a DENSITY the PID lands on rather than an L0 budget, so it gets its own knob.
 if [ "$GATE" != "hard_concrete" ]; then
   [ -z "$SPARSITY" ] || { echo "GATE=$GATE ignores target_sparsity; drop arg 6"; exit 1; }
-  SUF="${SUF}_sig"
+  case "$GATE" in
+    sigmoid) SUF="${SUF}_sig" ;;
+    dcm)     SUF="${SUF}_dcm_d${DENSITY}"; DENSITY_ARG="--target-density $DENSITY" ;;
+    *) echo "unknown GATE=$GATE"; exit 1 ;;
+  esac
 fi
 if [ -n "$LR" ]; then
   SUF="${SUF}_lr${LR}"
@@ -127,7 +147,7 @@ else
   PYTHONPATH=$MIB:$MIB/EAP-IG/src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "$PY" \
     scripts/eval_mib_edge_pruning.py --mib-path "$MIB" \
     --model "$MODEL" --task "$TASK" --level "$LEVEL" --steps "$STEPS" \
-    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $LR_ARG $L1_ARG $SPARSITY_ARG --skip-eval
+    --split "$SPLIT" --output "$OUT" --loss "$LOSS" --gate "$GATE" $LR_ARG $L1_ARG $DENSITY_ARG $SPARSITY_ARG --skip-eval
 fi
 
 cd "$MIB"
