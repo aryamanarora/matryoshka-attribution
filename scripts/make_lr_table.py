@@ -8,6 +8,7 @@ lr-sweep dirs (htk_lr_*, bern_lr_*) currently only hold ioi/gpt2; the lr=0.01 ba
 hold all tasks.
 Run from repo root on sc:  uv run python scripts/make_lr_table.py
 """
+import json
 import pickle
 from pathlib import Path
 
@@ -123,6 +124,42 @@ METHODS = [
         ("1.5", "eprun_eval_s0.8_ld_lr1.5"),
         ("3.0", "eprun_eval_s0.8_ld_lr3.0"),
     ]),
+    # DCM (Prakash et al. 2024 / roonbug/belief_dynamics): a raw coefficient clamped to
+    # [0,1], circuit = round(mask), with a PID controller on the sparsity weight. Unlike
+    # every other block here it has no ranking of its own -- clamp_ piles the scores onto
+    # exactly 0.0 and 1.0 -- so it can only be trained toward a density, and the density is
+    # a THIRD axis on top of LR. Hence three blocks, pinned to three of MIB's own sweep
+    # points, where round(mask) and top-k are the same set.
+    #
+    # 0.1 is the published LR and is identical in Prakash et al. and belief_dynamics, so
+    # unlike pyvene's 1e-3 there is a real prior here; the grid brackets it either way.
+    #
+    # READ THE $\emptyset$ MARKS BEFORE READING THE NUMBERS. Where the PID overshoots, the
+    # mask collapses to zero units and MIB still scores the run -- on the pruning-order
+    # tie-break, which is a trajectory ranking rather than any circuit DCM converged to.
+    # Those scores are not just meaningless but ANTI-correlated with success: the collapsed
+    # runs post a HIGHER AUC than the runs that hit their pin. Marked, and never bolded.
+    ("DCM (pinned density $=$ 1\\%)", [
+        ("0.01", "eprun_eval_ld_dcm_d0.01_lr0.01"),
+        ("0.03", "eprun_eval_ld_dcm_d0.01_lr0.03"),
+        ("0.1 (published)", "eprun_eval_ld_dcm_d0.01_lr0.1"),
+        ("0.3", "eprun_eval_ld_dcm_d0.01_lr0.3"),
+        ("1.0", "eprun_eval_ld_dcm_d0.01_lr1.0"),
+    ]),
+    ("DCM (pinned density $=$ 5\\%)", [
+        ("0.01", "eprun_eval_ld_dcm_d0.05_lr0.01"),
+        ("0.03", "eprun_eval_ld_dcm_d0.05_lr0.03"),
+        ("0.1 (published)", "eprun_eval_ld_dcm_d0.05_lr0.1"),
+        ("0.3", "eprun_eval_ld_dcm_d0.05_lr0.3"),
+        ("1.0", "eprun_eval_ld_dcm_d0.05_lr1.0"),
+    ]),
+    ("DCM (pinned density $=$ 20\\%)", [
+        ("0.01", "eprun_eval_ld_dcm_d0.2_lr0.01"),
+        ("0.03", "eprun_eval_ld_dcm_d0.2_lr0.03"),
+        ("0.1 (published)", "eprun_eval_ld_dcm_d0.2_lr0.1"),
+        ("0.3", "eprun_eval_ld_dcm_d0.2_lr0.3"),
+        ("1.0", "eprun_eval_ld_dcm_d0.2_lr1.0"),
+    ]),
 ]
 
 
@@ -151,6 +188,9 @@ STEPS = {
     "Node Pruning (sparsity sweep, logit-diff, LR $=$ 0.8)": "3000 steps",
     "Node Pruning ($s{=}0.5$, logit-diff)": "3000 steps",
     "Node Pruning ($s{=}0.8$, logit-diff)": "3000 steps",
+    "DCM (pinned density $=$ 1\\%)": "3000 steps",
+    "DCM (pinned density $=$ 5\\%)": "3000 steps",
+    "DCM (pinned density $=$ 20\\%)": "3000 steps",
 }
 
 
@@ -179,10 +219,35 @@ def cpr(d, task, model):
         return None
 
 
-def fmt(v, bold=False, dagger=False):
+def empty_circuit(d, task, model):
+    """True if a DCM run's PID missed its pin badly enough to leave round(mask) empty.
+
+    Only DCM can hit this. Its scores are 0/1 plus a pruning-order tie-break, so when no
+    unit survives, MIB's top-k still returns k units -- ordered by when they died. The
+    resulting AUC is a property of the training trajectory, not of any circuit the method
+    converged to, and empirically it is HIGHER than a successful run's. Left in the table
+    (the run happened, and hiding it would misrepresent the sweep) but marked and excluded
+    from the per-column best, so it can never be read as the winning learning rate.
+    """
+    if "_dcm_" not in d:
+        return False
+    graph = RESULTS_BASE / d.replace("eprun_eval_", "eprun_node_") / f"graph_{task}_{model}.json"
+    try:
+        with open(graph) as f:
+            nodes = json.load(f)["nodes"]
+    except (OSError, ValueError, KeyError):
+        return False
+    scores = [v["score"] for v in nodes.values() if isinstance(v, dict) and "score" in v]
+    # `input` is forced into every circuit and is not one of the maskable units.
+    return bool(scores) and sum(1 for s in scores if s >= 0.5) - 1 == 0
+
+
+def fmt(v, bold=False, dagger=False, empty=False):
     if v is None:
         return "---"
     s = f"\\textbf{{{v:.2f}}}" if bold else f"{v:.2f}"
+    if empty:
+        return "$^{\\emptyset}$" + s
     return ("$^{\\dagger}$" + s) if dagger else s
 
 
@@ -202,6 +267,7 @@ def main():
         method, lrs = entry[0], entry[1]
         prefix = entry[2] if len(entry) > 2 else "LR$=$"
         data = {lr: {(t, m): cpr(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
+        empty = {lr: {(t, m): empty_circuit(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
         # A block whose only populated row is the control (an existing run reused as the
         # sweep's zero point) is not yet a sweep -- it would render as one row of numbers
         # over four rows of "---". Skip it until a second point lands; it then appears on
@@ -214,7 +280,11 @@ def main():
         emitted += 1
         best = {}
         for t, m, _ in COLUMNS:
-            vals = [data[lr][(t, m)] for lr, _ in lrs if data[lr][(t, m)] is not None]
+            # Collapsed DCM runs are excluded here, not just marked: they routinely score
+            # above the runs that hit their pin, so leaving them in would bold an empty
+            # circuit as the block's best learning rate.
+            vals = [data[lr][(t, m)] for lr, _ in lrs
+                    if data[lr][(t, m)] is not None and not empty[lr][(t, m)]]
             best[(t, m)] = max(vals) if len(vals) > 1 else None  # only bold when there's a sweep
         # 3 MAttr blocks cap llama/ioi at 200 val examples, and so does the sigmoid-mask
         # block (run_edge_pruning.sbatch passes --head 200); the REINFORCE runs do not.
@@ -237,9 +307,21 @@ def main():
                           f"Avg suppressed (missing "
                           f"{[f'{t}/{m}' for t, m, _ in COLUMNS if data[lr][(t, m)] is None]})")
             cells = [fmt(data[lr][(t, m)],
-                         bold=(data[lr][(t, m)] is not None and data[lr][(t, m)] == best[(t, m)]),
-                         dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None))
+                         bold=(data[lr][(t, m)] is not None and not empty[lr][(t, m)]
+                               and data[lr][(t, m)] == best[(t, m)]),
+                         dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None),
+                         empty=empty[lr][(t, m)])
                      for t, m, _ in COLUMNS]
+            # An Avg over cells that are all empty circuits is an average of trajectory
+            # rankings; mark it so the block-level number carries the same warning as the
+            # cells it came from, rather than laundering it into a clean-looking mean.
+            n_empty = sum(1 for t, m, _ in COLUMNS
+                          if empty[lr][(t, m)] and data[lr][(t, m)] is not None)
+            if n_empty:
+                print(f"WARNING: {method} {prefix}{lr} has {n_empty}/{len(present)} cells whose "
+                      f"circuit is EMPTY; those scores are the pruning-order tie-break")
+                if avg != "---" and n_empty == len(present):
+                    avg = "$^{\\emptyset}$" + avg
             lines.append(f"\\quad {prefix}{lr} & {avg} & " + " & ".join(cells) + " \\\\")
 
     lines.append("\\bottomrule")
