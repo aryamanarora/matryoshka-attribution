@@ -86,6 +86,29 @@ METHODS = [
     # The 0.8 row is the EXISTING default-LR run, not a new one: 0.8 is the hard-concrete
     # default. That differs from the sigmoid default of 1e-3, so this grid is deliberately NOT
     # the DBM grid -- each gate is swept around its own default rather than on a shared one.
+    # The sparsity sweep itself, at the default LR. It belongs in this table because the two LR
+    # blocks below are each CONDITIONED on a budget (s=0.5 and s=0.8), so without it a reader
+    # cannot see how those two budgets were picked or how much of the block-to-block spread is
+    # the budget rather than the LR. Same 11 cells and same objective as the LR blocks, so the
+    # three blocks are directly comparable.
+    #
+    # NOT independent of the blocks below: the s=0.5 and s=0.8 rows here ARE the "0.8 (default)"
+    # rows of the two LR blocks -- same dirs, listed twice on purpose so each block reads as a
+    # complete sweep around its own centre. Averages will therefore agree exactly across blocks;
+    # that is a consistency check, not a duplicated run.
+    #
+    # The KL sparsity sweep (eprun_eval_s0.5 / _s0.8 / _s0.95 / _s0.99 and the s=0.9 default
+    # `eprun_eval`) is deliberately NOT here: two of its dirs are 6/11 and 9/11, so it would
+    # render with suppressed Avgs, and the LR blocks are all logit-diff anyway.
+    ("Node Pruning (sparsity sweep, logit-diff, LR $=$ 0.8)", [
+        ("0.1", "eprun_eval_s0.1_ld"),
+        ("0.25", "eprun_eval_s0.25_ld"),
+        ("0.5", "eprun_eval_s0.5_ld"),
+        ("0.8", "eprun_eval_s0.8_ld"),
+        ("0.9", "eprun_eval_s0.9_ld"),
+        ("0.95", "eprun_eval_s0.95_ld"),
+        ("0.99", "eprun_eval_s0.99_ld"),
+    ], "$s{=}$"),
     ("Node Pruning ($s{=}0.5$, logit-diff)", [
         ("0.1", "eprun_eval_s0.5_ld_lr0.1"),
         ("0.3", "eprun_eval_s0.5_ld_lr0.3"),
@@ -125,6 +148,7 @@ STEPS = {
     "$+$ hard bwd (REINFORCE)": "500 steps; 2000 in the last row",
     "DBM": "3000 steps",
     "DBM $+$ L1 (lr $=$ 0.3)": "3000 steps",
+    "Node Pruning (sparsity sweep, logit-diff, LR $=$ 0.8)": "3000 steps",
     "Node Pruning ($s{=}0.5$, logit-diff)": "3000 steps",
     "Node Pruning ($s{=}0.8$, logit-diff)": "3000 steps",
 }
