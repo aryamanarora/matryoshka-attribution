@@ -403,10 +403,10 @@ def main():
                 # measured. Nesting this way (box inside link) rather than the reverse also
                 # keeps the whole id one uniform hyperref colour instead of a highlighted
                 # darkblue stem followed by a black tail.
-                cell = r"\href{%s}{%s\textbf{.p%d}}" % (
+                cell = r"\href{%s}{%s.p%d}" % (
                     url,
                     chip((n["layer"], n["neuron"]),
-                         r"\textbf{$\ell$%d.n%d}" % (n["layer"], n["neuron"])),
+                         r"$\ell$%d.n%d" % (n["layer"], n["neuron"])),
                     n["pos"])
                 if desc_mode:
                     cell += r"\newline %s\newline %s" % (
