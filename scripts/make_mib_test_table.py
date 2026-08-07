@@ -117,6 +117,26 @@ GRAD_NODE_BASELINES = [
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
 ]
 
+# DBM, the other mask-learning baseline (pyvene's SigmoidMaskIntervention). Same loader and
+# same layout as Node Pruning above -- run_evaluation.py output, EdgePruning_patching_node --
+# and the same "no cells -> no row" rule, so an entry can be declared here before its jobs land
+# and it appears on the next regeneration with no edit.
+#
+# Two rows on purpose, NOT one tuned row. The unpenalised run is the DBM the paper describes
+# (pyvene ships this mask with no sparsity term at all); the L1 row is a separate variant, so
+# folding the penalty into "DBM" would attribute to the library a term it does not have. The
+# validation tables make the same split.
+#
+# lr=0.3 is the swept LR for both (best Avg CPR of {0.001..1.0} on validation), and lambda=6.0
+# is the best of {0, 0.2, 0.6, 2.0, 6.0, 20.0} -- validation Avg CPR 1.50 vs 1.31 unpenalised,
+# both peaks interior to their grids. Caveat for the prose: lambda also drops achieved density
+# 0.56 -> 0.30, so the CPR gain is confounded with the sparsity change and this sweep alone
+# does not establish that the penalty *helps*; it establishes the best-tuned operating point.
+MASK_NODE_BASELINES = [
+    ("DBM",            "eprun_eval_ld_sig_lr0.3",        "EdgePruning_patching_node"),
+    ("DBM $+$ L1",     "eprun_eval_ld_sig_lr0.3_l16.0",  "EdgePruning_patching_node"),
+]
+
 
 def load_run_eval_cpr(results_dir, sub, task, model):
     """CPR AUC from a run_evaluation.py output pkl (baseline layout, dashed task names)."""
@@ -205,6 +225,22 @@ def main():
     if node_pruning and len(node_pruning) < len(COLUMNS):
         print(f"WARNING: {np_name} has {len(node_pruning)}/{len(COLUMNS)} test cells; "
               f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in node_pruning]}")
+
+    # DBM rows, same rule: a dir with no test cells yet is skipped rather than printed as a row
+    # of dashes, which would read as "the method scored nothing" instead of "not run yet".
+    for name, d, sub in MASK_NODE_BASELINES:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_run_eval_cpr(d, sub, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        if not data:
+            print(f"SKIP {name}: no test cells in results/{d}/{sub} (jobs still pending)")
+            continue
+        if len(data) < len(COLUMNS):
+            print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
+                  f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in data]}")
+        mask_nodes[name] = data
 
     # GIM / RelP+QK, same loader and same "no cells -> no row" rule as Node Pruning: a row of
     # eleven dashes reads as "the method scored nothing", not "the jobs have not landed yet".
