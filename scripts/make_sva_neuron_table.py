@@ -5,7 +5,7 @@ Reads the per-unit score tensors the SVA sweep already writes
 method, the five neurons each method ranks FIRST -- i.e. the first units it puts into the
 circuit.
 
-DEFAULT LAYOUT IS COMPACT (one page): identity + position/score only. `--descriptions` adds
+DEFAULT LAYOUT IS COMPACT (one page): the identifier alone. `--descriptions` adds
 each neuron's top positive and negative description from Transluce, which is a much richer
 table but runs to four pages -- one per subtask -- because a described cell is 6-8 typeset
 lines instead of 2. Every neuron id is a hyperlink to Transluce either way, so the compact
@@ -314,12 +314,11 @@ def main():
         save_cache()
 
     # One column per method, read left to right; rank 1-5 down the rows, task as a row group.
-    # Each cell stacks its lines with \newline (legal in a p-column, unlike \\ which would end
-    # the table row): identity over position/score in compact mode, plus the two descriptions
-    # under them in --descriptions mode. Rank rows alternate a faint shade -- in description
-    # mode because a cell is 6-8 lines tall and rows that deep are hard to track across five
-    # columns, in compact mode because five columns of near-identical "l30.n11158" strings are
-    # easy to slip a row on.
+    # A compact cell is now a single identifier; --descriptions mode stacks the two Transluce
+    # lines under it with \newline (legal in a p-column, unlike \\ which would end the table
+    # row). Rank rows alternate a faint shade -- in description mode because a cell is 5-7 lines
+    # tall and rows that deep are hard to track across five columns, in compact mode because
+    # five columns of near-identical "l30.n11158.p5" strings are easy to slip a row on.
     #
     # longtable, not tabular, in BOTH modes: description mode is four pages, and while compact
     # mode fits on one, a tabular that later stops fitting overflows off the bottom of the page
@@ -391,22 +390,24 @@ def main():
                     continue
                 n = ns[r_i]
                 url = NEURON_URL % (n["layer"], n["neuron"])
-                # A plain space, not ~, between the id and the pos/score: "l30.n11158 p5 / 0.523"
-                # is ~95pt of text in a 68pt column, so tying it together guarantees an overfull
-                # box. A breakable space lets it sit on one line when it fits and wrap when not.
-                ident = chip((n["layer"], n["neuron"]),
-                             r"\href{%s}{\textbf{$\ell$%d.n%d}}" % (url, n["layer"], n["neuron"]))
-                # Compact mode forces the break before the position/score instead of letting it
-                # wrap. The two together are ~80pt of text in a 68pt column, so SOME cells
-                # wrapped and some (short ids) did not, and a row whose five cells break
-                # differently reads as noise. It costs no vertical space: every row already
-                # contained a wrapped cell, so the row was two lines tall regardless. Description
-                # mode keeps the breakable space -- there the id line is followed by two more
-                # lines anyway, so a forced break buys nothing and would add 20 lines to a
-                # layout that is already at the page limit.
-                sep = " " if desc_mode else r"\newline "
-                cell = (r"%s%s\textcolor{gray}{\scriptsize p%d\,/\,%.3g}"
-                        % (ident, sep, n["pos"], n["score"]))
+                # One identifier, "l30.n11158.p5" -- layer, neuron, position. The raw score used
+                # to sit next to it and is gone: it is not comparable across columns (IG's
+                # signed effects and a mask's logits are different quantities in different
+                # units), so a reader could only ever compare it DOWN a column, which is the one
+                # thing the rank number already says.
+                #
+                # \href wraps the whole label but \colorbox covers only the l.n part, because
+                # the chip means "this NEURON recurs across cells" and the position is not part
+                # of that identity -- the same neuron shows up at different positions, and
+                # highlighting the position with it would claim a recurrence that was not
+                # measured. Nesting this way (box inside link) rather than the reverse also
+                # keeps the whole id one uniform hyperref colour instead of a highlighted
+                # darkblue stem followed by a black tail.
+                cell = r"\href{%s}{%s\textbf{.p%d}}" % (
+                    url,
+                    chip((n["layer"], n["neuron"]),
+                         r"\textbf{$\ell$%d.n%d}" % (n["layer"], n["neuron"])),
+                    n["pos"])
                 if desc_mode:
                     cell += r"\newline %s\newline %s" % (
                         fmt_desc(describe(n["layer"], n["neuron"], "+", fetch=False), "+"),
