@@ -269,12 +269,13 @@ FIG_W, FIG_H = 5.4, 8.4
 # panel carries 49 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.5in total
 # leaves the node panel ~5.5in, i.e. LESS room than the standalone 8.4in figure, which is why
 # the ladder pass in place_labels matters more here than it does for --full.
-# This is a HARD ceiling, not a preference: the float goes in at width=\\linewidth, so LaTeX
-# scales it by \\linewidth/FIG_W (~5.5/5.4 = 1.019) and the height goes up with it. 8.6in
-# overfull'd the page by 3.6pt; every 0.1in shaved here buys ~7.3pt on the page, so 8.5in
-# clears it with ~4pt to spare. Raising it again needs the same arithmetic redone against
-# whatever caption is on that page.
-FIG_H_BOTH = 8.5
+# This is a HARD ceiling, not a preference. ICLR's \\textwidth is 5.5in and \\textheight is
+# 9.0in; the float goes in at width=\\linewidth, so LaTeX scales it by 5.5/FIG_W (= 1.019) and
+# the height rides along -- every 0.1in here is ~7.3pt on the page. 8.6in overfull'd by 3.6pt.
+# 8.5in fits, but only just: it leaves 0.34in = ~25pt for \\abovecaptionskip plus the caption,
+# i.e. ONE line of caption and nothing more, which is a trap for a figure that needs to explain
+# six series. 8.2in scales to 8.35in and leaves ~47pt, enough for a three-line caption.
+FIG_H_BOTH = 8.2
 
 # normalized-axes label geometry. Widths are MEASURED, not estimated (see label_boxes) -- the
 # old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
