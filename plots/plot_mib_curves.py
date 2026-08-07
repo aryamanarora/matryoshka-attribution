@@ -1,5 +1,5 @@
-"""Appendix full-width per-task curves over the MIB denoising sparsity sweep, for the 5
-key node methods (MAttr, +hard, IG, I×G, GIM), faceted by task/model.
+"""Appendix full-width per-task curves over the MIB denoising sparsity sweep, for the 7
+key node methods (MAttr, +hard, IG, I×G, GIM, Node Pruning, DBM), faceted by task/model.
 
 Two figures, same layout:
   - mib_accuracy_curves.pdf : decision accuracy (fraction of examples with metric>0) vs sparsity
@@ -9,7 +9,12 @@ log-x-weighted mean of the accuracy curve; CPR AUC is the linear-x area under th
 
 Each curve reads BOTH arrays from one self-consistent eval pkl:
   MAttr/+hard -> results/{topklog,htklog}_lr_0.05/{task}_{model}_validation.pkl
-  baselines   -> MIB-circuit-track/results/*_accauc/<sub>/{stask}_{model}_validation_abs-False.pkl
+  gradient    -> MIB-circuit-track/results/*_accauc/<sub>/{stask}_{model}_validation_abs-False.pkl
+  mask-learn  -> results/eprun_eval_*/EdgePruning_patching_node/{stask}_{model}_validation_abs-False.pkl
+
+The two mask-learning baselines sweep sparsity the same way everything else does: their
+learned per-node mask logits are a ranking, and MIB's eval thresholds that ranking at each
+sweep point. The mask's own converged density is one point on that x-axis, not the curve.
 Run:  uv run python plots/plot_mib_curves.py
 """
 import pickle
@@ -49,6 +54,12 @@ METHODS = [
     ("IG",    P.color("IG"), "base",  ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
     ("I×G",   P.color("I×G"), "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
     ("GIM",   P.color("GIM"), "base",  ("gim_accauc",       "GIM_patching_node")),
+    # The two mask-learning baselines at their best swept setting -- Node Pruning s=0.5 with
+    # the logit-diff objective, DBM at lr 0.3 with lambda_L1 6.0. Both are the same dirs the
+    # test table and the correlation heatmap read, so a reader comparing figures is looking
+    # at one run per method rather than three different budgets of it.
+    ("Node Pruning", P.color("Node Pruning"), "eprun", "eprun_eval_s0.5_ld"),
+    ("DBM",          P.color("DBM"),          "eprun", "eprun_eval_ld_sig_lr0.3_l16.0"),
 ]
 METHOD_ORDER = [m[0] for m in METHODS]
 
@@ -75,11 +86,14 @@ theme_set(
 
 
 def load(kind, loc, task, model):
+    stask = task.replace("_", "-")
     if kind == "mattr":
         p = R / loc / f"{task}_{model}_validation.pkl"
+    elif kind == "eprun":
+        p = R / loc / "EdgePruning_patching_node" / f"{stask}_{model}_validation_abs-False.pkl"
     else:
         dirn, sub = loc
-        p = MIB / dirn / sub / f"{task.replace('_', '-')}_{model}_validation_abs-False.pkl"
+        p = MIB / dirn / sub / f"{stask}_{model}_validation_abs-False.pkl"
     if not p.exists():
         return None
     try:
@@ -88,10 +102,13 @@ def load(kind, loc, task, model):
         return None
 
 
-# small per-method multiplicative x-offset (evenly spread in log space) so the 5 curves'
-# markers at each sweep point don't sit exactly on top of each other. ±0.06 decade ≈ ±15%.
+# small per-method multiplicative x-offset (evenly spread in log space) so the 7 curves'
+# markers at each sweep point don't sit exactly on top of each other. ±0.09 decade ≈ ±23%.
+# The half-width grew with the series count (was ±0.06 for 5) to hold the SPACING between
+# adjacent series fixed at 0.03 decade -- about one marker width. Shrinking back would stack
+# the markers; the total spread is still 6% of a 3-decade axis, well inside one sweep step.
 JIT = {m: 10 ** off for m, off in
-       zip(METHOD_ORDER, np.linspace(-0.06, 0.06, len(METHOD_ORDER)))}
+       zip(METHOD_ORDER, np.linspace(-0.09, 0.09, len(METHOD_ORDER)))}
 
 
 def build():

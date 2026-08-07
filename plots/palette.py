@@ -27,7 +27,12 @@ METHOD = {
     "IG":    "#e69f00",   # Wong orange   (light)
     "I×G":   "#882255",   # Tol wine      (dark)
     "GIM":   "#56b4e9",   # Wong sky blue; 5th series, MIB curve figures only
-    "Node Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter only
+    "Node Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter + curves
+    # Wong reddish purple: the other mask-learning baseline, so it stays in Node Pruning's
+    # cool-purple family while separating from it by lightness (L* ~60 vs ~24). Deliberately
+    # NOT the warm #d98d3a it started as -- that is a near-twin of IG's Wong orange, and in
+    # the curve figures the two would cross each other in every panel.
+    "DBM": "#cc79a7",
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
 
