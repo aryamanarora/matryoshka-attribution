@@ -79,16 +79,20 @@ LOSSES = [("logit_diff", "", "Logit difference"),
 # Methods and the order they appear. Keys are parse_method()'s outputs; %s takes the loss
 # fragment above. It is a template rather than a suffix because the fragment does not land at
 # the end for the two MAttr rows -- `sufficient_topk_adam_ce_bs1`, not `..._bs1_ce`.
-# Same four series as plot_accauc_vs_faithauc's FIGURE_METHODS, so this table and that figure
-# describe the same runs.
+# Same series as plot_accauc_vs_faithauc's FIGURE_METHODS, so this table and that figure
+# describe the same runs. DBM's fragment DOES land at the end (eval_sva.py appends _ce/_acc to
+# the whole tag), unlike the MAttr rows -- which is why the template is a %s slot, not a suffix.
 METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
+           ("sig_lr0.3_l16.0", "sig_lr0.3_l16.0%s"),
            ("stopk-log", "sufficient_topk_adam%s_bs1"),
            ("stopk-unif", "sufficient_topk_adam%s_uniformk_bs1")]
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
+          "sig_lr0.3_l16.0": "DBM",
           "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$"}
-# Truncation budget per description. The layout is one column per METHOD, so this shrinks with
-# the number of methods: five columns across \textwidth leave ~0.176\textwidth each, i.e. ~68pt,
-# i.e. ~15 characters per typeset line at \small -- so 45 wraps to about three lines.
+# Truncation budget per description. The layout is one column per METHOD, so the space per
+# description shrinks with the number of methods -- but the font drops a step at six columns
+# (see `font` in make()), and the two roughly cancel: ~68pt at \small and ~59pt at \scriptsize
+# are both ~15 characters per typeset line, so 45 still wraps to about three lines.
 DESC_CHARS = 45
 # Transluce's neuron browser, the same URL scheme tabs/arith_mlp_neuron_table.tex links to.
 NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
@@ -98,13 +102,15 @@ NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
 # you verify by reading 100 six-digit ids. Colour = identity, nothing else: it does not encode
 # rank, score or count.
 #
-# The threshold is 14 of the 60 cells because the recurrence distribution has a clean gap
-# there -- 7 neurons appear 14-24 times, then nothing at all between 13 and 8, then the tail
-# resumes at 7 -- so this is reading a break in the data, not imposing a cutoff. It also lands
+# The threshold is 14 of the 72 cells because the recurrence distribution has a clean gap
+# there -- 7 neurons appear 14-24 times, then nothing at all between 13 and 10, then the tail
+# resumes at 9 -- so this is reading a break in the data, not imposing a cutoff. It also lands
 # inside the palette size. (It was 4-of-20 when the table covered one loss; the same gap-reading
-# rule gives 14 now that all three losses are in, and 4-of-60 would select 13 neurons for 8
-# colours.) main() prints the counts either side of the cut so a rerun that moves the gap is
-# visible rather than silently recoloured.
+# rule gave 14 once all three losses were in, and 4-of-72 would select 20 neurons for 8
+# colours.) Adding the DBM column moved the cell count 60 -> 72 without moving the threshold or
+# the selected set at all: DBM's top-5s never land on any of the 7, so the counts either side of
+# the gap are unchanged. main() prints the counts either side of the cut so a rerun that moves
+# the gap is visible rather than silently recoloured.
 RECUR_MIN = 14
 # ColorBrewer Pastel1, with two substitutions made after looking at a rendered page. Pastels
 # because the link text sits ON these and hyperref renders it darkblue (colorlinks=true in the
@@ -359,17 +365,24 @@ def main():
     # The method header is repeated on every continuation page (\endhead) since a reader landing
     # mid-table otherwise has no way to tell which column is which.
     ncol = len(METHODS)
-    # \textwidth is ~397pt here. tabcolsep is added on both sides of all 6 columns except at the
-    # two @{} edges (2*6-2 = 10 gaps = 30pt = 0.076), and the rank column takes ~0.02, so the
-    # method columns share what is left. Overshooting shows up as an Overfull \hbox, not as a
-    # visibly broken table, so this is computed rather than eyeballed.
-    W = (1.0 - 0.076 - 0.02) / ncol
+    # \textwidth is ~397pt here. tabcolsep (3pt, set below) is added on both sides of all
+    # ncol+1 columns except at the two @{} edges, i.e. 2*ncol gaps, and the rank column takes
+    # ~0.02, so the method columns share what is left. Derived from ncol rather than written
+    # out as a constant: adding a method used to leave the old five-column number in place, and
+    # overshooting shows up as an Overfull \hbox, not as a visibly broken table.
+    W = (1.0 - 2 * ncol * 3.0 / 397.0 - 0.02) / ncol
     # Columns are ragged-right, not justified. At ~68pt a justified column cannot stretch its
     # interword glue enough to absorb a long word and overflows into its neighbour instead --
     # that alone accounted for most of the Overfull \hbox warnings this table used to emit.
     # >{...} needs the array package, which colortbl already \RequirePackage's (verified in the
     # build log), so this adds no preamble requirement beyond what \rowcolor already forces.
     col = r">{\raggedright\arraybackslash}p{%.3f\textwidth}" % W
+    # A chip is a \colorbox, i.e. an UNBREAKABLE box: ragged-right cannot rescue an id wider than
+    # its column, it just hangs over the neighbour. The widest id on this data is 12 characters
+    # ($\ell$31.n13964.p2); digits and lowercase run ~0.5em, so ~59pt at \small (9pt) against a
+    # 58.8pt column at ncol=6 -- over the edge, where ncol=5 had 71.8pt and 13pt of slack. One
+    # step down the size ladder buys back ~11%% of the width, which restores the slack.
+    font = r"\small" if W * 397 >= 65 else r"\scriptsize"
     hdr = ["& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\", r"\midrule"]
     def chip(key, body):
         """Wrap a neuron id in its recurrence colour, or leave it plain if it does not recur."""
@@ -378,7 +391,7 @@ def main():
     L = [r"% Requires \usepackage{booktabs,longtable,colortbl,hyperref}; \input at top level "
          r"(NOT inside a table float).",
          *[r"\definecolor{recur%d}{HTML}{%s}" % (i, PALETTE[i]) for i in range(len(recur))],
-         r"{\small",
+         "{" + font,
          r"\setlength{\tabcolsep}{3pt}",
          # \colorbox's default 3pt padding would push the chips into the neighbouring column and
          # open up the line spacing inside every cell; 1pt keeps the highlight tight to the id.

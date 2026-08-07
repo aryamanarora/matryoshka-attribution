@@ -68,6 +68,12 @@ METHODS = {
     # (MLP neurons, or +attn heads), a far larger unit count than MIB's ~156 nodes, so this is
     # NOT the same absolute circuit size as the results/eprun_node_s0.9 rows in the tables.
     "eprun-s090": ("Node Pruning", P.color("Node Pruning")),
+    # The pyvene sigmoid-mask baseline, likewise trained through eval_sva.py's own loss_fn, so
+    # the same "only the mask parameterization differs" reading applies: deterministic
+    # sigmoid(mask/temp) with temp annealed 50 -> 0.1, vs top-k. The key spells the recipe
+    # (lr 0.3, L1 6.0) because that pair, not the method name, decides the circuit -- it is the
+    # MIB validation argmax carried over, and a re-swept lr would be a DIFFERENT series.
+    "sig_lr0.3_l16.0": ("DBM", P.color("DBM")),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
@@ -93,6 +99,8 @@ def parse_method(fname, d):
         return None
     if tag.startswith("eprun_s"):        # eprun_s090[_ce|_acc] -> one key per budget
         return "eprun-s" + tag.split("_")[1][1:]
+    if tag.startswith("sig_"):           # sig_lr0.3_l16.0[_ce|_acc] -> one key per recipe
+        return re.sub(r"_(ce|acc)$", "", tag)
     if "hard_topk" in tag:
         if re.search(r"_ig\d+", tag):
             return None

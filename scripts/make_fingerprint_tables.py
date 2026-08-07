@@ -26,7 +26,10 @@ SECTIONS = [
     ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG")]),
     # Node Pruning through eval_sva.py's own loss_fn, so it shares MAttr's objective and
     # substrate exactly and differs only in mask parameterization (annealed L0 vs top-k).
-    ("Mask learning", [("Node Pruning", "eprun-s090")]),
+    # DBM is the same story one parameterization over: deterministic sigmoid gates (temp
+    # annealed 50 -> 0.1) at the MIB-validation-argmax recipe lr 0.3 / L1 6.0, rather than
+    # hard-concrete gates under an annealed L0 budget.
+    ("Mask learning", [("Node Pruning", "eprun-s090"), ("DBM", "sig_lr0.3_l16.0")]),
     (r"MAttr (soft top-$k$ fwd, Adam)", [(r"log-$k$", "stopk-log"), (r"unif-$k$", "stopk-unif")]),
     (r"$+$ hard (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
     (r"$+$ hard (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
