@@ -1,8 +1,14 @@
 """Compact MIB scatter: acc-AUC (x) vs CPR/logit-diff AUC (y), one point per node method.
 
 For every node-level MIB method (gradient baselines + all MAttr ablations) we computed both
-metrics on the validation set. This shows how the two agree across methods (Spearman rho in the
-title) — a companion to the MLP/Attn Spearman heatmap. Sized ~1/3 text width (5.5in full).
+metrics on the validation set. This shows how the two agree across methods (Spearman rho is
+printed, not drawn — the caption quotes it) — a companion to the MLP/Attn Spearman heatmap.
+
+Three variants of one plot, all raw matplotlib with direct point labels:
+  (no flag)  main text, 0.30\textwidth, eight curated points   -> mib_accauc_cpr_scatter.pdf
+  --full     appendix, full page, every node point             -> ..._full.pdf
+  --edge     appendix, full page, every edge point             -> ..._edge_full.pdf
+  --both     appendix, full page, node over edge in one float  -> ..._both.pdf
 
 acc-AUC sources mirror make_mib_accauc_table; CPR = `area_under` (mirrors make_mib_table).
 Run:  uv run python plots/plot_mib_accauc_cpr_scatter.py  ->  plots/mib_accauc_cpr_scatter.pdf
@@ -15,11 +21,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import palette as P
-from plotnine import (
-    ggplot, aes, geom_point, geom_path, labs, theme, theme_set, theme_bw, element_text,
-    element_line, element_blank, scale_fill_manual, scale_shape_manual, expand_limits,
-    guides, guide_legend,
-)
 
 sys.path.insert(0, "scripts")
 import make_mib_table as M            # noqa: E402  COLUMNS, OUR_METHODS, load_cpr_auc
@@ -28,42 +29,10 @@ import make_mib_accauc_table as A     # noqa: E402  acc_mattr / acc_base / BASEL
 COLS = M.COLUMNS
 RB = Path("results")
 
-theme_set(
-    theme_bw(base_size=8)
-    + theme(
-        text=element_text(color="#000", family="Inter"),
-        figure_size=(1.65, 2.0),   # display size at 0.30*textwidth (5.5in); matches heatmap fonts
-        axis_title=element_text(size=7),
-        axis_text=element_text(size=6),
-        plot_title=element_text(size=7, ha="center"),
-        panel_grid_major=element_line(size=0.25, color="#dddddd"),
-        panel_grid_minor=element_blank(),
-        legend_position="bottom",
-        legend_direction="horizontal",
-        legend_box="vertical",   # method legend above the gradient/mask shape legend
-        legend_title=element_blank(),
-        legend_text=element_text(size=5.5),
-        legend_key_size=7,
-        legend_box_margin=0,
-        legend_margin=0,
-    )
-)
-
-# Colour = method; grey "Other" for the un-highlighted gradient baselines. Colours from
-# plots/palette.py (single source of truth across all figures) -- no local hex codes.
-# MAttr headline = soft top-k fwd (log k); "+hard" = sigmoid-STE hard forward ablation.
-COLORS = {**P.METHOD, "Other": P.OTHER}
-COLOR_ORDER = ["MAttr", "+hard", "IG", "I×G", "Node Pruning", "Other"]
-
-# Node Pruning is the only mask-learning baseline that covers all 11 cells, so it is the closest
-# comparator to MAttr and gets its own colour rather than the grey "Other". Only its best budget
-# (M.EPRUN_BEST_SPARSITY) is plotted here, unlike the validation tables which list all three.
-# Both metrics come from the SAME pkl as every other point here (area_under + acc_auc), so
-# nothing extra was run.
-
-# the two MAttr methods we keep (drop all other MAttr ablations); IG/I×G among the baselines
-HL_DIR = {"topklog_lr_0.05": "MAttr", "htklog_lr_0.05": "+hard"}
-HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
+# Every figure here is raw matplotlib (see RC below): all three variants are the same plot at
+# different sizes and point counts, and the direct labelling needs per-annotation control that
+# plotnine does not expose. Colours still come from plots/palette.py, the single source of
+# truth across the paper's figures -- no local hex codes except the two tints noted below.
 
 # Shape = how the circuit is OBTAINED, which is the axis this figure is really about: score
 # every node with a gradient and rank, vs optimize a mask against an objective. Note this cuts
@@ -71,7 +40,6 @@ HL_BASE = {"NAP-IG": "IG", "I$\\times$G": "I×G"}
 # makes the upper-right cluster read as "mask learning wins acc-AUC" rather than "ours wins".
 GRADIENT, MASK = "Gradient", "Mask learning"
 FAMILY_SHAPE = {GRADIENT: "o", MASK: "s"}   # both fillable: black edge + method fill
-MASK_METHODS = {"MAttr", "+hard", "Node Pruning"}
 
 
 def avg(d):
@@ -119,7 +87,13 @@ FULL_ORDER = [G_MLOG, G_MUNI, G_GRAD, G_NPKL, G_NPLD, G_DBM]
 FULL_COLORS = {
     G_MLOG: P.METHOD["MAttr"], G_MUNI: P.METHOD["+hard"], G_GRAD: P.METHOD["IG"],
     G_NPLD: P.METHOD["Node Pruning"], G_NPKL: "#9d95d1",   # tint of the same indigo
-    G_DBM: "#d98d3a",   # warm, so it reads as neither MAttr (green) nor Node Pruning (indigo)
+    # Wong reddish purple. It was a warm #d98d3a, which is a near-twin of the gradient
+    # baselines' Wong orange (#e69f00) -- survivable at 50 labelled points, not in the
+    # eight-point main-text cut, where DBM sits four points from RelP+QK in the same hue and
+    # only the marker SHAPE says they are different families. Purple keeps it in the
+    # mask-learning family with Node Pruning's indigo while staying well clear of it in
+    # lightness (L* ~60 vs ~24).
+    G_DBM: "#cc79a7",
 }
 FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
 
@@ -281,12 +255,16 @@ FIG_H_BOTH = 8.2
 # old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
 # clean layout while "MAttr" and "+id-STE" visibly sat on top of each other in the PDF.
 LAB_PT = 6.5
+# Fallbacks only. The live values are measured off the rendered panel in place_labels(), since
+# both are axes FRACTIONS of a physical marker: 0.011 is the right half-extent for a 46pt^2
+# marker on a ~4.9in-wide panel and three times too small on the 1.65in main-text one, where it
+# let every label sit on top of its own marker.
 DX, MARK_R = 0.016, 0.011
 # Blank space added to the right of the data as a fraction of the x range, for the labels.
 XPAD = 0.34
 
 
-def label_boxes(ax, labels, fig):
+def label_boxes(ax, labels, fig, pt=LAB_PT):
     """(widths, height) of each rendered label in axes-fraction units.
 
     Draws each annotation with the exact fontsize/bbox the real call uses, measures it through
@@ -298,7 +276,7 @@ def label_boxes(ax, labels, fig):
     axb = ax.get_window_extent(renderer=r)
     ws, hs = [], []
     for lab in labels:
-        t = ax.annotate(lab, (0.5, 0.5), fontsize=LAB_PT, va="center", ha="left",
+        t = ax.annotate(lab, (0.5, 0.5), fontsize=pt, va="center", ha="left",
                         bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none"))
         bb = t.get_window_extent(renderer=r)
         ws.append(bb.width / axb.width)
@@ -307,7 +285,7 @@ def label_boxes(ax, labels, fig):
     return np.array(ws), float(max(hs))
 
 
-def repel(x, y, w, lab_h, xr, yr, n=900):
+def repel(x, y, w, lab_h, xr, yr, n=900, anchor_dx=DX, mark_r=MARK_R):
     """Label de-overlap by rectangle separation in normalized [0,1]^2 axes space (adjustText is
     not installed here, and a Gaussian point-repulsion does not converge on this figure -- the
     long labels like "+id-STE, Gumbel sel." are ~10x wider than tall, so what matters is BOX
@@ -317,11 +295,15 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
     drift unambiguous. Deterministic -- no RNG, so the figure is reproducible.
 
     `w` are the measured label widths and `lab_h` the label height, both axes-fraction
-    (label_boxes)."""
+    (label_boxes). `anchor_dx` is how far right of a marker its label is anchored and `mark_r`
+    the marker half-extent to keep labels clear of, both also axes-fraction and therefore both
+    dependent on the panel's physical size -- place_labels() measures them per figure rather
+    than passing the full-page constants down to the 1.65in main-text panel, where a marker is
+    three times bigger relative to the axes."""
     ax = (np.asarray(x) - xr[0]) / (xr[1] - xr[0])
     ay = (np.asarray(y) - yr[0]) / (yr[1] - yr[0])
     LAB_H = lab_h
-    lx, ly = ax + DX, ay.copy()
+    lx, ly = ax + anchor_dx, ay.copy()
     for _ in range(n):
         # half-extents of the pair boxes (labels are left-anchored, so x-centre = lx + w/2)
         cx = lx + w / 2
@@ -338,11 +320,11 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
         py = np.where(hit & useY, 0.5 * sy * oy, 0.0).sum(1)
         # keep labels off every marker (not just their own)
         mdx, mdy = cx[:, None] - ax[None, :], ly[:, None] - ay[None, :]
-        mox = w[:, None] / 2 + MARK_R - np.abs(mdx)
-        moy = LAB_H / 2 + MARK_R - np.abs(mdy)
+        mox = w[:, None] / 2 + mark_r - np.abs(mdx)
+        moy = LAB_H / 2 + mark_r - np.abs(mdy)
         mhit = (mox > 0) & (moy > 0)
         py += np.where(mhit, np.where(mdy >= 0, 1.0, -1.0) * moy, 0.0).sum(1)
-        lx += 0.28 * px + 0.05 * (ax + DX - lx)
+        lx += 0.28 * px + 0.05 * (ax + anchor_dx - lx)
         ly += 0.28 * py + 0.05 * (ay - ly)
         ly = np.clip(ly, LAB_H / 2, 1 - LAB_H / 2)
 
@@ -363,7 +345,7 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
     # invisible in a tall panel (few labels ever reach the edge) and dominates a short one: it is
     # what left 6 of the edge panel's 9 labels stacked in the top-right corner under --both.
     LO, HI = LAB_H / 2, 1 - LAB_H / 2
-    sep = LAB_H / 2 + MARK_R
+    sep = LAB_H / 2 + mark_r
     ladder = [0.0] + [s * d * LAB_H * 0.6 for s in range(1, 40) for d in (1, -1)]
     order = np.argsort(ly)
     placed = []
@@ -378,7 +360,7 @@ def repel(x, y, w, lab_h, xr, yr, n=900):
                        if abs(ci - (lx[j] + w[j] / 2)) < (w[i] + w[j]) / 2
                        and abs(cand - ly[j]) < LAB_H)
             cost += sum(1 for j in range(len(ax))
-                        if abs(ci - ax[j]) < w[i] / 2 + MARK_R and abs(cand - ay[j]) < sep)
+                        if abs(ci - ax[j]) < w[i] / 2 + mark_r and abs(cand - ay[j]) < sep)
             if cost == 0:
                 best = cand
                 break
@@ -504,13 +486,19 @@ def edge_rows():
     return rows
 
 
-def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True):
+def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
+                fs=(9, 8, 7.5), msize=46):
     """Markers, dashed series, axes furniture. Returns the frame; labels come later.
 
     Split from place_labels() because label geometry is measured in axes-fraction units, so it
     is only valid once the axes has its final size -- i.e. after tight_layout(). Drawing points
     for every panel first, then laying out, then labelling is the only order that gets the same
     answer in a one-panel and a two-panel figure.
+
+    `fs` = (axis-title, tick, legend) point sizes and `msize` the marker area. They are
+    arguments, not constants, because the compact figure goes in at 0.30\\textwidth (1.65in)
+    against the full-page variants' 5.5in: point sizes are absolute, so the same numbers that
+    read correctly on a full page render ~3x oversized in the small float.
     """
     df = pd.DataFrame(rows)
     # Dashed guides through every ordered series: the two Node Pruning objectives ordered
@@ -534,7 +522,7 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True):
         sub = df[df.grp == grp]
         if not len(sub):
             continue
-        ax.scatter(sub.acc, sub.cpr, s=46,
+        ax.scatter(sub.acc, sub.cpr, s=msize,
                    marker=FAMILY_SHAPE[MASK if grp in FULL_MASK else GRADIENT],
                    c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
                    label=grp)
@@ -550,29 +538,41 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True):
         # is taken over the 10 LOG-spaced sparsity points (0.1...100%), not a linear sweep. The
         # compact figure still says "acc-AUC" -- change both together or the two versions of the
         # same figure disagree about what their shared x axis measures.
-        ax.set_xlabel("IIA log-AUC (↑)", fontsize=9)
-    ax.set_ylabel("CPR AUC (↑)", fontsize=9)
+        ax.set_xlabel("IIA log-AUC (↑)", fontsize=fs[0])
+    ax.set_ylabel("CPR AUC (↑)", fontsize=fs[0])
     if title:
-        ax.set_title(title, fontsize=9, loc="left", pad=4)
-    ax.tick_params(labelsize=8)
+        ax.set_title(title, fontsize=fs[0], loc="left", pad=4)
+    ax.tick_params(labelsize=fs[1])
     ax.grid(True, lw=0.25, color="#dddddd")
     ax.set_axisbelow(True)
     for sp in ax.spines.values():
         sp.set_linewidth(0.5)
     if legend:
-        ax.legend(fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
+        ax.legend(fontsize=fs[2], loc="lower right", frameon=True, framealpha=0.95,
                   borderpad=0.5, handletextpad=0.4)
     return df
 
 
-def place_labels(fig, ax, df):
-    """Direct labels with leader lines. Call AFTER the figure is laid out (see draw_points)."""
+def place_labels(fig, ax, df, pt=LAB_PT, msize=46):
+    """Direct labels with leader lines. Call AFTER the figure is laid out (see draw_points).
+
+    `msize` must match the marker area draw_points() used: matplotlib's `s` is an area in
+    points^2, i.e. physical, so the same marker covers three times more of the 1.65in main-text
+    panel than of a full-page one, and repel()'s obstacle radius has to be measured here rather
+    than fixed. The anchor offset rides on the same measurement (DX/MARK_R = 1.45 on the
+    full-page figure these were tuned on), so a label always clears its own marker by the same
+    visible gap at any figure size.
+    """
     xr, yr = ax.get_xlim(), ax.get_ylim()
-    w, h = label_boxes(ax, df.label.tolist(), fig)
-    lx, ly = repel(df.acc.values, df.cpr.values, w, h, xr, yr)
+    w, h = label_boxes(ax, df.label.tolist(), fig, pt=pt)
+    axb = ax.get_window_extent(renderer=fig.canvas.get_renderer())
+    half = 0.5 * np.sqrt(msize) * fig.dpi / 72.0        # marker half-extent, px
+    mark_r = max(half / axb.width, half / axb.height)
+    lx, ly = repel(df.acc.values, df.cpr.values, w, h, xr, yr,
+                   anchor_dx=1.45 * mark_r, mark_r=mark_r)
     for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
         ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
-        ax.annotate(lab, (lxi, lyi), fontsize=LAB_PT, va="center", ha="left",
+        ax.annotate(lab, (lxi, lyi), fontsize=pt, va="center", ha="left",
                     color=FULL_COLORS[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
     # Report what the layout could not solve. A label sitting under another one is the failure
@@ -670,83 +670,72 @@ def main_both():
           f"{node_rho(dfn)}\n{edge_rho(dfe)}")
 
 
+# === compact figure: which points survive ===
+# The main-text scatter is the same plot as --full, cut to eight named points. Selection rule,
+# so it is re-derivable rather than taste: one point per METHOD FAMILY at that family's best
+# setting, plus the endpoints of the gradient spread.
+#
+#   MAttr / +hard          the headline and its one forward-pass ablation (lr=0.05, log k)
+#   Node Pruning s=0.5     best mask baseline by CPR (1.67), and the one the tables report
+#   DBM (L1=6.0)           best DBM setting on both sweeps (lr 0.3, lambda 6.0)
+#   GIM, RelP+QK, NAP-IG   the three strongest gradient baselines by CPR
+#   IxG                    the weakest, so the gradient cloud shows its full range
+#
+# Keys are (group, node_rows() label), so this list cannot drift away from the full figure: a
+# point that stops existing there raises here instead of silently dropping out. The group is
+# part of the key because the label alone is not unique -- Node Pruning's two objectives sweep
+# the same budgets, so "s=0.5" names a KL point and a logit-diff point, and keying on the label
+# alone silently plotted both. Everything else (the other 11 budgets, the lr and L1 paths, the
+# remaining ablations) is exactly what the appendix --full version is for.
+COMPACT = {
+    (G_MLOG, "MAttr"): None, (G_MLOG, "+hard"): None,
+    # M.EPRUN_BEST_SPARSITY; drop the bare "s=" (and the objective) for the main text
+    (G_NPLD, "s=0.5"): "Node Pruning",
+    (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
+    (G_GRAD, "GIM"): None, (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG"): None,
+    (G_GRAD, "IxG"): "I$\\times$G",
+}
+
+# 0.30\textwidth = 1.65in on the page, and the float goes in at width=\linewidth, so authoring
+# at exactly that width renders 1:1 -- fonts here are page points. Height is free; 2.2in is what
+# eight labels need vertically at 5.5pt once the legend is gone (direct labels replace it).
+FIG_W_C, FIG_H_C = 1.65, 2.2
+LAB_PT_C, MSIZE_C = 5.5, 18
+# Labels are ~as wide as they are on the full page but the panel is a third the width, so they
+# need proportionally far more room: 0.34 leaves "Node Pruning" hanging off the frame.
+XPAD_C = 0.70
+
+
 def main():
-    rows = []
-    # gradient baselines (all kept; IG / I×G highlighted, rest grey)
-    for disp, dacc, sub in A.BASELINES:
-        acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
-        dn, subn = BASE_CPR[disp]
-        cpr = avg(cpr_base(dn, subn))
-        if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, method=HL_BASE.get(disp, "Other")))
-    # keep ONLY the two headline MAttr methods (drop all other MAttr ablations)
-    for n, d, l, g in M.OUR_METHODS:
-        if l != "node" or d not in HL_DIR:
-            continue
-        acc = avg({(t, m): A.acc_mattr(d, t, m) for t, m, _ in COLS})
-        cpr = avg({(t, m): M.load_cpr_auc(d, t, m) for t, m, _ in COLS})
-        if acc is not None and cpr is not None:
-            rows.append(dict(acc=acc, cpr=cpr, method=HL_DIR[d]))
-    # Node Pruning: best budget only (M.EPRUN_BEST_SPARSITY). The validation tables list all
-    # of M.EPRUN_SPARSITIES -- there is room there -- but here the extra budgets are the one
-    # anti-correlated cluster in the figure and would understate the agreement this plot is
-    # about. Swap in M.EPRUN_SPARSITIES to show them all; the dashed path below wakes up and
-    # connects them sparse-ward (geom_path follows frame order).
-    ep = []
-    for si, (label, dirn) in enumerate([M.EPRUN_BEST_SPARSITY]):
-        sub = "EdgePruning_patching_node"
-        acc = avg({(t, m): A._acc(RB / dirn / sub /
-                                  f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
-                   for t, m, _ in COLS})
-        cpr = avg(cpr_base(dirn, sub))
-        if acc is not None and cpr is not None:
-            ep.append(dict(acc=acc, cpr=cpr, method="Node Pruning", s=si))
-    rows += ep
+    """The main-text figure: --full's plot, eight named points, no legend."""
+    import matplotlib.pyplot as plt
+    rows = [r for r in node_rows() if (r["grp"], r["label"]) in COMPACT]
+    missing = set(COMPACT) - {(r["grp"], r["label"]) for r in rows}
+    if missing:
+        raise SystemExit(f"compact figure: no node_rows() point at {sorted(missing)} "
+                         f"-- renamed upstream, or its dir went incomplete")
+    for r in rows:
+        r["label"] = COMPACT[(r["grp"], r["label"])] or r["label"]
+        r["paths"] = []   # one point per series here, so every dashed guide would be a no-op
 
-    df = pd.DataFrame(rows)
-    df["family"] = np.where(df.method.isin(MASK_METHODS), MASK, GRADIENT)
-    df["method"] = pd.Categorical(df["method"], COLOR_ORDER)
-    df["family"] = pd.Categorical(df["family"], [GRADIENT, MASK])
-    # draw grey "Other" first so the highlighted points sit on top
-    df = df.sort_values("method", ascending=False, key=lambda s: s.cat.codes)
-    epdf = pd.DataFrame(ep).sort_values("s") if ep else None
-
-    p = ggplot(df, aes("acc", "cpr", fill="method", shape="family"))
-    if epdf is not None and len(epdf) > 1:
-        # dashed guide across the sparsity budgets (drawn only if >1 is plotted), same
-        # visual language as the loss
-        # guide in accauc_vs_faithauc. Added BEFORE geom_point so the markers sit on top of
-        # it; adds no legend entry (constant colour, inherit_aes=False).
-        p += geom_path(epdf, aes("acc", "cpr"), color=COLORS["Node Pruning"],
-                       linetype="dashed", size=0.3, alpha=0.6, inherit_aes=False)
-    p = (
-        p
-        # Method on FILL with a black edge (matching accauc_vs_faithauc): shape is now spoken
-        # for by the family split, and an edge keeps the crowded 0.28-0.35 baseline cluster
-        # readable at this size. alpha=1 -- translucent fill under a black edge muddies the
-        # colour exactly where points overlap.
-        + geom_point(size=1.9, color="#000000", stroke=0.3)
-        + expand_limits(x=0, y=0)
-        + scale_fill_manual(values=COLORS, name="")
-        + scale_shape_manual(values=FAMILY_SHAPE, name="")
-        + labs(x="acc-AUC (↑)", y="CPR AUC (↑)")
-        # nrow=3 (2 columns), not 2: at 1.65in wide a 3-column legend clips "Node Pruning".
-        # The two legends stack (legend_box="vertical" in the theme).
-        + guides(fill=guide_legend(order=1, nrow=3, override_aes={"shape": "o"}),
-                 shape=guide_legend(order=2, nrow=1))
-    )
+    plt.rcParams.update(RC)
+    fig, ax = plt.subplots(figsize=(FIG_W_C, FIG_H_C))
+    # No legend: with eight points every one is named, so a group legend would spend a third of
+    # a 1.65in panel restating what the labels already say. Colour still encodes the group and
+    # shape the gradient/mask split, both consistent with the appendix figure.
+    df = draw_points(ax, rows, xpad=XPAD_C, legend=False, fs=(7, 6, 6), msize=MSIZE_C)
+    fig.tight_layout(pad=0.4)
+    place_labels(fig, ax, df, pt=LAB_PT_C, msize=MSIZE_C)
     out = "plots/mib_accauc_cpr_scatter.pdf"
-    p.save(out, dpi=300, verbose=False)
-    print(f"wrote {out} ({len(df)} points, {df['method'].nunique()} series; "
-          f"Node Pruning at {len(ep)} sparsities)")
+    fig.savefig(out, dpi=300)
+    print(f"wrote {out} ({len(df)} points)")
     # The figure's caption quotes this rho, so print it rather than leaving it hand-maintained
-    # -- it drifts with every re-eval, and Node Pruning pulls it down (its two metrics rank
-    # its own sparsity budgets in OPPOSITE directions, so extra budgets cost more than one).
+    # -- it drifts with every re-eval, and the mask baselines pull it down (they buy CPR at
+    # markedly lower IIA than any gradient method, so the two metrics rank them differently).
     from scipy.stats import spearmanr
-    r_all = spearmanr(df.acc, df.cpr)[0]
-    o = df[df.method != "Node Pruning"]
-    print(f"Spearman rho: {r_all:.3f} (all {len(df)}), "
-          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. Node Pruning, {len(o)})")
+    o = df[~df.grp.isin({G_NPKL, G_NPLD, G_DBM})]
+    print(f"Spearman rho: {spearmanr(df.acc, df.cpr)[0]:.3f} (all {len(df)}), "
+          f"{spearmanr(o.acc, o.cpr)[0]:.3f} (excl. mask baselines, {len(o)})")
 
 
 if __name__ == "__main__":
