@@ -1,18 +1,23 @@
-"""Top-5 MLP neurons by attribution, per SVA subtask x method.
+"""Top-5 MLP neurons by attribution, per training loss x SVA subtask x method.
 
 Reads the per-unit score tensors the SVA sweep already writes
 (results/sva_sweep/<task>_llama3_mlp_<tag>.scores.pt) and reports, for each subtask and
 method, the five neurons each method ranks FIRST -- i.e. the first units it puts into the
 circuit.
 
-DEFAULT LAYOUT IS COMPACT (one page): the identifier alone. `--descriptions` adds
+SECTIONED BY TRAINING LOSS (logit-diff, CE, accuracy), subtask within loss. All three losses
+were swept for all five methods, and which units a method reaches for first is exactly the
+thing the loss is expected to move -- showing only the logit-diff third made that
+unfalsifiable. 3 losses x 4 subtasks x 5 methods = 60 cells.
+
+DEFAULT LAYOUT IS COMPACT (~3 pages): the identifier alone. `--descriptions` adds
 each neuron's top positive and negative description from Transluce, which is a much richer
-table but runs to four pages -- one per subtask -- because a described cell is 6-8 typeset
-lines instead of 2. Every neuron id is a hyperlink to Transluce either way, so the compact
-table does not lose access to the descriptions, only their inlining.
+table but runs to twelve pages -- one per loss x subtask -- because a described cell is 6-8
+typeset lines instead of 2. Every neuron id is a hyperlink to Transluce either way, so the
+compact table does not lose access to the descriptions, only their inlining.
 
 Run:  uv run python scripts/make_sva_neuron_table.py   ->  paper/tabs/sva_top_neurons.tex
-      (--descriptions for the 4-page version; --no-fetch renders from cache only, e.g. offline)
+      (--descriptions for the long version; --no-fetch renders from cache only, e.g. offline)
 
 WHY llama3-only: the `mlp` substrate was only ever swept on llama3 (the other MIB models are
 node-level), so there is exactly one model here and no cross-model column to add.
@@ -64,13 +69,21 @@ API = "https://transluce--neuron-data-server-fastapi-app.modal.run/read_specific
 
 TASKS = [("simple", "Simple"), ("nounpp", "Noun PP"),
          ("rc", "RC"), ("within_rc", "Within RC")]
-# Methods and the order they appear. Keys are parse_method()'s outputs; the tag suffix picks
-# the loss, and no suffix = logit-diff, the loss every headline SVA number in the paper uses.
+# Training losses, as a top-level section each. Keys are the runs' own meta["loss"]; the middle
+# field is the tag fragment that selects them on disk (empty = logit-diff, the loss every
+# headline SVA number in the paper uses). Order matches plot_sva_sweep.LOSS_ORDER so the two
+# artifacts read top-to-bottom the same way.
+LOSSES = [("logit_diff", "", "Logit difference"),
+          ("ce", "_ce", "Cross-entropy"),
+          ("acc", "_acc", "Accuracy")]
+# Methods and the order they appear. Keys are parse_method()'s outputs; %s takes the loss
+# fragment above. It is a template rather than a suffix because the fragment does not land at
+# the end for the two MAttr rows -- `sufficient_topk_adam_ce_bs1`, not `..._bs1_ce`.
 # Same four series as plot_accauc_vs_faithauc's FIGURE_METHODS, so this table and that figure
 # describe the same runs.
-METHODS = [("IG", "ig"), ("IxG", "ixg"), ("eprun-s090", "eprun_s090"),
-           ("stopk-log", "sufficient_topk_adam_bs1"),
-           ("stopk-unif", "sufficient_topk_adam_uniformk_bs1")]
+METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
+           ("stopk-log", "sufficient_topk_adam%s_bs1"),
+           ("stopk-unif", "sufficient_topk_adam%s_uniformk_bs1")]
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
           "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$"}
 # Truncation budget per description. The layout is one column per METHOD, so this shrinks with
@@ -85,11 +98,14 @@ NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
 # you verify by reading 100 six-digit ids. Colour = identity, nothing else: it does not encode
 # rank, score or count.
 #
-# The threshold is 4 of the 20 cells because the recurrence distribution has a clean gap there
-# -- 8 neurons appear 4-7 times, then it drops straight to 2 with nothing at 3 -- so this is
-# reading a break in the data, not imposing a cutoff. It also happens to land exactly on the
-# palette size. If a rerun changes that, main() says so rather than silently recolouring.
-RECUR_MIN = 4
+# The threshold is 14 of the 60 cells because the recurrence distribution has a clean gap
+# there -- 7 neurons appear 14-24 times, then nothing at all between 13 and 8, then the tail
+# resumes at 7 -- so this is reading a break in the data, not imposing a cutoff. It also lands
+# inside the palette size. (It was 4-of-20 when the table covered one loss; the same gap-reading
+# rule gives 14 now that all three losses are in, and 4-of-60 would select 13 neurons for 8
+# colours.) main() prints the counts either side of the cut so a rerun that moves the gap is
+# visible rather than silently recoloured.
+RECUR_MIN = 14
 # ColorBrewer Pastel1, with two substitutions made after looking at a rendered page. Pastels
 # because the link text sits ON these and hyperref renders it darkblue (colorlinks=true in the
 # preamble), so saturated chips would bury it -- but pastel has a floor: Pastel1's FFFFCC and
@@ -266,24 +282,33 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-fetch", action="store_true", help="render from cache only")
     ap.add_argument("--descriptions", action="store_true",
-                    help="inline the Transluce descriptions (4 pages instead of 1)")
+                    help="inline the Transluce descriptions (12 pages instead of ~3)")
     args = ap.parse_args()
     desc_mode = args.descriptions
 
     blocks, missing = [], []
-    for task, tlabel in TASKS:
-        rows = []
-        for mkey, tag in METHODS:
-            scores, meta = load_run(task, tag)
-            if scores is None:
-                missing.append(f"{task}/{tag}")
-                continue
-            assert meta["_method"] == mkey, f"{task}/{tag} parses as {meta['_method']}, not {mkey}"
-            assert meta["intermediate_size"] * meta["seq_len"] * meta["num_layers"] == \
-                meta["total"] == scores.numel(), f"layout mismatch in {task}/{tag}"
-            rows.append((mkey, top_neurons(scores, meta)))
-        if rows:
-            blocks.append((task, tlabel, rows))
+    for lkey, lsuf, llabel in LOSSES:
+        for task, tlabel in TASKS:
+            rows = []
+            for mkey, tmpl in METHODS:
+                tag = tmpl % lsuf
+                scores, meta = load_run(task, tag)
+                if scores is None:
+                    missing.append(f"{task}/{tag}")
+                    continue
+                assert meta["_method"] == mkey, \
+                    f"{task}/{tag} parses as {meta['_method']}, not {mkey}"
+                # The loss is asserted from the run's own metadata, not inferred from the tag
+                # fragment. The fragment is a filename convention; meta["loss"] is what the
+                # trainer actually optimised, and a section headed "Cross-entropy" that
+                # silently held logit-diff runs is exactly the error this table cannot show.
+                assert meta.get("loss") == lkey, \
+                    f"{task}/{tag} was trained with loss={meta.get('loss')}, not {lkey}"
+                assert meta["intermediate_size"] * meta["seq_len"] * meta["num_layers"] == \
+                    meta["total"] == scores.numel(), f"layout mismatch in {task}/{tag}"
+                rows.append((mkey, top_neurons(scores, meta)))
+            if rows:
+                blocks.append((lkey, llabel, task, tlabel, rows))
 
     # Recurrence over every (subtask, method) cell, and the colour each recurring neuron keeps
     # everywhere it appears. Ordered by (count desc, layer, neuron) so a rerun on unchanged
@@ -291,7 +316,7 @@ def main():
     # between renders is worse than no colours, because the reader's memory of "the pink one"
     # silently goes stale.
     counts = Counter((n["layer"], n["neuron"])
-                     for _, _, rs in blocks for _, ns in rs for n in ns)
+                     for *_, rs in blocks for _, ns in rs for n in ns)
     recur = sorted((k for k, v in counts.items() if v >= RECUR_MIN),
                    key=lambda k: (-counts[k], k))
     if len(recur) > len(PALETTE):
@@ -300,8 +325,15 @@ def main():
               file=sys.stderr)
         recur = recur[:len(PALETTE)]
     color = {k: f"recur{i}" for i, k in enumerate(recur)}
+    # Show the cut: the smallest count kept vs the largest dropped. RECUR_MIN is justified by a
+    # gap in this distribution, and a gap is the one property a constant cannot assert about
+    # itself -- if a rerun closes it these two numbers land next to each other and say so.
+    kept = min((counts[k] for k in recur), default=None)
+    drop = max((v for k, v in counts.items() if k not in color), default=None)
+    print(f"recurrence cut at >={RECUR_MIN}: {len(recur)} coloured "
+          f"(lowest kept {kept}x, highest dropped {drop}x)", file=sys.stderr)
 
-    todo = {(n["layer"], n["neuron"]) for _, _, rs in blocks for _, ns in rs for n in ns}
+    todo = {(n["layer"], n["neuron"]) for *_, rs in blocks for _, ns in rs for n in ns}
     todo = sorted(k for k in todo if any(f"{k[0]}/{k[1]}/{s}" not in _cache for s in "+-"))
     if todo and desc_mode and not args.no_fetch:
         print(f"fetching {len(todo)} neurons from Transluce ({2 * len(todo)} requests)...")
@@ -366,18 +398,31 @@ def main():
                  r"\colorbox{%s}{$\ell$%d.n%d}~$\times$%d" % (color[k], k[0], k[1], counts[k])
                  for k in recur)),
          r"\endlastfoot"]
-    for task, tlabel, rows in blocks:
+    for b_i, (lkey, llabel, task, tlabel, rows) in enumerate(blocks):
         by = {mk: ns for mk, ns in rows}
         # One subtask per page, in description mode only. A described block is ~45 typeset lines
         # and a page body holds ~53, so left to itself longtable breaks a block roughly in half
         # and the continuation page opens on "2." with nothing saying which subtask it belongs
         # to (the \endhead repeats the method names, not the row-group label). Forcing the break
-        # makes every page self-labelling. Compact mode is ~50 lines TOTAL, so the same \newpage
-        # would turn a one-page table into four near-empty ones.
-        if desc_mode and task != blocks[0][0]:
+        # makes every page self-labelling. Compact mode is ~12 lines per block, so the same
+        # \newpage would turn a three-page table into twelve near-empty ones.
+        if desc_mode and b_i:
             L.append(r"\newpage")
-        elif task != blocks[0][0]:
+        elif b_i:
             L.append(r"\addlinespace[3pt]")
+        # Two levels of row group: training loss over subtask. They have to be told apart at a
+        # glance or a reader scanning for "RC" cannot tell which of the three RC blocks they
+        # landed in, so the loss header gets a rule above it and small caps, the subtask header
+        # stays flush-left bold. The rule is what actually does the work -- \textsc alone is too
+        # quiet a difference at \small.
+        if not b_i or lkey != blocks[b_i - 1][0]:
+            # No rule for the first section (the column header's own \midrule is right above
+            # it), and none in description mode (every block opens a page there, so \endhead
+            # has just drawn one) -- either would render as a double rule.
+            if b_i and not desc_mode:
+                L.append(r"\midrule")   # the 3pt block spacer above already opens the gap
+            L.append(r"\multicolumn{%d}{@{}l}{\textsc{\textbf{%s} loss}} \\*[3pt]"
+                     % (ncol + 1, llabel))
         # \\* forbids a page break directly after the task header, so a subtask name can never
         # be orphaned at the foot of a page from the rows it labels.
         L.append(r"\multicolumn{%d}{@{}l}{\textbf{%s}} \\*[2pt]" % (ncol + 1, tlabel))
@@ -420,13 +465,13 @@ def main():
     TABDIR.mkdir(parents=True, exist_ok=True)
     out = TABDIR / "sva_top_neurons.tex"
     out.write_text("\n".join(L) + "\n")
-    n_rows = sum(len(ns) for _, _, rs in blocks for _, ns in rs)
+    n_rows = sum(len(ns) for *_, rs in blocks for _, ns in rs)
     extra = ""
     if desc_mode:
-        n_desc = sum(1 for _, _, rs in blocks for _, ns in rs for n in ns
+        n_desc = sum(1 for *_, rs in blocks for _, ns in rs for n in ns
                      if describe(n["layer"], n["neuron"], "+", fetch=False))
         extra = f", {n_desc}/{n_rows} with a + description"
-    print(f"wrote {out}  ({len(blocks)} subtasks, {n_rows} neuron rows, "
+    print(f"wrote {out}  ({len(blocks)} loss x subtask blocks, {n_rows} neuron rows, "
           f"{'descriptions' if desc_mode else 'compact'}{extra})")
     if missing:
         print("MISSING runs:", ", ".join(missing))
