@@ -80,6 +80,11 @@ def parse_method(fname, d):
     # silently averaged into the IG rows.
     if tag.startswith("eprun_s"):
         return "eprun-s" + tag.split("_")[1][1:]
+    # sig_lr0.3_l16.0[_ce|_acc] -> the pyvene sigmoid-mask baseline (DBM in the paper). One key
+    # per recipe, since lr and the L1 weight are what decide the circuit. Same placement rule as
+    # eprun: ABOVE the catch-all, or every DBM run is silently averaged into the IG rows.
+    if tag.startswith("sig_"):
+        return re.sub(r"_(ce|acc)$", "", tag)
     return "IxG" if tag.startswith("ixg") else "IG"
 
 

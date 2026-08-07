@@ -18,7 +18,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import learn_scores, sparsity_sweep
-from learning_to_attribute.edge_pruning import learn_scores_edge_pruning
+from learning_to_attribute.edge_pruning import (
+    learn_scores_edge_pruning, learn_scores_sigmoid_mask)
 from learning_to_attribute.schedules import AdaptiveLogK, FixedK
 from learning_to_attribute.losses import attribution_loss, resolve_direction, LOSS_CHOICES
 from learning_to_attribute.data import SVADataset, CausalGymDataset
@@ -326,7 +327,8 @@ def main():
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
     p.add_argument("--method", default="mattr",
-                   choices=["mattr", "ixg", "relp", "ig", "conductance", "random", "edge_pruning"])
+                   choices=["mattr", "ixg", "relp", "ig", "conductance", "random", "edge_pruning",
+                            "sigmoid_mask"])
     # Node/Edge Pruning (Bhaskar et al., 2024) on this harness: hard-concrete gates + a
     # Lagrangian L0 budget instead of MAttr's top-k. It takes the SAME loss_fn as MAttr, so
     # --loss still selects the objective and the only thing that differs is how the mask is
@@ -335,6 +337,19 @@ def main():
     # so the budget is on a very different absolute scale than results/eprun_node_s*.
     p.add_argument("--target-sparsity", type=float, default=0.9,
                    help="edge_pruning: fraction of units the L0 Lagrangian anneals to PRUNING.")
+    # sigmoid_mask = the pyvene SigmoidMaskIntervention baseline the MIB tables show as DBM:
+    # deterministic sigmoid(mask/temp), temperature annealed 50 -> 0.1, no L0 term. Same
+    # loss_fn and the same step budget as MAttr and Node Pruning, so once again the mask
+    # parameterization is the only thing that varies. It has no --target-sparsity: the anneal
+    # controls how BINARY the gate is, not how sparse, and sparsity comes from --l1-coeff (or,
+    # at 0, from the sweep ranking the logits like any other score).
+    p.add_argument("--l1-coeff", type=float, default=0.0,
+                   help="sigmoid_mask: L1 sparsity penalty weight. 0 = the pyvene library's own "
+                        "unpenalised recipe; >0 = its tutorial's penalised one.")
+    p.add_argument("--l1-target", default="gate", choices=["gate", "logit"],
+                   help="sigmoid_mask: 'gate' penalises mean gate value (an L0 relaxation, "
+                        "normalised by substrate size); 'logit' is pyvene's tutorial term "
+                        "coeff*||mask||_1, which pulls gates toward 0.5 rather than 0.")
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
     p.add_argument("--train-eval-every", type=int, default=0,
                    help="MAttr: every N steps, run the FULL eval-metric suite on a fixed tiny "
@@ -650,6 +665,23 @@ def main():
             # rather than being read off the tag as a budget it never reached.
             logger.info("achieved sparsity %.3f (kept %.1f of %d; requested %.3f)",
                         1 - kept / total, kept, total, args.target_sparsity)
+    elif args.method == "sigmoid_mask":
+        # Same loss_fn again; the mask is pyvene's deterministic sigmoid gate. The returned
+        # scores are the mask LOGITS, monotone in the gate, so the sweep below ranks them
+        # exactly like an attribution score -- no rescaling needed.
+        logger.info("Sigmoid mask (DBM): %d steps, lr %g, l1 %g (%s) over %d units",
+                    args.steps, args.lr, args.l1_coeff, args.l1_target, total)
+        res = learn_scores_sigmoid_mask(total, loss_fn, steps=args.steps, lr=args.lr,
+                                        l1_coeff=args.l1_coeff, l1_target=args.l1_target,
+                                        device=device, logger=logger, log_every=200)
+        scores = res.scores.detach()
+        train_loss_log = res.loss_log
+        kept = res.train_log[-1][1] if getattr(res, "train_log", None) else None
+        if kept is not None:
+            # Density is an OUTCOME here, not a budget -- unpenalised runs converge dense and
+            # even penalised ones are not held to a target. Log it for the same reason Node
+            # Pruning logs achieved sparsity: so the number is read off the run, not the tag.
+            logger.info("final density %.3f (soft-kept %.1f of %d)", kept / total, kept, total)
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
@@ -707,6 +739,17 @@ def main():
         tag = f"random_s{args.seed}"
     if args.method == "edge_pruning":   # e.g. eprun_s090 -- budget is part of the identity
         tag = f"eprun_s{int(round(args.target_sparsity * 100)):03d}"
+    if args.method == "sigmoid_mask":
+        # e.g. sig_lr0.3_l16.0 -- lr and the penalty are the two knobs that decide the circuit,
+        # so both are part of the identity, spelled the way the MIB dirs spell them
+        # (results/eprun_node_ld_sig_lr0.3_l16.0) so the two harnesses' runs read alike.
+        # Plain str() of the float, NOT :g -- str(6.0) is "6.0" but f"{6.0:g}" is "6", and
+        # "sig_lr0.3_l16" reads as l1=16 as easily as l1=6. It also keeps the spelling identical
+        # to the MIB dirs (eprun_node_ld_sig_lr0.3_l16.0), which is what lets a reader match a
+        # run across the two harnesses by name.
+        tag = f"sig_lr{args.lr}"
+        if args.l1_coeff:
+            tag += f"_l1{'logit' if args.l1_target == 'logit' else ''}{args.l1_coeff}"
     if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
     if args.method == "mattr" and args.mattr_ig_steps > 1:
