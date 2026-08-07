@@ -137,8 +137,9 @@ LR_SERIES = [
 # point, so the figure separates the two knobs: the "lr:DBM" path is "tune the optimiser", the
 # "l1:DBM" path is "give the baseline a sparsity objective at its best lr".
 #
-# Same completeness bar as everything else here -- as of 2026-08-06 that admits lambda=0.2 and
-# 0.6 and excludes 2.0 (9/11), 6.0 (6/11) and 20.0 (0/11), which are still on the cluster.
+# Same completeness bar as everything else here. All six lambdas are 11/11 as of 2026-08-07, so
+# the whole path is drawn -- including 6.0, which the 2026-08-06 render excluded at 6/11 and
+# which is now the headline DBM row in both MIB tables.
 # build_lr_rows prints each exclusion, so a lambda missing from the figure is never silent.
 L1_SERIES = [
     (G_DBM, "DBM", [("0.2", "eprun_eval_ld_sig_lr0.3_l10.2"),
