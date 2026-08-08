@@ -235,7 +235,7 @@ SIGMOID_MASK_ROWS = [
 # backward over a batch of 20 costs ~20x one over a batch of 1.
 #
 # Where each number comes from:
-#   gradient methods  MIB-circuit-track/run_variants.sh (and run_relp/gim/attnrlp.sh, which
+#   gradient methods  MIB-circuit-track/run_variants.sh (and run_relp/gim/relpshapley.sh, which
 #                     share its CELLS): --num-examples 1000 on the IOI cells and 100 on all
 #                     others (mcqa's "full" train split is 100 examples), times --ig-steps
 #                     (5 for NAP-IG/Conductance, 1 for the rest). The range is a property of
@@ -509,7 +509,7 @@ def main():
         ("I$\\times$G", "ig1_eval",         "EAP-IG-inputs_patching_node"),
         ("RelP",        "relp_eval",        "RelP_patching_node"),
         ("RelP+QK",     "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
-        ("AttnRLP",     "attnrlp_eval",     "AttnRLP_patching_node"),
+        ("RelP+Shapley",     "relpshapley_eval",     "RelPShapley_patching_node"),
         ("GIM",         "gim_eval",         "GIM_patching_node"),
     ]
     # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those.

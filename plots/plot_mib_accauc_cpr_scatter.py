@@ -66,7 +66,7 @@ BASE_CPR = {
     "I$\\times$G": ("ig1_eval", "EAP-IG-inputs_patching_node"),
     "RelP": ("relp_eval", "RelP_patching_node"),
     "RelP+QK": ("relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
-    "AttnRLP": ("attnrlp_eval", "AttnRLP_patching_node"),
+    "RelP+Shapley": ("relpshapley_eval", "RelPShapley_patching_node"),
     "GIM": ("gim_eval", "GIM_patching_node"),
 }
 

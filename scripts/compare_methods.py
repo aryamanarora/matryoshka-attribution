@@ -45,7 +45,7 @@ NODE_METHODS = [
     ("IxG",         "nested", ("ig1_eval", "EAP-IG-inputs_patching_node")),
     ("RelP",        "nested", ("relp_eval", "RelP_patching_node")),
     ("RelP+QK",     "nested", ("relp_qkgrad_eval", "RelP-qkgrad_patching_node")),
-    ("AttnRLP",     "nested", ("attnrlp_eval", "AttnRLP_patching_node")),
+    ("RelP+Shapley",     "nested", ("relpshapley_eval", "RelPShapley_patching_node")),
     ("GIM",         "nested", ("gim_eval", "GIM_patching_node")),
 ]
 

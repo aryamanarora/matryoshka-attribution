@@ -1,7 +1,7 @@
 # UGS: the mask-learning baseline on MIB
 
 **UGS (Uniform Gradient Sampling)** is the only *mask-learning* baseline in the MIB circuit track —
-every other MIB baseline (NAP-IG, Conductance, I×G, RelP, RelP+QK, AttnRLP, GIM, exact patching,
+every other MIB baseline (NAP-IG, Conductance, I×G, RelP, RelP+QK, RelP+Shapley, GIM, exact patching,
 IFR) is a gradient/patching attribution method. It is therefore the closest published comparison
 to MAttr: it also learns a continuous per-edge mask by gradient descent, but with an L0-style
 sparsity penalty instead of a top-$k$ constraint, and it trains one mask per sparsity level

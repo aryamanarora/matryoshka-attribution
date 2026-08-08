@@ -27,7 +27,7 @@ BASELINES = [  # (display, *_accauc dir, method_saveable)
     ("I$\\times$G", "ig1_accauc", "EAP-IG-inputs_patching_node"),
     ("RelP", "relp_accauc", "RelP_patching_node"),
     ("RelP+QK", "relp_qkgrad_accauc", "RelP-qkgrad_patching_node"),
-    ("AttnRLP", "attnrlp_accauc", "AttnRLP_patching_node"),
+    ("RelP+Shapley", "relpshapley_accauc", "RelPShapley_patching_node"),
     ("GIM", "gim_accauc", "GIM_patching_node"),
 ]
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
