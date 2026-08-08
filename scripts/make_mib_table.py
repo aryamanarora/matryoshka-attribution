@@ -98,10 +98,26 @@ SEED_DIRS = {
 # Node baselines (reproduced on validation set)
 NODE_BASELINES = {}
 
-# NAP-IG reproduced: read from results/napig_repro_eval/
-NAPIG_REPRO_DIR = "napig_repro_eval"
+# NAP-IG / EAP-IG-inputs reproduced by us (NOT leaderboard numbers): run_attribution.py
+# --method EAP-IG-inputs --ig-steps 5, then run_evaluation.py, train -> validation.
+#
+# Both dirs used to point at the June wave (napig_repro_eval / eapig_repro_eval), which ran
+# under the L2A venv (TL 3.2.1) -- see scripts/submit_missing_baselines.sh, the one surviving
+# submitter from that wave. That TL computes a wrong Gemma-2 forward (commit 525673a), so all
+# six gemma2 cells across the two rows were suspect; on the node row the non-gemma cells agreed
+# with a clean rerun to <=0.008 while ioi/gemma2 moved +0.270 and mcqa/gemma2 +0.106, which is
+# what pinned it on the venv rather than run noise. Both dirs are now parked in
+# results/_stale_tl321/ and nothing reads them.
+#
+# Replacements are both TL 2.15.4 (MIB-circuit-track/.venv) and both use the CELLS block that
+# run_variants.sh / run_relp.sh / run_gim.sh / run_attnlrp.sh share, so NAP-IG is now
+# flag-identical to the other gradient baselines in its column rather than merely close.
+NAPIG_REPRO_DIR = "napig_ref_eval"        # MIB-circuit-track run_variants.sh, `ref` arm
 
-EAPIG_REPRO_DIR = "eapig_repro_eval"
+# NOT eapig_repro_accauc: that dir is clean but was attributed with --num-examples 1000 on every
+# cell, off-convention for arc/arithmetic (100) and mcqa (full). It stays the acc-AUC source;
+# this row comes from MIB-circuit-track/run_eapig_edge.sh, which follows CELLS.
+EAPIG_REPRO_DIR = "eapig_clean_eval"
 
 # Edge baselines (reproduced on validation set)
 EDGE_BASELINES = {}
