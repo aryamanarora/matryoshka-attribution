@@ -34,12 +34,38 @@ BASELINES = [  # (display, *_accauc dir, method_saveable)
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
 
 # Mask-learning baselines (own header). UGS is edge-only so it cannot appear in this
-# node-level table at all; Node Pruning runs at node level on every model. One row per
-# target-sparsity budget (M.EPRUN_SPARSITIES) -- the budget, not the ranking, is what a
-# mask learner actually optimizes, so it is a reported setting rather than a hidden default.
-# Name comes from M.EPRUN_NAME: this table is node-level only, hence "Node Pruning".
+# node-level table at all; Node Pruning runs at node level on every model. The budget, not the
+# ranking, is what a mask learner actually optimizes, so it is a reported setting rather than a
+# hidden default -- but the full M.EPRUN_SPARSITIES sweep is twelve near-identical rows, so as
+# in the CPR table (M.EPRUN_SHOW) we show the best budget per objective and no more.
+#
+# *** The pick is NOT M.EPRUN_SHOW's, and that is the point, not an oversight. ***
+# CPR and acc-AUC rank the budgets in essentially opposite orders (validation row means, 11
+# cells; higher s = sparser = smaller circuit):
+#
+#   logit-diff   s=0.5   s=0.8   s=0.9   s=0.95  s=0.99
+#     CPR AUC     1.67    1.46    1.28    1.36    1.24     <- densest wins
+#     acc-AUC     0.23    0.31    0.34    0.36    0.38     <- sparsest wins, monotone the other way
+#   KL           s=0.9 1.00 / 0.40   s=0.95 0.96 / 0.46   s=0.99 0.91 / 0.46
+#
+# That is CPR rewarding a bigger circuit, which is the same gap-padding sensitivity that
+# motivated reporting acc-AUC in the first place. So each table names the budget that is best
+# under the metric that table reports; carrying the CPR pick over here would show Node Pruning
+# at its WORST acc-AUC budget (0.23 vs 0.38) and read as the baseline collapsing on acc-AUC
+# when it is the budget selection, not the method.
+#
+# KL s=0.95 and s=0.99 are a tie at 2dp (0.4582 vs 0.4592); s=0.99 is the argmax but the
+# margin is noise, so do not report a preference between them.
+EPRUN_SHOW = {"eprun_eval_s0.99", "eprun_eval_s0.99_ld"}
 MASK_BASELINES = [(M.eprun_label("node", suf), L2A / d, "EdgePruning_patching_node")
-                  for suf, d in M.EPRUN_SPARSITIES]
+                  for suf, d in M.EPRUN_SPARSITIES if d in EPRUN_SHOW]
+# DBM (pyvene sigmoid mask) is in the CPR table's mask block via M.SIGMOID_MASK_ROWS but was
+# missing here, even though its eval pkls carry acc_auc like every other run -- so the acc-AUC
+# table was silently comparing MAttr against a smaller set of mask learners than the CPR table.
+# Its dirs are also written by run_evaluation.py under EdgePruning_patching_node (same code
+# path, only the mask parameterization differs), hence the same sub-folder name.
+MASK_BASELINES += [(disp, L2A / d, "EdgePruning_patching_node")
+                   for disp, d in M.SIGMOID_MASK_ROWS]
 
 
 def opt_of(d):   # id-STE variants use SGD; everything else Adam (mirrors make_mib_table)
