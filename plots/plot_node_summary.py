@@ -31,7 +31,7 @@ theme_set(theme_bw(base_size=8) + theme(
     legend_text=element_text(size=6), legend_key_size=6, legend_position="top"))
 
 RES = "results/sva_sweep"
-METHODS = ["IG", "IxG", "soft-log", "soft-unif", "soft-fixed",
+METHODS = ["IG", "IxG", "AttnLRP", "soft-log", "soft-unif", "soft-fixed",
            "idSTE-log", "idSTE-unif", "idSTE-fixed"]
 LOSSES = ["ce", "acc", "logit_diff"]
 METRICS = [("acc_auc", "acc-AUC", True), ("faith_auc", "faith-AUC", True),
@@ -56,6 +56,12 @@ def parse_method(fname, d):
     # which does plot the series.
     if tag.startswith("eprun_"):
         return None
+    # Same hazard, same fix: the DBM (sigmoid-mask) runs also match nothing above, so the
+    # catch-all was sweeping them into the IG series too. No METHODS entry here either.
+    if tag.startswith("sig_"):
+        return None
+    if tag.startswith("attnlrp"):
+        return "AttnLRP"
     return "IxG" if tag.startswith("ixg") else "IG"
 
 
@@ -122,7 +128,7 @@ def heatmap(g):
 
 
 def scatter(g):
-    meth = ["IG", "IxG", "soft-log", "idSTE-log"]   # drop unif (and fixed-k: interaction figure)
+    meth = ["IG", "IxG", "AttnLRP", "soft-log", "idSTE-log"]   # drop unif (fixed-k: own figure)
     llab = {"ce": "CE", "acc": "acc", "logit_diff": "logit-diff"}
     d = g[g["method"].isin(meth)].copy()
     d["loss"] = pd.Categorical(d["loss"].map(llab), categories=list(llab.values()), ordered=True)

@@ -1,10 +1,18 @@
-"""RelP modified-backward modules for HF Llama (ported from circuits/tracing/grad — pure
-PyTorch/transformers, no nnsight). install_relp(model) replaces norms/attn/mlp in place so a
-single forward+backward yields the RelP gradient; revert_relp(model) restores the originals.
+"""RelP / AttnLRP modified-backward modules for HF Llama (ported from circuits/tracing/grad —
+pure PyTorch/transformers, no nnsight). install_relp(model) / install_attnlrp(model) replace
+norms/attn/mlp in place so a single forward+backward yields the modified gradient;
+revert_relp(model) restores the originals (it reverts either variant).
 
 RelP rules: (1) RMSNorm linearized (identity backward through the normalization, weight frozen);
 (2) gated-MLP activation gate secant-linearized + half-rule on gate*up; (3) attention pattern
 detached so gradient flows only through the OV (V) path.
+
+AttnLRP shares (1) and (2) and replaces (3) with the uniform (half) rule for bilinear matmuls
+(Achtibat et al. 2024, Eq. 14-15): the QK and OV matmul outputs each get a x0.5 backward, so
+composed the Q/K gradients carry 1/4 and the V gradient 1/2 -- exactly LXT's
+divide_gradient(q,4)/(k,4)/(v,2). The softmax keeps its ordinary Jacobian (LXT patches nothing
+there). This mirrors the TransformerLens implementation used for MIB
+(EAP-IG/src/eap/attribute_node.py, shapley_attn=True + softmax_rule=False + linearize_act=True).
 """
 import torch
 from torch import nn
@@ -51,21 +59,65 @@ def noqk_attention_forward(module, query, key, value, attention_mask, scaling, d
     return attn_output, attn_weights
 
 
+class _HalfGrad(torch.autograd.Function):
+    """Identity forward, 0.5x gradient backward. Applied to a bilinear matmul's OUTPUT this is
+    the uniform (half) rule on both its inputs: for z = x @ y, halving grad_z halves grad_x and
+    grad_y alike."""
+    @staticmethod
+    def forward(ctx, x):
+        return x
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return 0.5 * grad_output
+
+
+def attnlrp_attention_forward(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
+    """Attention forward with AttnLRP's half-rule on the QK and OV matmuls (softmax untouched).
+
+    The half is applied to the QK product BEFORE the additive mask: the mask is a constant with
+    no gradient, so this is gradient-equivalent to halving after it and keeps the -inf entries
+    out of the scaled tensor."""
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_scores = _HalfGrad.apply(torch.matmul(query, key_states.transpose(2, 3)) * scaling)
+    if attention_mask is not None:
+        attn_scores = attn_scores + attention_mask[:, :, :, : key_states.shape[-2]]
+    attn_weights = nn.functional.softmax(attn_scores, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = _HalfGrad.apply(torch.matmul(attn_weights, value_states)).transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 ALL_ATTENTION_FUNCTIONS["noqk"] = noqk_attention_forward
 ALL_MASK_ATTENTION_FUNCTIONS.register("noqk", eager_mask)
+ALL_ATTENTION_FUNCTIONS["attnlrp"] = attnlrp_attention_forward
+ALL_MASK_ATTENTION_FUNCTIONS.register("attnlrp", eager_mask)
 
 
-class NoQKGradAttention(_StopGrad):
-    """Wrap attention so the softmax map gets no gradient (OV-only)."""
+class _WrappedAttention(_StopGrad):
+    """Wrap attention so it dispatches to one of our modified attention implementations."""
+    IMPL = None
+
     def __init__(self, attn):
         super().__init__()
         self.attn = attn
         self.q_proj = attn.q_proj; self.k_proj = attn.k_proj
         self.v_proj = attn.v_proj; self.o_proj = attn.o_proj
-        self.attn.config._attn_implementation = "noqk"
+        self.attn.config._attn_implementation = self.IMPL
 
     def forward(self, *a, **k):
         return self.attn(*a, **k)
+
+
+class NoQKGradAttention(_WrappedAttention):
+    """RelP: the softmax map gets no gradient (OV-only)."""
+    IMPL = "noqk"
+
+
+class AttnLRPAttention(_WrappedAttention):
+    """AttnLRP: half-rule on the QK and OV matmuls, softmax gradient kept."""
+    IMPL = "attnlrp"
 
 
 def _shapley_mult(x, y, half=True):
@@ -88,26 +140,43 @@ class RelPGradMLP(_StopGrad):
         return self.mlp.down_proj(_shapley_mult(gate_act, self.mlp.up_proj(x), self.half))
 
 
-def install_relp(model):
-    """Replace norms/attn/mlp in the HF model with RelP backward variants (in place)."""
+def _install(model, attn_cls):
+    """Replace norms/attn/mlp in the HF model with modified-backward variants (in place)."""
     m = model.model
+    # the wrappers rewrite config._attn_implementation, which is the SHARED model config, so
+    # stash the real one once here rather than per layer (per layer, the second install would
+    # record "noqk"/"attnlrp" as the original and revert would leave it installed).
+    if not hasattr(model, "_l2a_orig_attn_impl"):
+        model._l2a_orig_attn_impl = m.config._attn_implementation
     m.norm = StraightThroughRMSNorm(m.norm)
     for layer in m.layers:
         layer.input_layernorm = StraightThroughRMSNorm(layer.input_layernorm)
         layer.post_attention_layernorm = StraightThroughRMSNorm(layer.post_attention_layernorm)
-        layer.self_attn = NoQKGradAttention(layer.self_attn)
+        layer.self_attn = attn_cls(layer.self_attn)
         layer.mlp = RelPGradMLP(layer.mlp)
     return model
 
 
+def install_relp(model):
+    return _install(model, NoQKGradAttention)
+
+
+def install_attnlrp(model):
+    return _install(model, AttnLRPAttention)
+
+
 def revert_relp(model):
+    """Undo install_relp / install_attnlrp."""
     m = model.model
     m.norm = m.norm.norm
     for layer in m.layers:
         layer.input_layernorm = layer.input_layernorm.norm
         layer.post_attention_layernorm = layer.post_attention_layernorm.norm
-        if isinstance(layer.self_attn, NoQKGradAttention):
+        if isinstance(layer.self_attn, _WrappedAttention):
             layer.self_attn = layer.self_attn.attn
         if isinstance(layer.mlp, RelPGradMLP):
             layer.mlp = layer.mlp.mlp
+    if hasattr(model, "_l2a_orig_attn_impl"):
+        m.config._attn_implementation = model._l2a_orig_attn_impl
+        del model._l2a_orig_attn_impl
     return model

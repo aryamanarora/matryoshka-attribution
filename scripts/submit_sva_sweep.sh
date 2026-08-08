@@ -25,7 +25,7 @@ OUT=results/sva_sweep
 read -ra TASKS <<< "${SVA_TASKS-nounpp rc simple within_rc}"   # SVA_TASKS="" (set, empty) runs only MIB_TASKS
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
 LOSSES=(ce acc logit_diff)
-GRAD=(ig ixg)
+GRAD=(ig ixg attnlrp)
 KS=(log uniform)
 MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd" "topk:adam")   # gate:optimizer (topk = soft fwd)
 

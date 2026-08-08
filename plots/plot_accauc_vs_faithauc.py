@@ -59,6 +59,13 @@ SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 METHODS = {
     "IG":         ("IG",           P.color("IG")),
     "IxG":        ("I×G",          P.color("I×G")),
+    # Single-pass like I×G (only the backward RULES change): LN-freeze, gated-MLP secant +
+    # half-rule, and the uniform half-rule on the QK/OV matmuls. The HF-side implementation is
+    # src/learning_to_attribute/grad_attribution.py, verified against vanilla eager attention
+    # by scripts/test_attnlrp_hf.py; on MIB the equivalent TransformerLens path is within
+    # Spearman 0.96 of GIM (MIB-circuit-track/gim_attnlrp_decomp.py), so this series stands in
+    # for the whole LRP family here.
+    "AttnLRP":    ("AttnLRP",      P.color("AttnLRP")),
     "stopk-log":  ("MAttr (log)",  P.color("MAttr")),   # headline = soft top-k fwd, log k
     "soft-log":   ("+hard (log)",  P.color("+hard")),   # sigmoid-STE hard forward ablation
     # Node Pruning trained through the SAME loss_fn as MAttr (eval_sva.py --method edge_pruning),
@@ -119,6 +126,8 @@ def parse_method(fname, d):
     # by design -- they belong in a cause-trained figure of their own.
     if tag.startswith("ixg"):
         return "IxG"
+    if tag.startswith("attnlrp"):
+        return "AttnLRP"
     if tag.startswith("ig"):
         return "IG"
     return None

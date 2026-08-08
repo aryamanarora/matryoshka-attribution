@@ -37,7 +37,7 @@ for task in nounpp rc simple within_rc arc_easy ioi; do
   for loss in "${LOSSES[@]}"; do
     ls=""; [[ "$loss" != logit_diff ]] && ls="_$loss"
     # gradient methods (loss = target)
-    for gm in ig ixg; do sub "inp_${task}_${gm}_${loss}" "${gm}${ls}" \
+    for gm in ig ixg attnlrp; do sub "inp_${task}_${gm}_${loss}" "${gm}${ls}" \
         "${common[@]}" --method "$gm" --loss "$loss" "${ge[@]}"; done
     sub "inp_${task}_cond_${loss}" "conductance${ls}" \
         "${common[@]}" --method conductance --loss "$loss" --ig-steps 10 "${ge[@]}"

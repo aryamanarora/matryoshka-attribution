@@ -89,19 +89,22 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
 
 
 def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1,
-                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0, conductance=False):
+                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0, conductance=False, attnlrp=False):
     """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
 
     Captures the clean activation at each node module (down_proj / o_proj input) with a
     forward-pre-hook (retain_grad), runs a clean forward + logit-diff backward, and scores each
     node by g . (clean - patch), summed over a batch. relp=True applies the RelP modified
-    backward first (LN-freeze + MLP gate rule + QK-detach). [RelP backward not yet ported.]
+    backward first (LN-freeze + MLP gate rule + QK-detach); attnlrp=True applies AttnLRP's
+    instead (LN-freeze + MLP gate rule + half-rule on the QK/OV matmuls, softmax kept).
     """
     if hooker.mask_type in ("mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"):
         raise NotImplementedError("gradient attribution not supported for SAE/DAS nodes; use --method mattr")
-    if relp:
-        from learning_to_attribute.grad_attribution import install_relp, revert_relp
-        install_relp(hf)
+    assert not (relp and attnlrp), "relp and attnlrp are alternative backward rule sets"
+    modified_bwd = relp or attnlrp
+    if modified_bwd:
+        from learning_to_attribute.grad_attribution import install_attnlrp, install_relp, revert_relp
+        (install_attnlrp if attnlrp else install_relp)(hf)
     layers = hf.model.layers
     use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_head", "node", "mlp+attn_span", "mlp+attn_head_span")
     head_nonspan = hooker.mask_type == "mlp+attn_head"   # per-(pos, head), fixed-length
@@ -216,7 +219,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             scores[off0 + li * nh:off0 + (li + 1) * nh] = c.view(Bn, Pn, nh, Hd).sum(-1).sum((0, 1)).cpu()
         if hooker.include_input:
             scores[0] = input_node_effect()
-        if relp:
+        if modified_bwd:
             revert_relp(hf)
         return scores.to(device)
 
@@ -251,7 +254,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             scores[off0 + li * nh:off0 + (li + 1) * nh] = effh.cpu()   # [nh]
         if hooker.include_input:
             scores[0] = input_node_effect()
-        if relp:
+        if modified_bwd:
             revert_relp(hf)
         return scores.to(device)
     if span:
@@ -290,7 +293,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
                 effh = (g4 * (c4 - p4)).sum(-1).sum(0)   # sum head_dim, then batch -> [S, nh]
                 offh = hooker.mlp_span_total + li * S * nh
                 scores[offh:offh + S * nh] = effh.reshape(-1).cpu()
-        if relp:
+        if modified_bwd:
             revert_relp(hf)
         return scores.to(device)
     for li in range(len(layers)):
@@ -316,7 +319,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
             else:  # mlp+attn_dim: per-(pos, dim)
                 eff = (ga * (ca - pa)).sum(0)
                 off = hooker.mlp_total + li * P * H; scores[off:off + P * H] = eff.reshape(-1).cpu()
-    if relp:
+    if modified_bwd:
         revert_relp(hf)
     return scores.to(device)
 
@@ -327,8 +330,8 @@ def main():
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
     p.add_argument("--method", default="mattr",
-                   choices=["mattr", "ixg", "relp", "ig", "conductance", "random", "edge_pruning",
-                            "sigmoid_mask"])
+                   choices=["mattr", "ixg", "relp", "attnlrp", "ig", "conductance", "random",
+                            "edge_pruning", "sigmoid_mask"])
     # Node/Edge Pruning (Bhaskar et al., 2024) on this harness: hard-concrete gates + a
     # Lagrangian L0 budget instead of MAttr's top-k. It takes the SAME loss_fn as MAttr, so
     # --loss still selects the objective and the only thing that differs is how the mask is
@@ -639,11 +642,11 @@ def main():
     train_loss_log = None
     if args.method == "random":
         scores = torch.randn(total, device=device)   # random-ranking baseline (seeded)
-    elif args.method in ("ixg", "relp", "ig", "conductance"):
+    elif args.method in ("ixg", "relp", "attnlrp", "ig", "conductance"):
         cond = args.method == "conductance"
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=(args.grad_examples or args.eval_examples),
-                                 relp=(args.method == "relp"),
+                                 relp=(args.method == "relp"), attnlrp=(args.method == "attnlrp"),
                                  ig_steps=args.ig_steps if args.method in ("ig", "conductance") else 1,
                                  loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
                                  conductance=cond)

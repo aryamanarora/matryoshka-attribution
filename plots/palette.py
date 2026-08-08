@@ -27,6 +27,12 @@ METHOD = {
     "IG":    "#e69f00",   # Wong orange   (light)
     "I×G":   "#882255",   # Tol wine      (dark)
     "GIM":   "#56b4e9",   # Wong sky blue; 5th series, MIB curve figures only
+    # Wong vermillion: the LRP-family gradient baseline on SVA+. Warm like IG (they are both
+    # gradient methods) but separated by lightness, L* 54 vs 72 -- the same cue the IG / I×G
+    # pair relies on. Its worst CVD distance is dE 18.3 (deuteranopia, vs IG), which is under
+    # the dE>20 rule of thumb but above this palette's pre-existing worst pair (16.1), so it
+    # does not become the binding constraint. Checked with `python plots/palette.py`.
+    "AttnLRP": "#d55e00",
     "Node Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter + curves
     # Wong reddish purple: the other mask-learning baseline, so it stays in Node Pruning's
     # cool-purple family while separating from it by lightness (L* ~60 vs ~24). Deliberately

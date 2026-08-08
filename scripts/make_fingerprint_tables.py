@@ -23,7 +23,7 @@ TABDIR = "paper/tabs"
 METRICS = [("acc_auc", "acc", True), ("faith_auc", "faith", True), ("kstar_pct", r"$k^\star$\%", False)]
 # MAttr headline = soft top-k fwd; the STE variants are "+ hard" ablations
 SECTIONS = [
-    ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG")]),
+    ("Gradient attribution", [("IG", "IG"), ("IxG", "IxG"), ("AttnLRP", "AttnLRP")]),
     # Node Pruning through eval_sva.py's own loss_fn, so it shares MAttr's objective and
     # substrate exactly and differs only in mask parameterization (annealed L0 vs top-k).
     # DBM is the same story one parameterization over: deterministic sigmoid gates (temp
@@ -54,9 +54,11 @@ SVA = ["nounpp", "rc", "simple", "within_rc"]
 #   +input         --include-input adds input_node_effect(), a second pass of S
 #                  backwards over the embedding path, i.e. exactly double.
 COST_MASK = "2k"                                        # 2000 steps x batch 1
-COSTS_SVA = {"IG": "1k", "IxG": "100"}                  # 100 x 10 / 100 x 1
-COSTS_MIXED = {"IG": "0.3--1k", "IxG": "32--100"}       # 32 examples on arc_easy/ioi
-COSTS_INPUT = {"IG": "0.6--2k", "IxG": "64--200"}       # the above, doubled
+# AttnLRP is a single-pass method like IxG -- it only changes the backward RULES, not the
+# number of backwards -- so its cost is IxG's, not IG's.
+COSTS_SVA = {"IG": "1k", "IxG": "100", "AttnLRP": "100"}                 # 100 x 10 / 100 x 1
+COSTS_MIXED = {"IG": "0.3--1k", "IxG": "32--100", "AttnLRP": "32--100"}  # 32 ex. on arc_easy/ioi
+COSTS_INPUT = {"IG": "0.6--2k", "IxG": "64--200", "AttnLRP": "64--200"}  # the above, doubled
 
 SUBSTRATES = [("node", [("SVA", set(SVA)), ("ARC-E", {"arc_easy"}), ("IOI", {"ioi"})], COSTS_MIXED),
               ("mlp", [(t, {t}) for t in SVA], COSTS_SVA),
@@ -88,6 +90,11 @@ def parse_method(fname, d):
     # eprun: ABOVE the catch-all, or every DBM run is silently averaged into the IG rows.
     if tag.startswith("sig_"):
         return re.sub(r"_(ce|acc)$", "", tag)
+    # Same placement rule again: "attnlrp" matches none of the tests above and the catch-all
+    # below returns IG for anything that is not "ixg...", so without this branch every AttnLRP
+    # run would be averaged into the IG rows.
+    if tag.startswith("attnlrp"):
+        return "AttnLRP"
     return "IxG" if tag.startswith("ixg") else "IG"
 
 
