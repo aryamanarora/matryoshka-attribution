@@ -400,6 +400,11 @@ def node_rows():
         dn, subn = BASE_CPR[disp]
         cpr = avg(cpr_base(dn, subn))
         if acc is not None and cpr is not None:
+            # avg() means over whatever is on disk, so a still-running method plots a mean over
+            # FEWER cells than the points next to it -- invisible on the figure. Say so.
+            n = len([v for v in cpr_base(dn, subn).values() if v is not None])
+            if n < len(COLS):
+                print(f"  NOTE {disp}: CPR mean over {n}/{len(COLS)} cells", file=sys.stderr)
             rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD, label=delatex(disp), paths=[]))
     for name, d, level, g in M.OUR_METHODS:
         if level != "node":
@@ -680,7 +685,14 @@ def main_both():
 #   MAttr / +hard          the headline and its one forward-pass ablation (lr=0.05, log k)
 #   Node Pruning s=0.5     best mask baseline by CPR (1.67), and the one the tables report
 #   DBM (L1=6.0)           best DBM setting on both sweeps (lr 0.3, lambda 6.0)
-#   GIM, RelP+QK, NAP-IG   the three strongest gradient baselines by CPR
+#   GIM, AttnLRP,          the strongest gradient baselines by CPR. GIM and AttnLRP are a tie
+#   RelP+QK, NAP-IG        (1.31 each on the 10 matched cells) and near-duplicates by
+#                          construction -- they share the same q/4,k/4,v/2 attention rule and
+#                          norm freeze, differing only in the tempered softmax and the MLP
+#                          activation derivative (rho = 0.96; see MIB-circuit-track's
+#                          gim_attnlrp_decomp.py). Both are plotted anyway: the point of this
+#                          panel is the CPR/acc-AUC frontier, and two methods landing on top of
+#                          each other IS the finding. Drop one only if the overplotting hurts.
 #   IxG                    the weakest, so the gradient cloud shows its full range
 #
 # Keys are (group, node_rows() label), so this list cannot drift away from the full figure: a
@@ -694,7 +706,8 @@ COMPACT = {
     # M.EPRUN_BEST_SPARSITY; drop the bare "s=" (and the objective) for the main text
     (G_NPLD, "s=0.5"): "Node Pruning",
     (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
-    (G_GRAD, "GIM"): None, (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG"): None,
+    (G_GRAD, "GIM"): None, (G_GRAD, "AttnLRP"): None,
+    (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG"): None,
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 

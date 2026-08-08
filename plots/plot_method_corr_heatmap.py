@@ -204,7 +204,7 @@ print("Saved method_corr_heatmap")
 MAIN_LABELS = [
     "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
-    "NAP-IG", "RelP+QK", "GIM", "I$\\times$G",                   # gradient (4)
+    "NAP-IG", "RelP+QK", "GIM", "AttnLRP", "I$\\times$G",        # gradient (5)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups)
