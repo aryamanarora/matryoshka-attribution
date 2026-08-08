@@ -40,7 +40,7 @@ NODE_METHODS = [
     ("+ hard bwd",              "flat", "mib_node_bernoulli_reinforce"),
     ("+ hard bwd, log k",       "flat", "mib_node_bernoulli_reinforce_log"),
     # gradient-attribution baselines
-    ("NAP-IG",      "nested", ("napig_repro_eval", "EAP-IG-inputs_patching_node")),
+    ("NAP-IG",      "nested", ("napig_ref_eval", "EAP-IG-inputs_patching_node")),
     ("Conductance", "nested", ("napig_local_eval", "EAP-IG-inputs-local_patching_node")),
     ("IxG",         "nested", ("ig1_eval", "EAP-IG-inputs_patching_node")),
     ("RelP",        "nested", ("relp_eval", "RelP_patching_node")),
@@ -56,7 +56,7 @@ EDGE_METHODS = [
     ("+ soft fwd, log k",       "flat", "final_edge"),
     ("+ soft fwd, -c_k, log k", "flat", "mib_edge_detached_tau"),
     ("+ hard bwd, log k",       "flat", "mib_edge_bernoulli_reinforce"),
-    ("EAP-IG-inp", "nested", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),
+    ("EAP-IG-inp", "nested", ("eapig_clean_eval", "EAP-IG-inputs_patching_edge")),
 ]
 
 

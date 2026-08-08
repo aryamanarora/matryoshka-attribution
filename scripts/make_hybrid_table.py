@@ -26,7 +26,7 @@ METHODS = [
 ]
 
 OURS_DIR = Path("results/mib_node_hard_topk_log")
-NAPIG_DIR = Path("results/napig_repro_eval/EAP-IG-inputs_patching_node")
+NAPIG_DIR = Path("results/napig_ref_eval/EAP-IG-inputs_patching_node")
 
 
 def load(task, model, method):

@@ -42,7 +42,7 @@ REEVAL_DIRS = {"htk_lr_0.05", "final_node"}           # not in mattr_accauc -> r
 # (There IS a gim_nomlp_accauc on disk; it belongs to the pre-scale_mlp_gate GIM and must not
 # be listed here, or a corrected-GIM row would silently fill from the buggy run.)
 BASELINES = [
-    ("NAP-IG", ["napig_repro_eval", "napig_ref_accauc"], "EAP-IG-inputs_patching_node"),
+    ("NAP-IG", ["napig_ref_eval", "napig_ref_accauc"], "EAP-IG-inputs_patching_node"),
     ("Conductance", ["napig_local_eval", "napig_local_accauc"], "EAP-IG-inputs-local_patching_node"),
     ("I$\\times$G", ["ig1_eval", "ig1_accauc"], "EAP-IG-inputs_patching_node"),
     ("RelP", ["relp_eval", "relp_accauc"], "RelP_patching_node"),
@@ -103,8 +103,9 @@ def _acc(p):
 
 
 # L2A/results and MIB-circuit-track/results are mirrors of the same run_evaluation.py outputs,
-# but neither is complete: napig_repro_eval exists only in L2A, and a freshly finished job lands
-# MIB-side until it is copied over. Searching both is what makes "just add the eval dir" true
+# but neither is complete: some dirs (e.g. the quarantined _stale_tl321 wave) exist only in L2A,
+# and a freshly finished job lands MIB-side until it is copied over -- napig_ref_eval and
+# eapig_clean_eval both originate there. Searching both is what makes "just add the eval dir" true
 # regardless of which side a run happens to be on.
 ROOTS = (L2A, MIB)
 

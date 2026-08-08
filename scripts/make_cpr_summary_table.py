@@ -13,7 +13,7 @@ COLUMNS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llam
 
 # (label, group, spec). spec: (dir,) = our flat val.pkl; (evaldir, sub) = grad eval abs-False
 NODE = [
-    ("NAP-IG", "g", ("napig_repro_eval", "EAP-IG-inputs_patching_node")),
+    ("NAP-IG", "g", ("napig_ref_eval", "EAP-IG-inputs_patching_node")),
     ("Conductance", "g", ("napig_local_eval", "EAP-IG-inputs-local_patching_node")),
     ("I$\\times$G", "g", ("ig1_eval", "EAP-IG-inputs_patching_node")),
     ("RelP", "g", ("relp_eval", "RelP_patching_node")),
@@ -35,7 +35,7 @@ NODE = [
     ("$+$ unif $k$, $+$ id-STE, SGD", "o", ("mib_node_identity_sgd",)),
 ]
 EDGE = [
-    ("EAP-IG-inp", "g", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),
+    ("EAP-IG-inp", "g", ("eapig_clean_eval", "EAP-IG-inputs_patching_edge")),
     ("\\ourmethod{}", "o", ("final_edge",)),
     ("$+$ hard", "o", ("mib_edge_hard_topk",)),
     ("$+$ unif $k$, $+$ hard", "o", ("mib_edge_hard_topk_uniform",)),

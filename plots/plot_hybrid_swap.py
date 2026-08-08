@@ -47,9 +47,9 @@ PALETTE = {
 }
 
 OURS_DIR = Path("/tmp/mib_pkls/results/mib_node_hard_topk")
-NAPIG_DIR = Path("/tmp/mib_pkls/results/napig_repro_eval/EAP-IG-inputs_patching_node")
+NAPIG_DIR = Path("/tmp/mib_pkls/results/napig_ref_eval/EAP-IG-inputs_patching_node")
 OURS_CLUSTER = Path("results/mib_node_hard_topk")
-NAPIG_CLUSTER = Path("results/napig_repro_eval/EAP-IG-inputs_patching_node")
+NAPIG_CLUSTER = Path("results/napig_ref_eval/EAP-IG-inputs_patching_node")
 
 theme_set(
     theme_bw(base_size=8)

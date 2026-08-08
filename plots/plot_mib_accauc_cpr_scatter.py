@@ -61,7 +61,7 @@ def cpr_base(dirn, sub):
 
 # gradient baseline CPR dirs (mirror make_mib_table.EXTRA_NODE_BASELINES + NAP-IG repro)
 BASE_CPR = {
-    "NAP-IG": ("napig_repro_eval", "EAP-IG-inputs_patching_node"),
+    "NAP-IG": ("napig_ref_eval", "EAP-IG-inputs_patching_node"),
     "Conductance": ("napig_local_eval", "EAP-IG-inputs-local_patching_node"),
     "I$\\times$G": ("ig1_eval", "EAP-IG-inputs_patching_node"),
     "RelP": ("relp_eval", "RelP_patching_node"),
@@ -469,7 +469,7 @@ def edge_rows():
     rows = []
     # Same completeness bar as build_lr_rows: 11/11 on BOTH axes, because every point here is a
     # mean over cells and a 3-cell mean is not comparable to an 11-cell one.
-    EDGE_BASELINES = [("EAP-IG-inp", "eapig_repro_accauc", G_GRAD),
+    EDGE_BASELINES = [("EAP-IG-inp", "eapig_clean_eval", G_GRAD),
                       ("UGS", "ugs_eval", G_GRAD)]
     for disp, dirn, grp in EDGE_BASELINES:
         acc, cpr = pair_avg(dirn)

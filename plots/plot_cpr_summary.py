@@ -39,7 +39,7 @@ COLUMNS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llam
 
 # (label, group, level, spec). spec: (dir,) = our flat val.pkl; (evaldir, sub) = grad eval abs-False
 METHODS = [
-    ("NAP-IG", "Gradient", "node", ("napig_repro_eval", "EAP-IG-inputs_patching_node")),
+    ("NAP-IG", "Gradient", "node", ("napig_ref_eval", "EAP-IG-inputs_patching_node")),
     ("Conductance", "Gradient", "node", ("napig_local_eval", "EAP-IG-inputs-local_patching_node")),
     ("I×G", "Gradient", "node", ("ig1_eval", "EAP-IG-inputs_patching_node")),
     ("RelP", "Gradient", "node", ("relp_eval", "RelP_patching_node")),
@@ -56,7 +56,7 @@ METHODS = [
     ("$-c_k$ (log)", "Ours", "node", ("mib_node_detached_tau_log",)),
     ("+hard", "Ours", "node", ("mib_node_bernoulli_reinforce",)),
     ("+hard (log)", "Ours", "node", ("mib_node_bernoulli_reinforce_log",)),
-    ("EAP-IG-inp", "Gradient", "edge", ("eapig_repro_eval", "EAP-IG-inputs_patching_edge")),
+    ("EAP-IG-inp", "Gradient", "edge", ("eapig_clean_eval", "EAP-IG-inputs_patching_edge")),
     ("MAttr", "Ours", "edge", ("mib_edge_hard_topk_uniform",)),
     ("MAttr (log)", "Ours", "edge", ("mib_edge_hard_topk",)),
     ("+soft", "Ours", "edge", ("final_edge",)),

@@ -40,7 +40,7 @@ METHODS = [
     ("+ soft fwd", "final_node", "{task}_{model}_validation.pkl"),
     ("+ soft fwd, - c_k grad", "mib_node_detached_tau", "{task}_{model}_validation.pkl"),
     ("+ hard bwd", "mib_node_bernoulli_reinforce", "{task}_{model}_validation.pkl"),
-    ("NAP-IG (repro)", "napig_repro_eval/EAP-IG-inputs_patching_node",
+    ("NAP-IG (repro)", "napig_ref_eval/EAP-IG-inputs_patching_node",
      "{stask}_{model}_validation_abs-False.pkl"),
 ]
 
