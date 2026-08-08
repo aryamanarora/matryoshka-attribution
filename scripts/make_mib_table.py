@@ -166,6 +166,23 @@ EPRUN_SPARSITIES = [
     ("$s{=}0.99$, logit-diff", "eprun_eval_s0.99_ld"),
 ]
 
+# The sweep above is the full grid we RAN; this is what the CPR table SHOWS -- the best budget
+# per objective, one KL row and one logit-diff row. Twelve near-identical Node Pruning rows
+# buried every other mask-learning baseline in the table, and the budget sweep is not the point
+# being made there (it is a hyperparameter search we ran to give the baseline a fair shot).
+#
+# Selected by validation row mean on 2026-08-08, over the SAME 11 cells:
+#   KL:         s=0.9 1.00  >  s=0.95 0.96  >  s=0.99 0.91   (s=0.5, s=0.8 partial at 6/11 and
+#               9/11; on their own subsets s=0.9 still wins, 1.05 vs 0.86 and 0.99 vs 0.90, so
+#               they cannot overtake it by finishing)
+#   logit-diff: s=0.5 1.67  >  s=0.8 1.46  >  s=0.95 1.36  >  s=0.9 1.28  >  s=0.99 1.24
+#               >  s=0.25 0.84  >  s=0.1 0.34   (interior optimum, agrees with HEADLINE_EPRUN)
+#
+# Other consumers (make_mib_accauc_table, plot_mib_accauc_cpr_scatter) still iterate the FULL
+# EPRUN_SPARSITIES on purpose -- the scatter wants every budget as a point. Only this table
+# filters. Set to None to restore all rows.
+EPRUN_SHOW = {"eprun_eval", "eprun_eval_s0.5_ld"}
+
 # The single config the test table and the figures show. Best by CPR AUC, which is the metric
 # the paper leads with -- validation row avg over 11 cells is 1.67 for logit-diff s=0.5 against
 # 1.00 for the KL s=0.9 run this used to name, and 1.67 is an interior optimum (s=0.25 -> 0.84
@@ -286,6 +303,8 @@ def eprun_rows(level):
     """
     rows = []
     for suffix, dirn in EPRUN_SPARSITIES:
+        if EPRUN_SHOW is not None and dirn not in EPRUN_SHOW:
+            continue
         data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
         if not data:
             continue

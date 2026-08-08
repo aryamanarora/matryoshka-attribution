@@ -1,5 +1,5 @@
-"""Top-10 nodes by attribution for the IOI / GPT-2 MIB cell, with the heads of the
-published IOI circuit colour-coded by their role.
+"""Top-10 and bottom-10 nodes by attribution for the IOI / GPT-2 MIB cell, with the heads of
+the published IOI circuit colour-coded by their role.
 
 The MIB analogue of make_sva_neuron_table.py: same question ("which units does each method
 reach for FIRST?"), same ranking convention, same chip-colouring idea -- but the highlight
@@ -28,12 +28,17 @@ attention heads, MLPs, and `input`. `logits` is excluded because it has no score
 taxonomy is head-level and inventing an MLP role would be fabricating the reference we are
 checking against.
 
-*** The `heads only` summary row is not decoration -- read it. ***
-Methods differ in whether they rank `input` and the early MLPs highly, and those slots push
-heads out of a top-10 without saying anything about head recovery. MAttr ranks m0 and input
-2nd and 3rd, so it scores 8/10 on the all-nodes row and 10/10 on the heads-only row; the mask
-learners rank `input` first for the same reason. Comparing methods on the all-nodes row alone
-would read that difference as worse head recovery, which it is not.
+WHY THE BOTTOM 10 TOO. The top block asks "what does the method reach for first?"; the bottom
+block asks the sharper question, "what does it rule out?" A coloured chip down there is a
+method placing a path-patched IOI head among the least important nodes in the model, which is
+a substantive disagreement with the reference rather than a missed hit -- and unlike a top-10
+miss it cannot be explained away by `input`/`m0` occupying slots.
+
+NO SUMMARY ROWS. Counting hits per column invited exactly the reading the counts cannot
+support: methods differ in whether they rank `input` and the early MLPs highly (MAttr puts m0
+and input 2nd and 3rd; the mask learners put `input` first), so an all-nodes hit count scores
+that as worse head recovery when it is not, and the head-only correction needed its own row to
+say so. The ranks themselves are the evidence; the reader can see the chips.
 """
 import json
 import re
@@ -145,18 +150,6 @@ def main():
                  "they are the same ranking problem")
     n_nodes = len(next(iter(sets.values())))
 
-    # Three summary rows. The first two rank over ALL nodes (which is what the circuit actually
-    # is); the third restricts to attention heads so that ranking `input`/`m0` highly is not
-    # scored as a head-recovery failure. See the module docstring.
-    def n_ioi(seq, k):
-        return sum(1 for x in seq[:k] if x in ROLE)
-
-    summary = []
-    for lab, _ in cols:
-        r = rankings[lab]
-        heads = [x for x in r if HEAD_RE.match(x)]
-        summary.append((n_ioi(r, TOPN), n_ioi(r, N_IOI), n_ioi(heads, TOPN)))
-
     ncol = len(cols)
     # Same width arithmetic as make_sva_neuron_table: tabcolsep (3pt) lands on both sides of
     # 2*ncol interior gaps, the label column takes a fixed 0.14, and the method columns share
@@ -186,26 +179,23 @@ def main():
          r"\begin{tabular}{@{}p{%.2f\textwidth} *{%d}{%s}@{}}" % (LABW, ncol, col),
          r"\toprule", hdr, r"\midrule"]
 
-    for i in range(TOPN):
+    # Two blocks of TOPN rows over the SAME ranking, labelled by absolute rank so the elision
+    # between them is unambiguous: 1..10 and (n-9)..n out of n_nodes. Row parity is carried by
+    # the absolute row index rather than the within-block one, so the alternating shade does not
+    # reset and read as a new table at the join.
+    ranks = list(range(TOPN)) + [None] + list(range(n_nodes - TOPN, n_nodes))
+    for row, i in enumerate(ranks):
+        shade = r"\rowcolor[HTML]{F7F7F7}" if row % 2 else ""
+        if i is None:
+            # Elided middle. \vdots goes in EVERY column, not just the label: a rule alone would
+            # read as the section break the table already uses before the legend, whereas dots
+            # across the full width say "each of these rankings continues".
+            L.append(f"{shade}$\\vdots$ & " + " & ".join([r"$\vdots$"] * ncol) + r" \\")
+            continue
         cells = [chip(rankings[lab][i]) if i < len(rankings[lab]) else "" for lab, _ in cols]
         # Faint alternating shade: ncol near-identical short ids per row are easy to slip a
         # row on, exactly as in the SVA table.
-        shade = r"\rowcolor[HTML]{F7F7F7}" if i % 2 else ""
         L.append(f"{shade}{i + 1}. & " + " & ".join(cells) + r" \\")
-
-    L.append(r"\midrule")
-    # Order matters: the heads-only row QUALIFIES the top-10 row directly above it, so it has to
-    # sit between top-10 and top-26 rather than after both, where it read as a qualifier on 26.
-    # Best-in-row is bolded, ties included -- with five columns tied at 10 a single winner would
-    # be a fiction, and the tie IS the finding (every gradient method recovers the same ten).
-    for lab, k in [(r"\# IOI in top %d" % TOPN, 0),
-                   (r"\quad among top %d heads" % TOPN, 2),
-                   (r"\# IOI in top %d" % N_IOI, 1)]:
-        vals = [s[k] for s in summary]
-        best = max(vals)
-        L.append(r"{\scriptsize %s} & " % lab
-                 + " & ".join(r"\textbf{%d}" % v if v == best else r"%d" % v for v in vals)
-                 + r" \\")
 
     # Legend. It sits inside the tabular as a full-width row so it travels with the table
     # wherever the float lands, rather than as free text that can drift away from it.
@@ -225,11 +215,15 @@ def main():
     TABDIR.mkdir(parents=True, exist_ok=True)
     out = TABDIR / "ioi_top_nodes.tex"
     out.write_text("\n".join(L) + "\n")
-    print(f"wrote {out}  ({ncol} methods, top {TOPN} of {n_nodes} nodes, "
+    print(f"wrote {out}  ({ncol} methods, top/bottom {TOPN} of {n_nodes} nodes, "
           f"{N_IOI} IOI heads in the reference)")
-    for (lab, _), s in zip(cols, summary):
-        print(f"  {lab:22s} top{TOPN}={s[0]:2d}  top{N_IOI}={s[1]:2d}/{N_IOI}  "
-              f"heads-only top{TOPN}={s[2]:2d}")
+    # Stdout only -- deliberately NOT rows in the table (see the docstring). Printed anyway
+    # because it is the cheapest way to notice a column that has gone wrong or stale.
+    for lab, _ in cols:
+        r = rankings[lab]
+        top = sum(1 for x in r[:TOPN] if x in ROLE)
+        bot = sum(1 for x in r[-TOPN:] if x in ROLE)
+        print(f"  {lab:22s} IOI heads in top{TOPN}={top:2d}  in bottom{TOPN}={bot:2d}")
 
 
 if __name__ == "__main__":
