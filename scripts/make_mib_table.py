@@ -527,6 +527,14 @@ def main():
                     data[(task, model)] = round(d["area_under"], 2)
                 except Exception:
                     pass
+        # Same partial-row warning eprun_rows() prints, and for a sharper reason here: the Avg
+        # column of a partial row averages ONLY the cells present, so a row with 3 of 11 cells
+        # gets an Avg that looks directly comparable to an 11-cell row and is not. That bit us
+        # mid-rerun -- a 3-cell GIM and a 9-cell AttnLRP both landed on Avg 1.39, which reads as
+        # a tie between two things that were never measured on the same cells.
+        if data and len(data) < len(COLUMNS):
+            print(f"  NOTE {disp}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running; "
+                  f"its Avg covers only those {len(data)}")
         NODE_BASELINES[disp] = data
         DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
