@@ -46,6 +46,7 @@ NODE_METHODS = [
     ("RelP",        "nested", ("relp_eval", "RelP_patching_node")),
     ("RelP+QK",     "nested", ("relp_qkgrad_eval", "RelP-qkgrad_patching_node")),
     ("RelP+Shapley",     "nested", ("relpshapley_eval", "RelPShapley_patching_node")),
+    ("AttnLRP",     "nested", ("attnlrp_eval", "AttnLRP_patching_node")),
     ("GIM",         "nested", ("gim_eval", "GIM_patching_node")),
 ]
 

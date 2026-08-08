@@ -45,6 +45,7 @@ METHODS = [
     ("RelP", "Gradient", "node", ("relp_eval", "RelP_patching_node")),
     ("RelP+QK", "Gradient", "node", ("relp_qkgrad_eval", "RelP-qkgrad_patching_node")),
     ("RelP+Shapley", "Gradient", "node", ("relpshapley_eval", "RelPShapley_patching_node")),
+    ("AttnLRP", "Gradient", "node", ("attnlrp_eval", "AttnLRP_patching_node")),
     ("GIM", "Gradient", "node", ("gim_eval", "GIM_patching_node")),
     ("MAttr", "Ours", "node", ("mib_node_hard_topk",)),
     ("MAttr (log)", "Ours", "node", ("mib_node_hard_topk_log",)),

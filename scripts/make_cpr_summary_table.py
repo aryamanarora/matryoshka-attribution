@@ -19,6 +19,7 @@ NODE = [
     ("RelP", "g", ("relp_eval", "RelP_patching_node")),
     ("RelP+QK", "g", ("relp_qkgrad_eval", "RelP-qkgrad_patching_node")),
     ("RelP+Shapley", "g", ("relpshapley_eval", "RelPShapley_patching_node")),
+    ("AttnLRP", "g", ("attnlrp_eval", "AttnLRP_patching_node")),
     ("GIM", "g", ("gim_eval", "GIM_patching_node")),
     # MAttr headline = soft top-k fwd, log k (lr=0.01 dirs here); "+ hard" = sigmoid-STE fwd
     ("\\ourmethod{}", "o", ("mib_node_topk_log",)),

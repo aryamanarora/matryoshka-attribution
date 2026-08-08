@@ -77,6 +77,7 @@ METHODS = [
     ("RelP",              "relp/RelP_patching_node",                       "nested"),
     ("RelP+QK",           "relp_qkgrad/RelP-qkgrad_patching_node",         "nested"),
     ("RelP+Shapley",           "relpshapley/RelPShapley_patching_node",                 "nested"),
+    ("AttnLRP",           "attnlrp/AttnLRP_patching_node",                 "nested"),
     ("GIM",               "gim/GIM_patching_node",                         "nested"),
     ("Node Pruning",      EPRUN_BEST[0],                                   "graph"),
     ("DBM",               DBM_BEST,                                        "graph"),
