@@ -593,6 +593,15 @@ def place_labels(fig, ax, df, pt=LAB_PT, msize=46):
     np.fill_diagonal(hit, False)
     n = int(np.triu(hit).sum())
     print(f"  label overlaps after layout: {n}", file=sys.stderr)
+    # The other failure mode, and the one XPAD exists to prevent: a label running past the right
+    # frame. Without this the only way to pick XPAD was to overshoot, which is how it reached
+    # 0.70 -- most of that padding is empty axis. `slack` is how much of the padded range is
+    # unused, i.e. how far XPAD can come down before labels start clipping.
+    right = nx + w / 2
+    off = int((right > 1.0).sum())
+    if off:
+        print(f"  labels past the right frame: {off}", file=sys.stderr)
+    print(f"  x headroom: rightmost label ends at {right.max():.3f} of the frame", file=sys.stderr)
 
 
 def node_rho(df):
@@ -724,8 +733,14 @@ COMPACT = {
 FIG_W_C, FIG_H_C = 1.65, 2.0
 LAB_PT_C, MSIZE_C = 5.5, 18
 # Labels are ~as wide as they are on the full page but the panel is a third the width, so they
-# need proportionally far more room: 0.34 leaves "Node Pruning" hanging off the frame.
-XPAD_C = 0.70
+# need proportionally more room to the right. This was 0.70, which left 23% of the panel as
+# empty axis -- on a 1.65in figure that is ~0.35in of nothing, next to a heatmap using its full
+# width. Measured with the "x headroom" diagnostic in place_labels(): labels first cross the
+# right frame between 0.20 and 0.22, so 0.28 keeps them clear (rightmost ends at ~0.96) with
+# slack for points moving under re-evaluation. The old comment claimed 0.34 left "Node Pruning"
+# hanging off; that is not reproducible -- 0.35 ends at 0.917, well inside. Re-tune only if the
+# diagnostic reports "labels past the right frame"; do not raise it on suspicion.
+XPAD_C = 0.28
 
 
 def main():
