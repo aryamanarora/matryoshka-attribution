@@ -112,7 +112,32 @@ NODE_PRUNING = (_M.eprun_label("node", _M.EPRUN_BEST_SPARSITY[0]),
 # These carry the same harness caveat as the Node Pruning row: they are scored by MIB's
 # run_evaluation.py while the \ourmethod{} rows come from our eval_mib.py, and the two do not
 # agree cell-for-cell (worst on Gemma). A small gap either way is inside harness noise.
+#
+# *** GIM CURRENTLY PRODUCES NO ROW HERE, AND THAT IS DELIBERATE. ***
+# results/gim_eval has 12 validation pkls and ZERO test pkls -- corrected GIM (post
+# scale_mlp_gate) was never evaluated on test. The only GIM test pkls on disk belong to
+# results/gim_nomlp_eval, the pre-scale_mlp_gate BUGGY run, now quarantined to
+# results/_stale_gim_nomlp/ (same treatment as the TL 3.2.1 wave in _stale_tl321).
+#
+# Until 2026-08-10 this table shipped a GIM row that WAS the buggy run, matching
+# gim_nomlp_eval cell-for-cell (1.36 0.71 0.78 0.25 1.12 0.25 1.24 0.99 1.34 1.11 1.06,
+# avg 0.93). It predates the quarantine: the buggy pkls used to sit in gim_eval, so the row
+# generated cleanly and then froze in the .tex while the dirs were reorganised underneath it.
+# The paper therefore showed buggy GIM on test next to corrected GIM on validation (avg 1.32)
+# under one label -- exactly the confusion make_mib_accauc_table.py:60 warns about.
+#
+# Do NOT repoint this entry at gim_nomlp_eval to refill the row. The fix is a test-split eval
+# of the CORRECTED circuits in MIB-circuit-track/results/gim, after which this entry fills
+# itself with no edit (the "no cells -> no row" rule below means an empty dir is simply absent).
+#
+# AttnLRP was validated on all 12 cells but had never been evaluated on test at all, so the
+# strongest gradient baseline in the validation table was simply absent from this one. Its 11
+# test evals come from MIB-circuit-track/run_attnlrp_test.sh: EVAL-ONLY, reusing the train-split
+# circuits in results/attnlrp that the validation row already scored, so the row below and the
+# validation row describe the SAME circuits on two splits rather than two separate attributions.
+# Full-split including llama3, per the no-dagger rule documented above.
 GRAD_NODE_BASELINES = [
+    ("AttnLRP",  "attnlrp_eval",     "AttnLRP_patching_node"),
     ("GIM",      "gim_eval",         "GIM_patching_node"),
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
 ]
@@ -197,7 +222,7 @@ def complete_or_skip(name, level, d, data, split="test"):
     """
     if len(data) < len(COLUMNS):
         why = "no test cells" if not data else f"only {len(data)}/{len(COLUMNS)} test cells"
-        print(f"SKIP {name} ({level}): {why} in results/{d} (jobs still pending)")
+        print(f"SKIP {name} ({level}): {why} in results/{d} (no results on disk -- job pending, or never launched)")
         return False
     pend = gemma_unstamped(d, level, split)
     if pend:
@@ -241,7 +266,7 @@ def main():
             if v is not None:
                 data[(task, model)] = round(v, 2)
         if not data:
-            print(f"SKIP {name}: no test cells in results/{d}/{sub} (jobs still pending)")
+            print(f"SKIP {name}: no test cells in results/{d}/{sub} (no results on disk -- job pending, or never launched)")
             continue
         if len(data) < len(COLUMNS):
             print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
@@ -258,7 +283,7 @@ def main():
             if v is not None:
                 data[(task, model)] = round(v, 2)
         if not data:
-            print(f"SKIP {name}: no test cells in results/{d}/{sub} (jobs still pending)")
+            print(f"SKIP {name}: no test cells in results/{d}/{sub} (no results on disk -- job pending, or never launched)")
             continue
         if len(data) < len(COLUMNS):
             print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "

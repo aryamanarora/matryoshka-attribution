@@ -114,6 +114,59 @@ NODE_BASELINES = {}
 # flag-identical to the other gradient baselines in its column rather than merely close.
 NAPIG_REPRO_DIR = "napig_ref_eval"        # MIB-circuit-track run_variants.sh, `ref` arm
 
+# === NAP-IG step-count rows ==================================================================
+#
+# MIB's harness ships --ig-steps 5 (run_attribution.py:46) and that is NOT a converged
+# integral. Measured over all 12 cells on the attribution output itself (importances.json, via
+# MIB-circuit-track/napig_step_convergence.py), 5 -> 10 steps moves the ranking by rho 0.87
+# with only 57% top-5 overlap, and 27 nodes CHANGE SIGN while sitting in the top 10 by |score|
+# (26 of the 27 are MLPs). CPR is probed at 0.1--1% sparsity, so that unstable head is most of
+# what the metric reads -- which is why the row mean jumps 0.77 -> 1.27 from 5 to 10 steps.
+#
+# Reporting only the shipped default would flatter \ourmethod{} by ~0.5 CPR AUC against a
+# baseline that is merely under-integrated. Reporting only the converged setting would
+# misdescribe the MIB leaderboard, whose published NAP-IG numbers are the 5-step ones. Hence
+# both, as separate rows, which is also what makes the compute column above worth reading.
+#
+# Circuits come from MIB-circuit-track/run_napig{10,30}.sh. Those are copies of run_variants.sh
+# with --ig-steps as the ONLY difference -- same CELLS, same TL 2.15.4 venv, same --head 200
+# llama3 eval cap, same train -> validation direction -- so the gap between these rows and the
+# NAP-IG row is the integration grid and nothing else.
+#
+# Is 30 itself converged? The ladder says yes, and by a wide margin. Over the 11 cells where
+# both rungs exist (all but ioi/llama3), 10 -> 30 gives rho 0.996 / 85.5% top-5 / ZERO sign
+# flips, against 5 -> 10's rho 0.866 / 56.7% top-5 / 27 flips. The decisive one is mcqa/llama3,
+# the WORST cell at 5 -> 10 (20% top-5 overlap) and rho 0.992 with 100% top-5 overlap at
+# 10 -> 30: the instability is not merely smaller on average, it is gone from the cell that had
+# the most of it. CPR agrees -- across the 10 cells scored at both, |30-step minus 10-step| is
+# at most 0.04.
+#
+# The five llama3 cells that landed after the first pass did not change the verdict. llama3 was
+# the loosest family at 5 -> 10 (rho 0.75--0.96, 20--60% top-5, 13 of the 27 flips) and is rho
+# 0.992--0.996 with zero flips at 10 -> 30 -- that is the family where a 10-vs-30 divergence
+# would have surfaced first, so a prose claim of convergence at 10 steps is now supportable.
+# The one hole left is ioi/llama3, also the loosest cell in the whole 5 -> 10 column (rho 0.750,
+# 40% top-5); worth a look when it lands, though 11/12 at zero flips makes a surprise unlikely.
+#
+# So the honest reading is that TEN steps is already converged and 30 is the confirmation, not
+# that 30 is a distinct better setting.
+# The IG grid is a COMPUTE knob, so these rows must move the Bwd. column with them --
+# attribution cost is exactly linear in --ig-steps (same unit as the COST_* block below:
+# backward passes in sequences, = examples x ig-steps, 100--1000 examples depending on cell).
+# Leaving them at COST_GRAD_IG5 would show a converged NAP-IG costing what the 5-step run
+# costs, and that trade is the point of the rows: 30 steps buys most of the CPR gap back, at
+# 3--30k backwards against \ourmethod{}'s 0.5k node budget. Accuracy gap narrows, cost gap widens.
+NAPIG_STEP_ROWS = [
+    ("$+$ 10 IG steps", "napig10_eval", "1--10k"),
+    ("$+$ 30 IG steps", "napig30_eval", "3--30k"),
+]
+
+# These dirs are written by the MIB repo and have not been copied into L2A's results/ (unlike
+# napig_ref_eval, which was). Read them where they actually are rather than snapshotting: jobs
+# are still landing, and a stale copy would silently under-report a row as partial forever.
+# Same dual-root idea as make_mib_accauc_table.ROOTS, L2A first so a local copy wins if made.
+MIB_RESULTS = Path("/home/guests/aryaman/MIB-circuit-track/results")
+
 # NOT eapig_repro_accauc: that dir is clean but was attributed with --num-examples 1000 on every
 # cell, off-convention for arc/arithmetic (100) and mcqa (full). It stays the acc-AUC source;
 # this row comes from MIB-circuit-track/run_eapig_edge.sh, which follows CELLS.
@@ -291,6 +344,8 @@ COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
 COST_EPRUN = "3k"            # 3000 steps x batch 1
 COST_UGS = "7--114k"         # the 12 mask samples per step are what make this so large
 COST_OURS = {"node": "0.5k", "edge": "5k"}
+# The ig-steps 10 / 30 rows carry their own cost, declared with the rows in NAPIG_STEP_ROWS
+# (defined above, since it needs them) and looked up via grad_cost's STEP_COST.
 # ig_steps=5 rows; every other gradient row is a single backward per example.
 COST_IG5_ROWS = {"NAP-IG", "Conductance", "EAP-IG-inp (CF, repro)"}
 
@@ -341,6 +396,29 @@ def load_run_eval(results_dir, sub):
             try:
                 with open(pkl, "rb") as f:
                     data[(task, model)] = round(pickle.load(f)["area_under"], 2)
+            except Exception:
+                pass
+    return data
+
+
+def load_eval_dual(results_dir, sub):
+    """load_run_eval, but searching L2A results/ then the MIB repo's results/.
+
+    Separate from load_run_eval rather than folded into it: every existing caller resolves
+    L2A-side, and silently widening their search could pull a cell out of a MIB-side dir that
+    happens to share a name with an L2A one (napig_ref_eval exists on BOTH sides).
+    """
+    data = {}
+    for task, model, _ in COLUMNS:
+        fn = f"{task.replace('_', '-')}_{model}_validation_abs-False.pkl"
+        for root in (RESULTS_BASE, MIB_RESULTS):
+            pkl = root / results_dir / sub / fn
+            if not pkl.exists():
+                continue
+            try:
+                with open(pkl, "rb") as f:
+                    data[(task, model)] = round(pickle.load(f)["area_under"], 2)
+                break
             except Exception:
                 pass
     return data
@@ -440,7 +518,12 @@ def main():
         return round(sum(vs) / len(vs), 2) if vs else None
 
     def section_avg_best(data_dicts):
-        avs = sorted({a for a in (row_avg(d) for d in data_dicts) if a is not None}, reverse=True)
+        # Only COMPLETE rows compete for the best-Avg bold. A partial row's Avg is suppressed at
+        # render time, so if it won here the bold would simply vanish from the section: the
+        # winner would be an average that is never printed. Ranking partial against complete
+        # averages is meaningless anyway -- they are over different cell sets.
+        full = [d for d in data_dicts if len(d) == len(COLUMNS)]
+        avs = sorted({a for a in (row_avg(d) for d in full) if a is not None}, reverse=True)
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
     def make_row(name, data, best_col, second_col, indent=False, dagger=None,
@@ -463,7 +546,12 @@ def main():
         prefix = f"\\quad {name}" if indent else name
         return f"{prefix} & {cost or '---'} & " + " & ".join(vals) + " \\\\"
 
+    # Rows whose IG grid is neither 5 nor 1 declare their own cost in NAPIG_STEP_ROWS.
+    STEP_COST = {disp: cost for disp, _, cost in NAPIG_STEP_ROWS}
+
     def grad_cost(name):
+        if name in STEP_COST:
+            return STEP_COST[name]
         return COST_GRAD_IG5 if name in COST_IG5_ROWS else COST_GRAD_IG1
 
     def mask_cost(name):
@@ -522,6 +610,11 @@ def main():
     lines.append(header)
 
     # === Node-level section ===
+    # Every node-level baseline in this section (NAP-IG and its step variants, the Tilde
+    # methods, the mask learners) is scored by a runner that caps llama3 at --head 200, so they
+    # all share one dagger set. Hoisted above the NAP-IG block because that block now needs it
+    # too; it used to be defined further down, next to its first use.
+    TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\midrule")
     lines.append(f"\\multicolumn{{{ncols + 3}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     # Load NAP-IG repro results
@@ -537,6 +630,24 @@ def main():
             except Exception:
                 pass
     NODE_BASELINES["NAP-IG"] = napig_repro
+    # All six llama3 cells of run_variants.sh are scored with --head 200 (run_variants.sh:21-26),
+    # not just mcqa -- the pre-existing DAGGER["NAP-IG"] entry above marked only mcqa/llama3, so
+    # five capped cells were rendering as if they were full-validation numbers. It matters most
+    # in exactly the columns being argued over: \ourmethod{}'s lr05 dirs cap ONLY ioi/llama3
+    # (LR05_DAGGER), so e.g. the mcqa/llama3 column puts a full-val MAttr number next to a
+    # 200-example NAP-IG one, and the dagger is the table's only disclosure of that.
+    DAGGER["NAP-IG"] = TILDE_LLAMA3_DAGGER
+    # ig-steps 10 / 30 rows, same runner and same cap -> same dagger set.
+    for disp, dirn, _cost in NAPIG_STEP_ROWS:
+        data = load_eval_dual(dirn, "EAP-IG-inputs_patching_node")
+        if not data:
+            print(f"  NOTE {disp}: 0/{len(COLUMNS)} cells ({dirn}) -- not started; row omitted")
+            continue
+        if len(data) < len(COLUMNS):
+            print(f"  NOTE {disp}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running; "
+                  f"Avg suppressed until complete")
+        NODE_BASELINES[disp] = data
+        DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
     # Additional baselines fetched from Tilde (node-level); each dir has one method subfolder
     EXTRA_NODE_BASELINES = [
@@ -548,8 +659,8 @@ def main():
         ("AttnLRP",     "attnlrp_eval",     "AttnLRP_patching_node"),
         ("GIM",         "gim_eval",         "GIM_patching_node"),
     ]
-    # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those.
-    TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those
+    # (TILDE_LLAMA3_DAGGER is defined at the top of this section).
     for disp, dirn, sub in EXTRA_NODE_BASELINES:
         data = {}
         for task, model, _ in COLUMNS:
@@ -597,8 +708,15 @@ def main():
 
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in NODE_BASELINES.items():
+        # suppress_avg on partial rows -- the same rule the mask-baseline and \ourmethod{} rows
+        # already use, and it was the one block missing it. An Avg over whichever cells happen
+        # to have finished sits in the same column as an 11-cell Avg and reads as comparable.
+        # Live risk right now: the 30-step row fills cheap-model cells first, and those are the
+        # LOW-scoring columns for NAP-IG, so a partial Avg would understate it and overstate
+        # our margin -- the exact direction of error we should be most reluctant to publish.
         lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb,
-                              avg_second=avs, cost=grad_cost(name)))
+                              avg_second=avs, suppress_avg=len(data) < len(COLUMNS),
+                              cost=grad_cost(name)))
     if MASK_NODE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
         for name, data in MASK_NODE_BASELINES.items():

@@ -23,8 +23,26 @@ MATTR_REEVAL = MIB / "mattr_accauc_val"  # htk_lr_0.05, final_node (re-eval)
 OUTPUT = Path("paper/tabs/mib_accauc_results.tex")
 COLUMNS = M.COLUMNS
 LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05"}
-LR05_EVALMIB = {"htklog_lr_0.05", "topklog_lr_0.05"}  # acc_auc in the eval_mib val pkl
-REEVAL_DIRS = {"htk_lr_0.05", "final_node"}           # not in mattr_accauc -> re-eval
+# Dirs whose acc_auc lives in the eval_mib validation pkl (results/<dir>/<task>_<model>_
+# validation.pkl) rather than in a run_evaluation.py re-eval folder.
+#
+# mib_node_topk_uniform_lr05 was MISSING here, and that is why the "+ unif k" row showed only
+# its three gemma2 cells: unrouted dirs fall through to MATTR_ACC, and mattr_accauc holds
+# nothing for this variant except the three pkls the TL 2.15.4 gemma re-eval left behind.
+# Nothing needed evaluating -- all 11 acc_auc values were already on disk, just not looked at.
+#
+# Root cause was a half-finished repoint, not a missing run: make_mib_table.py:73 moved the
+# "+ unif k" row from final_node to the lr=0.05 dir when submit_softuni_lr05.sh produced it,
+# and this module's routing was left describing the old dir (final_node is still named in
+# REEVAL_DIRS below, where it is now dead -- it is no longer in OUR_METHODS at all).
+#
+# Safe to reroute rather than a change of measurement: on the three cells present in BOTH
+# sources the values agree to 2dp (ioi 0.403/0.40, mcqa 0.485/0.48, arc_easy 0.478/0.48).
+LR05_EVALMIB = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05"}
+# htk_lr_0.05 predates evaluation.py returning acc_auc, so its eval_mib pkl has acc_auc=None
+# and it genuinely needs the re-eval folder. final_node is vestigial (see above); it is kept
+# only so the entry does not have to be re-derived if that row is ever restored.
+REEVAL_DIRS = {"htk_lr_0.05", "final_node"}
 
 # (display, [results dirs, PRIMARY FIRST], method_saveable). The primary is the same ordinary
 # eval dir make_mib_table.EXTRA_NODE_BASELINES reads for CPR, so the two tables describe the
@@ -43,6 +61,18 @@ REEVAL_DIRS = {"htk_lr_0.05", "final_node"}           # not in mattr_accauc -> r
 # be listed here, or a corrected-GIM row would silently fill from the buggy run.)
 BASELINES = [
     ("NAP-IG", ["napig_ref_eval", "napig_ref_accauc"], "EAP-IG-inputs_patching_node"),
+    # ig-steps 10 / 30, mirroring make_mib_table.NAPIG_STEP_ROWS -- see the long note there for
+    # why the shipped 5-step default is not a converged integral. Both tables must carry the
+    # rows or they contradict each other: acc-AUC is where the 5-step run looks WORST (four
+    # cells pinned at the ~0.05 floor, vs 0.43--0.49 at 10 steps), so a CPR table that shows a
+    # competitive NAP-IG next to an acc-AUC table that still shows it collapsed would read as
+    # the metric disagreeing when it is only the step count.
+    #
+    # Single dir each, no legacy `*_accauc` fallback: these runs postdate evaluation.py
+    # returning acc_auc, so their ordinary eval pkls already carry it -- no extra GPU pass.
+    # (Confirmed, not assumed: the 10-step pkls have non-null acc_auc for every finished cell.)
+    ("$+$ 10 IG steps", ["napig10_eval"], "EAP-IG-inputs_patching_node"),
+    ("$+$ 30 IG steps", ["napig30_eval"], "EAP-IG-inputs_patching_node"),
     ("Conductance", ["napig_local_eval", "napig_local_accauc"], "EAP-IG-inputs-local_patching_node"),
     ("I$\\times$G", ["ig1_eval", "ig1_accauc"], "EAP-IG-inputs_patching_node"),
     ("RelP", ["relp_eval", "relp_accauc"], "RelP_patching_node"),
