@@ -133,23 +133,17 @@ NAPIG_REPRO_DIR = "napig_ref_eval"        # MIB-circuit-track run_variants.sh, `
 # llama3 eval cap, same train -> validation direction -- so the gap between these rows and the
 # NAP-IG row is the integration grid and nothing else.
 #
-# Is 30 itself converged? The ladder says yes, and by a wide margin. Over the 11 cells where
-# both rungs exist (all but ioi/llama3), 10 -> 30 gives rho 0.996 / 85.5% top-5 / ZERO sign
-# flips, against 5 -> 10's rho 0.866 / 56.7% top-5 / 27 flips. The decisive one is mcqa/llama3,
-# the WORST cell at 5 -> 10 (20% top-5 overlap) and rho 0.992 with 100% top-5 overlap at
-# 10 -> 30: the instability is not merely smaller on average, it is gone from the cell that had
-# the most of it. CPR agrees -- across the 10 cells scored at both, |30-step minus 10-step| is
-# at most 0.04.
-#
-# The five llama3 cells that landed after the first pass did not change the verdict. llama3 was
-# the loosest family at 5 -> 10 (rho 0.75--0.96, 20--60% top-5, 13 of the 27 flips) and is rho
-# 0.992--0.996 with zero flips at 10 -> 30 -- that is the family where a 10-vs-30 divergence
-# would have surfaced first, so a prose claim of convergence at 10 steps is now supportable.
-# The one hole left is ioi/llama3, also the loosest cell in the whole 5 -> 10 column (rho 0.750,
-# 40% top-5); worth a look when it lands, though 11/12 at zero flips makes a surprise unlikely.
+# Is 30 itself converged? Yes, on all 12 cells, and by a wide margin. 10 -> 30 gives rho 0.994
+# / 86.7% top-5 / ZERO sign flips, against 5 -> 10's rho 0.866 / 56.7% top-5 / 27 flips. The
+# decisive cell is mcqa/llama3, the WORST at 5 -> 10 (20% top-5 overlap) and rho 0.992 with
+# 100% top-5 at 10 -> 30: the instability is not merely smaller on average, it is gone from the
+# cell that had the most of it. Same story for ioi/llama3, loosest in the 5 -> 10 column (rho
+# 0.750, 40% top-5) and 100% top-5 with zero flips at 10 -> 30. llama3 as a family carried 13
+# of the 27 flips and now carries none. CPR agrees independently: per-cell |30 minus 10| is at
+# most 0.04, and the row averages are 1.31 vs 1.30.
 #
 # So the honest reading is that TEN steps is already converged and 30 is the confirmation, not
-# that 30 is a distinct better setting.
+# that 30 is a distinct better setting. Prose may claim convergence at 10 steps.
 # The IG grid is a COMPUTE knob, so these rows must move the Bwd. column with them --
 # attribution cost is exactly linear in --ig-steps (same unit as the COST_* block below:
 # backward passes in sequences, = examples x ig-steps, 100--1000 examples depending on cell).
