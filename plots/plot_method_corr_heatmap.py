@@ -71,7 +71,16 @@ METHODS = [
     ("+id-STE (log)",     "mib_node_identity_sgd_log",                     "flat"),
     ("+id-STE gum (log)", "mib_node_identity_gumbel_sgd_log",              "flat"),
     ("+id-STE gum (unif)","mib_node_identity_gumbel_sgd_uniform",          "flat"),
-    ("NAP-IG",            "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
+    # NAP-IG at two integration budgets. MIB ships --ig-steps 5 (napig_ref, what every earlier
+    # version of this figure showed); napig10 is our re-run differing in that flag ONLY. It is
+    # not a cosmetic difference: between the two rungs 27 nodes change SIGN while sitting in the
+    # top 10 by |score| (napig_step_convergence.py), and the CPR-AUC row average moves 0.85 ->
+    # 1.31. Both rows are here because the pair answers what the eval metrics cannot -- whether
+    # under-integration merely adds noise to one ranking, or produces a different ranking that
+    # happens to resemble a different family of methods. 30 steps is omitted: it is rho 0.994
+    # with zero sign flips vs 10, so its row would be a visual duplicate of the 10-step one.
+    ("NAP-IG (5 steps)",  "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
+    ("NAP-IG (10 steps)", "napig10/EAP-IG-inputs_patching_node",           "nested"),
     ("Conductance",       "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
     ("I$\\times$G",       "ig1/EAP-IG-inputs_patching_node",               "nested"),
     ("RelP",              "relp/RelP_patching_node",                       "nested"),
@@ -204,11 +213,15 @@ print("Saved method_corr_heatmap")
 MAIN_LABELS = [
     "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
-    "NAP-IG", "RelP+QK", "GIM", "AttnLRP", "I$\\times$G",        # gradient (5)
+    "NAP-IG (5 steps)", "NAP-IG (10 steps)",                     # gradient, one method two budgets
+    "RelP+QK", "GIM", "AttnLRP", "I$\\times$G",                  # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
-# short display names for the main-text figure (identity labels above stay stable for lookups)
-DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard", "NAP-IG": "IG",
+# short display names for the main-text figure (identity labels above stay stable for lookups).
+# The two IG rows keep their step count in the tick label -- dropping it and relying on the
+# clustering to imply the pairing does not work, because they do NOT always land adjacent.
+DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
+           "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune"}
 
 # re-cluster the subset on its avg all-node correlation so blocks are tight for these methods
@@ -235,11 +248,17 @@ ORDER_MAIN_D = [DISPLAY.get(x, x) for x in ORDER_MAIN]
 sd["subset"] = pd.Categorical(sd["subset"], categories=SUBSETS, ordered=True)
 sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN_D, ordered=True)
 sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
-sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
+# leading zero dropped (".69" / "-.22") and text one point smaller than the appendix figures.
+# At 10 methods each tile is ~9.7pt wide, and a 5-character "-0.22" at size 4.5 is ~10.4pt --
+# i.e. the 9-method version was already at the limit and the tenth column made neighbouring
+# numbers overlap. Every value here is a correlation, so the units digit is always 0 and
+# carries nothing. Do not widen the figure to buy the space back: its 3.69in is set by the
+# 0.67*textwidth slot it shares with the scatter, and breaking that misaligns the subfigures.
+sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
 # sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
 # companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=4.5)
+       + geom_text(aes(label="lab"), size=3.6)
        + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
                               midpoint=0, limits=[-1, 1], na_value="#eeeeee")
