@@ -48,20 +48,44 @@ def avg(d):
 
 
 def cpr_base(dirn, sub):
+    """area_under per cell, searching BOTH results roots (A.ROOTS = L2A, then MIB).
+
+    Dual-root for the same reason acc_base is: a dir lands MIB-side and is only sometimes
+    copied over. The IG step dirs (napig{10,30}_eval) exist ONLY under MIB-circuit-track, so an
+    RB-only read returned an empty dict and the point silently vanished -- the acc axis would
+    have resolved fine through A.acc_base, which already searched both, and the mismatch between
+    the two readers is exactly the kind of half-fix that plots a method at the wrong place.
+    """
     out = {}
+    fn_for = lambda t, m: f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl"
     for t, m, _ in COLS:
-        p = RB / dirn / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl"
-        if p.exists():
+        for root in A.ROOTS:
+            p = root / dirn / sub / fn_for(t, m)
+            if not p.exists():
+                continue
             try:
                 out[(t, m)] = pickle.load(open(p, "rb"))["area_under"]
+                break
             except Exception:
                 pass
     return out
 
 
-# gradient baseline CPR dirs (mirror make_mib_table.EXTRA_NODE_BASELINES + NAP-IG repro)
+# gradient baseline CPR dirs (mirror make_mib_table.EXTRA_NODE_BASELINES + NAP-IG repro).
+# MUST cover every entry in A.BASELINES: node_rows() indexes this dict by the acc-table's display
+# name, so a baseline added there and not here is a KeyError, not a missing point. (That is not
+# hypothetical -- adding the IG step rows to the acc table is what broke this figure.)
 BASE_CPR = {
     "NAP-IG": ("napig_ref_eval", "EAP-IG-inputs_patching_node"),
+    # The IG step ladder. MIB ships --ig-steps 5 ("NAP-IG" above) and that integral is not
+    # converged: 10 steps moves the row average 0.85 -> 1.31 CPR and 0.30 -> 0.46 acc-AUC, so on
+    # this figure the 5-step point sits far down-left of where the same method lands once it is
+    # integrated properly. 30 steps then lands essentially on top of 10 (rho 0.994, zero sign
+    # flips between the two rungs), which is what makes the pair worth plotting: the visible gap
+    # is 5 -> 10 and the visible non-gap is 10 -> 30. Both dirs are MIB-side only, hence the
+    # dual-root cpr_base above.
+    "$+$ 10 IG steps": ("napig10_eval", "EAP-IG-inputs_patching_node"),
+    "$+$ 30 IG steps": ("napig30_eval", "EAP-IG-inputs_patching_node"),
     "Conductance": ("napig_local_eval", "EAP-IG-inputs-local_patching_node"),
     "I$\\times$G": ("ig1_eval", "EAP-IG-inputs_patching_node"),
     "RelP": ("relp_eval", "RelP_patching_node"),
@@ -97,6 +121,22 @@ FULL_COLORS = {
     G_DBM: "#cc79a7",
 }
 FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
+
+# === IG integration-step ladder ===
+# One method at three budgets, so it gets a dashed path like every other one-knob sweep here --
+# the line's direction is the sensitivity to --ig-steps, and that is the whole claim. Keyed by
+# the acc table's display name (A.BASELINES), which is what node_rows() iterates.
+#
+# Labels are rewritten because the table's "$+$ 10 IG steps" reads as an ablation OF NAP-IG when
+# the rows are stacked under it, and as a separate method once they are scattered. Naming the
+# budget on all three -- including the 5-step default -- is what makes the path self-explaining
+# without a caption. COMPACT maps "NAP-IG (5 steps)" back to plain "NAP-IG" so the main-text
+# figure is untouched; the step variants are absent there by construction, since COMPACT is a
+# whitelist and they are not on it.
+IG_STEPS = {"NAP-IG": 5.0, "$+$ 10 IG steps": 10.0, "$+$ 30 IG steps": 30.0}
+IG_STEP_LABEL = {"NAP-IG": "NAP-IG (5 steps)",
+                 "$+$ 10 IG steps": "NAP-IG (10 steps)",
+                 "$+$ 30 IG steps": "NAP-IG (30 steps)"}
 
 # === LR series ===
 # Every lr we swept whose dir is COMPLETE on both axes (11/11 cells for acc_auc AND
@@ -405,7 +445,9 @@ def node_rows():
             n = len([v for v in cpr_base(dn, subn).values() if v is not None])
             if n < len(COLS):
                 print(f"  NOTE {disp}: CPR mean over {n}/{len(COLS)} cells", file=sys.stderr)
-            rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD, label=delatex(disp), paths=[]))
+            rows.append(dict(acc=acc, cpr=cpr, grp=G_GRAD,
+                             label=IG_STEP_LABEL.get(disp, delatex(disp)),
+                             paths=[("ig", IG_STEPS[disp])] if disp in IG_STEPS else []))
     for name, d, level, g in M.OUR_METHODS:
         if level != "node":
             continue
@@ -716,7 +758,9 @@ COMPACT = {
     (G_NPLD, "s=0.5"): "Node Pruning",
     (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
     (G_GRAD, "GIM"): None, (G_GRAD, "AttnLRP"): None,
-    (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG"): None,
+    # "NAP-IG (5 steps)" in the appendix (where its 10/30-step siblings are plotted beside it),
+    # plain "NAP-IG" here (where they are not, and the budget would be unexplained noise).
+    (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG (5 steps)"): "NAP-IG",
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 
