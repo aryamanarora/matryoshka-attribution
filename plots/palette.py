@@ -42,11 +42,34 @@ METHOD = {
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
 
+# Qualitative suitability marks (+ / o / -) in the teaser figure's method-property table.
+# Not method colours -- a separate three-level ordinal scale -- but kept here so the whole
+# paper still has exactly one file with hex codes in it. Wong colourblind-safe stock:
+# bluish green / orange / vermillion, which also separate by lightness (L* 60 / 72 / 54).
+RATING = {"+": "#009e73", "o": "#e69f00", "-": "#d55e00"}
+
+# The two poles of the contrast traced in the ViT sparsity-ladder figure: `pos` is the class
+# being explained, `neg` the class it is explained against. Keyed by ROLE, not by animal, so
+# the explained class is always the blue line whichever way round the run was set up. A
+# different semantic space from METHOD (classes, not attribution methods), so the hexes are
+# deliberately reused rather than new ones invented -- Wong blue / orange, L* 47 vs 72.
+CLASS = {"pos": "#0072b2", "neg": "#e69f00"}
+
 # spellings that appear as series labels in individual figures
 ALIASES = {
     "MAttr (log)": "MAttr", "stopk-log": "MAttr", "MAttr-cause": "MAttr",
     "+hard (log)": "+hard", "soft-log": "+hard", "+hard-cause": "+hard",
     "IxG": "I×G", "I$\\times$G": "I×G", "NAP-IG": "IG",
+    # The IG step-count ladder is ONE method at three integration budgets, so all three share
+    # IG's orange and separate by LINETYPE in the figure, not by hue. Giving them their own
+    # hexes was tried and rejected: the warm-dark region this palette leaves free is already
+    # boxed in by I×G (wine, L*30) and AttnLRP (vermillion, L*54). A 3-step OrRd ramp
+    # (#e69f00 / #cc4c02 / #8c2d04) lands its dark end 13.1 dE from I×G under tritanopia --
+    # below this palette's pre-existing worst pair of 16.1, so it would have become the new
+    # binding constraint -- and its mid tone is 7.9 dE from AttnLRP in NORMAL vision, i.e. a
+    # near-twin of an existing method. Ordered hyperparameter -> ordered linetype is also the
+    # more honest encoding: colour is reserved for "different method" everywhere else here.
+    "IG (5 steps)": "IG", "IG (10 steps)": "IG", "IG (30 steps)": "IG",
 }
 
 

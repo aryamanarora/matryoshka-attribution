@@ -1,5 +1,6 @@
-"""Appendix full-width per-task curves over the MIB denoising sparsity sweep, for the 7
-key node methods (MAttr, +hard, IG, I×G, GIM, Node Pruning, DBM), faceted by task/model.
+"""Appendix full-width per-task curves over the MIB denoising sparsity sweep, for the 9
+key node methods (MAttr, +hard, IG at 5/10/30 integration steps, I×G, GIM, Node Pruning,
+DBM), faceted by task/model.
 
 Two figures, same layout:
   - mib_accuracy_curves.pdf : decision accuracy (fraction of examples with metric>0) vs sparsity
@@ -9,7 +10,9 @@ log-x-weighted mean of the accuracy curve; CPR AUC is the linear-x area under th
 
 Each curve reads BOTH arrays from one self-consistent eval pkl:
   MAttr/+hard -> results/{topklog,htklog}_lr_0.05/{task}_{model}_validation.pkl
-  gradient    -> MIB-circuit-track/results/*_accauc/<sub>/{stask}_{model}_validation_abs-False.pkl
+  gradient    -> MIB-circuit-track/results/<dir>/<sub>/{stask}_{model}_validation_abs-False.pkl
+                 (dir is *_accauc for the older runs, *_eval for ones evaluated after the
+                  `accuracies` array became standard -- see the METHODS comment)
   mask-learn  -> results/eprun_eval_*/EdgePruning_patching_node/{stask}_{model}_validation_abs-False.pkl
 
 The two mask-learning baselines sweep sparsity the same way everything else does: their
@@ -26,7 +29,7 @@ import palette as P
 from plotnine import (
     ggplot, aes, geom_line, geom_point, geom_hline, facet_wrap, labs, theme,
     theme_set, theme_bw, element_text, element_line, element_blank,
-    scale_color_manual, scale_x_log10,
+    scale_color_manual, scale_linetype_manual, scale_x_log10,
 )
 
 R = Path("results")
@@ -46,20 +49,38 @@ COLUMNS = [
 ]
 FACET_ORDER = [c[2] for c in COLUMNS]
 
-# method -> (colour, loader-kind, dir/sub). Colours from plots/palette.py, the single
+# method -> (colour, linetype, loader-kind, dir/sub). Colours from plots/palette.py, the single
 # source of truth shared with every other figure -- do not write hex codes here.
+#
+# The three IG rows are ONE method at three integration budgets (MIB ships --ig-steps 5; 10 and
+# 30 are ours, from MIB-circuit-track/run_napig{10,30}.sh, which differ from run_variants.sh in
+# that flag ONLY). They therefore share IG's orange and separate by linetype -- see the rejected
+# colour-ramp note in palette.ALIASES. Expect the 10- and 30-step curves to sit on top of each
+# other in nearly every panel: that overlap IS the result (rho 0.994 / zero sign flips between
+# those two rungs), and it is what makes the gap down to the 5-step curve worth showing.
+#
+# The 5-step series reads napig_ref_accauc rather than napig_ref_eval because only the former
+# carries the `accuracies` array the top figure needs; the two dirs are the same run, verified
+# by identical area_under (1.294409255584171 on ioi/gpt2). The 10/30 dirs were evaluated after
+# accuracies became standard, so their _eval dirs already have both arrays and need no twin.
 METHODS = [
-    ("MAttr", P.color("MAttr"), "mattr", "topklog_lr_0.05"),
-    ("+hard", P.color("+hard"), "mattr", "htklog_lr_0.05"),
-    ("IG",    P.color("IG"), "base",  ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
-    ("I×G",   P.color("I×G"), "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
-    ("GIM",   P.color("GIM"), "base",  ("gim_accauc",       "GIM_patching_node")),
+    ("MAttr", P.color("MAttr"), "solid", "mattr", "topklog_lr_0.05"),
+    ("+hard", P.color("+hard"), "solid", "mattr", "htklog_lr_0.05"),
+    ("IG (5 steps)",  P.color("IG"), "solid",  "base", ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
+    ("IG (10 steps)", P.color("IG"), "dashed", "base", ("napig10_eval",     "EAP-IG-inputs_patching_node")),
+    ("IG (30 steps)", P.color("IG"), "dotted", "base", ("napig30_eval",     "EAP-IG-inputs_patching_node")),
+    ("I×G",   P.color("I×G"), "solid", "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
+    # gim_eval, NOT gim_accauc: the latter has never existed in either tree, so this series was
+    # silently absent from the figure (load() returns None on a missing path and the method just
+    # drops out). gim_eval is the corrected post-scale_mlp_gate run -- ioi/gpt2 area_under
+    # 1.4168 matches the 1.42 in tabs/mib_results.tex -- and is what every other consumer reads.
+    ("GIM",   P.color("GIM"), "solid", "base",  ("gim_eval",         "GIM_patching_node")),
     # The two mask-learning baselines at their best swept setting -- Node Pruning s=0.5 with
     # the logit-diff objective, DBM at lr 0.3 with lambda_L1 6.0. Both are the same dirs the
     # test table and the correlation heatmap read, so a reader comparing figures is looking
     # at one run per method rather than three different budgets of it.
-    ("Node Pruning", P.color("Node Pruning"), "eprun", "eprun_eval_s0.5_ld"),
-    ("DBM",          P.color("DBM"),          "eprun", "eprun_eval_ld_sig_lr0.3_l16.0"),
+    ("Node Pruning", P.color("Node Pruning"), "solid", "eprun", "eprun_eval_s0.5_ld"),
+    ("DBM",          P.color("DBM"),          "solid", "eprun", "eprun_eval_ld_sig_lr0.3_l16.0"),
 ]
 METHOD_ORDER = [m[0] for m in METHODS]
 
@@ -102,18 +123,22 @@ def load(kind, loc, task, model):
         return None
 
 
-# small per-method multiplicative x-offset (evenly spread in log space) so the 7 curves'
-# markers at each sweep point don't sit exactly on top of each other. ±0.09 decade ≈ ±23%.
-# The half-width grew with the series count (was ±0.06 for 5) to hold the SPACING between
-# adjacent series fixed at 0.03 decade -- about one marker width. Shrinking back would stack
-# the markers; the total spread is still 6% of a 3-decade axis, well inside one sweep step.
+# small per-method multiplicative x-offset (evenly spread in log space) so the curves' markers
+# at each sweep point don't sit exactly on top of each other. The rule is a fixed SPACING of
+# 0.03 decade between adjacent series -- about one marker width -- so the half-width is derived
+# from the series count rather than hardcoded (it was ±0.06 for 5 series, ±0.09 for 7, and is
+# ±0.12 for the 9 here). Hardcoding it is what let it go stale last time a series was added;
+# deriving it means the next addition re-spaces itself. At 9 series the total spread is 8% of a
+# 3-decade axis, still well inside one sweep step.
+JIT_SPACING = 0.03
+_half = JIT_SPACING * (len(METHOD_ORDER) - 1) / 2
 JIT = {m: 10 ** off for m, off in
-       zip(METHOD_ORDER, np.linspace(-0.09, 0.09, len(METHOD_ORDER)))}
+       zip(METHOD_ORDER, np.linspace(-_half, _half, len(METHOD_ORDER)))}
 
 
 def build():
     rows = []
-    for mname, _, kind, loc in METHODS:
+    for mname, _, _, kind, loc in METHODS:
         for task, model, flabel in COLUMNS:
             d = load(kind, loc, task, model)
             if d is None:
@@ -132,9 +157,15 @@ def build():
 
 def make(df, ycol, ylab, out, hline=None, free_y=False):
     colors = {m[0]: m[1] for m in METHODS}
+    ltypes = {m[0]: m[2] for m in METHODS}
     sub = df[df[ycol].notna()]
+    # colour AND linetype both map to `method` with the same scale `name`, so plotnine merges
+    # them into ONE legend whose keys show the pairing -- three orange keys differing only in
+    # dash pattern read as "one method, three budgets", which is the point. Splitting them into
+    # two legends (linetype keyed on a separate `steps` column) was the alternative and is worse
+    # here: it spends a second legend block on an aesthetic that is constant for 6 of 9 series.
     p = (
-        ggplot(sub, aes("x", ycol, color="method"))
+        ggplot(sub, aes("x", ycol, color="method", linetype="method"))
         + (geom_hline(yintercept=hline, linetype="dashed", color="#999999", size=0.3)
            if hline is not None else geom_blank())
         + geom_line(size=0.5)
@@ -142,6 +173,7 @@ def make(df, ycol, ylab, out, hline=None, free_y=False):
         + facet_wrap("facet", ncol=4, scales="free_y" if free_y else "fixed")
         + scale_x_log10(breaks=[.001, .01, .1, 1], labels=["0.1%", "1%", "10%", "100%"])
         + scale_color_manual(values=colors, name="Method", limits=METHOD_ORDER)
+        + scale_linetype_manual(values=ltypes, name="Method", limits=METHOD_ORDER)
         + labs(x="fraction of nodes kept (denoised)", y=ylab)
     )
     p.save(OUT / out, dpi=300, verbose=False)

@@ -46,7 +46,7 @@ METHODS = [
     ("+hard", P.color("+hard"), "mattr", "htklog_lr_0.05"),
     ("IG",    P.color("IG"), "base",  ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
     ("I×G",   P.color("I×G"), "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
-    ("GIM",   P.color("GIM"), "base",  ("gim_accauc",       "GIM_patching_node")),
+    ("GIM",   P.color("GIM"), "base",  ("gim_eval",         "GIM_patching_node")),
 ]
 METHOD_ORDER = [m[0] for m in METHODS]
 JIT = {m: 10 ** off for m, off in
