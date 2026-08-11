@@ -166,6 +166,24 @@ MIB_RESULTS = Path("/home/guests/aryaman/MIB-circuit-track/results")
 # this row comes from MIB-circuit-track/run_eapig_edge.sh, which follows CELLS.
 EAPIG_REPRO_DIR = "eapig_clean_eval"
 
+# Edge twin of NAPIG_STEP_ROWS, from MIB-circuit-track/run_eapig_edge10.sh (same CELLS, same
+# venv, same --head 200 cap; --ig-steps is the only difference from EAPIG_REPRO_DIR).
+#
+# The node ladder is the reason this exists, and the edge answer is the OPPOSITE one, which is
+# exactly why the row belongs in the table rather than in a footnote. At node level 5 -> 10
+# steps moves CPR 0.85 -> 1.31; here it moves 1.63 -> 1.67 (+0.04, 9/11 cells) and acc-AUC not
+# at all (0.933 -> 0.933, 6/12 cells -- a coin flip). So the 5-step edge baseline this table has
+# always reported is NOT under-integrated, and our edge-level margin (6.37) does not depend on
+# the baseline's IG grid. Only 10 is run: 30 would cost 3--30k backwards to confirm a delta
+# that is already inside the noise at 10.
+#
+# Do not "simplify" by reusing NAPIG_STEP_ROWS' entry -- that one points at a node dir. The
+# display name is deliberately identical so the row reads the same way in both sections, which
+# also means it inherits the right STEP_COST and DAGGER entries for free.
+EAPIG_EDGE_STEP_ROWS = [
+    ("$+$ 10 IG steps", "eapig_clean10_eval", "1--10k"),
+]
+
 # Edge baselines (reproduced on validation set)
 EDGE_BASELINES = {}
 
@@ -737,6 +755,24 @@ def main():
             except Exception:
                 pass
     EDGE_BASELINES["EAP-IG-inp (CF, repro)"] = eapig_repro
+    # run_eapig_edge.sh scores ALL SIX llama3 cells with --head 200 (its CELLS block is verbatim
+    # from run_variants.sh), not just arc_challenge. The static DAGGER entry above marked only
+    # that one cell, so five 200-example numbers were rendering as if they were full validation
+    # -- the identical defect already fixed on the node NAP-IG row, which is where this same
+    # TILDE_LLAMA3_DAGGER assignment comes from. Overriding here rather than editing the static
+    # dict keeps the two fixes side by side with their sections.
+    DAGGER["EAP-IG-inp (CF, repro)"] = TILDE_LLAMA3_DAGGER
+
+    for disp, dirn, _cost in EAPIG_EDGE_STEP_ROWS:
+        data = load_eval_dual(dirn, "EAP-IG-inputs_patching_edge")
+        if not data:
+            print(f"  NOTE {disp} (edge): 0/{len(COLUMNS)} cells ({dirn}) -- not started; row omitted")
+            continue
+        if len(data) < len(COLUMNS):
+            print(f"  NOTE {disp} (edge): {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still "
+                  f"running; Avg suppressed until complete")
+        EDGE_BASELINES[disp] = data
+        DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
     # Mask learning at edge level: UGS (reg_lamb=0.001, gpt2/qwen only) + Edge Pruning
     ugs = load_run_eval(UGS_DIR, "UGS_patching_edge")
@@ -756,8 +792,14 @@ def main():
     EDGE_LLAMA_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\textbf{Gradient attribution} \\\\")
     for name, data in EDGE_BASELINES.items():
+        # suppress_avg on partial rows, same rule as every other section. This loop predates
+        # any incomplete edge row (the one baseline here was always 11/11), but the step-ladder
+        # row lands cell by cell over ~a day of jobs, and an Avg over whichever cells finished
+        # first is actively misleading: the first four to land were three mcqa cells, the only
+        # task where more IG steps HURT, which read as "10 steps is worse" until the rest came in.
         lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb,
-                              avg_second=eavs, cost=grad_cost(name)))
+                              avg_second=eavs, suppress_avg=len(data) < len(COLUMNS),
+                              cost=grad_cost(name)))
     # Mask learners rank by a learned gate rather than a gradient, so they get their own header.
     if MASK_EDGE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
