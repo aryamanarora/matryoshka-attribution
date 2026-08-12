@@ -130,14 +130,18 @@ FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
 # Labels are rewritten because the table's "$+$ 10 IG steps" reads as an ablation OF NAP-IG when
 # the rows are stacked under it, and as a separate method once they are scattered. Naming the
 # budget on all three -- including the 5-step default -- is what makes the path self-explaining
-# without a caption. COMPACT whitelists the 5- and 10-step names too (shortened to "NAP-IG (5)"
-# / "NAP-IG (10)" -- the long form is ~1/3 of that panel's width at 5.5pt), so the main-text
-# figure shows the same two budgets. 30 stays out of both: rho 0.994 with 10 and zero sign
-# flips, so it lands on top of it.
+# without a caption. COMPACT whitelists the 5- and 10-step names too, shortened to "IG-5" /
+# "IG-10": that is exactly what the sibling panel of fig:mib-combined
+# (method_corr_heatmap_bytype) calls those two columns, and one figure using two names for one
+# method is a referee-visible inconsistency for no gain. 30 stays out of both: rho 0.994 with
+# 10 and zero sign flips, so it lands on top of it.
+#
+# "NAP-IG" survives only as a DICT KEY here -- it is the acc table's display name, which is what
+# node_rows() iterates. Nothing rendered says "NAP-IG" any more.
 IG_STEPS = {"NAP-IG": 5.0, "$+$ 10 IG steps": 10.0, "$+$ 30 IG steps": 30.0}
-IG_STEP_LABEL = {"NAP-IG": "NAP-IG (5 steps)",
-                 "$+$ 10 IG steps": "NAP-IG (10 steps)",
-                 "$+$ 30 IG steps": "NAP-IG (30 steps)"}
+IG_STEP_LABEL = {"NAP-IG": "IG (5 steps)",
+                 "$+$ 10 IG steps": "IG (10 steps)",
+                 "$+$ 30 IG steps": "IG (30 steps)"}
 
 # === LR series ===
 # Every lr we swept whose dir is COMPLETE on both axes (11/11 cells for acc_auc AND
@@ -772,8 +776,8 @@ COMPACT = {
     # width at 5.5pt. The dashed segment carries the "same method" reading; the appendix
     # --full figure spells the budgets out.
     (G_GRAD, "RelP+QK"): None,
-    (G_GRAD, "NAP-IG (5 steps)"): "NAP-IG (5)",
-    (G_GRAD, "NAP-IG (10 steps)"): "NAP-IG (10)",
+    (G_GRAD, "IG (5 steps)"): "IG-5",
+    (G_GRAD, "IG (10 steps)"): "IG-10",
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 
@@ -792,13 +796,17 @@ LAB_PT_C, MSIZE_C = 5.5, 18
 # Labels are ~as wide as they are on the full page but the panel is a third the width, so they
 # need proportionally more room to the right. This was 0.70, which left 23% of the panel as
 # empty axis -- on a 1.65in figure that is ~0.35in of nothing, next to a heatmap using its full
-# width. Measured with the "x headroom" diagnostic in place_labels(). This was 0.28 while the
-# rightmost point was Node Pruning; adding the 10-step NAP-IG put a NEW rightmost point on the
-# panel (acc-AUC 0.465, past every other gradient method) carrying a longer label, so the pad
-# had to go back up. Swept: 0.42 -> rightmost label ends at 1.030 of the frame (1 past),
-# 0.46 -> 1.014 (1 past), 0.50 -> 0.999 (0 past, 0 overlaps). Re-tune only if the diagnostic
-# reports "labels past the right frame"; do not raise it on suspicion.
-XPAD_C = 0.50
+# width. Measured with the "x headroom" diagnostic in place_labels(): labels first cross the
+# right frame between 0.20 and 0.22, so 0.28 keeps them clear with slack for points moving
+# under re-evaluation. The old comment claimed 0.34 left "Node Pruning" hanging off; that is
+# not reproducible -- 0.35 ends at 0.917, well inside.
+#
+# The 10-step IG point is now the panel's rightmost (acc-AUC 0.465, past every other gradient
+# method), so this briefly went to 0.50 while its label was the long "NAP-IG (10)". Shortening
+# to "IG-10" bought it back: swept at the current labels, 0.28 -> 0.956 of the frame, 0.34 ->
+# 0.922, 0.50 -> 0.846, none past. Re-tune only if the diagnostic reports "labels past the
+# right frame"; do not raise it on suspicion.
+XPAD_C = 0.28
 
 
 def main():
