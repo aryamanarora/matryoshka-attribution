@@ -25,6 +25,7 @@ from learning_to_attribute.data.causalgym import CausalGymDataset
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_hard    # evaluation mask (all variants)
 from learning_to_attribute.masks import build_mask          # canonical mask registry
 from learning_to_attribute.schedules import sample_k        # canonical k-sampler
+from learning_to_attribute.losses import attribution_loss   # canonical loss definitions
 
 
 class JumpReLUSAE:
@@ -107,6 +108,55 @@ def sample_train_pair(ds, eval_keys, max_tries=10_000):
             return p, i
     raise RuntimeError(f"could not draw a non-eval example in {max_tries} tries; "
                        f"the generator's support may be smaller than n_eval")
+
+
+def sae_grad_scores(model, ds, tokenizer, hook, eval_keys, device, S, width,
+                    n_examples, grad_loss="ce"):
+    """I x G over the per-span SAE variable set (latents + reconstruction-error nodes).
+
+    Paper eq. 21:  s_H = (h(b) - h(s)) . dl/dH |_b.  Our intervention
+
+        new = a_cf + (m (.) (f_b - f_cf)) @ W_dec  [+ m_err (err_b - err_cf)]
+
+    is exactly AFFINE in the mask m, with m=0 -> a_cf and m=1 -> a_base, so
+
+        dl/dm_ji = (f_b,ji - f_cf,ji) . dl/df_ji
+
+    which IS the eq.-21 score: the (h(b) - h(s)) factor is already inside the mask derivative,
+    so no separate (clean - patch) multiplication is needed. The gradient is taken at m = 1,
+    matching eq. 21's ``|_b`` and ``eval_sva.gradient_scores``'s ig_steps=1 behaviour. The
+    reconstruction-error coordinate gets eq. 21 with H = the error term for free, in the same
+    units as the feature scores -- it is deliberately NOT special-cased.
+
+    Returns (scores [S*width] detached, info dict). Score sign follows the repo convention
+    (``eval_sva.metric_of``): we differentiate GOODNESS = -attribution_loss(..., corrupt_topk=
+    False), so a larger score means "restoring this unit to its base value helps preserve the
+    base behaviour".
+    """
+    acc = torch.zeros(S, width, device=device)
+    used, rejected, skipped, keys = 0, 0, 0, set()
+    for _ in range(n_examples):
+        pair, rej = sample_train_pair(ds, eval_keys)     # same stream semantics as MAttr
+        rejected += rej
+        keys.add(_key(pair))
+        tok = ds.tokenize_pair(pair, tokenizer, device)
+        bp, cp, si = pos_map(tok)
+        if not bp:
+            skipped += 1
+            continue
+        m = torch.ones(S, width, device=device, requires_grad=True)   # m = 1  ->  base point
+        logits = run_intervened(model, tok, hook, m, bp, cp, si)
+        goodness = -attribution_loss(
+            grad_loss, logits.unsqueeze(0),
+            torch.tensor([tok.base_label_id], device=device),
+            torch.tensor([tok.src_label_id], device=device),
+            corrupt_topk=False)                           # iso direction, as in MAttr training
+        goodness.backward()
+        acc += m.grad
+        used += 1
+    return acc.div_(max(used, 1)).flatten().detach(), {
+        "grad_examples_used": used, "grad_examples_skipped": skipped,
+        "n_rejected_eval_draws": rejected, "train_keys": keys}
 
 
 def curve_metrics(curve, tag="learned", thr=0.9):
@@ -232,6 +282,17 @@ def main():
                          "topk = differentiable sigmoid top-k in forward AND backward (canonical); "
                          "hard_topk = hard top-k forward, sigmoid-STE backward (the legacy path). "
                          "Evaluation always uses a hard top-k mask regardless of this flag.")
+    ap.add_argument("--loss", default="ce", choices=["ce", "logit_diff"],
+                    help="--method mattr: training objective, via learning_to_attribute.losses. "
+                         "ce (default) is bit-identical to the previous hardcoded behaviour")
+    ap.add_argument("--method", default="mattr", choices=["mattr", "ixg"],
+                    help="mattr = learn scores by sigmoid-top-k masking (default); "
+                         "ixg = closed-form I x G over the same SAE variable set (no training)")
+    ap.add_argument("--grad-examples", type=int, default=4000,
+                    help="--method ixg: #examples in the attribution average (matches MAttr's --steps)")
+    ap.add_argument("--grad-loss", default="ce", choices=["ce", "logit_diff"],
+                    help="--method ixg: metric differentiated for I x G. ce matches the MAttr "
+                         "training objective; logit_diff is the repo's canonical logit difference")
     ap.add_argument("--n-eval", type=int, default=80)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="auto", help="auto -> cuda, else mps, else cpu")
@@ -277,7 +338,19 @@ def main():
     losses, mask_frac_binary = [], []
     n_rejected, train_keys = 0, set()
     t0 = time.time()
-    for step in range(args.steps):
+    if args.method == "ixg":
+        # closed-form I x G over the same variable set: no optimiser, no k-schedule, no mask
+        # variant -- just d(goodness)/dm at m=1, averaged over --grad-examples draws.
+        scores, ginfo = sae_grad_scores(model, ds, tokenizer, hook, eval_keys, device, S, width,
+                                        args.grad_examples, grad_loss=args.grad_loss)
+        train_keys = ginfo.pop("train_keys")
+        n_rejected = ginfo["n_rejected_eval_draws"]
+        split_info.update(ginfo)
+        print(f"I x G ({args.grad_loss}): averaged {ginfo['grad_examples_used']} examples, "
+              f"score |.|: mean {scores.abs().mean():.3e} max {scores.abs().max():.3e}", flush=True)
+
+    n_train_steps = args.steps if args.method == "mattr" else 0   # ixg is closed-form: no training
+    for step in range(n_train_steps):
         pair, rej = sample_train_pair(ds, eval_keys)      # generator draw, eval keys rejected
         n_rejected += rej
         train_keys.add(_key(pair))
@@ -290,7 +363,12 @@ def main():
         mask = build_mask(scores, k, args.variant, T=args.T).mask.view(S, width)
         logits = run_intervened(model, tok, hook, mask, bp, cp, si)
         # denoising / sufficient (Iso): non-top-k patched to source, target is the CLEAN (base) label
-        loss = F.cross_entropy(logits.unsqueeze(0), torch.tensor([tok.base_label_id], device=device))
+        # canonical losses; corrupt_topk=False is the Iso direction. "ce" is bit-identical to the
+        # previous hardcoded F.cross_entropy(logits, base_label).
+        loss = attribution_loss(args.loss, logits.unsqueeze(0),
+                                torch.tensor([tok.base_label_id], device=device),
+                                torch.tensor([tok.src_label_id], device=device),
+                                corrupt_topk=False)
         opt.zero_grad(); loss.backward(); opt.step()
         losses.append(loss.item())
         if step % 100 == 0:
@@ -303,8 +381,10 @@ def main():
     # hard guarantee, checked against what training ACTUALLY consumed (not just the design)
     overlap = train_keys & eval_keys
     assert not overlap, f"train/eval overlap = {len(overlap)} examples"
-    split_info.update({"n_train_draws": len(losses), "n_train_distinct": len(train_keys),
+    split_info.update({"n_train_distinct": len(train_keys),
                        "n_rejected_eval_draws": n_rejected, "train_eval_overlap": 0})
+    if args.method == "mattr":
+        split_info["n_train_draws"] = len(losses)
 
     torch.save(scores.detach().cpu(), os.path.join(args.output, "scores.pt"))
     ks = [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048, 4096]
@@ -334,11 +414,17 @@ def main():
                 else torch.mps.current_allocated_memory() / 2**30 if device == "mps" else None)
     metrics = {"learned": curve_metrics(curve, "learned"), "random": curve_metrics(curve, "random")}
     provenance = {
-        "task": args.task, "variant": args.variant, "k_schedule": args.k_schedule,
+        "task": args.task, "method": args.method,
+        "grad_loss": args.grad_loss if args.method == "ixg" else None,
+        "grad_examples": args.grad_examples if args.method == "ixg" else None,
+        "variant": args.variant if args.method == "mattr" else None,
+        "k_schedule": args.k_schedule if args.method == "mattr" else None,
         "seed": args.seed, "model": args.model, "sae_repo": args.sae_repo, "sae_id": args.sae_id,
         "layer": args.layer, "d_sae": sae.d_sae, "num_spans": S, "width": width,
         "total_scores": total, "steps": args.steps, "lr": args.lr, "T": args.T,
-        "error_mode": args.error_mode, "loss": "iso/sufficient: CE(logits, base_label)",
+        "error_mode": args.error_mode,
+        "loss": f"iso/sufficient ({args.loss if args.method == 'mattr' else args.grad_loss})",
+        "objective": args.loss if args.method == "mattr" else args.grad_loss,
         "eval_mask": "hard top-k (sigmoid_topk_hard), identical for every variant",
         "device": device, "git_commit": commit, "peak_mem_gib": peak_mem,
         "train_time_s": train_time, "eval_time_s": eval_time, **split_info,
@@ -353,7 +439,9 @@ def main():
         print(f"k={k:5d}  learned acc={curve['learned_acc'][i]:.3f} pd={curve['learned_probdiff'][i]:+.3f}"
               f"   random acc={curve['random_acc'][i]:.3f} pd={curve['random_probdiff'][i]:+.3f}", flush=True)
     m = metrics["learned"]
-    print(f"=== {args.variant}/{args.k_schedule}/s{args.seed}  log-AUC={m['log_auc']:.4f} "
+    tag = (f"{args.variant}/{args.k_schedule}/{args.loss}" if args.method == "mattr"
+           else f"ixg/{args.grad_loss}/n{args.grad_examples}")
+    print(f"=== {tag}/s{args.seed}  log-AUC={m['log_auc']:.4f} "
           f"linear-AUC={m['linear_auc']:.4f} plateau={m['plateau_acc']:.3f} "
           f"max={m['max_acc']:.3f} kstar_grid={m['kstar_grid']} "
           f"train={train_time:.0f}s eval={eval_time:.0f}s", flush=True)

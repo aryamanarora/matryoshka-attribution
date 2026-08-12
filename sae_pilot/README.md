@@ -27,6 +27,47 @@ Values are **IIA log-AUC** (log-weighted AUC of interchange intervention accurac
 
 ![SAE attribution pilot](pilot_abc_two_task.png)
 
+## Objective robustness: MAttr vs I×G over SAE latents
+
+A gradient-attribution baseline in the same variable set. Because the intervention
+`new = a_cf + (m ⊙ (f_b − f_cf)) W_dec + m_err(ε_b − ε_cf)` is **exactly affine in the mask**,
+`∂ℓ/∂m` *is* the paper's I×G score (eq. 21) with the `(h(b) − h(s))` factor already inside the
+derivative; the gradient is taken at `m = 1` (the base point). The reconstruction-error node gets
+eq. 21 with `H` = the error term and is deliberately not special-cased.
+
+All values are **IIA log-AUC, mean ± sd over seeds 0/1/2, `n_eval = 200`**.
+
+| Method | CE | logit-diff | objective swing (ld − CE) |
+|---|---|---|---|
+| **MAttr** (soft top-k, log-k) | 0.7109 ± 0.0224 | **0.7498 ± 0.0119** | **+0.0389 ± 0.0108** |
+| **I×G** | 0.3371 ± 0.0058 | 0.7378 ± 0.0096 | **+0.4006 ± 0.0037** |
+| random | 0.0250 | 0.0250 | — |
+
+**Paired objective swings.** Per seed, `[I×G(ld) − I×G(CE)] − [MAttr(ld) − MAttr(CE)]` =
+**+0.3618 ± 0.0145**, positive in all 3 seeds — I×G is **10.3×** more sensitive to the objective
+than MAttr on log-AUC (13.4× at k ≤ 64, 11.0× at k ≤ 256, 8.7× at the endpoint).
+
+**Matched on logit-diff**, the two methods are close: paired MAttr − I×G = **+0.0120 ± 0.0023**
+(positive in all 3 seeds, but ~2.4 examples of 200 — a small effect, not dominance). Matched on
+**CE**, MAttr leads by **+0.3738 ± 0.0167**. `k*` (smallest grid k with IIA ≥ 0.9) is identical
+between the methods under logit-diff (48/48/32); under CE, **I×G never reaches 0.9 at any k in any
+seed**, while MAttr reaches it in all three (64/192/64).
+
+![Objective robustness](sae_objective_robustness.png)
+
+**Interpretation.** In this SAE basis a well-configured I×G nearly matches MAttr; what MAttr buys
+is not having to configure it. This is plausibly *because* the mask→activation map is exactly
+affine, which is unusually favourable to first-order attribution — more so than the component
+bases used elsewhere. Note MAttr is **not** objective-invariant: logit-diff is genuinely better for
+it too (+0.039, consistent across seeds), just ~10× less so.
+
+**Caveats.**
+- One task so far (`npi_ever_subj-relc`), one SAE and one layer, three seeds.
+- Only CE and logit-diff were tested; the soft-accuracy objective was not.
+- **Do not pool these `n_eval = 200` values with the `n_eval = 80` k-schedule numbers above** —
+  different held-out sets *and* different training streams.
+- The `+0.0120` matched-logit-diff gap should not be reported as strong MAttr dominance.
+
 ## Experimental setup
 
 - `google/gemma-2-2b`
@@ -36,7 +77,8 @@ Values are **IIA log-AUC** (log-weighted AUC of interchange intervention accurac
 - Iso / denoising objective (top-k held clean, complement patched to the source; CE to the base label)
 - 4000 steps
 - seed 0
-- 80 held-out evaluation examples
+- 80 held-out evaluation examples (the k-schedule pilot only; the objective-robustness
+  section above uses 200 and is not numerically comparable)
 - identical hard-top-k evaluation across A/B/C — the arms differ only in how the ranking is trained
 
 Reproduce (one arm; vary `--variant` / `--k-schedule` for the others):
@@ -56,7 +98,28 @@ python scripts/attribute_sae.py --task syntaxgym/npi_ever_subj-relc \
   `learning_to_attribute.masks.build_mask` rather than a local mask implementation);
 - training distribution preserved via rejection of held-out examples — training still draws from
   the original generator, rejecting only keys in the held-out set, rather than sampling uniformly
-  from a materialised pool.
+  from a materialised pool;
+- gradient baseline added over the same SAE variable set (`--method ixg`, `--grad-loss`,
+  `--grad-examples`), reusing `run_intervened` and the evaluator verbatim so only the ranking
+  source differs;
+- MAttr training objective made configurable (`--loss {ce,logit_diff}`) via the canonical
+  `learning_to_attribute.losses.attribution_loss`; `ce` is bit-identical to the previous
+  hardcoded `F.cross_entropy(logits, base_label)`.
+
+Reproduce the objective-robustness grid (2 methods × 2 objectives × 3 seeds):
+
+```bash
+for S in 0 1 2; do
+  python scripts/attribute_sae.py --task syntaxgym/npi_ever_subj-relc --n-eval 200 --seed $S \
+      --method mattr --variant topk --k-schedule log --loss ce         --steps 4000 --output .../MAttr_ce_s$S
+  python scripts/attribute_sae.py --task syntaxgym/npi_ever_subj-relc --n-eval 200 --seed $S \
+      --method mattr --variant topk --k-schedule log --loss logit_diff --steps 4000 --output .../MAttr_ld_s$S
+  python scripts/attribute_sae.py --task syntaxgym/npi_ever_subj-relc --n-eval 200 --seed $S \
+      --method ixg --grad-loss ce         --grad-examples 4000 --output .../IxG_ce_s$S
+  python scripts/attribute_sae.py --task syntaxgym/npi_ever_subj-relc --n-eval 200 --seed $S \
+      --method ixg --grad-loss logit_diff --grad-examples 4000 --output .../IxG_ld_s$S
+done
+```
 
 ## Caveats
 
