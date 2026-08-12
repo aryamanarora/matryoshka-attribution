@@ -130,9 +130,10 @@ FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
 # Labels are rewritten because the table's "$+$ 10 IG steps" reads as an ablation OF NAP-IG when
 # the rows are stacked under it, and as a separate method once they are scattered. Naming the
 # budget on all three -- including the 5-step default -- is what makes the path self-explaining
-# without a caption. COMPACT maps "NAP-IG (5 steps)" back to plain "NAP-IG" so the main-text
-# figure is untouched; the step variants are absent there by construction, since COMPACT is a
-# whitelist and they are not on it.
+# without a caption. COMPACT whitelists the 5- and 10-step names too (shortened to "NAP-IG (5)"
+# / "NAP-IG (10)" -- the long form is ~1/3 of that panel's width at 5.5pt), so the main-text
+# figure shows the same two budgets. 30 stays out of both: rho 0.994 with 10 and zero sign
+# flips, so it lands on top of it.
 IG_STEPS = {"NAP-IG": 5.0, "$+$ 10 IG steps": 10.0, "$+$ 30 IG steps": 30.0}
 IG_STEP_LABEL = {"NAP-IG": "NAP-IG (5 steps)",
                  "$+$ 10 IG steps": "NAP-IG (10 steps)",
@@ -758,9 +759,21 @@ COMPACT = {
     (G_NPLD, "s=0.5"): "Node Pruning",
     (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
     (G_GRAD, "GIM"): None, (G_GRAD, "AttnLRP"): None,
-    # "NAP-IG (5 steps)" in the appendix (where its 10/30-step siblings are plotted beside it),
-    # plain "NAP-IG" here (where they are not, and the budget would be unexplained noise).
-    (G_GRAD, "RelP+QK"): None, (G_GRAD, "NAP-IG (5 steps)"): "NAP-IG",
+    # BOTH IG budgets, joined by the dashed "ig" guide -- the one place this panel plots a
+    # method twice. It earns the second point because the move is larger than the gaps the
+    # panel is otherwise asking the reader to judge: 5 -> 10 steps takes NAP-IG from
+    # 0.304/0.854 to 0.465/1.306, i.e. from worst gradient baseline to the best acc-AUC of any
+    # of them, past GIM and AttnLRP. Plotting only the 5-step point (what this figure did until
+    # now) puts a baseline on the frontier at a setting we know is unconverged, which flatters
+    # us; plotting only the 10-step point hides that the converged number is not the one MIB
+    # reports. 30 steps stays out: it lands on top of 10 (rho 0.994, zero sign flips) and would
+    # be a third label in a 1.65in panel for no visible movement.
+    # Labels are "(5)" / "(10)" rather than "(5 steps)" -- the long form is ~1/3 of the panel
+    # width at 5.5pt. The dashed segment carries the "same method" reading; the appendix
+    # --full figure spells the budgets out.
+    (G_GRAD, "RelP+QK"): None,
+    (G_GRAD, "NAP-IG (5 steps)"): "NAP-IG (5)",
+    (G_GRAD, "NAP-IG (10 steps)"): "NAP-IG (10)",
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 
@@ -779,12 +792,13 @@ LAB_PT_C, MSIZE_C = 5.5, 18
 # Labels are ~as wide as they are on the full page but the panel is a third the width, so they
 # need proportionally more room to the right. This was 0.70, which left 23% of the panel as
 # empty axis -- on a 1.65in figure that is ~0.35in of nothing, next to a heatmap using its full
-# width. Measured with the "x headroom" diagnostic in place_labels(): labels first cross the
-# right frame between 0.20 and 0.22, so 0.28 keeps them clear (rightmost ends at ~0.96) with
-# slack for points moving under re-evaluation. The old comment claimed 0.34 left "Node Pruning"
-# hanging off; that is not reproducible -- 0.35 ends at 0.917, well inside. Re-tune only if the
-# diagnostic reports "labels past the right frame"; do not raise it on suspicion.
-XPAD_C = 0.28
+# width. Measured with the "x headroom" diagnostic in place_labels(). This was 0.28 while the
+# rightmost point was Node Pruning; adding the 10-step NAP-IG put a NEW rightmost point on the
+# panel (acc-AUC 0.465, past every other gradient method) carrying a longer label, so the pad
+# had to go back up. Swept: 0.42 -> rightmost label ends at 1.030 of the frame (1 past),
+# 0.46 -> 1.014 (1 past), 0.50 -> 0.999 (0 past, 0 overlaps). Re-tune only if the diagnostic
+# reports "labels past the right frame"; do not raise it on suspicion.
+XPAD_C = 0.50
 
 
 def main():
@@ -797,7 +811,10 @@ def main():
                          f"-- renamed upstream, or its dir went incomplete")
     for r in rows:
         r["label"] = COMPACT[(r["grp"], r["label"])] or r["label"]
-        r["paths"] = []   # one point per series here, so every dashed guide would be a no-op
+        # Every sweep series is cut to a single point here, so its dashed guide would be a
+        # no-op -- except "ig", the one series with two survivors (5 and 10 steps). Keeping it
+        # is what makes those read as one method at two budgets rather than two rival methods.
+        r["paths"] = [p for p in r["paths"] if p[0] == "ig"]
 
     plt.rcParams.update(RC)
     fig, ax = plt.subplots(figsize=(FIG_W_C, FIG_H_C))
