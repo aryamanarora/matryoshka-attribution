@@ -405,9 +405,23 @@ def learn_scores_dcm(
     Three deliberate deviations, all forced:
 
       - **The pruning-order tie-break is OURS, not theirs** — see ``Returns`` below for the
-        mechanism. Upstream DCM emits no ranking of any kind; it emits a set and evaluates
-        that set. MIB's harness is rank-then-top-k, so scoring DCM at all requires inventing
-        an order for the 0/1 blocks, and this is the least arbitrary one available. It is
+        mechanism. Upstream never sorts: no ``argsort``/``topk``/``sort`` in ``DCM.py``, which
+        rounds and evaluates the resulting SET, and gets its multi-sparsity story by RETRAINING
+        per ``lamb`` (``DCM.py:144``), not by ranking one run.
+
+        The mask is nonetheless a continuous latent in [0,1], so it is sortable in principle —
+        it just isn't, in practice. Measured at lr 0.1 on the three cells we ran, the fraction
+        sitting at *exactly* 0.0 or 1.0 is 91-100% (100%, i.e. fully degenerate, on 2 of 3
+        cells at the 1% pin). The additive penalty's per-unit gradient is the constant
+        ``mult/total``, so each unit is pushed monotonically until it hits a boundary and
+        ``clamp_`` holds it; nothing restores it to the interior. Contrast the other two gates,
+        whose latent is an UNBOUNDED logit — the gate saturates but the parameter keeps moving
+        and stays sortable. Here the parameter IS the gate.
+
+        So MIB's rank-then-top-k harness needs an order for the two blocks, and this is the
+        least arbitrary one available. ``tie_eps=1e-4`` is chosen below the smallest observed
+        interior gap (3.5e-4), so the tie-break orders WITHIN the 0- and 1-blocks and never
+        reorders a genuine interior value. It is
         the widest of the three deviations in effect, not the narrowest: it is inert at the
         pinned density but decides every other point of MIB's sweep, and since ``area_under``
         is a LINEAR trapezoid over 0.001..1.0 (evaluation.py:63), ~90% of which comes from
