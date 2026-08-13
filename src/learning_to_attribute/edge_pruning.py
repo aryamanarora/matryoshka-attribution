@@ -402,8 +402,20 @@ def learn_scores_dcm(
     is sufficiency vs necessity, which is the caller's business (``--mode``), not the
     parameterization's.
 
-    Two deliberate deviations, both forced and both narrow:
+    Three deliberate deviations, all forced:
 
+      - **The pruning-order tie-break is OURS, not theirs** — see ``Returns`` below for the
+        mechanism. Upstream DCM emits no ranking of any kind; it emits a set and evaluates
+        that set. MIB's harness is rank-then-top-k, so scoring DCM at all requires inventing
+        an order for the 0/1 blocks, and this is the least arbitrary one available. It is
+        the widest of the three deviations in effect, not the narrowest: it is inert at the
+        pinned density but decides every other point of MIB's sweep, and since ``area_under``
+        is a LINEAR trapezoid over 0.001..1.0 (evaluation.py:63), ~90% of which comes from
+        k >= 20%, a DCM CPR-AUC is mostly a statement about pruning order rather than about
+        the circuit. Runs whose mask collapsed to zero units still post competitive AUC on
+        it. Report CPR at the pin (``collect_dcm_sweep.py``), never the AUC, and see
+        ``scripts/dcm_rank_agreement.py`` for how much of a rho-vs-other-methods this term
+        generates on its own.
       - **The setpoint.** Their controller ramps the pruned count to *all* units and runs
         until the circuit is empty (``pid_target_frac=1.0`` + early stop), because they
         want the whole sparsity trajectory. We are pinning one density, so the ramp goes
