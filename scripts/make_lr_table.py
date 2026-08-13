@@ -142,44 +142,31 @@ SPARSITY_METHODS = [
         ("6.0", "eprun_eval_ld_sig_lr0.3_l16.0"),
         ("20.0", "eprun_eval_ld_sig_lr0.3_l120.0"),
     ], "$\\lambda_{\\mathrm{L1}}{=}$"),
-    # DCM (Prakash et al. 2024 / roonbug/belief_dynamics): a raw coefficient clamped to
-    # [0,1], circuit = round(mask), with a PID controller on the sparsity weight. Unlike
-    # every other block it has no ranking of its own -- clamp_ piles the scores onto exactly
-    # 0.0 and 1.0 -- so it can only be trained toward a density. That density is the knob
-    # that decides whether the method works at all, which is why DCM sits in THIS table even
-    # though the rows inside each block are LRs: the three blocks are the sparsity sweep, and
-    # the rows exist to show the LR is not the confound. Pinned to three of MIB's own sweep
-    # points, where round(mask) and top-k are the same set.
+    # --- DCM: PULLED FROM THE PAPER 2026-08-13. Do not re-add without reading this. ---
     #
-    # 0.1 is the published LR and is identical in Prakash et al. and belief_dynamics, so
-    # unlike pyvene's 1e-3 there is a real prior here; the grid brackets it either way.
+    # Three blocks used to live here (pinned density 1/5/20%, five LRs each, dirs
+    # results/eprun_eval_ld_dcm_d{0.01,0.05,0.2}_lr*). The runs are still on disk and
+    # scripts/collect_dcm_sweep.py + scripts/dcm_rank_agreement.py still read them; only the
+    # paper-facing rows are gone. Three reasons, in order of weight:
     #
-    # READ THE $\varnothing$ MARKS BEFORE READING THE NUMBERS. Where the PID overshoots, the
-    # mask collapses to zero units and MIB still scores the run -- on the pruning-order
-    # tie-break, which is a trajectory ranking rather than any circuit DCM converged to.
-    # Those scores are not just meaningless but ANTI-correlated with success: the collapsed
-    # runs post a HIGHER AUC than the runs that hit their pin. Marked, and never bolded.
-    ("DCM (pinned density $=$ 1\\%)", [
-        ("0.01", "eprun_eval_ld_dcm_d0.01_lr0.01"),
-        ("0.03", "eprun_eval_ld_dcm_d0.01_lr0.03"),
-        ("0.1 (published)", "eprun_eval_ld_dcm_d0.01_lr0.1"),
-        ("0.3", "eprun_eval_ld_dcm_d0.01_lr0.3"),
-        ("1.0", "eprun_eval_ld_dcm_d0.01_lr1.0"),
-    ]),
-    ("DCM (pinned density $=$ 5\\%)", [
-        ("0.01", "eprun_eval_ld_dcm_d0.05_lr0.01"),
-        ("0.03", "eprun_eval_ld_dcm_d0.05_lr0.03"),
-        ("0.1 (published)", "eprun_eval_ld_dcm_d0.05_lr0.1"),
-        ("0.3", "eprun_eval_ld_dcm_d0.05_lr0.3"),
-        ("1.0", "eprun_eval_ld_dcm_d0.05_lr1.0"),
-    ]),
-    ("DCM (pinned density $=$ 20\\%)", [
-        ("0.01", "eprun_eval_ld_dcm_d0.2_lr0.01"),
-        ("0.03", "eprun_eval_ld_dcm_d0.2_lr0.03"),
-        ("0.1 (published)", "eprun_eval_ld_dcm_d0.2_lr0.1"),
-        ("0.3", "eprun_eval_ld_dcm_d0.2_lr0.3"),
-        ("1.0", "eprun_eval_ld_dcm_d0.2_lr1.0"),
-    ]),
+    # 1. THE NUMBER WE PRINTED CANNOT BE PRODUCED BY DCM. Every block in this table reports
+    #    `area_under`, but DCM's mask saturates -- 91-100% of units land at exactly 0.0 or
+    #    1.0, fully degenerate on 2 of 3 cells at the 1% pin -- so a sweep needs an order for
+    #    the two blocks, and that order is OUR pruning-order tie-break (edge_pruning.py:507),
+    #    not the method's. Upstream never sorts and gets its sparsity curve by retraining per
+    #    lambda (DCM.py:144). So a DCM CPR-AUC is an artifact of our port; a reviewer who
+    #    knows the method would be right to object.
+    # 2. It made the artifact visible in the worst way: `area_under` is a LINEAR trapezoid
+    #    over 0.001..1.0 (evaluation.py:63), ~90% of it from k >= 20% where every method is
+    #    near-identical, so collapsed-mask runs (ZERO units kept) outscored converged ones.
+    #    The $\varnothing$ marks flagged this, but the caption never defined the symbol.
+    # 3. Coverage: 3 of 12 cells (ioi/gpt2, ioi/qwen2.5, mcqa/qwen2.5), hence an all-`---`
+    #    Avg column -- the only block in either table that cannot report one.
+    #
+    # If it comes back, it must report CPR AT THE PIN (collect_dcm_sweep.py already computes
+    # it; that IS a faithful evaluation of the set DCM emits, and the three pins are the
+    # honest analogue of upstream's lambda sweep), and the tie-break must be described as our
+    # adaptation. Do NOT re-add it reporting area_under.
 ]
 
 
