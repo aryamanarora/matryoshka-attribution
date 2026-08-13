@@ -1,9 +1,27 @@
-"""Top-5 MLP neurons by attribution, per training loss x SVA subtask x method.
+"""Top-5 units by attribution, per training loss x SVA subtask x method.
 
 Reads the per-unit score tensors the SVA sweep already writes
-(results/sva_sweep/<task>_llama3_mlp_<tag>.scores.pt) and reports, for each subtask and
-method, the five neurons each method ranks FIRST -- i.e. the first units it puts into the
+(results/sva_sweep/<task>_llama3_<substrate>_<tag>.scores.pt) and reports, for each subtask
+and method, the five units each method ranks FIRST -- i.e. the first units it puts into the
 circuit.
+
+FOUR TABLES, one --substrate/--include-input combination each (see SUBSTRATES):
+
+  --substrate mlp                  -> sva_top_neurons.tex     per-(layer, pos, neuron)
+  --substrate mlp+attn_head        -> sva_top_mlp_attn.tex    the above PLUS per-(layer, pos, head)
+  --substrate node                 -> sva_top_nodes.tex       MIB granularity: MLP block, attn head
+  --substrate node --include-input -> sva_top_nodes_input.tex the above PLUS the embedding node
+
+The last two are the same 1056 attn-head/MLP-block units with and without one extra unit at
+flat index 0, and they are SEPARATE SWEEPS, not one sweep re-read: --include-input changes
+what the mask can hold, so every method re-ranks under it. They live in different results
+dirs (results/sva_sweep vs results/sva_sweep_input) for that reason, and --include-input
+selects the dir; see submit_sva_node_pruning.sh, which is where the split originates.
+
+Reading the two node tables against each other is the point of having both: if the input node
+enters at rank 1 and the rest of the column is otherwise unchanged, the method is spending its
+first pick on "the prompt matters" and the with-input faithfulness curve gains nothing that
+tells you where in the network SVA is computed.
 
 SECTIONED BY TRAINING LOSS (logit-diff, CE, accuracy), subtask within loss. All three losses
 were swept for all five methods, and which units a method reaches for first is exactly the
@@ -19,8 +37,8 @@ compact table does not lose access to the descriptions, only their inlining.
 Run:  uv run python scripts/make_sva_neuron_table.py   ->  paper/tabs/sva_top_neurons.tex
       (--descriptions for the long version; --no-fetch renders from cache only, e.g. offline)
 
-WHY llama3-only: the `mlp` substrate was only ever swept on llama3 (the other MIB models are
-node-level), so there is exactly one model here and no cross-model column to add.
+WHY llama3-only: the SVA subtasks were only ever swept on llama3, at every substrate, so there
+is exactly one model here and no cross-model column to add.
 
 RANKING. Raw score, sorted DESCENDING -- not |score|. That is not a stylistic choice: it is
 what evaluate.sparsity_sweep does (`flat.argsort(descending=True)`), so these really are the
@@ -29,11 +47,13 @@ faithfulness curve in the paper. Ranking by |score| here would show a DIFFERENT 
 than the ones our own numbers were computed from, for IG/IxG especially, whose scores are
 signed effects rather than importances.
 
-NEURON vs UNIT. The substrate is per-(layer, position, neuron) -- 32 x 6 x 14336 = 2752512
-units -- but the question is about neurons, and one neuron can occupy several of the top
-slots at different positions. So we deduplicate to distinct (layer, neuron) keeping each
-neuron's best-scoring position, and report that position. "Top 5" therefore means 5 distinct
-neurons, which is usually deeper into the raw ranking than slot 5.
+NEURON vs UNIT. At the positional substrates (`mlp`, `mlp+attn_head`) the score index is
+per-(layer, position, neuron) -- 32 x 6 x 14336 = 2752512 units -- but the question is about
+neurons, and one neuron can occupy several of the top slots at different positions. So we
+deduplicate to distinct (component, layer, neuron-or-head) keeping each unit's best-scoring
+position, and report that position. "Top 5" therefore means 5 distinct units, which is usually
+deeper into the raw ranking than slot 5. At `node` there is no position axis and every index is
+already a distinct unit, so the dedupe is a no-op there and the printed rank is the raw rank.
 
 *** Transluce descriptions are for Llama-3.1-8B-INSTRUCT; our runs use the BASE model
     (meta-llama/Llama-3.1-8B, see eval_sva.MODEL_FULLNAMES). ***
@@ -58,10 +78,43 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from make_fingerprint_tables import parse_method  # noqa: E402  (one naming source of truth)
 
-RES = Path("results/sva_sweep")
 TABDIR = Path("paper/tabs")
 CACHE = Path("results/.transluce_cache.json")
-MODEL, SUBSTRATE, TOPN = "llama3", "mlp", 5
+MODEL, TOPN = "llama3", 5
+# Query heads per layer, asserted rather than assumed: the head count is NOT in the runs'
+# metadata, so layout() derives it from `total` and cross-checks it here. That check is what
+# distinguishes a with-input node run from a without-input one (1057 vs 1056 = 32*32 + 32 + i),
+# and reading one as the other would shift every attn head by one layer with no visible symptom.
+NUM_HEADS = {"llama3": 32}
+
+# --substrate / --include-input -> (results dir, on-disk substrate tag, output stem, recurrence
+# cut). The tag is the run's own meta["nodes"] with `+` -> `-`, which is the substitution
+# eval_sva.py makes when it builds a filename. `recur` is set per substrate because the
+# recurrence distribution is a property of the substrate SIZE, not a global constant: 2.7M
+# positional units almost never collide across cells, 1056 node units collide constantly, and a
+# single threshold would either colour nothing in one table or everything in the other.
+#
+# Where each value comes from (the descending count list main() prints is the evidence):
+#   mlp            14  the original gap: 24 22 18 16 14 14 14 | 9 7 7 ...
+#   mlp+attn_head  14  MATCHED to mlp, not gap-read. This distribution is a smooth staircase --
+#                      20 17 15 14 12 11 10 9 9 9 | 6 -- whose only gap in the palette range is
+#                      at >=9, and that selects 10 units for 8 colours AND cuts a three-way tie
+#                      at 9. With no gap to read, comparability wins: a chip here means the same
+#                      frequency as a chip in the mlp table, which is the table it is read against.
+#   node           29  gap 30 | 24 (nothing sits at 29, so >=29 and >=30 select the same 3)
+#   node+input     29  gap 29 29 | 22
+# The two node values are deliberately EQUAL rather than separately gap-read, for the same
+# comparability reason: these two tables exist to be read against each other.
+SUBSTRATES = {
+    ("mlp", False): dict(res="results/sva_sweep", tag="mlp",
+                         out="sva_top_neurons", recur=14),
+    ("mlp+attn_head", False): dict(res="results/sva_sweep", tag="mlp-attn_head",
+                                   out="sva_top_mlp_attn", recur=14),
+    ("node", False): dict(res="results/sva_sweep", tag="node",
+                          out="sva_top_nodes", recur=29),
+    ("node", True): dict(res="results/sva_sweep_input", tag="node",
+                         out="sva_top_nodes_input", recur=29),
+}
 
 # Transluce's neuron-data server. sign=+/- selects the positive/negative activation direction;
 # the response's explanation_summary is a [description, score] list already sorted best-first.
@@ -111,7 +164,10 @@ NEURON_URL = "https://neurons.transluce.org/%d/%d/+"
 # the selected set at all: DBM's top-5s never land on any of the 7, so the counts either side of
 # the gap are unchanged. main() prints the counts either side of the cut so a rerun that moves
 # the gap is visible rather than silently recoloured.
-RECUR_MIN = 14
+#
+# THE RULE, not the number, is what carries over to the other substrates: read the gap in the
+# descending count list main() prints on every run, don't reuse 14. Each substrate's value lives
+# in SUBSTRATES[...]["recur"] above; `--recur-min` overrides it for one render.
 # ColorBrewer Pastel1, with two substitutions made after looking at a rendered page. Pastels
 # because the link text sits ON these and hyperref renders it darkblue (colorlinks=true in the
 # preamble), so saturated chips would bury it -- but pastel has a floor: Pastel1's FFFFCC and
@@ -124,9 +180,9 @@ PALETTE = ["FBB4AE", "B3CDE3", "CCEBC5", "DECBE4",
            "FED9A6", "8DD3C7", "E8DE6B", "DCC49A"]
 
 
-def load_run(task, tag):
+def load_run(res, task, sub_tag, tag):
     """(scores tensor, meta dict) for one cell, or (None, None) if that run is missing."""
-    stem = RES / f"{task}_{MODEL}_{SUBSTRATE}_{tag}"
+    stem = res / f"{task}_{MODEL}_{sub_tag}_{tag}"
     pt, js = Path(str(stem) + ".scores.pt"), Path(str(stem) + ".json")
     if not pt.exists() or not js.exists():
         return None, None
@@ -138,19 +194,50 @@ def load_run(task, tag):
     return torch.load(pt, map_location="cpu", weights_only=False), (meta | {"_method": got})
 
 
-def decode(idx, meta):
-    """Flat unit index -> (layer, position, neuron).
+def layout(meta, sub, inp):
+    """Heads per layer for this run, asserting the flat score layout is the one decode() assumes.
 
-    Byte-for-byte the same arithmetic as LlamaAttributionHooks.decode_index (models/llama.py,
-    the `mask_type == "mlp"` branch), which is the authority for this layout; it is duplicated
-    rather than imported because decode_index is an instance method and instantiating the
-    hooker would mean loading 8B of weights just to divide two integers. It also matches the
-    writer side, eval_sva.gradient_scores: `off = li * P * N` then a [P, N] block reshaped
-    row-major, i.e. index = layer*(P*N) + pos*N + neuron.
+    The head count is not stored in the runs' metadata, so it is DERIVED from `total` by
+    subtracting the parts whose size is known, and the derivation is only well-posed if the
+    layout is as expected -- which is what makes it a check and not an assumption:
+
+      mlp            L*P*N                       (no heads to derive; returns None)
+      mlp+attn_head  L*P*N + L*P*H
+      node           [1 if include_input] + L*H + L
+
+    Both node variants are pinned by exact divisibility alone: without input 1056 - 32 = 1024 =
+    32*32, with input 1057 - 1 - 32 = 1024, and swapping the two leaves 1025 or 1023, neither
+    divisible by 32. So pointing --include-input at the wrong results dir is an AssertionError,
+    not a table in which every attention head silently sits one layer off.
+    """
+    L, P, N = meta["num_layers"], meta["seq_len"], meta["intermediate_size"]
+    total = meta["total"]
+    if sub == "mlp":
+        assert L * P * N == total, f"mlp layout: {L}*{P}*{N} != {total}"
+        return None
+    if sub == "mlp+attn_head":
+        rest, per = total - L * P * N, L * P
+    else:
+        rest, per = total - (1 if inp else 0) - L, L
+    assert rest > 0 and rest % per == 0, f"{sub} layout: {rest} not divisible by {per}"
+    H = rest // per
+    assert H == NUM_HEADS[MODEL], f"derived {H} heads, expected {NUM_HEADS[MODEL]}"
+    return H
+
+
+def decode(idx, meta, sub, H, inp):
+    """Flat unit index -> unit dict: kind (mlp/attn/input), layer, and head/neuron/pos if any.
+
+    Byte-for-byte the same arithmetic as LlamaAttributionHooks.decode_index (models/llama.py),
+    which is the authority for these layouts; it is duplicated rather than imported because
+    decode_index is an instance method and instantiating the hooker would mean loading 8B of
+    weights just to divide two integers. The positional branch also matches the writer side,
+    eval_sva.gradient_scores: `off = li * P * N` then a [P, N] block reshaped row-major, i.e.
+    index = layer*(P*N) + pos*N + neuron.
 
     Getting this wrong is the failure mode with no symptom -- every description would attach
-    to the wrong neuron and the table would still look entirely plausible -- so main() asserts
-    the shape identity L*P*N == total == numel before trusting it.
+    to the wrong neuron and the table would still look entirely plausible -- so layout() pins
+    the shape before this is trusted.
 
     That assert only pins the shape, so the ORDERING was checked separately against a
     signature a transposed decode could not reproduce: under this decode, positions 0 and 1
@@ -159,23 +246,63 @@ def decode(idx, meta):
     top-200 units concentrate at pos 2 and pos P-1 -- the subject and the verb, which is where
     subject-verb agreement lives. Note P is per-subtask (simple 3, nounpp 6, rc 7,
     within_rc 6), read from each run's json rather than assumed.
+
+    NOTE the two substrates order their blocks differently, and it is not a typo: `mlp+attn_head`
+    is [all MLP | all attn] with MLP first, while `node` is [input | all attn | all MLP] with
+    attn first. That is how the hooker lays them out; decode_index has the same asymmetry.
     """
-    N, P = meta["intermediate_size"], meta["seq_len"]
-    layer, rem = divmod(int(idx), P * N)
-    pos, neuron = divmod(rem, N)
-    return layer, pos, neuron
+    idx = int(idx)
+    L, P, N = meta["num_layers"], meta["seq_len"], meta["intermediate_size"]
+    if sub == "node":
+        if inp and idx == 0:
+            return dict(kind="input", layer=-1)
+        i = idx - (1 if inp else 0)
+        if i < L * H:
+            return dict(kind="attn", layer=i // H, head=i % H)
+        return dict(kind="mlp", layer=i - L * H)
+    if sub == "mlp" or idx < L * P * N:
+        layer, rem = divmod(idx, P * N)
+        pos, neuron = divmod(rem, N)
+        return dict(kind="mlp", layer=layer, pos=pos, neuron=neuron)
+    layer, rem = divmod(idx - L * P * N, P * H)
+    pos, head = divmod(rem, H)
+    return dict(kind="attn", layer=layer, pos=pos, head=head)
 
 
-def top_neurons(scores, meta, n=TOPN):
-    """Top-n DISTINCT (layer, neuron) by descending raw score, best position kept."""
+def unit_key(u):
+    """Identity for dedupe / recurrence colouring: everything about the unit EXCEPT position.
+
+    Position is excluded because the chip means "this unit recurs across cells" and the same
+    neuron shows up at different positions; folding position in would report a recurrence that
+    was never measured. At `node` there is no position and the key is the whole unit.
+    """
+    if u["kind"] == "input":
+        return ("input",)
+    return (u["kind"], u["layer"], u.get("head", u.get("neuron")))
+
+
+def unit_label(u):
+    r"""Chip text for a unit: `$\ell$30.n11158`, `$\ell$12.h7`, `$\ell$12.mlp`, or `input`."""
+    if u["kind"] == "input":
+        return r"\textsc{input}"
+    if u["kind"] == "attn":
+        return r"$\ell$%d.h%d" % (u["layer"], u["head"])
+    if "neuron" in u:
+        return r"$\ell$%d.n%d" % (u["layer"], u["neuron"])
+    return r"$\ell$%d.mlp" % u["layer"]
+
+
+def top_units(scores, meta, sub, H, inp, n=TOPN):
+    """Top-n DISTINCT units by descending raw score, each unit's best position kept."""
     order = torch.argsort(scores, descending=True)
     out, seen = [], set()
     for idx in order.tolist():
-        layer, pos, neuron = decode(idx, meta)
-        if (layer, neuron) in seen:
+        u = decode(idx, meta, sub, H, inp)
+        k = unit_key(u)
+        if k in seen:
             continue
-        seen.add((layer, neuron))
-        out.append(dict(layer=layer, neuron=neuron, pos=pos, score=float(scores[idx])))
+        seen.add(k)
+        out.append(u | {"score": float(scores[idx])})
         if len(out) == n:
             break
     return out
@@ -289,8 +416,27 @@ def main():
     ap.add_argument("--no-fetch", action="store_true", help="render from cache only")
     ap.add_argument("--descriptions", action="store_true",
                     help="inline the Transluce descriptions (12 pages instead of ~3)")
+    ap.add_argument("--substrate", default="mlp",
+                    choices=sorted({s for s, _ in SUBSTRATES}),
+                    help="score granularity; picks the results dir and the output file")
+    ap.add_argument("--include-input", action="store_true",
+                    help="node only: read results/sva_sweep_input, whose mask carries the "
+                         "embedding node at flat index 0")
+    ap.add_argument("--recur-min", type=int, default=None,
+                    help="override this substrate's recurrence colouring cut")
     args = ap.parse_args()
     desc_mode = args.descriptions
+    sub, inp = args.substrate, args.include_input
+    if (sub, inp) not in SUBSTRATES:
+        ap.error(f"--include-input was only ever swept at --substrate node, not {sub} "
+                 f"(there is no results/sva_sweep_input run for it)")
+    cfg = SUBSTRATES[(sub, inp)]
+    res, recur_min = Path(cfg["res"]), args.recur_min or cfg["recur"]
+    # Descriptions are per-NEURON facts from Transluce's database; at `node` a unit is a whole
+    # MLP block or attention head and there is nothing to look up, so every cell would render
+    # two "---" lines and quadruple the page count to say nothing.
+    if desc_mode and sub == "node":
+        ap.error("--descriptions is neuron-level; --substrate node has no neuron indices")
 
     blocks, missing = [], []
     for lkey, lsuf, llabel in LOSSES:
@@ -298,7 +444,7 @@ def main():
             rows = []
             for mkey, tmpl in METHODS:
                 tag = tmpl % lsuf
-                scores, meta = load_run(task, tag)
+                scores, meta = load_run(res, task, cfg["tag"], tag)
                 if scores is None:
                     missing.append(f"{task}/{tag}")
                     continue
@@ -310,9 +456,14 @@ def main():
                 # silently held logit-diff runs is exactly the error this table cannot show.
                 assert meta.get("loss") == lkey, \
                     f"{task}/{tag} was trained with loss={meta.get('loss')}, not {lkey}"
-                assert meta["intermediate_size"] * meta["seq_len"] * meta["num_layers"] == \
-                    meta["total"] == scores.numel(), f"layout mismatch in {task}/{tag}"
-                rows.append((mkey, top_neurons(scores, meta)))
+                # Same idea for the substrate: the filename tag says `node`, meta["nodes"] says
+                # what the hooker actually masked, and layout() then pins the flat layout that
+                # decode() is about to assume.
+                assert meta.get("nodes") == sub, \
+                    f"{task}/{tag} was swept at nodes={meta.get('nodes')}, not {sub}"
+                assert meta["total"] == scores.numel(), f"layout mismatch in {task}/{tag}"
+                H = layout(meta, sub, inp)
+                rows.append((mkey, top_units(scores, meta, sub, H, inp)))
             if rows:
                 blocks.append((lkey, llabel, task, tlabel, rows))
 
@@ -321,25 +472,45 @@ def main():
     # scores reproduces the same assignment byte for byte -- a table whose colours shuffle
     # between renders is worse than no colours, because the reader's memory of "the pink one"
     # silently goes stale.
-    counts = Counter((n["layer"], n["neuron"])
-                     for *_, rs in blocks for _, ns in rs for n in ns)
-    recur = sorted((k for k, v in counts.items() if v >= RECUR_MIN),
+    units = {}                              # key -> a representative unit, for the legend label
+    for *_, rs in blocks:
+        for _, ns in rs:
+            for n in ns:
+                units.setdefault(unit_key(n), n)
+    counts = Counter(unit_key(n) for *_, rs in blocks for _, ns in rs for n in ns)
+    recur = sorted((k for k, v in counts.items() if v >= recur_min),
                    key=lambda k: (-counts[k], k))
-    if len(recur) > len(PALETTE):
-        print(f"NOTE: {len(recur)} neurons recur >={RECUR_MIN}x but the palette holds "
+    # Truncation is not just cosmetic: the legend below says "recurring in >=recur_min cells", and
+    # if the palette cut off some of the units that clear recur_min, that sentence is false. So
+    # the legend switches to describing what is actually coloured -- and the tie warning matters
+    # because a cut through a plateau of equal counts colours some members and not others with no
+    # rule a reader could infer.
+    truncated = len(recur) > len(PALETTE)
+    if truncated:
+        print(f"NOTE: {len(recur)} units recur >={recur_min}x but the palette holds "
               f"{len(PALETTE)}; colouring the {len(PALETTE)} most frequent, rest left plain.",
               file=sys.stderr)
         recur = recur[:len(PALETTE)]
+        if counts[recur[-1]] == max(counts[k] for k in counts if k not in set(recur)):
+            print(f"  ! the cut splits a tie at {counts[recur[-1]]}x -- units with identical "
+                  f"counts are coloured differently. Raise --recur-min above it.", file=sys.stderr)
     color = {k: f"recur{i}" for i, k in enumerate(recur)}
-    # Show the cut: the smallest count kept vs the largest dropped. RECUR_MIN is justified by a
-    # gap in this distribution, and a gap is the one property a constant cannot assert about
-    # itself -- if a rerun closes it these two numbers land next to each other and say so.
+    # Show the cut: the smallest count kept vs the largest dropped. The threshold is justified by
+    # a gap in this distribution, and a gap is the one property a constant cannot assert about
+    # itself -- if a rerun closes it these two numbers land next to each other and say so. The
+    # descending count list next to them is what a NEW substrate's threshold is read off.
     kept = min((counts[k] for k in recur), default=None)
     drop = max((v for k, v in counts.items() if k not in color), default=None)
-    print(f"recurrence cut at >={RECUR_MIN}: {len(recur)} coloured "
+    print(f"[{cfg['out']}] recurrence cut at >={recur_min}: {len(recur)} coloured "
           f"(lowest kept {kept}x, highest dropped {drop}x)", file=sys.stderr)
+    print("  counts, descending: "
+          + " ".join(str(v) for v in sorted(counts.values(), reverse=True)[:24]) + " ...",
+          file=sys.stderr)
 
-    todo = {(n["layer"], n["neuron"]) for *_, rs in blocks for _, ns in rs for n in ns}
+    # Only MLP units with a neuron index are describable; at mlp+attn_head the attn rows have no
+    # Transluce entry and are simply skipped rather than fetched and cached as failures.
+    todo = {(n["layer"], n["neuron"]) for *_, rs in blocks for _, ns in rs for n in ns
+            if n["kind"] == "mlp" and "neuron" in n}
     todo = sorted(k for k in todo if any(f"{k[0]}/{k[1]}/{s}" not in _cache for s in "+-"))
     if todo and desc_mode and not args.no_fetch:
         print(f"fetching {len(todo)} neurons from Transluce ({2 * len(todo)} requests)...")
@@ -385,7 +556,7 @@ def main():
     font = r"\small" if W * 397 >= 65 else r"\scriptsize"
     hdr = ["& " + " & ".join(r"\textbf{%s}" % LABELS[k] for k, _ in METHODS) + r" \\", r"\midrule"]
     def chip(key, body):
-        """Wrap a neuron id in its recurrence colour, or leave it plain if it does not recur."""
+        """Wrap a unit id in its recurrence colour, or leave it plain if it does not recur."""
         return r"\colorbox{%s}{%s}" % (color[key], body) if key in color else body
 
     L = [r"% Requires \usepackage{booktabs,longtable,colortbl,hyperref}; \input at top level "
@@ -404,11 +575,13 @@ def main():
          # Legend, so a colour is decodable without hunting for its other occurrences. It goes in
          # \endlastfoot rather than \endfoot: repeating it under all four pages would cost a
          # quarter of the vertical space the \newpage-per-subtask layout just bought.
-         r"\multicolumn{%d}{@{}p{0.97\textwidth}@{}}{\scriptsize Recurring in $\geq$%d of the "
+         r"\multicolumn{%d}{@{}p{0.97\textwidth}@{}}{\scriptsize %s in $\geq$%d of the "
          r"%d cells:~%s} \\" % (
-             ncol + 1, RECUR_MIN, len(blocks) * ncol,
+             ncol + 1,
+             f"The {len(PALETTE)} most frequent, each recurring" if truncated else "Recurring",
+             kept if truncated else recur_min, len(blocks) * ncol,
              r"\quad ".join(
-                 r"\colorbox{%s}{$\ell$%d.n%d}~$\times$%d" % (color[k], k[0], k[1], counts[k])
+                 r"\colorbox{%s}{%s}~$\times$%d" % (color[k], unit_label(units[k]), counts[k])
                  for k in recur)),
          r"\endlastfoot"]
     for b_i, (lkey, llabel, task, tlabel, rows) in enumerate(blocks):
@@ -447,26 +620,29 @@ def main():
                     cells.append("")
                     continue
                 n = ns[r_i]
-                url = NEURON_URL % (n["layer"], n["neuron"])
-                # One identifier, "l30.n11158.p5" -- layer, neuron, position. The raw score used
+                describable = n["kind"] == "mlp" and "neuron" in n
+                # One identifier, "l30.n11158.p5" -- layer, unit, position (positional substrates
+                # only; `node` units have no position and stop at "l30.mlp"). The raw score used
                 # to sit next to it and is gone: it is not comparable across columns (IG's
                 # signed effects and a mask's logits are different quantities in different
                 # units), so a reader could only ever compare it DOWN a column, which is the one
                 # thing the rank number already says.
                 #
-                # \href wraps the whole label but \colorbox covers only the l.n part, because
-                # the chip means "this NEURON recurs across cells" and the position is not part
+                # \colorbox covers only the l.n part and the position is appended outside it,
+                # because the chip means "this UNIT recurs across cells" and position is not part
                 # of that identity -- the same neuron shows up at different positions, and
                 # highlighting the position with it would claim a recurrence that was not
-                # measured. Nesting this way (box inside link) rather than the reverse also
-                # keeps the whole id one uniform hyperref colour instead of a highlighted
-                # darkblue stem followed by a black tail.
-                cell = r"\href{%s}{%s.p%d}" % (
-                    url,
-                    chip((n["layer"], n["neuron"]),
-                         r"$\ell$%d.n%d" % (n["layer"], n["neuron"])),
-                    n["pos"])
-                if desc_mode:
+                # measured.
+                cell = chip(unit_key(n), unit_label(n))
+                if "pos" in n:
+                    cell += ".p%d" % n["pos"]
+                # Only MLP neurons get the Transluce link; there is no browser page for an
+                # attention head or a whole MLP block, so those ids stay plain text. Nesting the
+                # link OUTSIDE the box rather than the reverse keeps the whole id one uniform
+                # hyperref colour instead of a highlighted darkblue stem and a black tail.
+                if describable:
+                    cell = r"\href{%s}{%s}" % (NEURON_URL % (n["layer"], n["neuron"]), cell)
+                if desc_mode and describable:
                     cell += r"\newline %s\newline %s" % (
                         fmt_desc(describe(n["layer"], n["neuron"], "+", fetch=False), "+"),
                         fmt_desc(describe(n["layer"], n["neuron"], "-", fetch=False), "-"))
@@ -476,16 +652,22 @@ def main():
     L += [r"\end{longtable}", r"}"]
 
     TABDIR.mkdir(parents=True, exist_ok=True)
-    out = TABDIR / "sva_top_neurons.tex"
+    out = TABDIR / f"{cfg['out']}.tex"
     out.write_text("\n".join(L) + "\n")
     n_rows = sum(len(ns) for *_, rs in blocks for _, ns in rs)
     extra = ""
     if desc_mode:
         n_desc = sum(1 for *_, rs in blocks for _, ns in rs for n in ns
-                     if describe(n["layer"], n["neuron"], "+", fetch=False))
+                     if n["kind"] == "mlp" and "neuron" in n
+                     and describe(n["layer"], n["neuron"], "+", fetch=False))
         extra = f", {n_desc}/{n_rows} with a + description"
-    print(f"wrote {out}  ({len(blocks)} loss x subtask blocks, {n_rows} neuron rows, "
+    # The component mix is the headline fact for the two mixed substrates -- "IG's top-5 is all
+    # attention and MAttr's is all MLP" is not visible from a row count -- so it is printed
+    # rather than left to be eyeballed off the rendered page.
+    mix = Counter(n["kind"] for *_, rs in blocks for _, ns in rs for n in ns)
+    print(f"wrote {out}  ({len(blocks)} loss x subtask blocks, {n_rows} unit rows, "
           f"{'descriptions' if desc_mode else 'compact'}{extra})")
+    print("  component mix: " + ", ".join(f"{k} {v}" for k, v in sorted(mix.items())))
     if missing:
         print("MISSING runs:", ", ".join(missing))
 
