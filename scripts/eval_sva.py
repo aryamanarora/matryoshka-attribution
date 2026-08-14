@@ -746,6 +746,13 @@ def main():
     # the whole k grid, so they are k-independent and comparable across steps, runs and methods.
     # The subset is TRAIN, and fixed across the run, so the probe is a convergence diagnostic,
     # not a held-out estimate: read it for "has it stopped improving", never as a test number.
+    #
+    # AND A PLATEAU IS NOT PROOF OF CONVERGENCE. At --train-eval-examples 16 the probe
+    # SATURATES: on nounpp/mlp it read 0.685 at step 2000 and 0.690 at 6250 (flat), while the
+    # 100-example TEST acc-AUC of the same configuration rose 0.663 -> 0.705 over that span.
+    # It caught the large gap it was built for (addition/mlp, +0.09 over the same span) and
+    # missed a real +0.04. Treat a rising probe as evidence of under-convergence; treat a flat
+    # one as inconclusive, and raise --train-eval-examples before believing it.
     train_eval_log = []
     on_step_cb = None
     # edge_pruning/sigmoid_mask hand back rankable scores from their on_step too (log-alphas and
