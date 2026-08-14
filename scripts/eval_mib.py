@@ -20,6 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import math
 
 from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES
+from learning_to_attribute import wandb_util
 from learning_to_attribute.losses import attribution_loss
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
@@ -128,8 +129,7 @@ def main():
     parser.add_argument("--output", type=str, default="results/mib")
     parser.add_argument("--skip-eval", action="store_true",
                         help="Skip the MIB eval; just train and save the train log (for convergence diagnostics)")
-    parser.add_argument("--wandb", action="store_true")
-    parser.add_argument("--wandb-project", default="circuits")
+    wandb_util.add_args(parser)   # --no-wandb / --wandb-project / --wandb-entity; ON by default
     parser.add_argument("--wandb-name", default=None)
 
     # Config YAML
@@ -152,13 +152,12 @@ def main():
     if args.model is None or args.task is None:
         parser.error("--model and --task are required (via CLI or config)")
 
-    # W&B init
-    if args.wandb:
-        import wandb
-        run_name = args.wandb_name or f"{args.task}_{args.model}_{args.masking}_s{args.seed}"
-        wandb.init(project=args.wandb_project, name=run_name, config=vars(args))
-    else:
-        wandb = None
+    # W&B init. Project defaults to l2a-mib (one project per dataset, wandb_util.PROJECTS);
+    # it used to default to "circuits", which pooled these with unrelated runs.
+    wandb = wandb_util.init(
+        "mib", args.wandb_name or f"{args.task}_{args.model}_{args.masking}_s{args.seed}",
+        vars(args), project=args.wandb_project, entity=args.wandb_entity,
+        enabled=args.wandb, group=f"{args.task}/{args.model}", job_type="node")
 
     # Add MIB to path
     mib_path = Path(args.mib_path).resolve()

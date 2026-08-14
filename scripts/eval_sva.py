@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import learn_scores, sparsity_sweep
+from learning_to_attribute import learn_scores, sparsity_sweep, wandb_util
 from learning_to_attribute.edge_pruning import (
     learn_scores_edge_pruning, learn_scores_sigmoid_mask)
 from learning_to_attribute.schedules import AdaptiveLogK, FixedK
@@ -410,36 +410,13 @@ def run_tag(args):
 
 
 def wandb_init(args, tag):
-    """Start a wandb run, one PROJECT PER DATASET (sva / arith / causalgym / mib).
-
-    Per-dataset projects rather than one big project because the run set is only comparable
-    within a dataset: the substrates, the unit counts (2.3M mlp neurons vs 1056 nodes) and the
-    metric scales all differ across them, so a single project's charts would overlay
-    incommensurable series and its run table would be unsortable.
-
-    Never fatal, and never blocking: an unreachable wandb (or a node with no credentials) must
-    not take a 6-hour training run down with it, so failures degrade to offline and then to
-    None. The run name is `run_tag`, i.e. exactly the output filename's method half, so a
-    chart can be matched back to its json without a lookup table.
-    """
-    if not args.wandb:
-        return None
-    import os
-    try:
-        import wandb
-        # No credentials on some nodes; fall back to offline rather than losing the run.
-        # `wandb sync <dir>` uploads it once a key is available.
-        if not (os.environ.get("WANDB_API_KEY") or Path.home().joinpath(".netrc").exists()):
-            os.environ.setdefault("WANDB_MODE", "offline")
-            logger.warning("no WANDB_API_KEY and no ~/.netrc -> logging OFFLINE")
-        return wandb.init(entity=args.wandb_entity,
-                          project=args.wandb_project or f"l2a-{args.dataset}",
-                          name=f"{args.task}_{args.model}_{args.nodes.replace('+', '-')}_{tag}",
-                          group=f"{args.task}/{args.nodes}", job_type=args.method,
-                          config=vars(args))
-    except Exception as exc:                       # noqa: BLE001 -- logging must never be fatal
-        logger.warning("wandb disabled (%s: %s)", type(exc).__name__, exc)
-        return None
+    """Start the run. Named `run_tag`, i.e. exactly the output filename's method half, so a
+    chart can be matched back to its json without a lookup table."""
+    return wandb_util.init(
+        args.dataset,
+        f"{args.task}_{args.model}_{args.nodes.replace('+', '-')}_{tag}",
+        vars(args), project=args.wandb_project, entity=args.wandb_entity,
+        enabled=args.wandb, group=f"{args.task}/{args.nodes}", job_type=args.method)
 
 
 def main():
@@ -519,12 +496,7 @@ def main():
                         "all layers at once, so long seqs OOM. Independent of the eval-sweep size.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="results/sva")
-    # wandb is ON by default: these runs are hours long and the only other record of how a run
-    # went is a slurm .err file that nobody diffs across 400 jobs.
-    p.add_argument("--no-wandb", dest="wandb", action="store_false", help="disable wandb logging")
-    p.add_argument("--wandb-project", default=None,
-                   help="override the per-dataset default project (l2a-<dataset>)")
-    p.add_argument("--wandb-entity", default=None, help="wandb entity (default: your default)")
+    wandb_util.add_args(p)     # --no-wandb / --wandb-project / --wandb-entity; ON by default
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

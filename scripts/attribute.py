@@ -15,7 +15,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from learning_to_attribute import (
     sigmoid_topk, sigmoid_topk_hard, make_rotate_layer, CausalGymDataset, learn_scores,
-    normalize_mode,
+    normalize_mode, wandb_util,
 )
 from learning_to_attribute.models import (
     LlamaAttributionHooks, LlamaSpanAttributionHooks,
@@ -386,8 +386,8 @@ def main():
                         help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--das_dim", type=int, default=None,
                         help="DAS rotation subspace dimension (default: full d_model)")
-    parser.add_argument("--wandb", action="store_true")
-    parser.add_argument("--wandb_project", default="learning-to-attribute")
+    # underscore spelling to match every other option in this script
+    wandb_util.add_args(parser, dash=False)   # ON by default; project defaults to l2a-causalgym
     parser.add_argument("--wandb_name", default=None)
 
     # Config YAML
@@ -421,13 +421,11 @@ def main():
     args.sufficient = not args.sufficient
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
-    if args.wandb:
-        import wandb
-        wandb.init(project=args.wandb_project,
-                   name=args.wandb_name or Path(args.output).name,
-                   config=vars(args))
-    else:
-        wandb = None
+    # `wandb` below is the RUN object, not the module -- .log()/.finish() are the only two
+    # members used, and both exist on it. Project defaults to l2a-causalgym (one per dataset).
+    wandb = wandb_util.init(
+        "causalgym", args.wandb_name or Path(args.output).name, vars(args),
+        project=args.wandb_project, entity=args.wandb_entity, enabled=args.wandb)
 
     logger.info("Config: %s", json.dumps(vars(args), indent=2, default=str))
 

@@ -21,6 +21,8 @@ import torch.nn.functional as F
 import yaml
 from torch.utils.checkpoint import checkpoint
 
+from learning_to_attribute import wandb_util
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -83,7 +85,12 @@ def main():
     parser.add_argument("--l0-lambda", type=float, default=1e-3)
     parser.add_argument("--eval-examples", type=int, default=None)
     parser.add_argument("--output", type=str, default="results/mib_edge")
+    wandb_util.add_args(parser)   # --no-wandb / --wandb-project / --wandb-entity; ON by default
     args = parser.parse_args()
+    # Same project as the node-granularity MIB runs (same dataset); job_type separates them.
+    wb = wandb_util.init("mib", f"edge_{args.task}_{args.model}_{args.masking}",
+                         vars(args), project=args.wandb_project, entity=args.wandb_entity,
+                         enabled=args.wandb, group=f"{args.task}/{args.model}", job_type="edge")
 
     mib_path = Path(args.mib_path).resolve()
     sys.path.insert(0, str(mib_path))
@@ -313,11 +320,13 @@ def main():
         logit_diff = logits[0, -1, correct_idx] - logits[0, -1, incorrect_idx]
         return logit_diff.float() if corrupt_topk else -logit_diff.float()
 
+    on_step = None if wb is None else (lambda step, k, lv, sc: wb.log(
+        {"train/loss": lv, "train/k": k, "train/k_frac": k / total}, step=step))
     result = learn_scores(
         total, loss_fn, steps=args.steps, variant=args.masking,
         k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
         optimizer=getattr(args, "optimizer", "adam"), l0_lambda=args.l0_lambda,
-        device=device, logger=logger, log_every=50,
+        device=device, logger=logger, log_every=50, on_step=on_step,
     )
     scores = result.scores
     loss_log = result.loss_log
@@ -373,6 +382,13 @@ def main():
         "mib_results": mib_results,
     }, output_dir / f"{args.task}_{args.model}_scores.pt")
     logger.info("Saved results to %s", output_dir)
+
+    if wb is not None:
+        # summary, not log: this is what the run table sorts on
+        wb.summary.update({"mib/area_under": area_under, "mib/average": average,
+                           "mib/acc_auc": acc_auc, "mib/area_from_1": area_from_1,
+                           "total_edges": total, "output": str(output_dir)})
+        wb.finish()
 
 
 if __name__ == "__main__":
