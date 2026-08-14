@@ -1,10 +1,17 @@
 #!/bin/bash
-# Two probes into "why is MAttr weak at the neuron (mlp) substrate on arithmetic?".
+# Probes into "why is MAttr weak at the neuron (mlp) substrate on arithmetic?".
 #
 #   A) steps  -- is it simply under-converged? 8k and 16k steps against the 2k headline.
 #   B) lr     -- or is 0.05 just too small a step for a 2.3M-unit score vector? lr 0.1/0.3/1.0.
+#   C) lr_low -- B came back monotonically NEGATIVE, so 0.05 is bracketed only from above.
+#                lr 0.01/0.02, and at 8000 steps too (a smaller step needs a longer budget,
+#                so the two knobs interact and the 2k grid alone could hide the optimum).
 #
-# Both carry a control at the far end of the effect (nounpp, where MAttr already matches IG):
+# Usage: scripts/submit_mattr_probes.sh C          # one or more arm letters, no default.
+# Arms A and B are DONE (see the results table in git log / wandb); re-running one overwrites
+# its results dir, so the arm is an explicit argument rather than "submit everything".
+#
+# All carry a control at the far end of the effect (nounpp, where MAttr already matches IG):
 # if the SVA cell moves too, the knob is a global under-tuning and every existing
 # fingerprint_mlp*.tex number is understated -- not an arithmetic-specific finding.
 #
@@ -26,6 +33,7 @@ COMMON="--nodes mlp --loss acc --train-batch-size 1 --train-eval-every 250 --tra
 sub() { sbatch -J "$1" sva_sweep.sbatch "${@:2}"; }
 
 # ---- A) steps: headline lr, 4x and 8x the step budget --------------------------------------
+arm_A() {
 for S in 8000 16000; do
   sub "conv_add_stopk_$S"  --dataset arith --task addition $COMMON --variant topk --optimizer adam \
       --lr 0.05 --steps $S --output "results/probe_steps/add_stopk_$S"
@@ -35,8 +43,10 @@ done
 # SVA control: does the agreement cell gain from 4x steps too?
 sub "conv_nounpp_stopk_8000" --task nounpp $COMMON --variant topk --optimizer adam \
     --lr 0.05 --steps 8000 --output "results/probe_steps/nounpp_stopk_8000"
+}
 
 # ---- B) lr: headline step budget, 2x/6x/20x the learning rate ------------------------------
+arm_B() {
 for LR in 0.1 0.3 1.0; do
   sub "lr_add_stopk_$LR" --dataset arith --task addition $COMMON --variant topk --optimizer adam \
       --lr $LR --output "results/probe_lr/add_stopk_$LR"
@@ -50,3 +60,38 @@ sub "lr_add_idste_0.3" --dataset arith --task addition $COMMON --variant hard_to
 # SVA control, as above.
 sub "lr_nounpp_stopk_0.3" --task nounpp $COMMON --variant topk --optimizer adam \
     --lr 0.3 --output "results/probe_lr/nounpp_stopk_0.3"
+}
+
+# ---- C) lr BELOW the headline, crossed with the step budget --------------------------------
+# Arm B's outcome (test acc-AUC on addition/mlp/acc, vs 0.366 at the headline lr=0.05):
+# stopk 0.1 -> 0.282, 0.3 -> 0.280, 1.0 -> 0.175. Monotone down. Nothing there rules out the
+# optimum sitting BELOW 0.05, and arm A showed the same cell is still climbing at 16k steps --
+# so a smaller step may simply need more of them. Hence the 2k x 8k crossing rather than a
+# flat lr grid: 8 jobs, exactly the guests account's gres/gpu=8 ceiling, so the arm runs as
+# one wave.
+arm_C() {
+for LR in 0.01 0.02; do
+  # 2000 steps: directly comparable to the headline grid (stopk 0.366, soft 0.372).
+  sub "lrlo_add_stopk_$LR" --dataset arith --task addition $COMMON --variant topk --optimizer adam \
+      --lr $LR --output "results/probe_lr_low/add_stopk_${LR}_s2000"
+  sub "lrlo_add_soft_$LR"  --dataset arith --task addition $COMMON --variant hard_topk --optimizer adam \
+      --lr $LR --output "results/probe_lr_low/add_soft_${LR}_s2000"
+  # 8000 steps: the interaction test, against 0.05@8000 = 0.425 (and 0.05@16000 = 0.453).
+  sub "lrlo_add_stopk_${LR}_8k" --dataset arith --task addition $COMMON --variant topk \
+      --optimizer adam --lr $LR --steps 8000 --output "results/probe_lr_low/add_stopk_${LR}_s8000"
+done
+# idSTE+SGD invariance control, this time in the DOWNWARD direction (0.3 already checked, +0.009).
+sub "lrlo_add_idste_0.01" --dataset arith --task addition $COMMON --variant hard_topk_identity \
+    --optimizer sgd --lr 0.01 --output "results/probe_lr_low/add_idste_0.01"
+# SVA control, as in arms A and B (0.05 -> 0.663).
+sub "lrlo_nounpp_stopk_0.01" --task nounpp $COMMON --variant topk --optimizer adam \
+    --lr 0.01 --output "results/probe_lr_low/nounpp_stopk_0.01"
+}
+
+[ $# -gt 0 ] || { echo "usage: $0 <arm>...   (arms: A steps, B lr, C lr_low)" >&2; exit 2; }
+for arm in "$@"; do
+  case "$arm" in
+    A|B|C) echo "== arm $arm =="; "arm_$arm" ;;
+    *) echo "unknown arm '$arm' (expected A, B or C)" >&2; exit 2 ;;
+  esac
+done
