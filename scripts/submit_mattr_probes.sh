@@ -88,10 +88,43 @@ sub "lrlo_nounpp_stopk_0.01" --task nounpp $COMMON --variant topk --optimizer ad
     --lr 0.01 --output "results/probe_lr_low/nounpp_stopk_0.01"
 }
 
-[ $# -gt 0 ] || { echo "usage: $0 <arm>...   (arms: A steps, B lr, C lr_low)" >&2; exit 2; }
+# ---- D) confirm arm C's winner ------------------------------------------------------------
+# Arm C's result: lr 0.02 x 8000 steps = 0.465, beating BOTH 0.05@8000 (0.425) and 0.05@16000
+# (0.453) -- the latter at half the budget -- and its probe is flat over the last 1000 steps
+# where 0.05's was still climbing. Three things that single number does not establish:
+#   1. is +0.040 above seed noise? -> paired seed-1 replicates of the winner AND its reference.
+#   2. does the winner transfer to the other variants, or is 0.02 a topk-specific fluke?
+#   3. arm C's SVA control FELL hard at 0.01 (0.663 -> 0.529) with a probe still climbing at
+#      the buzzer -- budget-starved, or does low lr genuinely hurt the cell where MAttr
+#      already wins? Only a longer budget separates those.
+arm_D() {
+sub "d_add_stopk_0.02_16k" --dataset arith --task addition $COMMON --variant topk --optimizer adam \
+    --lr 0.02 --steps 16000 --output "results/probe_lr_low/add_stopk_0.02_s16000"
+# (1) paired replicates: winner and reference, same new seed, 8k both.
+for L in 0.02 0.05; do
+  sub "d_add_stopk_${L}_8k_s1" --dataset arith --task addition $COMMON --variant topk \
+      --optimizer adam --lr $L --steps 8000 --seed 1 \
+      --output "results/probe_lr_low/add_stopk_${L}_s8000_seed1"
+done
+# (2) the other two variants at the winning lr, same 8k budget. The +hard ablation has to be
+# retuned alongside the headline or the ablation table compares tuned against untuned.
+sub "d_add_soft_0.02_8k"  --dataset arith --task addition $COMMON --variant hard_topk \
+    --optimizer adam --lr 0.02 --steps 8000 --output "results/probe_lr_low/add_soft_0.02_s8000"
+sub "d_add_idste_0.01_8k" --dataset arith --task addition $COMMON --variant hard_topk_identity \
+    --optimizer sgd --lr 0.01 --steps 8000 --output "results/probe_lr_low/add_idste_0.01_s8000"
+sub "d_add_idste_0.02_8k" --dataset arith --task addition $COMMON --variant hard_topk_identity \
+    --optimizer sgd --lr 0.02 --steps 8000 --output "results/probe_lr_low/add_idste_0.02_s8000"
+# (3) the SVA control at 8k, at both low lrs.
+for L in 0.01 0.02; do
+  sub "d_nounpp_stopk_${L}_8k" --task nounpp $COMMON --variant topk --optimizer adam \
+      --lr $L --steps 8000 --output "results/probe_lr_low/nounpp_stopk_${L}_s8000"
+done
+}
+
+[ $# -gt 0 ] || { echo "usage: $0 <arm>...   (arms: A steps, B lr, C lr_low, D confirm)" >&2; exit 2; }
 for arm in "$@"; do
   case "$arm" in
-    A|B|C) echo "== arm $arm =="; "arm_$arm" ;;
-    *) echo "unknown arm '$arm' (expected A, B or C)" >&2; exit 2 ;;
+    A|B|C|D) echo "== arm $arm =="; "arm_$arm" ;;
+    *) echo "unknown arm '$arm' (expected A, B, C or D)" >&2; exit 2 ;;
   esac
 done
