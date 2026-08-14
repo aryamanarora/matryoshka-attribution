@@ -44,7 +44,9 @@ theme_set(
 )
 
 RES = Path("results/sva_sweep")
-TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy", "ioi/qwen2.5"]
+TASKS = ["nounpp", "rc", "simple", "within_rc",
+         "addition", "months", "weekdays", "hours",   # arithmetic-wild
+         "arc_easy", "ioi/qwen2.5"]
 SCHED = ["log", "uniform", "fixed (10%)"]
 LOSS = "acc"
 

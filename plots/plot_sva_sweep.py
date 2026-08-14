@@ -41,7 +41,9 @@ theme_set(
 
 RES = Path("results/sva_sweep")
 # SVA tasks are llama3; MIB tasks carry a /model suffix (node substrate only).
-TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy", "ioi/qwen2.5"]
+TASKS = ["nounpp", "rc", "simple", "within_rc",
+         "addition", "months", "weekdays", "hours",   # arithmetic-wild, all three substrates
+         "arc_easy", "ioi/qwen2.5"]
 # metrics that have a measured random-ranking baseline (drawn as a dashed red line)
 RANDOM_METRICS = {"acc_auc", "faith_auc"}
 # MAttr split into gate/optimizer family: soft = hard_topk + Adam (sigmoid-STE);

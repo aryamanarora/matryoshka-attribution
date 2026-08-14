@@ -40,7 +40,9 @@ theme_set(
 )
 
 RES = Path("results/sva_sweep")
-TASKS = ["nounpp", "rc", "simple", "within_rc", "arc_easy"]   # arc_easy: MIB, node substrate only
+TASKS = ["nounpp", "rc", "simple", "within_rc",
+         "addition", "months", "weekdays", "hours",   # arithmetic-wild, all three substrates
+         "arc_easy"]                                  # arc_easy: MIB, node substrate only
 METHOD_ORDER = ["IG", "IxG", "Cond",
                 "soft-log", "soft-unif", "soft-fixed", "idSTE-log", "idSTE-unif", "idSTE-fixed",
                 "soft-log-IG", "idSTE-log-IG"]   # Cond = conductance; -fixed = fixed k=10%

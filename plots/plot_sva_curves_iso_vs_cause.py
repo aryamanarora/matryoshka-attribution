@@ -101,7 +101,9 @@ CURVES = [
     # exact complements, AUC(acc_base) + AUC(acc_source) = 1 up to ties.)
     ("cause_metrics", "acc_base", "cause: acc base (↓)"),
 ]
-TASK_ORDER = ["nounpp", "rc", "simple", "within_rc", "arc_easy", "ioi/qwen2.5"]
+TASK_ORDER = ["nounpp", "rc", "simple", "within_rc",
+              "addition", "months", "weekdays", "hours",   # arithmetic-wild
+              "arc_easy", "ioi/qwen2.5"]
 
 
 def load():

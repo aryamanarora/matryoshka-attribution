@@ -121,7 +121,14 @@ SUBSTRATES = {
 API = "https://transluce--neuron-data-server-fastapi-app.modal.run/read_specific_file"
 
 TASKS = [("simple", "Simple"), ("nounpp", "Noun PP"),
-         ("rc", "RC"), ("within_rc", "Within RC")]
+         ("rc", "RC"), ("within_rc", "Within RC"),
+         # goodfire-ai/arithmetic-wild, same model and substrates. These are NOT agreement
+         # tasks, so a unit recurring across an SVA cell and an arith cell is a much stronger
+         # claim than one recurring across two SVA subtasks -- which is the reason to have them
+         # in the same table rather than a parallel one, and the reason the recurrence cuts in
+         # SUBSTRATES had to be re-read once these landed (12 cells per loss became 24).
+         ("addition", "Addition"), ("months", "Months"),
+         ("weekdays", "Weekdays"), ("hours", "Hours")]
 # Training losses, as a top-level section each. Keys are the runs' own meta["loss"]; the middle
 # field is the tag fragment that selects them on disk (empty = logit-diff, the loss every
 # headline SVA number in the paper uses). Order matches plot_sva_sweep.LOSS_ORDER so the two

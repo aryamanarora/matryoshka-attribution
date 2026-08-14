@@ -6,7 +6,8 @@ Two encodings on the no-input node data (results/sva_sweep):
   B) insight scatter: acc-AUC vs faith-AUC, colour=method, shape=loss, facet=task-group;
      gap-padding shows as logit_diff points riding high on faith at equal acc.
 
-Tasks collapsed to 3 groups: SVA (mean of nounpp/rc/simple/within_rc), ARC-E, IOI.
+Tasks collapsed to 4 groups: SVA (mean of nounpp/rc/simple/within_rc),
+Arith (mean of addition/months/weekdays/hours), ARC-E, IOI.
 Run:  uv run python plots/plot_node_summary.py
 """
 import glob
@@ -37,6 +38,8 @@ LOSSES = ["ce", "acc", "logit_diff"]
 METRICS = [("acc_auc", "acc-AUC", True), ("faith_auc", "faith-AUC", True),
            ("kstar_50", "k*", False)]   # (key, label, higher_is_better)
 SVA = {"nounpp", "rc", "simple", "within_rc"}
+ARITH = {"addition", "months", "weekdays", "hours"}   # arithmetic-wild; own group, not folded
+                                                      # into SVA (not agreement tasks)
 
 
 def parse_method(fname, d):
@@ -66,7 +69,11 @@ def parse_method(fname, d):
 
 
 def taskgroup(d):
-    return "SVA" if d["task"] in SVA else ("ARC-E" if d["task"] == "arc_easy" else "IOI")
+    if d["task"] in SVA:
+        return "SVA"
+    if d["task"] in ARITH:
+        return "Arith"
+    return "ARC-E" if d["task"] == "arc_easy" else "IOI"
 
 
 def load():
@@ -113,7 +120,7 @@ def heatmap(g):
     h["ml"] = h["method"] + " / " + h["loss"]
     h["ml"] = pd.Categorical(h["ml"], categories=list(reversed(ml)), ordered=True)
     h["metric"] = pd.Categorical(h["metric"], categories=[l for _, l, _ in METRICS], ordered=True)
-    h["grp"] = pd.Categorical(h["grp"], categories=["SVA", "ARC-E", "IOI"], ordered=True)
+    h["grp"] = pd.Categorical(h["grp"], categories=["SVA", "Arith", "ARC-E", "IOI"], ordered=True)
     p = (ggplot(h, aes("metric", "ml", fill="goodness"))
          + geom_tile(color="white", size=0.4)
          + geom_text(aes(label="raw"), size=5)
@@ -133,7 +140,7 @@ def scatter(g):
     d = g[g["method"].isin(meth)].copy()
     d["loss"] = pd.Categorical(d["loss"].map(llab), categories=list(llab.values()), ordered=True)
     d["method"] = pd.Categorical(d["method"], categories=meth, ordered=True)
-    d["grp"] = pd.Categorical(d["grp"], categories=["SVA", "ARC-E", "IOI"], ordered=True)
+    d["grp"] = pd.Categorical(d["grp"], categories=["SVA", "Arith", "ARC-E", "IOI"], ordered=True)
     p = (ggplot(d, aes("acc_auc", "faith_auc", color="loss", shape="method"))
          + geom_hline(yintercept=1.0, linetype="dashed", color="#888888", size=0.3)  # overshoot
          + geom_point(size=2.0, alpha=0.9)

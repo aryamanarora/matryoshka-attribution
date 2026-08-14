@@ -69,7 +69,11 @@ theme_set(
 
 OUT = "plots/kschedule_accauc_vs_faithauc.pdf"
 SVA = ["nounpp", "rc", "simple", "within_rc"]
-GROUPS = [SVA, ["arc_easy"], ["ioi"]]
+ARITH = ["addition", "months", "weekdays", "hours"]   # arithmetic-wild; own group, see below
+# Macro-average over groups, matching plot_accauc_vs_faithauc.group_avg. Arith is its own group
+# rather than folded into SVA so the four agreement subtasks are not outvoted by four
+# arithmetic ones -- and so the group means stay comparable between the two figures.
+GROUPS = [SVA, ARITH, ["arc_easy"], ["ioi"]]
 # (results dir, input-included label); see the ±input warning in the docstring
 SWEEPS = [("results/sva_sweep", "$-$ input"),
           ("results/sva_sweep_input", "$+$ input")]

@@ -36,6 +36,10 @@ SECTIONS = [
 ]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 SVA = ["nounpp", "rc", "simple", "within_rc"]
+# goodfire-ai/arithmetic-wild on the same model. At `node` these collapse into one grouped
+# column, matching how the 4 SVA subtasks collapse there; at the two positional substrates they
+# get a column each, again matching SVA. Order is by prompt length (5, 13, 13, 38 tokens).
+ARITH = ["addition", "months", "weekdays", "hours"]
 
 # ---------------------------------------------------------------------------
 # "Bwd." = backward passes needed to produce one circuit, counted in SEQUENCES
@@ -57,12 +61,16 @@ COST_MASK = "2k"                                        # 2000 steps x batch 1
 # AttnLRP is a single-pass method like IxG -- it only changes the backward RULES, not the
 # number of backwards -- so its cost is IxG's, not IG's.
 COSTS_SVA = {"IG": "1k", "IxG": "100", "AttnLRP": "100"}                 # 100 x 10 / 100 x 1
-COSTS_MIXED = {"IG": "0.3--1k", "IxG": "32--100", "AttnLRP": "32--100"}  # 32 ex. on arc_easy/ioi
+# 32 ex. on arc_easy/ioi AND on arith/hours, whose 38-token prompts are arc-length -- which is
+# why the two positional substrates now carry this range too rather than COSTS_SVA: they gained
+# `hours`, so "100 examples" stopped being true of every task in those tables.
+COSTS_MIXED = {"IG": "0.3--1k", "IxG": "32--100", "AttnLRP": "32--100"}
 COSTS_INPUT = {"IG": "0.6--2k", "IxG": "64--200", "AttnLRP": "64--200"}  # the above, doubled
 
-SUBSTRATES = [("node", [("SVA", set(SVA)), ("ARC-E", {"arc_easy"}), ("IOI", {"ioi"})], COSTS_MIXED),
-              ("mlp", [(t, {t}) for t in SVA], COSTS_SVA),
-              ("mlp+attn_head", [(t, {t}) for t in SVA], COSTS_SVA)]
+SUBSTRATES = [("node", [("SVA", set(SVA)), ("Arith", set(ARITH)),
+                        ("ARC-E", {"arc_easy"}), ("IOI", {"ioi"})], COSTS_MIXED),
+              ("mlp", [(t, {t}) for t in SVA + ARITH], COSTS_MIXED),
+              ("mlp+attn_head", [(t, {t}) for t in SVA + ARITH], COSTS_MIXED)]
 
 
 def parse_method(fname, d):

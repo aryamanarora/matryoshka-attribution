@@ -1,9 +1,10 @@
 """Scatter of accuracy-AUC (x) vs faithfulness-AUC (y), one point per (method, loss).
 
-Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + the 2 MIB tasks
-(ARC-E, IOI) when present. Faceted by substrate (rows) x whether the input node is included
-in scoring/ablation (cols). Only the `node` substrate has the MIB tasks and the +input
-variant; mlp / mlp+attn_head are SVA-only, no-input (those input=Yes cells stay empty).
+Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + Arith (mean of its 4)
++ the 2 MIB tasks (ARC-E, IOI) when present. Faceted by substrate (rows) x whether the input
+node is included in scoring/ablation (cols). Only the `node` substrate has the MIB tasks and
+the +input variant; mlp / mlp+attn_head carry SVA and Arith only, no-input (those input=Yes
+cells stay empty).
 
 Data: results/sva_sweep/*.json (input excluded), results/sva_sweep_input/*.json (included).
 Run:  uv run python plots/plot_accauc_vs_faithauc.py  ->  plots/accauc_vs_faithauc.pdf
@@ -47,6 +48,11 @@ theme_set(
 )
 
 SVA = ["nounpp", "rc", "simple", "within_rc"]
+# goodfire-ai/arithmetic-wild, same model (llama3) and same three substrates as SVA. Kept as a
+# SEPARATE group rather than folded into SVA: these are not agreement tasks, and averaging them
+# into SVA would hide that they are where the methods separate most (I×G floors at acc-AUC 0.022
+# on all four while MAttr reaches ~0.50). As a fourth group each contributes 1/4 of every point.
+ARITH = ["addition", "months", "weekdays", "hours"]
 # (results dir, input-included label)
 SWEEPS = [("results/sva_sweep", "−input"),
           ("results/sva_sweep_input", "+input")]
@@ -146,8 +152,13 @@ def load(res):
 
 
 def group_avg(raw, m, loss, sub):
-    """Average over task-groups: SVA (mean of 4) + ARC-E + IOI when present."""
-    groups = [SVA, ["arc_easy"], ["ioi"]]
+    """Average over task-groups: SVA (mean of 4) + Arith (mean of 4) + ARC-E + IOI when present.
+
+    Macro-average over groups, not over tasks, so the eight subtasks that come in fours do not
+    outvote the two single-task MIB cells. Groups with no runs at this substrate drop out (the
+    MIB tasks exist at `node` only), which is why the mean is over `gx` rather than len(groups).
+    """
+    groups = [SVA, ARITH, ["arc_easy"], ["ioi"]]
     gx, gy = [], []
     for tasks in groups:
         xs = [raw[(m, loss, sub, t)] for t in tasks if (m, loss, sub, t) in raw]
