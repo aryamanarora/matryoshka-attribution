@@ -364,6 +364,84 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     return scores.to(device)
 
 
+def run_tag(args):
+    """The method half of the output filename: `<task>_<model>_<nodes>_<TAG>.json`.
+
+    Factored out of the write at the end of main() so wandb can NAME the run before training
+    starts. Beware: the tag deliberately encodes only knobs that change the *identity* of the
+    circuit, so two runs differing solely in --steps/--lr/etc. beyond the defaults handled
+    below collide on disk -- probe sweeps must use a separate --output dir.
+    """
+    tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
+    if args.method == "random":
+        tag = f"random_s{args.seed}"
+    if args.method == "edge_pruning":   # e.g. eprun_s090 -- budget is part of the identity
+        tag = f"eprun_s{int(round(args.target_sparsity * 100)):03d}"
+    if args.method == "sigmoid_mask":
+        # e.g. sig_lr0.3_l16.0 -- lr and the penalty are the two knobs that decide the circuit,
+        # so both are part of the identity, spelled the way the MIB dirs spell them
+        # (results/eprun_node_ld_sig_lr0.3_l16.0) so the two harnesses' runs read alike.
+        # Plain str() of the float, NOT :g -- str(6.0) is "6.0" but f"{6.0:g}" is "6", and
+        # "sig_lr0.3_l16" reads as l1=16 as easily as l1=6. It also keeps the spelling identical
+        # to the MIB dirs (eprun_node_ld_sig_lr0.3_l16.0), which is what lets a reader match a
+        # run across the two harnesses by name.
+        tag = f"sig_lr{args.lr}"
+        if args.l1_coeff:
+            tag += f"_l1{'logit' if args.l1_target == 'logit' else ''}{args.l1_coeff}"
+    if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
+        tag += f"_{args.loss}"
+    if args.method == "mattr" and args.mattr_ig_steps > 1:
+        tag += f"_ig{args.mattr_ig_steps}"
+    if args.method == "mattr" and args.fixed_k_frac is not None:
+        tag += f"_fixedk{int(round(args.fixed_k_frac * 100))}"
+    if args.method == "mattr" and args.fixed_k_frac is None and args.k_schedule == "uniform":
+        tag += "_uniformk"
+    if args.method == "mattr" and args.k_schedule == "adaptive_log":
+        tag += "_adaptivek"
+    if args.method == "mattr" and args.k_schedule == "log_both":
+        tag += "_logboth"
+    if args.method == "mattr" and args.train_batch_size != 8:
+        tag += f"_bs{args.train_batch_size}"
+    if args.method == "mattr" and args.steps != 2000:
+        tag += f"_s{args.steps}"
+    if args.method == "mattr" and args.loss == "acc" and args.acc_temp != 1.0:
+        tag += f"_t{str(args.acc_temp).replace('.', '')}"
+    return tag
+
+
+def wandb_init(args, tag):
+    """Start a wandb run, one PROJECT PER DATASET (sva / arith / causalgym / mib).
+
+    Per-dataset projects rather than one big project because the run set is only comparable
+    within a dataset: the substrates, the unit counts (2.3M mlp neurons vs 1056 nodes) and the
+    metric scales all differ across them, so a single project's charts would overlay
+    incommensurable series and its run table would be unsortable.
+
+    Never fatal, and never blocking: an unreachable wandb (or a node with no credentials) must
+    not take a 6-hour training run down with it, so failures degrade to offline and then to
+    None. The run name is `run_tag`, i.e. exactly the output filename's method half, so a
+    chart can be matched back to its json without a lookup table.
+    """
+    if not args.wandb:
+        return None
+    import os
+    try:
+        import wandb
+        # No credentials on some nodes; fall back to offline rather than losing the run.
+        # `wandb sync <dir>` uploads it once a key is available.
+        if not (os.environ.get("WANDB_API_KEY") or Path.home().joinpath(".netrc").exists()):
+            os.environ.setdefault("WANDB_MODE", "offline")
+            logger.warning("no WANDB_API_KEY and no ~/.netrc -> logging OFFLINE")
+        return wandb.init(entity=args.wandb_entity,
+                          project=args.wandb_project or f"l2a-{args.dataset}",
+                          name=f"{args.task}_{args.model}_{args.nodes.replace('+', '-')}_{tag}",
+                          group=f"{args.task}/{args.nodes}", job_type=args.method,
+                          config=vars(args))
+    except Exception as exc:                       # noqa: BLE001 -- logging must never be fatal
+        logger.warning("wandb disabled (%s: %s)", type(exc).__name__, exc)
+        return None
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
@@ -394,9 +472,11 @@ def main():
                         "normalised by substrate size); 'logit' is pyvene's tutorial term "
                         "coeff*||mask||_1, which pulls gates toward 0.5 rather than 0.")
     p.add_argument("--ig-steps", type=int, default=10, help="IG integration steps (input-embedding path)")
-    p.add_argument("--train-eval-every", type=int, default=0,
-                   help="MAttr: every N steps, run the FULL eval-metric suite on a fixed tiny "
-                        "train subset and log it (unconfounded by the per-step k). 0 = off.")
+    p.add_argument("--train-eval-every", type=int, default=200,
+                   help="Mask-learning methods: every N steps, run the FULL eval-metric suite on "
+                        "a fixed tiny train subset and log it. The train LOSS is measured at a k "
+                        "that moves over training, so it is not comparable across steps; these "
+                        "AUCs integrate over the whole k grid and are. 0 = off.")
     p.add_argument("--train-eval-examples", type=int, default=20,
                    help="# fixed train examples for the --train-eval-every probe.")
     p.add_argument("--include-input", action="store_true",
@@ -439,10 +519,18 @@ def main():
                         "all layers at once, so long seqs OOM. Independent of the eval-sweep size.")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="results/sva")
+    # wandb is ON by default: these runs are hours long and the only other record of how a run
+    # went is a slurm .err file that nobody diffs across 400 jobs.
+    p.add_argument("--no-wandb", dest="wandb", action="store_false", help="disable wandb logging")
+    p.add_argument("--wandb-project", default=None,
+                   help="override the per-dataset default project (l2a-<dataset>)")
+    p.add_argument("--wandb-entity", default=None, help="wandb entity (default: your default)")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     random.seed(args.seed); torch.manual_seed(args.seed)
+    tag = run_tag(args)
+    wb = wandb_init(args, tag)
 
     name = MODEL_FULLNAMES[args.model]
     logger.info("Loading %s ...", name)
@@ -677,17 +765,36 @@ def main():
                     acc_auc=auc_of(acc), kstar_50=kstar(0.5), kstar_90=kstar(0.9),
                     iso_metrics=iso, cause_metrics=cause)
 
-    # optional training-time probe: full metric suite on a FIXED tiny train subset every N steps
-    # (unconfounded by the per-step budget k, unlike the raw train loss).
+    # ---- training-time probe: the full metric suite on a FIXED tiny TRAIN subset every N steps.
+    # This is the only honest way to watch a mask-learning run converge. The raw train loss is
+    # measured at a k that MOVES over training (the log-k schedule samples a new budget every
+    # step, and AdaptiveLogK widens its frontier as accuracy rises), so a falling loss curve
+    # conflates "the ranking got better" with "this step happened to draw an easier k" -- two
+    # runs' losses at step t are not even the same quantity. acc-AUC / faith-AUC integrate over
+    # the whole k grid, so they are k-independent and comparable across steps, runs and methods.
+    # The subset is TRAIN, and fixed across the run, so the probe is a convergence diagnostic,
+    # not a held-out estimate: read it for "has it stopped improving", never as a test number.
     train_eval_log = []
     on_step_cb = None
-    if args.method == "mattr" and args.train_eval_every > 0:
-        probe_ex = sample_batch(train, args.train_eval_examples, n_train)
+    # edge_pruning/sigmoid_mask hand back rankable scores from their on_step too (log-alphas and
+    # mask logits respectively), so they get the same probe -- it is how we can tell an
+    # under-converged L0 anneal from a converged one without waiting for the final sweep.
+    if args.method in ("mattr", "edge_pruning", "sigmoid_mask") and (args.train_eval_every > 0
+                                                                    or wb is not None):
+        probe_ex = (sample_batch(train, args.train_eval_examples, n_train)
+                    if args.train_eval_every > 0 else None)
         def on_step_cb(step, k, loss, live_scores):
+            if wb is not None:
+                wb.log({"train/loss": loss, "train/k": k, "train/k_frac": k / total}, step=step)
+            if probe_ex is None:
+                return
             if step % args.train_eval_every == 0 or step == args.steps - 1:
                 m = summarize(live_scores.detach().cpu(), probe_ex)
-                train_eval_log.append({"step": step, **{kk: m[kk] for kk in
-                    ("acc_auc", "faith_auc", "kstar_50", "cause_accsrc_auc", "F_clean", "F_patch")}})
+                rec = {kk: m[kk] for kk in
+                       ("acc_auc", "faith_auc", "kstar_50", "cause_accsrc_auc", "F_clean", "F_patch")}
+                train_eval_log.append({"step": step, **rec})
+                if wb is not None:
+                    wb.log({f"probe/{kk}": v for kk, v in rec.items() if v is not None}, step=step)
                 logger.info("  [probe %4d] acc_auc=%.3f faith_auc=%.3f k*=%s",
                             step, m["acc_auc"], m["faith_auc"], m["kstar_50"])
 
@@ -710,7 +817,7 @@ def main():
                     args.steps, args.target_sparsity, total)
         res = learn_scores_edge_pruning(total, loss_fn, steps=args.steps,
                                         target_sparsity=args.target_sparsity, device=device,
-                                        logger=logger, log_every=200)
+                                        logger=logger, log_every=200, on_step=on_step_cb)
         scores = res.scores.detach()
         train_loss_log = res.loss_log
         kept = res.train_log[-1][1] if getattr(res, "train_log", None) else None
@@ -728,7 +835,8 @@ def main():
                     args.steps, args.lr, args.l1_coeff, args.l1_target, total)
         res = learn_scores_sigmoid_mask(total, loss_fn, steps=args.steps, lr=args.lr,
                                         l1_coeff=args.l1_coeff, l1_target=args.l1_target,
-                                        device=device, logger=logger, log_every=200)
+                                        device=device, logger=logger, log_every=200,
+                                        on_step=on_step_cb)
         scores = res.scores.detach()
         train_loss_log = res.loss_log
         kept = res.train_log[-1][1] if getattr(res, "train_log", None) else None
@@ -788,46 +896,38 @@ def main():
     out["loss"] = args.loss
     out["loss_log"] = train_loss_log
     out["train_eval_log"] = train_eval_log
+    # The FULL invocation. The filename tag only encodes knobs that change the circuit's
+    # identity, so --lr, --steps (at the default), --seed and the probe settings appear
+    # nowhere else -- two runs that differ only in lr write the same filename and the json
+    # could not tell you which one you were reading. Additive; nothing parses it yet.
+    out["config"] = {k: v for k, v in vars(args).items() if isinstance(v, (int, float, str, bool, type(None)))}
     outdir = Path(args.output); outdir.mkdir(parents=True, exist_ok=True)
-    tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
-    if args.method == "random":
-        tag = f"random_s{args.seed}"
-    if args.method == "edge_pruning":   # e.g. eprun_s090 -- budget is part of the identity
-        tag = f"eprun_s{int(round(args.target_sparsity * 100)):03d}"
-    if args.method == "sigmoid_mask":
-        # e.g. sig_lr0.3_l16.0 -- lr and the penalty are the two knobs that decide the circuit,
-        # so both are part of the identity, spelled the way the MIB dirs spell them
-        # (results/eprun_node_ld_sig_lr0.3_l16.0) so the two harnesses' runs read alike.
-        # Plain str() of the float, NOT :g -- str(6.0) is "6.0" but f"{6.0:g}" is "6", and
-        # "sig_lr0.3_l16" reads as l1=16 as easily as l1=6. It also keeps the spelling identical
-        # to the MIB dirs (eprun_node_ld_sig_lr0.3_l16.0), which is what lets a reader match a
-        # run across the two harnesses by name.
-        tag = f"sig_lr{args.lr}"
-        if args.l1_coeff:
-            tag += f"_l1{'logit' if args.l1_target == 'logit' else ''}{args.l1_coeff}"
-    if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
-        tag += f"_{args.loss}"
-    if args.method == "mattr" and args.mattr_ig_steps > 1:
-        tag += f"_ig{args.mattr_ig_steps}"
-    if args.method == "mattr" and args.fixed_k_frac is not None:
-        tag += f"_fixedk{int(round(args.fixed_k_frac * 100))}"
-    if args.method == "mattr" and args.fixed_k_frac is None and args.k_schedule == "uniform":
-        tag += "_uniformk"
-    if args.method == "mattr" and args.k_schedule == "adaptive_log":
-        tag += "_adaptivek"
-    if args.method == "mattr" and args.k_schedule == "log_both":
-        tag += "_logboth"
-    if args.method == "mattr" and args.train_batch_size != 8:
-        tag += f"_bs{args.train_batch_size}"
-    if args.method == "mattr" and args.steps != 2000:
-        tag += f"_s{args.steps}"
-    if args.method == "mattr" and args.loss == "acc" and args.acc_temp != 1.0:
-        tag += f"_t{str(args.acc_temp).replace('.', '')}"
     fn = outdir / f"{args.task}_{args.model}_{args.nodes.replace('+','-')}_{tag}.json"
     torch.save(scores.cpu(), fn.with_suffix(".scores.pt"))
     json.dump(out, open(fn, "w"), indent=2)
     logger.info("iso/faith AUC=%.3f (fmax %.3f) | cause AUC=%.3f | total=%d -> %s",
                 S["faith_auc"], S["faith_max"], S["cause_auc"], total, fn)
+
+    if wb is not None:
+        # The scalars go in summary (not log) so the run table sorts on them; the sweep curves
+        # go in as tables so a chart can be built per-run without re-reading the json.
+        wb.summary.update({f"test/{k}": S[k] for k in
+                           ("acc_auc", "faith_auc", "cause_auc", "cause_accsrc_auc",
+                            "faith_max", "kstar_50", "kstar_90", "F_clean", "F_patch")
+                           if S[k] is not None})
+        # SummaryDict.update takes a dict POSITIONALLY only -- kwargs raise TypeError.
+        wb.summary.update({"total": total, "seq_len": seq_len, "n_eval": len(ec),
+                           "json_path": str(fn)})
+        try:
+            import wandb
+            wb.log({"test/sweep": wandb.Table(
+                columns=["k", "faith_iso", "acc_iso", "faith_cause", "acc_cause"],
+                data=[[float(x), float(a), float(b), float(c), float(d)] for x, a, b, c, d in zip(
+                    xs, S["iso_metrics"]["faithfulness"], S["iso_metrics"]["acc_base"],
+                    S["cause_metrics"]["faithfulness"], S["cause_metrics"]["acc_base"])])})
+        except Exception as exc:                   # noqa: BLE001
+            logger.warning("wandb table failed (%s)", exc)
+        wb.finish()
 
 
 if __name__ == "__main__":

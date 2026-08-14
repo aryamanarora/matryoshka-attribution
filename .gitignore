@@ -9,3 +9,6 @@ plots/*
 .claude/
 paper/
 *.log
+
+# wandb run dirs (eval_sva.py --wandb); the run of record is on wandb.ai, not on disk
+wandb/
