@@ -65,7 +65,11 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
   local task=$1 nodes=$2 dataset=$3 nabbr=${2//+/-} loss gm cfg variant opt vabbr ks
   # long-prompt MIB tasks: shrink the IG/IxG attribution batch (captured with grad over all
   # layers at once) to avoid OOM; eval sweep still uses 100 test pairs.
-  local grad_extra=(); [[ "$dataset" == mib ]] && grad_extra=(--grad-examples 32)
+  # long-prompt tasks: shrink the IG/IxG attribution batch (captured with grad over all
+  # layers at once) to avoid OOM; eval sweep still uses 100 test pairs. arith/hours is 38
+  # tokens -- arc-length, unlike the other three arith tasks (5-13).
+  local grad_extra=()
+  [[ "$dataset" == mib || "$task" == hours ]] && grad_extra=(--grad-examples 32)
   for loss in "${LOSSES[@]}"; do
     for gm in "${GRAD[@]}"; do
       submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
@@ -104,5 +108,14 @@ done
 read -ra MIB_TASKS_ARR <<< "${MIB_TASKS:-}"
 for task in "${MIB_TASKS_ARR[@]}"; do
   [[ -n "$task" ]] && emit_grid "$task" node mib
+done
+# goodfire-ai/arithmetic-wild tasks. Unlike the MIB tasks these are (near-)fixed-length --
+# addition 5 tokens, months/weekdays 13, hours 38 -- so all three substrates apply; eval_sva.py
+# filters to the modal length for the per-position ones.
+#   ARITH_TASKS="addition months weekdays hours" IG_STEPS=5 bash scripts/submit_sva_sweep.sh
+read -ra ARITH_TASKS_ARR <<< "${ARITH_TASKS:-}"
+for task in "${ARITH_TASKS_ARR[@]}"; do
+  [[ -z "$task" ]] && continue
+  for nodes in "${NODES[@]}"; do emit_grid "$task" "$nodes" arith; done
 done
 echo "submitted $n, skipped $skip (already present) -> $OUT"

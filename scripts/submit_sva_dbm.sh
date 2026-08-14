@@ -71,7 +71,7 @@ while read -r res nodes task model loss; do
   if [ "${FORCE:-0}" != "1" ] && [ -f "$out" ]; then skip=$((skip+1)); continue; fi
   # arc_easy/ioi come from MIB, the four SVA tasks from the SVA dataset; +input is the
   # sva_sweep_input dir and is the only place --include-input is passed.
-  case "$task" in arc_easy|ioi) ds=mib ;; *) ds=sva ;; esac
+  case "$task" in arc_easy|ioi) ds=mib ;; addition|months|weekdays|hours) ds=arith ;; *) ds=sva ;; esac
   extra=(); [ "$res" = "results/sva_sweep_input" ] && extra=(--include-input)
   name="dbmsva_${task}_${nodes//+/-}_${loss}"
   if [ "${DRY:-0}" = "1" ]; then

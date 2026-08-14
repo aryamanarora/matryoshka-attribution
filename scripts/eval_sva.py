@@ -53,6 +53,46 @@ def _span_last(tokenizer, content_spans):
     return last
 
 
+ARITH_DIR = "/home/guests/aryaman/arithmetic-wild/datasets/Llama-3.1-8B"
+
+
+class ArithDataset:
+    """goodfire-ai/arithmetic-wild task as a fixed list of (clean, corrupted, [base_id, source_id]).
+
+    Drop-in for SVADataset. The upstream release pairs each base with its counterfactual by
+    index, so train/test are disjoint index ranges rather than two seeds -- with 1.6-4k pairs
+    and sampling with replacement, two seeds would overlap heavily.
+
+    Two task-specific wrinkles, both handled here rather than downstream:
+      * `hours` answers are multi-token ("04:00" -> ["04", ":", "00"]). We score the FIRST
+        token, which is the only one that varies with the answer -- ":" and "00" are constant,
+        so a logit diff on them is identically zero.
+      * base and counterfactual answers coincide by chance in 1-14% of pairs (highest for
+        weekdays, which has only 7 possible answers). Those pairs have a zero logit diff in
+        either direction and are dropped, not left to contribute a null gradient.
+    """
+    def __init__(self, task, tokenizer, split="train", frac=0.8, data_dir=ARITH_DIR):
+        from learning_to_attribute.data.arithmetic_wild import ArithmeticWildDataset
+        ds = ArithmeticWildDataset(task, data_dir)
+        n = len(ds.bases)
+        idx = range(0, int(n * frac)) if split == "train" else range(int(n * frac), n)
+        self.recs, self.dropped = [], 0
+        for i in idx:
+            b, c = ds.bases[i], ds.cfs[i]
+            bid = tokenizer.encode(b["raw_output"], add_special_tokens=False)[0]
+            sid = tokenizer.encode(c["raw_output"], add_special_tokens=False)[0]
+            if bid == sid:
+                self.dropped += 1
+                continue
+            self.recs.append((b["raw_input"], c["raw_input"], [bid, sid]))
+
+    def __len__(self):
+        return len(self.recs)
+
+    def __getitem__(self, i):
+        return self.recs[i]
+
+
 class CGDataset:
     """CausalGym task as a fixed list of (clean, corrupted, [base_id, source_id]) pairs.
     Drop-in for SVADataset; strips the gpt2 <|endoftext|> prefix (the model tokenizer adds BOS).
@@ -328,7 +368,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
-    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib"])
+    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib", "arith"])
     p.add_argument("--method", default="mattr",
                    choices=["mattr", "ixg", "relp", "attnlrp", "ig", "conductance", "random",
                             "edge_pruning", "sigmoid_mask"])
@@ -418,6 +458,18 @@ def main():
     if args.dataset == "causalgym":
         train = CGDataset(args.task, tok, n=2000, seed=0)
         test = CGDataset(args.task, tok, n=400, seed=1)
+    elif args.dataset == "arith":
+        # arithmetic-wild has no span schema built here, so the per-span substrates would
+        # silently fall back to a wrong NUM_SPANS; refuse them explicitly.
+        assert args.nodes not in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span",
+                                  "mlp_sae_span", "resid_sae_span",
+                                  "das_mlp_span", "das_resid_span"), \
+            f"--dataset arith does not build a span schema; {args.nodes} needs one"
+        train = ArithDataset(args.task, tok, split="train")
+        test = ArithDataset(args.task, tok, split="test")
+        logger.info("arith %s: %d train / %d test pairs (dropped %d/%d with base==cf answer)",
+                    args.task, len(train), len(test), train.dropped + test.dropped,
+                    len(train) + len(test) + train.dropped + test.dropped)
     elif args.dataset == "mib":
         # MIB tasks (arc_easy, ...) via HFEAPDataset: (clean, corrupted, [base_id, source_id]),
         # length-matched per example but variable across examples -> node substrate only.
