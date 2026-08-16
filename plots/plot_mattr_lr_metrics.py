@@ -34,7 +34,13 @@ ROOT = Path(__file__).resolve().parent.parent
 METRICS = [("acc_auc", "acc-AUC $\\uparrow$", False),
            ("faith_auc", "faith-AUC $\\uparrow$ (gap-paddable)", False),
            ("faith_max", "faith-max $\\uparrow$ (gap-paddable)", False),
-           ("cause_auc", "cause-AUC $\\uparrow$", False),
+           # cause-AUC is LOWER-is-better and is the one metric here whose direction inverts.
+           # It is the AUC of the NOISING faithfulness curve, normalised identically to the iso
+           # one: 1.0 when nothing is corrupted, 0 when everything is. A circuit that destroys
+           # the behaviour with few units drops fast and sweeps out a SMALL area. Verified
+           # empirically over the 60 addition runs on disk: corr(acc_auc, cause_auc) = -0.44,
+           # while the two source-token readouts below run +0.45/+0.51.
+           ("cause_auc", "cause-AUC $\\downarrow$", False),
            ("cause_accsrc_auc", "cause acc-src AUC $\\uparrow$", False),
            ("cause_psrc_auc", "cause p-src AUC $\\uparrow$", False),
            ("kstar_50", "k* at 50% $\\downarrow$ (units)", True),
