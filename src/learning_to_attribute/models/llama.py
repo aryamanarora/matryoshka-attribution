@@ -26,13 +26,24 @@ class LlamaAttributionHooks:
     MASK_TYPES = {"mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False,
-                 num_spans=None):
+                 num_spans=None, zero_ablation=False):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
+        if zero_ablation and ("sae" in mask_type or "das" in mask_type):
+            # The SAE/DAS paths do not route through _interpolate: they interchange in a learned
+            # feature/rotated basis, where "zero" is a different object from a zeroed activation
+            # (zeroing a rotated subspace is not zeroing the neuron, and the SAE path also has a
+            # reconstruction-error node with no zero analogue). Refuse rather than silently
+            # ablating to the source anyway.
+            raise ValueError(f"zero_ablation is not defined for mask_type {mask_type!r}")
 
         self.model = model
         self.mask_type = mask_type
         self.seq_len = seq_len
         self.sufficient = sufficient
+        #: ablate to ZERO instead of to the cached source activation. Changes what "corrupted"
+        #: means everywhere the mask is applied -- training, evaluation and the faithfulness
+        #: endpoints alike -- so it is a property of the run, not of a single call.
+        self.zero_ablation = zero_ablation
         self.include_input = include_input and (mask_type == "node")
         self.num_spans = num_spans          # for mlp_span: # of causalgym content spans
         self.span_last = None               # per-batch [B, num_spans] long: base last-token pos/span
@@ -260,13 +271,25 @@ class LlamaAttributionHooks:
         return cf_logits
 
     def _interpolate(self, x, m, cf_act):
+        """Mix clean activation `x` with the ablated value under mask `m`.
+
+        NOTE the flag sense: `self.sufficient` here is the LEGACY inverted spelling (see
+        CLAUDE.md) -- `self.sufficient=True` means the top-k (m=1) is the side that gets
+        CORRUPTED (noising), and `False` means the top-k stays clean (denoising). eval_sva's
+        `iso`/denoising sweep calls this with sufficient=False.
+
+        Under zero ablation the corrupted side goes to 0 rather than to the source activation.
+        Which side that is still follows `self.sufficient`, so both sweep directions work.
+        """
         m = m.to(x.dtype)
-        if cf_act is not None:
-            if self.sufficient:
-                return (x * (1 - m) + cf_act * m,)
-            else:
-                return (x * m + cf_act * (1 - m),)
-        return (x * m,)
+        if self.zero_ablation or cf_act is None:
+            # cf_act is None means "nothing cached" -- the old code returned x*m for both
+            # directions, which zeroed the WRONG side under sufficient=True. Folding the two
+            # cases together fixes that; in practice cf_act is always cached by the callers.
+            return (x * (1 - m),) if self.sufficient else (x * m,)
+        if self.sufficient:
+            return (x * (1 - m) + cf_act * m,)
+        return (x * m + cf_act * (1 - m),)
 
     def _sae_interchange(self, out, cf, layer_idx):
         """SAE feature interchange at each span's LAST token, cross-aligned base<-src.

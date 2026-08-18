@@ -21,7 +21,15 @@ cd "$(dirname "$0")/.."
 mkdir -p logs results/sva_sweep
 
 MODEL=${MODEL:-llama3}   # override for MIB tasks on other models, e.g. MODEL=qwen2.5
-OUT=results/sva_sweep
+OUT=${OUT:-results/sva_sweep}
+# ABLATION=zero re-runs the whole grid with non-top-k units set to 0 instead of to the source
+# activation. It is a second SETTING, not a re-scoring: MAttr retrains through it and the
+# gradient baselines change estimator (IxG -> Gradient x Input, IG -> zero-baseline IG). Pair it
+# with a separate OUT so the two settings' results dirs stay legible:
+#   OUT=results/sva_zeroabl ABLATION=zero bash scripts/submit_sva_sweep.sh
+ABLATION=${ABLATION:-patch}
+ABL_ARG=(--ablation "$ABLATION")
+ABL_SUF=""; [[ "$ABLATION" != "patch" ]] && ABL_SUF="_${ABLATION}abl"
 read -ra TASKS <<< "${SVA_TASKS-nounpp rc simple within_rc}"   # SVA_TASKS="" (set, empty) runs only MIB_TASKS
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
 LOSSES=(ce acc logit_diff)
@@ -33,12 +41,15 @@ STEPS=2000
 MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --lr 0.05 --eval-examples 100)
 
 # Reproduce eval_sva.py's output tag so we can skip already-finished configs.
+# These two must stay byte-identical to eval_sva.run_tag() or the skip-if-exists check silently
+# resubmits everything. run_tag appends the ablation suffix directly after the loss.
 grad_tag() {   # $1=method $2=loss
-  local t=$1; [[ "$2" != "logit_diff" ]] && t="${t}_$2"; echo "$t"
+  local t=$1; [[ "$2" != "logit_diff" ]] && t="${t}_$2"; echo "${t}${ABL_SUF}"
 }
 mattr_tag() {  # $1=variant $2=optimizer $3=loss $4=kschedule $5=ig_steps(optional,>1)
   local t="sufficient_$1_$2"
   [[ "$3" != "logit_diff" ]] && t="${t}_$3"
+  t="${t}${ABL_SUF}"
   [[ "${5:-1}" -gt 1 ]] && t="${t}_ig${5}"
   [[ "$4" == "uniform" ]] && t="${t}_uniformk"
   echo "${t}_bs1"
@@ -74,7 +85,8 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
     for gm in "${GRAD[@]}"; do
       submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
         --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
-        --method "$gm" --loss "$loss" --eval-examples 100 "${grad_extra[@]}" --output "$OUT"
+        --method "$gm" --loss "$loss" --eval-examples 100 "${grad_extra[@]}" \
+        "${ABL_ARG[@]}" --output "$OUT"
     done
     for cfg in "${MATTR_CONFIGS[@]}"; do
       variant=${cfg%:*}; opt=${cfg#*:}
@@ -84,7 +96,8 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
           "$(mattr_tag "$variant" "$opt" "$loss" "$ks")" \
           --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
           --method mattr --loss "$loss" --k-schedule "$ks" \
-          --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" --output "$OUT"
+          --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" \
+          "${ABL_ARG[@]}" --output "$OUT"
       done
       if [[ "$IGS" -gt 1 ]]; then   # MAttr-IG variants (env-gated), IG_KS schedules only
         for ks in $IG_KS_STR; do
@@ -93,7 +106,7 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
             --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
             --method mattr --loss "$loss" --k-schedule "$ks" \
             --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" \
-            "${MATTR_COMMON[@]}" --output "$OUT"
+            "${MATTR_COMMON[@]}" "${ABL_ARG[@]}" --output "$OUT"
         done
       fi
     done

@@ -209,6 +209,12 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         patch_acts, _ = capture(pt.input_ids, pt.attention_mask, False)
     clean_acts = {k: v.detach() for k, v in clean_acts.items()}
     patch_acts = {k: v.detach() for k, v in patch_acts.items()}
+    if hooker.zero_ablation:
+        # Match the intervention these scores will be EVALUATED under: the ablated value is 0,
+        # so the endpoint delta is (clean - 0) = clean. This is not a cosmetic change -- it turns
+        # IxG into plain Gradient x Input and IG into the textbook zero-baseline IG, which are
+        # different estimators from the counterfactual-baseline ones, not the same method rescored.
+        patch_acts = {k: torch.zeros_like(v) for k, v in patch_acts.items()}
 
     # embeddings for the IG path (interpolate clean->patch input embedding, downstream live)
     emb_override = None
@@ -218,6 +224,8 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         with torch.no_grad(): hf(bid, attention_mask=bam); ec = cap["e"]
         with torch.no_grad(): hf(pt.input_ids, attention_mask=pt.attention_mask); ep = cap["e"]
         h.remove()
+        if hooker.zero_ablation:
+            ep = torch.zeros_like(ep)   # IG integrates from the ZERO embedding, as at the nodes
 
     def input_node_effect():
         # score for the input-embedding node (index 0 when include_input): grad(emb).(clean-patch),
@@ -390,6 +398,11 @@ def run_tag(args):
             tag += f"_l1{'logit' if args.l1_target == 'logit' else ''}{args.l1_coeff}"
     if args.loss != "logit_diff":   # encode the loss target for BOTH mattr and gradient methods
         tag += f"_{args.loss}"
+    if args.ablation != "patch":
+        # applies to EVERY method including the gradient ones, so it goes here rather than in a
+        # mattr-only branch -- a zero-ablation IG is a different circuit from a patched IG and
+        # must not overwrite it.
+        tag += f"_{args.ablation}abl"
     if args.method == "mattr" and args.mattr_ig_steps > 1:
         tag += f"_ig{args.mattr_ig_steps}"
     if args.method == "mattr" and args.fixed_k_frac is not None:
@@ -468,6 +481,15 @@ def main():
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "hard_topk", "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
+    p.add_argument("--ablation", default="patch", choices=["patch", "zero"],
+                   help="what the ablated units are set to. patch (default) = the cached SOURCE "
+                        "activation from the counterfactual prompt; zero = 0. This is a property "
+                        "of the whole run: MAttr TRAINS through the same intervention it is "
+                        "scored with, and the faithfulness endpoints F_clean/F_patch are "
+                        "recomputed under it, so the two settings are not comparable run-for-run "
+                        "-- only method RANKINGS within a setting are. It also redefines the "
+                        "gradient baselines: with a zero baseline IxG becomes Gradient x Input "
+                        "and IG becomes textbook zero-baseline IG.")
     p.add_argument("--loss", default="logit_diff", choices=list(LOSS_CHOICES),
                    help="training loss (see learning_to_attribute.losses): logit_diff, ce, "
                         "logit, prob (bounded), hinge (--hinge-margin), acc (soft-0-1, --acc-temp)")
@@ -558,7 +580,8 @@ def main():
     corrupt_topk = args.mode == "necessary"
     hooker = LlamaAttributionHooks(hf, args.nodes, seq_len=seq_len,
                                    sufficient=corrupt_topk, include_input=args.include_input,
-                                   num_spans=(NUM_SPANS if SPAN else None))
+                                   num_spans=(NUM_SPANS if SPAN else None),
+                                   zero_ablation=args.ablation == "zero")
     if SAE:
         from learning_to_attribute.sae_loader import load_llama_scope_saes
         comp = "M" if args.nodes == "mlp_sae_span" else "R"
