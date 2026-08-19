@@ -54,6 +54,13 @@ SOURCES = [("results/sva_sweep", "Patched", "−input"),
            ("results/sva_zeroabl", "Zero-abl.", "−input")]
 GROUP_OF = {t: "SVA" for t in SVA} | {t: "Arith" for t in ARITH}
 GROUP_OF |= {"arc_easy": "ARC-E", "ioi": "IOI"}
+# (nodes, inp, label) for --by-substrate, in the paper figure's column order. `mlp` and
+# `mlp+attn_head` are per-POSITION layouts and exist only in the -input dirs; `node` is the only
+# substrate that can score the input embedding, hence the +input column.
+COLUMNS = [("mlp", "−input", "MLP"),
+           ("mlp+attn_head", "−input", "MLP+attn"),
+           ("node", "−input", "Node"),
+           ("node", "+input", "Node, +input")]
 
 
 LOSS_LABEL = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
@@ -161,24 +168,33 @@ def fmt(tally, ncell, title):
         print(f"  {clabel(c):{w}s} {wr:8.3f} {ww:5d} {l:5d} {t:4d} {n:5d} {nc:6d}")
 
 
-def render(panels, metric_label, unit_label, out):
-    """Draw the ranked tables as an image: one column per setting.
+def render(panels, metric_label, unit_label, cell_label, out, ncols=None):
+    """Draw the ranked tables as an image, laid out in a `ncols`-wide grid.
 
     Hand-drawn rather than matplotlib's table(): the win-rate bar behind each row is the point
     (rank order is read from bar length at a glance, the digits are for checking), and table()
     gives no way to put a bar under the text.
+
+    `panels` is a flat list of (title, rows) in row-major grid order; a panel with no rows is
+    drawn as an explicit "(no cells)" so the grid stays aligned and a missing combination reads
+    as missing rather than shifting its neighbours left.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
+    ncols = ncols or len(panels)
+    nrows = -(-len(panels) // ncols)
+    # One shared row count so every panel has the same vertical scale: a competitor's bar is
+    # then comparable across panels by eye, which is the whole reason for a grid.
     nrow = max(len(rows) for _, rows in panels)
-    fig_w = 5.6 * len(panels)
-    fig, axes = plt.subplots(1, len(panels), figsize=(fig_w, 0.34 * nrow + 1.5))
-    if len(panels) == 1:
-        axes = [axes]
-    for ax, (title, rows) in zip(axes, panels):
+    fig, axes = plt.subplots(nrows, ncols, squeeze=False,
+                             figsize=(5.6 * ncols, nrows * (0.34 * nrow + 1.5)))
+    flat = [ax for row in axes for ax in row]
+    for ax in flat[len(panels):]:
+        ax.axis("off")
+    for ax, (title, rows) in zip(flat, panels):
         ax.set_xlim(0, 1); ax.set_ylim(-nrow - 0.5, 1.6); ax.axis("off")
         ax.text(0, 1.15, title, fontsize=12, fontweight="bold", va="bottom")
         for x, lab in ((0.035, "#"), (0.075, "competitor"), (0.60, "win rate"),
@@ -186,12 +202,13 @@ def render(panels, metric_label, unit_label, out):
             ax.text(x, 0.35, lab, fontsize=8, color="#555",
                     ha="right" if lab in ("#", "h2h") else "left")
         ax.plot([0, 1], [0.05, 0.05], color="#999", lw=0.8)
+        if not rows:
+            ax.text(0.075, -0.65, "(no cells)", fontsize=9, color="#999", style="italic")
         for i, (wr, c, w, l, t, n, _nc) in enumerate(rows):
             y = -i - 0.55
-            # Bar is drawn first and spans the whole row so it reads as a background, not a
-            # separate column; alpha keeps the text on top legible.
-            # Bar is scaled to the win-rate column's left edge, so a full-width bar never runs
-            # under the W-L-T digits.
+            # Bar is drawn first so it reads as a row background, not a separate column, and is
+            # scaled to the win-rate column's left edge so a full-width bar never runs under the
+            # digits. alpha keeps the text on top legible.
             ax.add_patch(Rectangle((0.075, y - 0.3), 0.52 * wr, 0.6,
                                    color=METHODS[c[0]][1], alpha=0.28, lw=0))
             ax.text(0.035, y - 0.1, f"{i + 1}", fontsize=8, color="#777", ha="right")
@@ -201,13 +218,13 @@ def render(panels, metric_label, unit_label, out):
             ax.text(0.60, y - 0.1, f"{wr:.3f}", fontsize=9, fontweight="bold")
             ax.text(0.74, y - 0.1, f"{w}–{l}" + (f"–{t}" if t else ""), fontsize=8, color="#444")
             ax.text(0.99, y - 0.1, f"{n}", fontsize=8, color="#777", ha="right")
-    fig.suptitle(f"Head-to-head win rate · {metric_label} · {unit_label}", fontsize=11, y=0.995)
-    fig.text(0.5, 0.012,
+    fig.suptitle(f"Head-to-head win rate · {metric_label} · {unit_label}", fontsize=11, y=0.997)
+    fig.text(0.5, 0.008,
              "Pairwise-complete: each pair scored only over cells where both ran. "
-             "Cell = (substrate, task). Settings never pooled.",
+             f"Cell = {cell_label}. Settings never pooled.",
              ha="center", fontsize=7.5, color="#666")
-    fig.tight_layout(rect=(0, 0.03, 1, 0.97))
-    fig.savefig(out, dpi=200)
+    fig.tight_layout(rect=(0, 0.02, 1, 0.98))
+    fig.savefig(out, dpi=170)
     print(f"\nwrote {out}")
 
 
@@ -219,6 +236,9 @@ def main():
     ap.add_argument("--best-loss", action="store_true",
                     help="oracle: collapse to each method's best loss per cell")
     ap.add_argument("--by-group", action="store_true", help="also break down by task group")
+    ap.add_argument("--by-substrate", action="store_true",
+                    help="split every panel by granularity too, so the grid is "
+                         "setting x substrate and the cell is just a task")
     ap.add_argument("--matched-loss", action="store_true",
                     help="pin the loss as part of the CELL, so only same-loss pairs meet "
                          "(default: the loss is part of the competitor's identity)")
@@ -243,7 +263,17 @@ def main():
     for setting in ("Patched", "Zero-abl."):
         tally, pair, ncell = winrates(cells, idx, lambda k, s=setting: k[0] == s)
         fmt(tally, ncell, f"=== {setting} ===")
-        if tally:
+        if a.by_substrate:
+            # One panel per (setting, substrate), in the SAME column order as the paper figure's
+            # facet_grid, and every column emitted even when empty -- a granularity where a
+            # method never ran has to be visible as a hole, not silently closed up.
+            for nodes, inp, slabel in COLUMNS:
+                t2, _, n2 = winrates(
+                    cells, idx,
+                    lambda k, s=setting, n=nodes, i=inp: k[0] == s and (k[1], k[2]) == (n, i))
+                fmt(t2, n2, f"--- {setting} / {slabel} ---")
+                panels.append((f"{setting} · {slabel}", ranked(t2, n2)))
+        elif tally:
             panels.append((setting, ranked(tally, ncell)))
         if a.by_group:
             for g in ("SVA", "Arith", "ARC-E", "IOI"):
@@ -272,8 +302,10 @@ def main():
                     print(f"    vs {clabel(opp):24s} {w:3d}-{l:3d}"
                           f"{f'-{ti}' if ti else '   '}  ({w / n:.3f} of {n})")
 
-    if a.image and panels:
-        render(panels, label, unit, str(ROOT / a.image))
+    if a.image and any(rows for _, rows in panels):
+        render(panels, label, unit,
+               "(task)" if a.by_substrate else "(substrate, task)",
+               str(ROOT / a.image), ncols=len(COLUMNS) if a.by_substrate else None)
 
     print("\nCoverage is still filling in -- these numbers will move. `cells` is how many cells a"
           "\nmethod ran in; `h2h` is how many head-to-head comparisons back its win rate.")
