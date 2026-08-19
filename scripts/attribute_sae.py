@@ -159,6 +159,83 @@ def sae_grad_scores(model, ds, tokenizer, hook, eval_keys, device, S, width,
         "n_rejected_eval_draws": rejected, "train_keys": keys}
 
 
+def _output_grad_geometry(logits, base_id, src_id):
+    """Cheap per-step geometry of the two objectives' OUTPUT gradients. No autograd, no RNG.
+
+    At any operating point, with z the last-token logits and p = softmax(z),
+        grad_z L_CE = p - e_base            (norm shrinks as p_base -> 1; mass on all of V)
+        grad_z L_LD = -e_base + e_source    (constant, norm sqrt(2), supported on {b, s})
+    Returns plain floats; nothing here participates in the training graph.
+    """
+    with torch.no_grad():
+        z = logits.detach().float()
+        p = z.softmax(-1)
+        pb, ps = float(p[base_id]), float(p[src_id])
+        g_ce = p.clone()
+        g_ce[base_id] -= 1.0
+        n_ce = float(torch.linalg.vector_norm(g_ce))
+        dot = float(-g_ce[base_id] + g_ce[src_id])          # <g_ce, -e_b + e_s>
+        return {"p_base": pb, "p_source": ps, "p_other": 1.0 - pb - ps,
+                "margin": float(z[base_id] - z[src_id]),
+                "ce_grad_norm": n_ce, "ld_grad_norm": math.sqrt(2.0),
+                "out_cos": dot / (n_ce * math.sqrt(2.0)) if n_ce > 0 else float("nan")}
+
+
+def _score_grad_geometry(logits, scores, mask, base_id, src_id, top_depth=256):
+    """COUNTERFACTUAL score-gradient comparison at ONE fixed masked state.
+
+    Both gradients are taken through the SAME forward, the SAME mask and the SAME scores, so
+    they differ only in the objective. Uses torch.autograd.grad, which returns the gradients
+    without ever writing .grad -- the optimiser state is untouched and no step is taken.
+    """
+    bt = torch.tensor([base_id], device=logits.device)
+    st = torch.tensor([src_id], device=logits.device)
+    lg = logits.unsqueeze(0)
+    g_ce = torch.autograd.grad(attribution_loss("ce", lg, bt, st, corrupt_topk=False),
+                               scores, retain_graph=True)[0].detach()
+    g_ld = torch.autograd.grad(attribution_loss("logit_diff", lg, bt, st, corrupt_topk=False),
+                               scores, retain_graph=True)[0].detach()
+    with torch.no_grad():
+        n_ce = float(torch.linalg.vector_norm(g_ce))
+        n_ld = float(torch.linalg.vector_norm(g_ld))
+        cos = float((g_ce @ g_ld) / (n_ce * n_ld)) if n_ce > 0 and n_ld > 0 else float("nan")
+        nz = (g_ce != 0) & (g_ld != 0)
+        sign_nz = float((torch.sign(g_ce[nz]) == torch.sign(g_ld[nz])).float().mean()) if int(nz.sum()) else float("nan")
+        d = min(top_depth, g_ce.numel())
+        sel = torch.zeros_like(g_ce, dtype=torch.bool)
+        sel[g_ce.abs().topk(d).indices] = True
+        sel[g_ld.abs().topk(d).indices] = True
+        sign_top = float((torch.sign(g_ce[sel]) == torch.sign(g_ld[sel])).float().mean())
+        # "boundary" = coordinates the sigmoid top-k mask has not yet decided. dm/dS is
+        # largest here, so these are the coordinates the score gradient actually moves.
+        m = mask.detach().flatten()
+        bnd = (m > 0.1) & (m < 0.9)
+        if int(bnd.sum()) > 1:
+            a, b = g_ce[bnd], g_ld[bnd]
+            na, nb = float(torch.linalg.vector_norm(a)), float(torch.linalg.vector_norm(b))
+            cos_b = float((a @ b) / (na * nb)) if na > 0 and nb > 0 else float("nan")
+        else:
+            cos_b = float("nan")
+        # Disentangles WHERE the two gradients differ. If the mask->logits Jacobian were
+        # effectively rank-1 the two score gradients would be exactly (anti)parallel, giving
+        # |cos| = 1; abs_cos compares only the MAGNITUDE profiles, so
+        #   abs_cos ~ 1 with cos ~ -1  -> same coordinates, global sign flip
+        #   abs_cos low              -> the two objectives load on DIFFERENT variables
+        a_ce, a_ld = g_ce.abs(), g_ld.abs()
+        abs_cos = float((a_ce @ a_ld) / (n_ce * n_ld)) if n_ce > 0 and n_ld > 0 else float("nan")
+        top_ce = set(a_ce.topk(min(256, g_ce.numel())).indices.tolist())
+        top_ld = set(a_ld.topk(min(256, g_ld.numel())).indices.tolist())
+        return {"score_cos": cos, "score_cos_boundary": cos_b, "n_boundary": int(bnd.sum()),
+                "abs_cos": abs_cos,
+                "top256_overlap": len(top_ce & top_ld) / max(1, len(top_ce)),
+                "mass_top256_ce": float(a_ce.topk(min(256, g_ce.numel())).values.pow(2).sum() / n_ce**2),
+                "mass_top256_ld": float(a_ld.topk(min(256, g_ld.numel())).values.pow(2).sum() / n_ld**2),
+                "ce_score_norm": n_ce, "ld_score_norm": n_ld,
+                "norm_ratio": n_ce / n_ld if n_ld > 0 else float("nan"),
+                "sign_agree_nonzero": sign_nz, "sign_agree_top": sign_top,
+                "n_nonzero": int(nz.sum())}
+
+
 def curve_metrics(curve, tag="learned", thr=0.9):
     """Aggregates of the SAME IIA-vs-k curve the evaluator already produces (nothing is
     re-measured): log-weighted AUC (paper eq. 8/12), linear-in-k AUC, plateau, k*."""
@@ -299,6 +376,14 @@ def main():
     ap.add_argument("--error-mode", default="node", choices=["cf", "clean", "node"],
                     help="default node: error term is always a scored node (consistent w/ arith SAE)")
     ap.add_argument("--output", default="results/sae_npi_subj_relc")
+    ap.add_argument("--record-gradient-geometry", action="store_true",
+                    help="--method mattr: record CE-vs-logit-diff gradient geometry at MAttr's "
+                         "MASKED operating points. Purely observational: it consumes no RNG, "
+                         "never touches .grad or the optimiser, and leaves the trajectory "
+                         "bit-identical to a run without it (see --geometry-every).")
+    ap.add_argument("--geometry-every", type=int, default=100,
+                    help="stride (in steps) for the expensive SCORE-gradient diagnostic; the "
+                         "cheap output-gradient diagnostic is recorded at every step")
     args = ap.parse_args()
 
     random.seed(args.seed); np.random.seed(args.seed)
@@ -336,6 +421,7 @@ def main():
     print(f"per-span scores: {S} spans x {width} = {total}", flush=True)
 
     losses, mask_frac_binary = [], []
+    geom_out, geom_score = [], []      # --record-gradient-geometry only
     n_rejected, train_keys = 0, set()
     t0 = time.time()
     if args.method == "ixg":
@@ -369,6 +455,19 @@ def main():
                                 torch.tensor([tok.base_label_id], device=device),
                                 torch.tensor([tok.src_label_id], device=device),
                                 corrupt_topk=False)
+        # Observational diagnostics. Everything below is read-only w.r.t. training: no RNG is
+        # consumed, .grad is never written (torch.autograd.grad returns instead of accumulating),
+        # and the optimiser is not touched until the ordinary update below.
+        if args.record_gradient_geometry:
+            rec = _output_grad_geometry(logits, tok.base_label_id, tok.src_label_id)
+            rec.update({"step": step, "k": float(k), "k_frac": float(k) / total})
+            geom_out.append(rec)
+            if step % args.geometry_every == 0 or step == n_train_steps - 1:
+                sg = _score_grad_geometry(logits, scores, mask,
+                                          tok.base_label_id, tok.src_label_id)
+                sg.update({"step": step, "k": float(k), "k_frac": float(k) / total,
+                           "out_cos": rec["out_cos"]})
+                geom_score.append(sg)
         opt.zero_grad(); loss.backward(); opt.step()
         losses.append(loss.item())
         if step % 100 == 0:
@@ -385,6 +484,13 @@ def main():
                        "n_rejected_eval_draws": n_rejected, "train_eval_overlap": 0})
     if args.method == "mattr":
         split_info["n_train_draws"] = len(losses)
+    if args.record_gradient_geometry:
+        with open(os.path.join(args.output, "gradient_geometry.json"), "w") as f:
+            json.dump({"task": args.task, "objective": args.loss, "seed": args.seed,
+                       "total_scores": total, "geometry_every": args.geometry_every,
+                       "per_step": geom_out, "score_grad": geom_score}, f)
+        print(f"gradient geometry: {len(geom_out)} per-step + {len(geom_score)} score-grad records",
+              flush=True)
 
     torch.save(scores.detach().cpu(), os.path.join(args.output, "scores.pt"))
     ks = [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048, 4096]

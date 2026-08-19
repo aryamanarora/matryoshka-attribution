@@ -240,7 +240,7 @@ that geometry directly and completely.
 
 This analysis measures the base point only. It does **not** explain MAttr's robustness: MAttr's
 scores are the endpoint of an optimisation through thousands of *masked* points, whose operating
-point these diagnostics deliberately do not touch.
+point these diagnostics deliberately do not touch. Section 6 measures exactly those points.
 
 ### Which tasks swing most remains unexplained
 
@@ -275,7 +275,86 @@ correlates at ρ = +0.551 but does not separate the NPI pair at all (NPI [0.625,
 Held-out (200 eval) and attribution-stream (4000) distributions agree closely — median cosine
 differs by less than 0.004 on every task — so none of this is specific to the training stream.
 
-## 6. Interpretation
+## 6. The geometry MAttr actually optimises through
+
+Section 5 measured only the single point where I×G takes its gradient, and closed with two open
+questions: MAttr's robustness was unexplained (its operating points were deliberately not
+touched), and no base-point statistic separated the NPI outliers. This section measures the
+missing operating points. `attribute_sae.py --record-gradient-geometry` records, during MAttr
+training, the CE-vs-LD *output*-gradient cosine at every masked step, and — every 10th step —
+both objectives' gradients **with respect to the scores** through the same masked forward
+(`torch.autograd.grad` on the same graph: same forward, same mask, same scores, so the two
+gradients differ only in the objective; no RNG is consumed and `.grad` is never written). The
+instrumentation is verified non-perturbing: all 12 instrumented runs (6 tasks × {ce, logit_diff},
+seed 0) reproduce the original section-2 runs' scores **bitwise**, per-step losses exactly, and
+IIA log-AUC exactly.
+
+### Masking changes nothing at the output; the mask Jacobian changes everything in score space
+
+At the output, the two objectives disagree by the same fixed angle at every operating point:
+median per-task cosine 0.656–0.688 over all 4000 masked training states, indistinguishable from
+the 0.654–0.686 measured at the unmasked base point in section 5, and with no task separation
+(ρ = +0.20 against the causal swing). The ~0.68 output-space misalignment is a constant of the
+model and task family, not of the operating point.
+
+The score gradients behave completely differently. `cos(∂L_CE/∂S, ∂L_LD/∂S)` at the same masked
+state depends strongly on the state's sparsity `k` (tasks sorted by I×G causal swing):
+
+| task | k≤8 | 8<k≤32 | 32<k≤128 | k>128 | k>32768 |
+|---|---|---|---|---|---|
+| npi_ever_subj-relc | 0.962 | 0.570 | 0.295 | **0.007** | −0.063 |
+| npi_any_obj-relc | 0.988 | 0.971 | 0.567 | 0.406 | 0.385 |
+| garden_npz_obj_mod | 0.986 | 0.888 | 0.625 | 0.427 | 0.333 |
+| garden_npz_v-trans | 0.967 | 0.961 | 0.883 | 0.534 | 0.482 |
+| agr_sv_num_subj-relc | 0.995 | 0.841 | 0.540 | 0.394 | 0.308 |
+| filler_gap_pp | 0.976 | 0.724 | 0.746 | 0.580 | 0.650 |
+
+On every task the agreement is highest deep in the corrupted regime (k≤8: 0.96–0.995, with the
+caveat that only ~2–3 mask coordinates are undecided there, so near-perfect alignment is partly
+forced by dimensionality) and lowest near the clean model (k>128: 0.58 down to **0.007** on
+npi_ever_subj-relc, which goes slightly *negative*, −0.03 to −0.06, in the k>2048 tail). Both
+trajectories — the run trained with CE and the run trained with LD — give consistent numbers, so
+this is a property of the states, not of which objective did the training.
+
+I×G differentiates at exactly one state: the fully-unmasked `m=1`, the `k=total` endpoint of this
+axis, which is the regime where the two objectives' update directions agree least. MAttr's
+log-uniform k-schedule spreads its 4000 updates over the entire axis, including the
+deep-corruption regime where the objective choice barely changes the update. This is a
+mechanism-shaped account of the robustness asymmetry of sections 2–3, but it is correlational:
+we did not retrain MAttr with a large-k-only schedule to show that the schedule *causes* the
+robustness.
+
+![Masked-point gradient geometry](sae_masked_gradient_geometry.png)
+
+### The predeclared per-task test: tracks the swing, still does not separate the NPI pair
+
+Predeclared with only npi_ever_subj-relc and filler_gap_pp observed: (1) the median k>128 score
+cosine should decrease with the task's I×G causal swing; (2) k≤8 and output cosines should
+separate nothing. Outcome over all six tasks:
+
+| candidate | ρ vs I×G swing | separates NPI? | norm gap |
+|---|---|---|---|
+| score cos, k>128 | −0.657 | no | −0.02 |
+| score cos, all k | −0.714 | yes | 0.02 |
+| score cos, k≤8 | −0.314 | no | −0.07 |
+| output cos | +0.200 | no | −0.01 |
+
+Prediction 2 held. Prediction 1 held in direction — the k>128 score cosine is the strongest
+correlate of the swing measured anywhere in this file (vs churn +0.55, |margin| +0.49), and
+unlike |margin| it comes with a mechanism attached — but it does **not** separate the NPI pair:
+npi_ever collapses to genuine orthogonality (0.007) while npi_any (0.406) sits inside the control
+range (0.394–0.580). The all-k variant separates only at a normalised gap of 0.02, chance-level
+by section 5's yardstick. Control: no masked-point statistic tracks the MAttr swing (ρ = −0.09;
+MAttr swings span +0.002 to +0.041 — though the largest, +0.041, does belong to npi_ever, the
+geometry-collapse task).
+
+Where npi_ever's orthogonality lives: even at cosine 0.007, the two objectives' score-gradient
+*magnitude* profiles remain as correlated as on every other task (abs-cosine 0.666 vs 0.686–0.752
+elsewhere; top-256 support overlap 0.797). The disagreement is **sign flips on shared latents**,
+not attention to different latents — the objectives agree on which SAE latents matter and
+disagree on which direction to push them.
+
+## 7. Interpretation
 
 In SAE space, MAttr is substantially less sensitive than I×G to switching between cross-entropy
 and margin-based attribution objectives. This robustness appears both in causal evaluation
@@ -292,14 +371,24 @@ spends ~97% of its output-gradient mass on tokens outside the `{base, source}` p
 intervention actually manipulates, leaving it ~0.68-cosine aligned with the causal direction on
 every task. I×G takes a single gradient at that point and inherits this directly.
 
+Section 6 extends the measurement from I×G's single differentiation point to the family of masked
+states MAttr trains through. The output-space disagreement is the same constant everywhere; what
+varies is how much of it the mask→logits Jacobian lets through to the update direction. Deep in
+the corrupted regime the two objectives prescribe nearly the same score update; the disagreement
+is largest near the clean model — the one state I×G uses — while MAttr's log-uniform schedule
+averages over the whole family. We take this as the most economical account of the robustness gap
+consistent with the data, while flagging that it is correlational (no schedule-ablated rerun).
+
 We do **not** claim that MAttr dominates I×G, that I×G fails in SAE space, that three independent
 objectives were tested, that ranking change causes IIA degradation, that MAttr is
 objective-invariant, or that the NPI-sized effect is representative of the task distribution. We
-also do **not** claim to explain MAttr's robustness (section 5 measures only the base point, not
-MAttr's masked operating point), nor to explain *which* tasks are most objective-sensitive — no
-base-point statistic separates the NPI outliers, and the one that does (`|margin|`) is fragile.
+do **not** claim the k-schedule causally produces MAttr's robustness — section 6's account is
+correlational. And *which* tasks are most objective-sensitive remains unexplained: npi_ever's
+collapse to score-gradient orthogonality is now measured, not explained, and no statistic at
+either the base point (section 5) or the masked operating points (section 6) separates the NPI
+pair — npi_any looks like the controls in every geometric measure while swinging 3–9× more.
 
-## 7. Reproduction
+## 8. Reproduction
 
 All three objectives, both methods, six tasks (`--loss` drives MAttr, `--grad-loss` drives I×G;
 `acc` is the paper's soft accuracy). Seeds 0 and 1 for `ce`/`logit_diff`, seed 0 only for `acc`:
@@ -352,6 +441,26 @@ python sae_pilot/analyze_base_diagnostics.py \
 
 Collection is ~21 min on one A100 for 6 tasks × 2 seeds × (4000 attribution + 200 held-out)
 examples; the analysis is pure CPU.
+
+Masked-operating-point geometry (section 6). Instrumented re-runs of the section-2 MAttr cells
+(seed 0 only); the records are observational and the analysis asserts bitwise equality with the
+original runs before using them:
+
+```bash
+for T in $TASKS; do for L in ce logit_diff; do
+  python scripts/attribute_sae.py --task syntaxgym/$T --n-eval 200 --seed 0 \
+      --method mattr --variant topk --k-schedule log --loss $L --steps 4000 \
+      --record-gradient-geometry --geometry-every 10 \
+      --output results/sae_mattr_diag/$T/MAttr_${L}_s0_geom10
+done; done
+
+python sae_pilot/analyze_masked_geometry.py --diag results/sae_mattr_diag \
+    --root results/sae_variant_pilot \
+    --figure sae_pilot/sae_masked_gradient_geometry.png
+```
+
+~11 min per run on one A100 (evaluation dominates; the 401 extra gradient pairs add ~20 s of
+train time — 290 s vs 274 s for the same run probed at every 100th step).
 
 ## Shared experimental setup
 
