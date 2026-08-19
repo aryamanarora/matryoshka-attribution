@@ -11,9 +11,11 @@ position across rows -- the two rows are different experiments, not two scorings
 and the two mask baselines are retrained through whichever intervention they are scored under,
 and the gradient baselines change estimator outright (I×G -> Gradient×Input, IG -> textbook
 zero-baseline IG). The settings agree at only Spearman ~0.44 on matched cells, which is the
-reason the second row is worth drawing at all. The x axis of the zero row is chance-corrected
-(see `load`); its y axis is on a ~1.9x inflated scale because faith-AUC's (F_clean - F_patch)
-denominator shrinks when the ablated model is destroyed rather than flipped.
+reason the second row is worth drawing at all. Both axes of the zero row are on their own scale:
+x carries a ~0.5 baseline (a destroyed model still wins the binary base-vs-source comparison
+about half the time, and `load` explains why correcting for that per-run is worse than living
+with it), and y is inflated ~1.9x because faith-AUC's (F_clean - F_patch) denominator shrinks
+when the ablated model is destroyed rather than flipped. Neither is comparable across rows.
 
 Data: results/sva_sweep (patched, input excluded), results/sva_sweep_input (patched, included),
 results/sva_zeroabl (zeroed, input excluded -- the `+input` column is empty there by design).
@@ -180,21 +182,35 @@ def _auc_of(xs, ya):
     return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
 
 
-def load(res, corrected=False):
-    """(method, loss, substrate, task) -> (acc_auc, faith_auc).
+def load(res):
+    """(method, loss, substrate, task) -> (acc_auc, faith_auc), both as stored.
 
-    `corrected=True` replaces the stored acc-AUC with a CHANCE-CORRECTED one, and is required
-    for the zero-ablation sweep. Zeroing every non-top-k unit destroys the model to
-    logit_diff ~ 0, so `acc_base` -- a binary base-vs-source preference -- sits at a 0.5 chance
-    floor rather than patching's 0.0, and the stored acc-AUC reads ~0.5 for a circuit carrying
-    no signal whatsoever. Plotting that raw against faith-AUC would put every zero-row method in
-    a fake cluster near x=0.5 and invert the ordering. Renormalising against the measured floor,
+    NO chance correction, deliberately. The zero row used to be rescaled by
 
         acc' = (acc - acc[0]) / (1 - acc[0])
 
-    restores the spread and is the IDENTITY when acc[0] = 0, i.e. it would not move a single
-    patched point -- so the x axis still means the same thing in both rows, up to the extra
-    sampling noise in acc[0] (~+-0.05 at 100 examples). See scripts/compare_ablation.py.
+    on the theory that acc[0] is the setting's chance floor: zeroing every non-top-k unit
+    destroys the model to logit_diff ~ 0, so `acc_base` -- a binary base-vs-source preference --
+    sits near 0.5 rather than patching's 0.0. That premise is FALSE, and the correction was
+    removed on 2026-08-19.
+
+    `acc[0]` is the accuracy with ONE unit of ~1056 kept clean and the rest zeroed, i.e. a dead
+    model, and it is a per-RUN quantity, not a per-cell constant. On SVA/arith it happens to be
+    stable (a0 in [0.48, 0.68] across all 99 runs of a task), which is why the correction looked
+    benign. On arc_easy under zeroing it is BIMODAL -- a0 takes 0.00, 0.18, 0.30, 0.52, 0.82,
+    0.92, 0.93 and 1.00 across the 33 runs, and jumps discontinuously at the next sparsity point
+    (0.84 -> 0.11) -- because a destroyed model emits near-identical logits for every example, so
+    the `lb > ls` comparison flips coherently for all 100 at once. Dividing by (1 - a0) then
+    divides each curve by its own noise draw, and blows up as a0 -> 1: MAttr-CE on arc_easy/zero
+    has raw acc-AUC 0.853 with a0 = 0.93, which the correction mapped to -1.10, i.e. it punished
+    the method for finding a top-1 node that alone recovers 93% accuracy.
+
+    Any floor worth subtracting has to be SHARED across the methods in a cell (then it is an
+    affine map that leaves within-cell ordering alone); a per-run one is not. Raw acc-AUC is
+    that, trivially. The cost is that the zero row's x axis carries a ~0.5 baseline and so
+    visually flatters it next to the patched row -- which is why the rows must be read
+    separately, as the module docstring says. See scripts/method_winrate.py for the same
+    reasoning applied to the win-rate tables.
     """
     raw = {}
     for f in glob.glob(res + "/*.json"):
@@ -202,13 +218,7 @@ def load(res, corrected=False):
         m = parse_method(os.path.basename(f), d)
         if m is None or m not in METHODS:
             continue
-        acc_auc = d["acc_auc"]
-        if corrected:
-            acc = d["iso_metrics"]["acc_base"]
-            a0 = acc[0]
-            acc_auc = (np.nan if a0 == 1 else
-                       _auc_of(d["n_nodes"], [(x - a0) / (1 - a0) for x in acc]))
-        raw[(m, d["loss"], d["nodes"], d["task"])] = (acc_auc, d["faith_auc"])
+        raw[(m, d["loss"], d["nodes"], d["task"])] = (d["acc_auc"], d["faith_auc"])
     return raw
 
 
@@ -243,7 +253,7 @@ def group_avg(raw, m, loss, sub):
 def main():
     rows, dropped = [], []
     for res, inp_label, abl in SOURCES:
-        raw = load(res, corrected=abl != "Patched")
+        raw = load(res)
         for m in FIGURE_METHODS:
             mlabel = METHODS[m][0]
             for lkey, llabel in LOSSES.items():
@@ -295,7 +305,7 @@ def main():
         # wherever markers overlap, which is exactly where the distinction has to hold.
         + geom_point(size=1.9, color="#000000", stroke=0.3)
         # Rows = ablation setting, cols = substrate x input. `scales="free"` is per-PANEL here,
-        # not per-column, which is what we want: the zero row's corrected acc-AUC and inflated
+        # not per-column, which is what we want: the zero row's baseline-shifted acc-AUC and inflated
         # faith-AUC live on their own scales and sharing an axis with the patched row would
         # invite exactly the cross-setting comparison the docstring warns against.
         + facet_grid("ablation ~ facet", scales="free")

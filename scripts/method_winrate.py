@@ -22,10 +22,11 @@ SETTINGS ARE NEVER POOLED. Patched and zero ablation are different experiments (
 mask baselines retrain through whichever intervention they are scored under; the gradient
 baselines change estimator), so a cell in one is not comparable to a cell in the other.
 
-Metrics: `acc` is the chance-corrected accuracy AUC -- under zeroing acc_base sits at a 0.5
-floor rather than patching's 0.0, so the raw column reads ~0.5 for a circuit with no signal;
-the correction is the identity when acc[0] = 0 and so leaves patched values untouched. `faith`
-is faith-AUC as stored. Prefer `acc` when the two disagree: it is bounded and immune to padding.
+Metrics: both `acc` (accuracy AUC) and `faith` (faithfulness AUC) are used exactly as stored.
+Prefer `acc` when the two disagree: it is bounded and immune to gap-padding. Under zeroing its
+baseline sits near 0.5 rather than patching's 0.0, which makes the two settings' absolute values
+incomparable -- but win rates only ever compare inside a cell, where that baseline is common to
+every competitor, so it cannot affect a single number here.
 
 Run:  uv run python scripts/method_winrate.py
       uv run python scripts/method_winrate.py --metric faith --by-group
@@ -47,7 +48,7 @@ sys.path.insert(0, str(ROOT / "plots"))
 # a history of silently folding the headline `sufficient_topk_` runs and `attnlrp` into the IG
 # series via a catch-all `else: return "IG"`, so a second copy here is a real hazard.
 from plot_accauc_vs_faithauc import (  # noqa: E402
-    METHODS, SVA, ARITH, parse_method, _auc_of)
+    METHODS, SVA, ARITH, parse_method)
 
 SOURCES = [("results/sva_sweep", "Patched", "−input"),
            ("results/sva_sweep_input", "Patched", "+input"),
@@ -87,11 +88,12 @@ def load(split_loss=True):
             m = parse_method(os.path.basename(f), d)
             if m is None or m not in METHODS:
                 continue
-            acc = d["iso_metrics"]["acc_base"]
-            a0 = acc[0]
-            # Identity when a0 == 0 (the patched case), so both settings share one column.
-            corr = (np.nan if a0 == 1 else
-                    _auc_of(d["n_nodes"], [(x - a0) / (1 - a0) for x in acc]))
+            # acc-AUC as stored. There is no chance correction here (see `plot_accauc_vs_faithauc
+            # .load` for the full autopsy): every method inside a cell shares that cell's task,
+            # substrate and setting, so any floor shared across them is an affine map that leaves
+            # the ordering -- and therefore every win rate -- untouched. The only correction that
+            # would change a win rate is a per-RUN one, and that is precisely the broken kind.
+            corr = d["acc_auc"]
             loss = d["loss"]
             if split_loss:
                 cells[(setting, d["nodes"], inp, d["task"])][(m, loss)] = (corr, d["faith_auc"])
@@ -232,7 +234,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--metric", default="acc", choices=["acc", "faith"],
-                    help="acc = chance-corrected accuracy AUC (default, bounded); faith = faith-AUC")
+                    help="acc = accuracy AUC (default, bounded); faith = faith-AUC")
     ap.add_argument("--best-loss", action="store_true",
                     help="oracle: collapse to each method's best loss per cell")
     ap.add_argument("--by-group", action="store_true", help="also break down by task group")
@@ -249,7 +251,7 @@ def main():
     a = ap.parse_args()
 
     idx = 0 if a.metric == "acc" else 1
-    label = ("chance-corrected acc-AUC" if a.metric == "acc" else "faith-AUC")
+    label = ("acc-AUC" if a.metric == "acc" else "faith-AUC")
     cells = load(split_loss=not a.matched_loss)
     if a.best_loss:
         cells = collapse_best_loss(cells, idx)
