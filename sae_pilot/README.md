@@ -179,7 +179,103 @@ compatibility check with the paper's experimental grid rather than an independen
 direction — and for the same reason we did **not** run a second seed for it: a replication would
 confirm the behaviour of a near-duplicate of an objective already measured at two seeds.
 
-## 5. Interpretation
+## 5. Why is the objective choice so consequential for I×G?
+
+Sections 2 and 3 show *that* I×G's attributions move when the objective changes and MAttr's do
+not; they do not show *why*. The natural explanation is **saturation**. I×G differentiates at the
+unmasked base point `m=1`, where the two objectives have exact output gradients
+
+```
+grad_z L_CE = softmax(z) - e_base        grad_z L_LD = -e_base + e_source
+```
+
+so CE's gradient vanishes as `p_base -> 1` while the logit-difference gradient has constant norm
+`sqrt(2)`. That predicts CE should be least reliable exactly where the model is most confident.
+
+This is answerable with forward passes alone, but no stored run contains it: I×G is closed-form,
+so those runs never wrote per-example losses or logits (`losses` is an empty list in all 24 I×G
+cells). `collect_base_diagnostics.py` therefore **reconstructs the exact gradient stream** each
+I×G run consumed. The dataset holds an isolated `random.Random(seed)` and nothing between the
+eval-set draw and the gradient loop touches it, so `(task, seed)` fully determines the stream; the
+script re-derives all 4000 examples and checks them against every invariant the original runs
+recorded (`eval_collection_draws`, `n_eval_distinct_keys`, `n_rejected_eval_draws`,
+`n_train_distinct`, `train_eval_overlap`). **All 12 streams match exactly.** It then runs only the
+base prompt forward — no SAE, no hook, no backward — and stores per-example scalars. At `m=1` the
+intervention is algebraically the identity,
+`a_cf + (f_b - f_cf) W_dec + [(a_b - dec f_b) - (a_cf - dec f_cf)] = a_b`, so the plain base
+forward *is* the I×G base point.
+
+### The saturation hypothesis is refuted
+
+Over all 48,000 attribution examples (6 tasks × 2 seeds × 4000):
+
+| statistic | value |
+|---|---|
+| median `p_base` | 0.019 |
+| p99 / max `p_base` | 0.399 / 0.695 |
+| examples with `p_base > 0.9` | **0** |
+| min `‖grad_z L_CE‖ / sqrt(2)` | 0.221 |
+| examples with `‖grad_z L_CE‖ / sqrt(2) < 0.1` | **0** |
+
+The saturated regime is not rare on these tasks, it is **empty** — CE's gradient norm never falls
+below ~22% of the logit-difference norm. Saturation cannot be why CE behaves differently here.
+
+### What the geometry actually is
+
+The probability mass is somewhere else entirely: median `p_source` = 0.0008 and median
+`p_other` = 0.975. Since `grad_z L_CE = p - e_base` places weight `p_j` on *every* vocabulary
+token while `grad_z L_LD` is supported on `{base, source}` alone, CE's gradient is only
+
+```
+cosine(grad_z L_CE, grad_z L_LD) = 0.677     (p10 0.626, p90 0.699)
+```
+
+aligned with the causal base-vs-source direction — and this is **uniform across tasks** (0.654 to
+0.686). The two objectives genuinely ask different questions of the model, but for a reason
+unrelated to confidence: roughly **97% of CE's gradient mass is spent on tokens that the
+interchange intervention never involves**. I×G takes one gradient at this point, so it inherits
+that geometry directly and completely.
+
+![CE gradient geometry](sae_ce_gradient_geometry.png)
+
+This analysis measures the base point only. It does **not** explain MAttr's robustness: MAttr's
+scores are the endpoint of an optimisation through thousands of *masked* points, whose operating
+point these diagnostics deliberately do not touch.
+
+### Which tasks swing most remains unexplained
+
+The two NPI tasks are large outliers in objective sensitivity (I×G log-AUC swing +0.399 and +0.288
+vs +0.033 to +0.085 elsewhere). No base-point statistic accounts for that split. Two-seed means,
+with the NPI pair listed first:
+
+| candidate | ρ | separates NPI? | gap/range | seeds |
+|---|---|---|---|---|
+| median `p_base` | +0.143 | no | −0.06 | 0/2 |
+| median `‖grad_z L_CE‖` | −0.429 | no | −0.06 | 0/2 |
+| median `p_other` | −0.257 | no | −0.02 | 0/2 |
+| median CE↔LD cosine | +0.200 | no | −0.01 | 0/2 |
+| ranking churn@32 | +0.551 | no | −0.00 | — |
+| median `\|margin\|` | +0.486 | YES | +0.39 | 2/2 |
+| *(the outcome itself)* | — | YES | +0.56 | — |
+
+`ρ` is Spearman over n=6 and is **descriptive only**. Separation is weak evidence by itself: with
+2 NPI vs 4 non-NPI a random ordering separates with probability `2/C(6,2)` = 13.3%, so across the
+seven candidates there is a ~63% chance that at least one separates by luck. The normalised gap is
+what discriminates, and on shuffled data a chance separation is razor-thin (~0.09) against the
+outcome's own 0.56.
+
+Only median `|margin|` separates, and it is fragile: it holds at mean/median/p25 but **fails at
+p75 and p90**, and it mis-orders within groups (`filler_gap_pp` has the third-largest `|margin|`
+and the *smallest* swing). We record it as a correlate, not a mechanism.
+
+**The earlier ranking-churn explanation is also negative and is retained as such**: churn@32
+correlates at ρ = +0.551 but does not separate the NPI pair at all (NPI [0.625, 0.406] vs non-NPI
+[0.547, 0.406, 0.500, 0.312] — fully interleaved), so the within-group ordering carries that ρ.
+
+Held-out (200 eval) and attribution-stream (4000) distributions agree closely — median cosine
+differs by less than 0.004 on every task — so none of this is specific to the training stream.
+
+## 6. Interpretation
 
 In SAE space, MAttr is substantially less sensitive than I×G to switching between cross-entropy
 and margin-based attribution objectives. This robustness appears both in causal evaluation
@@ -190,11 +286,20 @@ is plausible mechanistically: the intervention is affine in the mask, so the bas
 displacement is represented exactly by the mask parameterisation and first-order attribution is
 unusually well suited to this basis.
 
+Section 5 measures where that objective sensitivity comes from. It is **not** gradient saturation
+— the saturated regime is empty across all 48,000 attribution examples. It is that cross-entropy
+spends ~97% of its output-gradient mass on tokens outside the `{base, source}` pair the
+intervention actually manipulates, leaving it ~0.68-cosine aligned with the causal direction on
+every task. I×G takes a single gradient at that point and inherits this directly.
+
 We do **not** claim that MAttr dominates I×G, that I×G fails in SAE space, that three independent
 objectives were tested, that ranking change causes IIA degradation, that MAttr is
-objective-invariant, or that the NPI-sized effect is representative of the task distribution.
+objective-invariant, or that the NPI-sized effect is representative of the task distribution. We
+also do **not** claim to explain MAttr's robustness (section 5 measures only the base point, not
+MAttr's masked operating point), nor to explain *which* tasks are most objective-sensitive — no
+base-point statistic separates the NPI outliers, and the one that does (`|margin|`) is fragile.
 
-## 6. Reproduction
+## 7. Reproduction
 
 All three objectives, both methods, six tasks (`--loss` drives MAttr, `--grad-loss` drives I×G;
 `acc` is the paper's soft accuracy). Seeds 0 and 1 for `ce`/`logit_diff`, seed 0 only for `acc`:
@@ -230,6 +335,23 @@ python sae_pilot/analyze_ranking_stability.py --root results/sae_variant_pilot \
 python sae_pilot/analyze_ranking_stability.py --root results/sae_variant_pilot \
     --exclude-error-node                        # reconstruction-error-node sensitivity
 ```
+
+Base-point diagnostics (section 5). The collector is **forward-only** — it loads no SAE, takes no
+backward pass, and reruns no attribution; it reconstructs each I×G gradient stream and asserts it
+against the invariants stored by the original runs before doing any GPU work:
+
+```bash
+python sae_pilot/collect_base_diagnostics.py --device cuda \
+    --grad-examples 4000 --n-eval 200 \
+    --results-root results/sae_variant_pilot --out results/sae_base_diag
+
+python sae_pilot/analyze_base_diagnostics.py \
+    --diag results/sae_base_diag --root results/sae_variant_pilot \
+    --figure sae_pilot/sae_ce_gradient_geometry.png
+```
+
+Collection is ~21 min on one A100 for 6 tasks × 2 seeds × (4000 attribution + 200 held-out)
+examples; the analysis is pure CPU.
 
 ## Shared experimental setup
 
