@@ -56,8 +56,23 @@ GROUP_OF = {t: "SVA" for t in SVA} | {t: "Arith" for t in ARITH}
 GROUP_OF |= {"arc_easy": "ARC-E", "ioi": "IOI"}
 
 
-def load():
-    """(setting, substrate, input, task, loss) -> {method: (acc_corr, faith)}."""
+LOSS_LABEL = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
+
+
+def load(split_loss=True):
+    """cell key -> {competitor: (acc_corr, faith)}.
+
+    `split_loss=True` (the default) makes the training loss part of the COMPETITOR identity,
+    so MAttr-CE and MAttr-logit-diff are two entrants racing inside one (setting, substrate,
+    task) cell. That is the right unit when the question is "which recipe wins", because the
+    loss is a choice the practitioner makes, not a nuisance parameter -- and the SVA+ figure
+    already treats (method, loss) as its plotted point.
+
+    `split_loss=False` instead pins the loss as part of the CELL, so only same-loss pairs ever
+    meet. Use that to ask "which mask/attribution machinery is better, holding the objective
+    fixed" -- a narrower question that cannot be answered by the split view, since there a
+    method can win purely by having one loss that suits the metric.
+    """
     cells = defaultdict(dict)
     for res, setting, inp in SOURCES:
         for f in glob.glob(str(ROOT / res / "*.json")):
@@ -70,60 +85,130 @@ def load():
             # Identity when a0 == 0 (the patched case), so both settings share one column.
             corr = (np.nan if a0 == 1 else
                     _auc_of(d["n_nodes"], [(x - a0) / (1 - a0) for x in acc]))
-            key = (setting, d["nodes"], inp, d["task"], d["loss"])
-            cells[key][m] = (corr, d["faith_auc"])
+            loss = d["loss"]
+            if split_loss:
+                cells[(setting, d["nodes"], inp, d["task"])][(m, loss)] = (corr, d["faith_auc"])
+            else:
+                cells[(setting, d["nodes"], inp, d["task"], loss)][(m, None)] = (corr,
+                                                                                d["faith_auc"])
     return cells
 
 
+def clabel(c):
+    """Display label for a competitor key (method, loss|None)."""
+    m, loss = c
+    return METHODS[m][0] + (f" · {LOSS_LABEL[loss]}" if loss else "")
+
+
 def collapse_best_loss(cells, idx):
-    """Oracle view: keep each method's best loss per (setting, substrate, input, task).
+    """Oracle view: keep each method's best loss per cell, collapsing the loss axis.
 
     Not the default. It answers "how good can this method be if you tune the loss per cell",
     which flatters whichever method has more losses on disk and is not how the paper reports.
     """
     best = defaultdict(dict)
-    for (setting, sub, inp, task, _loss), bym in cells.items():
-        for m, v in bym.items():
-            k = (setting, sub, inp, task, "best")
-            cur = best[k].get(m)
+    for key, bym in cells.items():
+        k = key[:4]
+        for (m, _loss), v in bym.items():
+            cur = best[k].get((m, None))
             if cur is None or (np.isfinite(v[idx]) and v[idx] > cur[idx]):
-                best[k][m] = v
+                best[k][(m, None)] = v
     return best
 
 
 def winrates(cells, idx, keyfilter=None):
-    """Pairwise wins/losses per method over cells where both members of the pair ran."""
+    """Pairwise wins/losses per competitor over cells where both members of the pair ran."""
     pair = defaultdict(lambda: [0, 0, 0])          # (a,b) -> [a_wins, b_wins, ties]
     ncell = defaultdict(int)
+    order = {c: i for i, c in enumerate(
+        (m, l) for m in METHODS for l in (None, "acc", "ce", "logit_diff"))}
     for key, bym in cells.items():
         if keyfilter and not keyfilter(key):
             continue
-        present = [m for m in METHODS if m in bym and np.isfinite(bym[m][idx])]
-        for m in present:
-            ncell[m] += 1
+        present = sorted((c for c in bym if np.isfinite(bym[c][idx])), key=order.get)
+        for c in present:
+            ncell[c] += 1
         for a, b in combinations(present, 2):
             va, vb = bym[a][idx], bym[b][idx]
             rec = pair[(a, b)]
             rec[0 if va > vb else 1 if vb > va else 2] += 1
-    tally = defaultdict(lambda: [0, 0, 0])         # method -> [wins, losses, ties]
+    tally = defaultdict(lambda: [0, 0, 0])         # competitor -> [wins, losses, ties]
     for (a, b), (aw, bw, ti) in pair.items():
         tally[a][0] += aw; tally[a][1] += bw; tally[a][2] += ti
         tally[b][0] += bw; tally[b][1] += aw; tally[b][2] += ti
     return tally, pair, ncell
 
 
+def ranked(tally, ncell):
+    """[(winrate, competitor, W, L, T, h2h, cells)] sorted best-first."""
+    rows = []
+    for c, (w, l, t) in tally.items():
+        n = w + l + t
+        rows.append((w / n if n else np.nan, c, w, l, t, n, ncell[c]))
+    return sorted(rows, key=lambda r: (-r[0], clabel(r[1])))
+
+
 def fmt(tally, ncell, title):
     print(f"\n{title}")
-    rows = []
-    for m, (w, l, t) in tally.items():
-        n = w + l + t
-        rows.append((w / n if n else np.nan, m, w, l, t, n, ncell[m]))
+    rows = ranked(tally, ncell)
     if not rows:
         print("  (no cells)")
         return
-    print(f"  {'method':14s} {'winrate':>8s} {'W':>5s} {'L':>5s} {'T':>4s} {'h2h':>5s} {'cells':>6s}")
-    for wr, m, w, l, t, n, nc in sorted(rows, reverse=True):
-        print(f"  {METHODS[m][0]:14s} {wr:8.3f} {w:5d} {l:5d} {t:4d} {n:5d} {nc:6d}")
+    w = max(len(clabel(r[1])) for r in rows)
+    print(f"  {'competitor':{w}s} {'winrate':>8s} {'W':>5s} {'L':>5s} {'T':>4s} "
+          f"{'h2h':>5s} {'cells':>6s}")
+    for wr, c, ww, l, t, n, nc in rows:
+        print(f"  {clabel(c):{w}s} {wr:8.3f} {ww:5d} {l:5d} {t:4d} {n:5d} {nc:6d}")
+
+
+def render(panels, metric_label, unit_label, out):
+    """Draw the ranked tables as an image: one column per setting.
+
+    Hand-drawn rather than matplotlib's table(): the win-rate bar behind each row is the point
+    (rank order is read from bar length at a glance, the digits are for checking), and table()
+    gives no way to put a bar under the text.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    nrow = max(len(rows) for _, rows in panels)
+    fig_w = 5.6 * len(panels)
+    fig, axes = plt.subplots(1, len(panels), figsize=(fig_w, 0.34 * nrow + 1.5))
+    if len(panels) == 1:
+        axes = [axes]
+    for ax, (title, rows) in zip(axes, panels):
+        ax.set_xlim(0, 1); ax.set_ylim(-nrow - 0.5, 1.6); ax.axis("off")
+        ax.text(0, 1.15, title, fontsize=12, fontweight="bold", va="bottom")
+        for x, lab in ((0.035, "#"), (0.075, "competitor"), (0.60, "win rate"),
+                       (0.74, "W–L–T"), (0.99, "h2h")):
+            ax.text(x, 0.35, lab, fontsize=8, color="#555",
+                    ha="right" if lab in ("#", "h2h") else "left")
+        ax.plot([0, 1], [0.05, 0.05], color="#999", lw=0.8)
+        for i, (wr, c, w, l, t, n, _nc) in enumerate(rows):
+            y = -i - 0.55
+            # Bar is drawn first and spans the whole row so it reads as a background, not a
+            # separate column; alpha keeps the text on top legible.
+            # Bar is scaled to the win-rate column's left edge, so a full-width bar never runs
+            # under the W-L-T digits.
+            ax.add_patch(Rectangle((0.075, y - 0.3), 0.52 * wr, 0.6,
+                                   color=METHODS[c[0]][1], alpha=0.28, lw=0))
+            ax.text(0.035, y - 0.1, f"{i + 1}", fontsize=8, color="#777", ha="right")
+            ax.add_patch(Rectangle((0.05, y - 0.16), 0.016, 0.32,
+                                   color=METHODS[c[0]][1], lw=0))
+            ax.text(0.075, y - 0.1, clabel(c), fontsize=9)
+            ax.text(0.60, y - 0.1, f"{wr:.3f}", fontsize=9, fontweight="bold")
+            ax.text(0.74, y - 0.1, f"{w}–{l}" + (f"–{t}" if t else ""), fontsize=8, color="#444")
+            ax.text(0.99, y - 0.1, f"{n}", fontsize=8, color="#777", ha="right")
+    fig.suptitle(f"Head-to-head win rate · {metric_label} · {unit_label}", fontsize=11, y=0.995)
+    fig.text(0.5, 0.012,
+             "Pairwise-complete: each pair scored only over cells where both ran. "
+             "Cell = (substrate, task). Settings never pooled.",
+             ha="center", fontsize=7.5, color="#666")
+    fig.tight_layout(rect=(0, 0.03, 1, 0.97))
+    fig.savefig(out, dpi=200)
+    print(f"\nwrote {out}")
 
 
 def main():
@@ -134,23 +219,32 @@ def main():
     ap.add_argument("--best-loss", action="store_true",
                     help="oracle: collapse to each method's best loss per cell")
     ap.add_argument("--by-group", action="store_true", help="also break down by task group")
+    ap.add_argument("--matched-loss", action="store_true",
+                    help="pin the loss as part of the CELL, so only same-loss pairs meet "
+                         "(default: the loss is part of the competitor's identity)")
     ap.add_argument("--head-to-head", default=None,
                     help="print this method's record against each opponent (key or label)")
+    ap.add_argument("--image", nargs="?", const="plots/method_winrate.png", default=None,
+                    help="also render the ranked tables to this PNG")
     a = ap.parse_args()
 
     idx = 0 if a.metric == "acc" else 1
     label = ("chance-corrected acc-AUC" if a.metric == "acc" else "faith-AUC")
-    cells = load()
+    cells = load(split_loss=not a.matched_loss)
     if a.best_loss:
         cells = collapse_best_loss(cells, idx)
+    unit = ("best loss per cell (ORACLE)" if a.best_loss else
+            "matched loss" if a.matched_loss else "loss counted as part of the method")
 
-    print(f"metric: {label}"
-          f"{'   [ORACLE: best loss per cell]' if a.best_loss else '   [matched loss]'}")
+    print(f"metric: {label}   [{unit}]")
     print(f"cells loaded: {len(cells)}")
 
+    panels = []
     for setting in ("Patched", "Zero-abl."):
         tally, pair, ncell = winrates(cells, idx, lambda k, s=setting: k[0] == s)
         fmt(tally, ncell, f"=== {setting} ===")
+        if tally:
+            panels.append((setting, ranked(tally, ncell)))
         if a.by_group:
             for g in ("SVA", "Arith", "ARC-E", "IOI"):
                 t2, _, n2 = winrates(
@@ -158,19 +252,28 @@ def main():
                 if t2:
                     fmt(t2, n2, f"--- {setting} / {g} ---")
         if a.head_to_head:
-            want = next((k for k in METHODS
-                         if k == a.head_to_head or METHODS[k][0] == a.head_to_head), None)
-            if want is None:
-                raise SystemExit(f"unknown method {a.head_to_head!r}; pick from {list(METHODS)}")
-            print(f"\n  {METHODS[want][0]} head-to-head ({setting}):")
-            for (x, y), (xw, yw, ti) in sorted(pair.items()):
-                if want not in (x, y):
-                    continue
-                opp = y if x == want else x
-                w, l = (xw, yw) if x == want else (yw, xw)
-                n = w + l + ti
-                print(f"    vs {METHODS[opp][0]:14s} {w:3d}-{l:3d}"
-                      f"{f'-{ti}' if ti else '   '}  ({w / n:.3f} of {n})")
+            # Competitors are (method, loss) pairs now, so a bare method name selects EVERY
+            # loss variant of that method rather than one row -- which is what you want when
+            # asking "how does MAttr do against everyone", and the loss is spelled out in the
+            # printed label so the several MAttr rows stay distinguishable.
+            want = [c for c in {k for kk in pair for k in kk}
+                    if a.head_to_head in (c[0], METHODS[c[0]][0], clabel(c))]
+            if not want:
+                raise SystemExit(f"unknown method {a.head_to_head!r}; "
+                                 f"pick from {sorted({METHODS[m][0] for m in METHODS})}")
+            for c in sorted(want, key=clabel):
+                print(f"\n  {clabel(c)} head-to-head ({setting}):")
+                for (x, y), (xw, yw, ti) in sorted(pair.items(), key=lambda kv: clabel(kv[0][0])):
+                    if c not in (x, y):
+                        continue
+                    opp = y if x == c else x
+                    w, l = (xw, yw) if x == c else (yw, xw)
+                    n = w + l + ti
+                    print(f"    vs {clabel(opp):24s} {w:3d}-{l:3d}"
+                          f"{f'-{ti}' if ti else '   '}  ({w / n:.3f} of {n})")
+
+    if a.image and panels:
+        render(panels, label, unit, str(ROOT / a.image))
 
     print("\nCoverage is still filling in -- these numbers will move. `cells` is how many cells a"
           "\nmethod ran in; `h2h` is how many head-to-head comparisons back its win rate.")
