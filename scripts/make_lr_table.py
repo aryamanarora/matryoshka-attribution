@@ -40,6 +40,16 @@ LR_METHODS = [
         ("0.005", "topklog_lr_0.005"), ("0.01", "mib_node_topk_log"),
         ("0.05", "topklog_lr_0.05"), ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3"),
     ]),
+    # Same soft top-k forward AND same sigmoid-slope backward as the block above; only the
+    # optimizer differs. Included because the three MAttr arms on disk never isolated the
+    # optimizer -- the id-STE arm flips the backward and switches to SGD at once -- so this is
+    # the block that says whether Adam's per-parameter normalisation is doing the work.
+    # submit_softlog_sgd_lr.sh; all five LRs run all 11 cells (llama3/ioi capped at 200).
+    ("$+$ SGD", [
+        ("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
+        ("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
+        ("0.3", "softlog_sgd_lr_0.3"),
+    ]),
     ("$+$ hard", [
         ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
         ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),

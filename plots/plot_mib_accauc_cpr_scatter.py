@@ -163,6 +163,13 @@ IG_STEP_LABEL = {"NAP-IG": "IG (5 steps)",
 LR_SERIES = [
     (G_MLOG, "MAttr", [("0.005", "topklog_lr_0.005"), ("0.1", "topklog_lr_0.1"),
                        ("0.3", "topklog_lr_0.3")]),
+    # MAttr's optimizer ablation. Unlike the MAttr/+hard ladders above, 0.01 IS listed: that LR
+    # has its own dir here (softlog_sgd_lr_0.01) evaluated with the rest of the sweep, rather
+    # than being the old lr=0.01 main run whose acc_auc covers only 3/11 cells.
+    # 0.05 is excluded for the usual reason -- it is the headline point from M.OUR_METHODS and
+    # is stitched back into this path by LR_ANCHOR below.
+    (G_MLOG, "MAttr (SGD)", [("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
+                             ("0.1", "softlog_sgd_lr_0.1"), ("0.3", "softlog_sgd_lr_0.3")]),
     (G_MLOG, "+hard", [("0.005", "htklog_lr_0.005"), ("0.1", "htklog_lr_0.1"),
                        ("0.3", "htklog_lr_0.3")]),
     (G_DBM, "DBM", [("0.001", "eprun_eval_ld_sig"), ("0.3", "eprun_eval_ld_sig_lr0.3")]),
@@ -203,7 +210,8 @@ DBM_L1_ANCHOR = {"eprun_eval_ld_sig_lr0.3": ("l1:DBM", 0.0)}
 # The lr=0.05 headline points come from M.OUR_METHODS (see above), so to draw one unbroken
 # path per method they have to be tagged into the same series as the swept points -- otherwise
 # the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
-LR_ANCHOR = {"topklog_lr_0.05": ("MAttr", 0.05), "htklog_lr_0.05": ("+hard", 0.05)}
+LR_ANCHOR = {"topklog_lr_0.05": ("MAttr", 0.05), "htklog_lr_0.05": ("+hard", 0.05),
+             "softlog_sgd_lr_0.05": ("MAttr (SGD)", 0.05)}
 # Same trick for Node Pruning, except the anchor is a point that ALREADY sits on another path:
 # eprun_eval_s0.5_ld is the s=0.5 node of the sparsity path AND the lr=0.8 node of its own LR
 # path. That is why rows carry a list of (path, sort-key) pairs rather than one of each.

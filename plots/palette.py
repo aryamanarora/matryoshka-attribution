@@ -70,6 +70,13 @@ ALIASES = {
     # near-twin of an existing method. Ordered hyperparameter -> ordered linetype is also the
     # more honest encoding: colour is reserved for "different method" everywhere else here.
     "IG (5 steps)": "IG", "IG (10 steps)": "IG", "IG (30 steps)": "IG",
+    # Same reasoning as the IG ladder: MAttr-SGD is the SAME forward and the same backward as
+    # MAttr, differing only in the optimizer, so it shares MAttr's blue and separates by
+    # linetype. It is deliberately not given a hex of its own -- the cool region is already
+    # occupied by +hard (bluish green), GIM (sky blue) and Node Pruning (indigo), and a fifth
+    # cool hue would become this palette's binding CVD constraint for what is a hyperparameter
+    # change, not a different method.
+    "MAttr (SGD)": "MAttr", "MAttr-SGD": "MAttr", "softsgd-log": "MAttr",
 }
 
 

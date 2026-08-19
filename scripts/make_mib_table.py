@@ -60,6 +60,16 @@ OUR_METHODS = [
     # Node level (log k-schedule = default). Swept methods use lr=0.05 (best); llama/ioi capped 200.
     # MAttr headline = SOFT top-k forward, log k. "+ hard" = sigmoid-STE hard forward.
     ("\\ourmethod{}", "topklog_lr_0.05", "node", "ours"),
+    # Optimizer ablation: identical forward and backward to the row above, Adam -> SGD. Pinned
+    # to lr=0.05 so it sits at the SAME learning rate as the headline and the row is a
+    # single-knob contrast. NOTE: if the LR sweep (tabs/lr_sweep.tex, submit_softlog_sgd_lr.sh)
+    # finds SGD peaks elsewhere, this should be repointed to SGD's own best LR AND the
+    # \ourmethod{} row left where it is -- the two rows are then each at their own optimum,
+    # which is the comparison the ablation is meant to make.
+    # Labelled "\ourmethod{}" rather than "+ SGD" because emit_ours() files it under the
+    # \ourmethod{}-SGD header (opt_of matches _sgd), where it IS the plain method -- the
+    # optimizer is already named by the header, so "+ SGD" there would read as a second one.
+    ("\\ourmethod{}", "softlog_sgd_lr_0.05", "node", "ours"),
     ("$+$ hard", "htklog_lr_0.05", "node", "ours"),
     ("$-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
@@ -464,8 +474,17 @@ def main():
     # Collect all our results
     all_results = {}  # method_key -> {(task, model): cpr_auc}
 
+    # Keyed on the RESULTS DIR, not the display name. The display name is not unique -- the
+    # same label legitimately appears once per (level, group) block, and now also once per
+    # optimizer -- so a name-based key silently made the last row with a given label overwrite
+    # every earlier one's data. Adding the SGD row as "\ourmethod{}" at node/ours blanked the
+    # Adam headline row that way: both hashed to "\ourmethod{}_node_ours". The dir is the one
+    # thing that is unique per run, which is what this key needs to be.
+    def mkey(results_dir, level, group):
+        return f"{results_dir}_{level}_{group}"
+
     for method_name, results_dir, level, group in OUR_METHODS:
-        key = f"{method_name}_{level}_{group}"
+        key = mkey(results_dir, level, group)
         data = {}
         for task, model, _ in COLUMNS:
             v = load_cpr_auc(results_dir, task, model)
@@ -491,7 +510,8 @@ def main():
     def best_in_col(level):
         baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES} if level == "node" \
             else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
-        our = {f"{n}_{l}_{g}": all_results.get(f"{n}_{l}_{g}", {}) for n, _, l, g in OUR_METHODS if l == level}
+        our = {mkey(d, l, g): all_results.get(mkey(d, l, g), {})
+               for _, d, l, g in OUR_METHODS if l == level}
         best = {}
         second = {}
         for task, model, _ in COLUMNS:
@@ -570,11 +590,14 @@ def main():
         return COST_UGS if name == "UGS" else COST_EPRUN
 
     def opt_of(results_dir):
-        # id-STE variants are trained with SGD; everything else with Adam.
-        return "sgd" if "identity" in results_dir else "adam"
+        # id-STE variants are trained with SGD, and so is the soft-topk optimizer ablation
+        # (softlog_sgd_*); everything else with Adam. Matching on "identity" alone was enough
+        # while id-STE was the ONLY SGD arm, but it silently files any other SGD dir under the
+        # \ourmethod{}-Adam header -- which is a wrong claim about the run, not a layout nit.
+        return "sgd" if ("identity" in results_dir or "_sgd" in results_dir) else "adam"
 
     # lr=0.05 swept dirs cap llama/ioi at 200 -> dagger just that cell for those rows.
-    LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05"}
+    LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05", "softlog_sgd_lr_0.05"}
     LR05_DAGGER = {("ioi", "llama3")}
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
@@ -595,14 +618,21 @@ def main():
             # three held gemma cells are the lowest-scoring columns in that section.
             for n, r, g in rows_o:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
-                d = all_results.get(f"{n}_{level}_{g}", {})
+                d = all_results.get(mkey(r, level, g), {})
+                # A row with no populated cells renders as 12 "---" and claims a run exists
+                # that scored nothing, which is worse than not listing it. Skip until the
+                # first cell lands; it then appears on the next regeneration with no edit
+                # here. Announced, never silent -- same rule as make_lr_table's block skip.
+                if not d:
+                    print(f"SKIP row {n!r} ({r}, {level}/{g}): no results yet")
+                    continue
                 lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
                                       cost=COST_OURS[level]))
             for n, r, g in rows_u:
                 dg = LR05_DAGGER if r in LR05_CAPPED else dagger
-                d = all_results.get(f"{n}_{level}_{g}", {})
+                d = all_results.get(mkey(r, level, g), {})
                 lines.append(make_row(unifk(n), d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
@@ -714,8 +744,8 @@ def main():
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
     node_dicts = list(NODE_BASELINES.values()) + list(MASK_NODE_BASELINES.values()) \
-        + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_uniform] \
-        + [all_results.get(f"{n}_node_{g}", {}) for n, _, _, g in node_ours]
+        + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_uniform] \
+        + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_ours]
     avb, avs = section_avg_best(node_dicts)
 
     lines.append("\\textbf{Gradient attribution} \\\\")
@@ -784,8 +814,8 @@ def main():
 
     best_edge, second_edge = best_in_col("edge")
     edge_dicts = list(EDGE_BASELINES.values()) + list(MASK_EDGE_BASELINES.values()) \
-        + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_uniform] \
-        + [all_results.get(f"{n}_edge_{g}", {}) for n, _, _, g in edge_ours]
+        + [all_results.get(mkey(d, "edge", g), {}) for _, d, _, g in edge_uniform] \
+        + [all_results.get(mkey(d, "edge", g), {}) for _, d, _, g in edge_ours]
     eavb, eavs = section_avg_best(edge_dicts)
 
     # MAttr edge llama3 cells use a reduced eval subset (sphinx rerun) -> dagger.

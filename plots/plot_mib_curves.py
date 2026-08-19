@@ -65,6 +65,10 @@ FACET_ORDER = [c[2] for c in COLUMNS]
 # accuracies became standard, so their _eval dirs already have both arrays and need no twin.
 METHODS = [
     ("MAttr", P.color("MAttr"), "solid", "mattr", "topklog_lr_0.05"),
+    # Same forward, same backward, Adam -> SGD, same lr=0.05. Shares MAttr's blue and separates
+    # by linetype (palette.py ALIASES documents why it gets no hex of its own): colour encodes
+    # "different method" everywhere else in this paper, and this is one method at two optimizers.
+    ("MAttr (SGD)", P.color("MAttr (SGD)"), "dashed", "mattr", "softlog_sgd_lr_0.05"),
     ("+hard", P.color("+hard"), "solid", "mattr", "htklog_lr_0.05"),
     ("IG (5 steps)",  P.color("IG"), "solid",  "base", ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
     ("IG (10 steps)", P.color("IG"), "dashed", "base", ("napig10_eval",     "EAP-IG-inputs_patching_node")),
@@ -139,16 +143,25 @@ JIT = {m: 10 ** off for m, off in
 def build():
     rows = []
     for mname, _, _, kind, loc in METHODS:
+        n_found = 0
         for task, model, flabel in COLUMNS:
             d = load(kind, loc, task, model)
             if d is None:
                 continue
+            n_found += 1
             acc, faith = d.get("accuracies"), d.get("faithfulnesses")
             for i, pct in enumerate(PCT):
                 rows.append(dict(method=mname, facet=flabel,
                                  pct=pct, x=pct * JIT[mname],
                                  acc=acc[i] if acc else None,
                                  cpr=faith[i] if faith else None))
+        # load() returns None for a path that does not exist, so a mistyped or not-yet-populated
+        # dir makes the series vanish from the figure with no error -- which is exactly how GIM
+        # was silently absent until the gim_accauc/gim_eval mixup was caught (see METHODS above).
+        # Say it out loud instead: partial is expected while a sweep fills, absent is not.
+        if n_found < len(COLUMNS):
+            print(f"{'MISSING' if not n_found else 'partial'}: {mname} ({loc}) "
+                  f"{n_found}/{len(COLUMNS)} cells")
     df = pd.DataFrame(rows)
     df["method"] = pd.Categorical(df["method"], METHOD_ORDER)
     df["facet"] = pd.Categorical(df["facet"], FACET_ORDER)
