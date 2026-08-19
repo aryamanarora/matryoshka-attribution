@@ -63,6 +63,22 @@ SVA = ["nounpp", "rc", "simple", "within_rc"]
 # into SVA would hide that they are where the methods separate most (I×G floors at acc-AUC 0.022
 # on all four while MAttr reaches ~0.50). As a fourth group each contributes 1/4 of every point.
 ARITH = ["addition", "months", "weekdays", "hours"]
+# The four task-groups a point may average over, and which of them each SUBSTRATE is REQUIRED to
+# have. Every (method, loss) point inside a panel must carry the panel's full required set or it
+# is dropped -- see `group_avg`. Without that rule group_avg silently skips a group with no runs,
+# so a series whose sweep is still in flight lands on the same axis as a complete one with no
+# visible sign of it, and the panel compares two different task populations.
+#
+# ARC-E and IOI are `node` ONLY, and that is structural, not a gap to be filled. The mlp and
+# mlp+attn_head substrates are per-POSITION layouts, so eval_sva.py filters every pair to the
+# modal clean-prompt token length (`VARLEN = SPAN or nodes == "node"`, eval_sva.py:579). The MIB
+# tasks are variable-length, and measured on llama3 the filter keeps 3.8% of ARC-E (15 of 400
+# pairs, 83 distinct lengths) and 28.5% of IOI. A 15-example "ARC-E" would read in the figure as
+# a task-group average while being a single-length fluke, so those cells are not run.
+GROUPS = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi"])]
+REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
+            "mlp": ["SVA", "Arith"],
+            "mlp+attn_head": ["SVA", "Arith"]}
 # (results dir, input-included label, ablation-row label). The ablation dimension is the FACET
 # ROW: `Patched` ablates non-top-k units to the counterfactual source activation, `Zero-abl.`
 # sets them to 0. That is a different SETTING, not a rescoring -- MAttr trains through it, and
@@ -197,37 +213,54 @@ def load(res, corrected=False):
 
 
 def group_avg(raw, m, loss, sub):
-    """Average over task-groups: SVA (mean of 4) + Arith (mean of 4) + ARC-E + IOI when present.
+    """Macro-average over the task-groups REQUIRED[sub]; None if any of them is incomplete.
 
     Macro-average over groups, not over tasks, so the eight subtasks that come in fours do not
-    outvote the two single-task MIB cells. Groups with no runs at this substrate drop out (the
-    MIB tasks exist at `node` only), which is why the mean is over `gx` rather than len(groups).
+    outvote the two single-task MIB cells.
+
+    All-or-nothing on purpose. This used to average whichever groups happened to be on disk,
+    which meant a series whose sweep was still running silently became e.g. an SVA-only point
+    plotted on the same axis as a four-group one -- the panel then compared two different task
+    populations with nothing on the figure to show it. A group also counts as missing when only
+    SOME of its subtasks are present (`set(tasks) <= have`), since a 2-of-4 Arith mean is the
+    same failure one level down. Callers report what was dropped rather than swallowing it.
     """
-    groups = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi"])]
-    gx, gy, names = [], [], []
-    for gname, tasks in groups:
-        xs = [raw[(m, loss, sub, t)] for t in tasks if (m, loss, sub, t) in raw]
-        if xs:
-            gx.append(np.mean([v[0] for v in xs]))
-            gy.append(np.mean([v[1] for v in xs]))
-            names.append(gname)
+    have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, loss, sub)}
+    gx, gy = [], []
+    for gname, tasks in GROUPS:
+        if gname not in REQUIRED[sub]:
+            continue
+        if not set(tasks) <= have:
+            return None
+        vs = [raw[(m, loss, sub, t)] for t in tasks]
+        gx.append(np.mean([v[0] for v in vs]))
+        gy.append(np.mean([v[1] for v in vs]))
     if not gx:
         return None
-    return float(np.mean(gx)), float(np.mean(gy)), tuple(names)
+    return float(np.mean(gx)), float(np.mean(gy)), tuple(REQUIRED[sub])
 
 
 def main():
-    rows = []
+    rows, dropped = [], []
     for res, inp_label, abl in SOURCES:
         raw = load(res, corrected=abl != "Patched")
         for m in FIGURE_METHODS:
             mlabel = METHODS[m][0]
             for lkey, llabel in LOSSES.items():
                 for sub, slabel in SUBSTRATES:
+                    # Second strip line names the task-groups the panel averages. It differs by
+                    # substrate (node has ARC-E/IOI, the per-position ones structurally cannot),
+                    # so putting it in the strip is what stops the two column families from
+                    # being read as the same average. Abbreviated to fit the panel width.
+                    facet = f"{slabel}, {inp_label}\n{'·'.join(REQUIRED[sub])}"
                     r = group_avg(raw, m, lkey, sub)
                     if r is None:
+                        have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
+                        miss = [g for g, ts in GROUPS
+                                if g in REQUIRED[sub] and not set(ts) <= have]
+                        if have:   # nothing at all on disk = not submitted; only flag partials
+                            dropped.append((abl, facet, mlabel, llabel, "+".join(miss)))
                         continue
-                    facet = f"{slabel}, {inp_label}"
                     rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel,
                                      loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
@@ -236,8 +269,9 @@ def main():
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
     df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in FIGURE_METHODS])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
-    facet_order = ["Node, −input", "Node, +input",
-                   "MLP, −input", "MLP+Attn, −input"]
+    node_g, mlp_g = "·".join(REQUIRED["node"]), "·".join(REQUIRED["mlp"])
+    facet_order = [f"Node, −input\n{node_g}", f"Node, +input\n{node_g}",
+                   f"MLP, −input\n{mlp_g}", f"MLP+Attn, −input\n{mlp_g}"]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
     df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
@@ -278,17 +312,25 @@ def main():
     # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
     p.save(out.replace(".pdf", ".png"), dpi=200, verbose=False)
     print("wrote", out, f"({len(df)} points)")
-    # quick sanity: points per facet cell
-    print(df.groupby(["ablation", "facet"], observed=True).size().to_string())
-    # COVERAGE, not cosmetics. group_avg silently drops a task-group with no runs, so a row
-    # whose sweep is still in flight quietly becomes an SVA-only average while the other row
-    # macro-averages four groups -- same axis, different populations, no visible sign of it.
-    # Print which groups actually went into each panel so an incomplete row is impossible to
-    # mistake for a complete one.
-    cov = df.groupby(["ablation", "facet"], observed=True)["groups"].agg(
-        lambda s: " / ".join(sorted(set(s))))
-    print("\ntask-groups averaged per panel:")
+    # Every panel must show ONE group set (group_avg enforces it) and the full method x loss
+    # grid. A short count is a coverage hole, not a styling choice, so print both.
+    n_full = len(FIGURE_METHODS) * len(LOSSES)
+    cov = df.groupby(["ablation", "facet"], observed=True).agg(
+        n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
+    cov["of"] = n_full
+    print("\npoints and task-groups per panel:")
     print(cov.to_string())
+    if dropped:
+        # Partial cells: runs exist for this method/loss/substrate but not for every subtask of
+        # every required group, so the point would have been an average over a smaller task
+        # population than its neighbours. Listed rather than silently omitted -- this is the
+        # to-run list, and an empty list is the signal the figure is ready for the paper.
+        print(f"\nDROPPED {len(dropped)} partial cells (missing task-groups):")
+        for abl, facet, m, loss, miss in sorted(dropped):
+            # facet carries the two-line strip label; flatten it so the report stays tabular.
+            print(f"  {abl:10s} {facet.split(chr(10))[0]:18s} {m:14s} {loss:11s} missing {miss}")
+    else:
+        print("\nno partial cells: every panel is complete.")
 
 
 if __name__ == "__main__":
