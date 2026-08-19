@@ -23,10 +23,18 @@ enters at rank 1 and the rest of the column is otherwise unchanged, the method i
 first pick on "the prompt matters" and the with-input faithfulness curve gains nothing that
 tells you where in the network SVA is computed.
 
-SECTIONED BY TRAINING LOSS (logit-diff, CE, accuracy), subtask within loss. All three losses
-were swept for all five methods, and which units a method reaches for first is exactly the
+SECTIONED BY TRAINING LOSS (logit-diff, CE, accuracy), task within loss. All three losses
+were swept for all six methods, and which units a method reaches for first is exactly the
 thing the loss is expected to move -- showing only the logit-diff third made that
-unfalsifiable. 3 losses x 4 subtasks x 5 methods = 60 cells.
+unfalsifiable. 3 losses x 8 tasks x 6 methods = 144 cells, 720 unit rows.
+
+The 8 tasks are the 4 SVA subtasks and the 4 goodfire-ai/arithmetic-wild tasks (see TASKS).
+The arithmetic half carries PRIOR-WORK MARKS -- \\star for a neuron \\citet{feucht2026arithmetic}
+publish, \\dagger for the layer-18 MLP block they localise to -- the SVA+ counterpart of the
+IOI table's role colours, and the only unit-level published circuit available for these tasks.
+See the GOODFIRE block for what each mark does and does not claim. Every run prints its mark
+counts, and a count of zero is a result, not a failure: it says no method's top-5 on that task
+contains a unit the prior work names.
 
 DEFAULT LAYOUT IS COMPACT (~3 pages): the identifier alone. `--descriptions` adds
 each neuron's top positive and negative description from Transluce, which is a much richer
@@ -129,6 +137,33 @@ TASKS = [("simple", "Simple"), ("nounpp", "Noun PP"),
          # SUBSTRATES had to be re-read once these landed (12 cells per loss became 24).
          ("addition", "Addition"), ("months", "Months"),
          ("weekdays", "Weekdays"), ("hours", "Hours")]
+
+# ---------------------------------------------------------------- prior-work annotation
+# The arithmetic half of this table is the one place in the SVA+ appendix where a PUBLISHED
+# unit-level circuit exists to check against, so it gets the same treatment the IOI table gives
+# \citet{wang2022interpretability}'s head roles: units the prior work names are marked in place.
+#
+# `arith_wild_l18_neurons.json` is goodfire-ai/arithmetic-wild's own `src/neurons_per_task.json`,
+# vendored (results/ and paper/ are gitignored, and a table generator that reads a sibling home
+# directory silently stops annotating on any other machine). Its contents are LAYER-18
+# down_proj-INPUT neuron indices -- the same 14336-wide index space this table's `mlp` substrate
+# uses -- selected in that repo's src/neuron_selection.ipynb by write score
+# omega = ||n^T S|| / ||n|| > 0.4 onto the task's layer-18 DAS *output* subspace.
+#
+# TWO marks, because the two substrate families can support two different claims and conflating
+# them would overclaim at `node`:
+#   \star    (neuron substrates) this EXACT neuron is in that task's published set.
+#   \dagger  (node substrates)   this is the layer-18 MLP BLOCK, the one the published neurons
+#            live in. A far weaker statement -- the block holds 14336 neurons and the published
+#            set is 15-28 of them -- so it is worded as "the block they localise to", not as a
+#            hit, and it is never drawn at the neuron substrates where the exact test is available.
+# Both are drawn ONLY in the four arithmetic blocks, and only against that task's OWN list: the
+# four lists overlap heavily (weekdays' 15 are a subset of addition's 28), so marking a
+# cross-task member would turn "the method found the weekdays neurons" into a near-tautology.
+GOODFIRE = json.load(open(Path(__file__).resolve().parent.parent
+                          / "src/learning_to_attribute/data/arith_wild_l18_neurons.json"))
+GF_LAYER, GF_NEURONS = GOODFIRE["layer"], GOODFIRE["neurons"]
+GF_CITE = r"\citet{feucht2026arithmetic}"
 # Training losses, as a top-level section each. Keys are the runs' own meta["loss"]; the middle
 # field is the tag fragment that selects them on disk (empty = logit-diff, the loss every
 # headline SVA number in the paper uses). Order matches plot_sva_sweep.LOSS_ORDER so the two
@@ -297,6 +332,42 @@ def unit_label(u):
     if "neuron" in u:
         return r"$\ell$%d.n%d" % (u["layer"], u["neuron"])
     return r"$\ell$%d.mlp" % u["layer"]
+
+
+def gf_mark(u, task, sub):
+    r"""`$^{\star}$` / `$^{\dagger}$` / "" -- see the GOODFIRE block for what each claims."""
+    if task not in GF_NEURONS or u["kind"] != "mlp" or u["layer"] != GF_LAYER:
+        return ""
+    if "neuron" in u:
+        return r"$^{\star}$" if u["neuron"] in GF_NEURONS[task] else ""
+    return r"$^{\dagger}$" if sub == "node" else ""
+
+
+def gf_legend(gf, sub):
+    """Legend row(s) for whichever prior-work marks this render actually produced.
+
+    Returns a list so it can be spliced into \\endlastfoot, and is EMPTY when no mark occurred --
+    the four arithmetic blocks are always rendered, so an absent legend means the marks found
+    nothing, which main() reports on stderr rather than by printing a promise the table does not
+    keep.
+    """
+    n_arith = sum(1 for t, _ in TASKS if t in GF_NEURONS)
+    parts = []
+    if gf[r"$^{\star}$"]:
+        parts.append(r"$^{\star}$~one of the %d--%d layer-%d MLP neurons %s localise that task's "
+                     r"cyclic arithmetic to (%d occurrences here)"
+                     % (min(map(len, GF_NEURONS.values())), max(map(len, GF_NEURONS.values())),
+                        GF_LAYER, GF_CITE, gf[r"$^{\star}$"]))
+    if gf[r"$^{\dagger}$"]:
+        parts.append(r"$^{\dagger}$~the layer-%d MLP block, which is where %s localise those "
+                     r"neurons -- at this granularity the block is one unit, so this marks the "
+                     r"right \emph{site}, not the right neurons (%d occurrences)"
+                     % (GF_LAYER, GF_CITE, gf[r"$^{\dagger}$"]))
+    if not parts:
+        return []
+    return [r"\multicolumn{%d}{@{}p{0.97\textwidth}@{}}{\scriptsize Marks apply to the %d "
+            r"arithmetic blocks only, against each task's own published set:~%s} \\"
+            % (len(METHODS) + 1, n_arith, r"\quad ".join(parts))]
 
 
 def top_units(scores, meta, sub, H, inp, n=TOPN):
@@ -485,6 +556,12 @@ def main():
             for n in ns:
                 units.setdefault(unit_key(n), n)
     counts = Counter(unit_key(n) for *_, rs in blocks for _, ns in rs for n in ns)
+    # Prior-work marks, counted BEFORE rendering so the legend can name only the marks that
+    # actually occur. A legend that promises a $\star$ no cell carries reads as "the methods
+    # missed them" only if you scan all 720 ids to confirm; the honest version is to drop the
+    # entry and say so in the run log instead, which is what main()'s stderr line does.
+    gf = Counter(m for _, _, task, _, rs in blocks for _, ns in rs for n in ns
+                 if (m := gf_mark(n, task, sub)))
     recur = sorted((k for k, v in counts.items() if v >= recur_min),
                    key=lambda k: (-counts[k], k))
     # Truncation is not just cosmetic: the legend below says "recurring in >=recur_min cells", and
@@ -590,6 +667,7 @@ def main():
              r"\quad ".join(
                  r"\colorbox{%s}{%s}~$\times$%d" % (color[k], unit_label(units[k]), counts[k])
                  for k in recur)),
+         *gf_legend(gf, sub),
          r"\endlastfoot"]
     for b_i, (lkey, llabel, task, tlabel, rows) in enumerate(blocks):
         by = {mk: ns for mk, ns in rows}
@@ -643,6 +721,11 @@ def main():
                 cell = chip(unit_key(n), unit_label(n))
                 if "pos" in n:
                     cell += ".p%d" % n["pos"]
+                # Prior-work mark, OUTSIDE the chip and after the position, for the same reason
+                # the position sits outside it: the chip means "recurs across cells", and a unit
+                # can be both recurring and published, so the two annotations have to compose
+                # rather than one overwriting the other.
+                cell += gf_mark(n, task, sub)
                 # Only MLP neurons get the Transluce link; there is no browser page for an
                 # attention head or a whole MLP block, so those ids stay plain text. Nesting the
                 # link OUTSIDE the box rather than the reverse keeps the whole id one uniform
@@ -675,6 +758,17 @@ def main():
     print(f"wrote {out}  ({len(blocks)} loss x subtask blocks, {n_rows} unit rows, "
           f"{'descriptions' if desc_mode else 'compact'}{extra})")
     print("  component mix: " + ", ".join(f"{k} {v}" for k, v in sorted(mix.items())))
+    # A zero here is a RESULT, not a bug: it says no method's top-5 on that task contains a unit
+    # the prior work names. Print it either way so the two cases are distinguishable without
+    # grepping the .tex, and print the per-task split because the four lists differ in size and
+    # `hours` is the one our own multitask run already failed to recover (ARITHMETIC_WILD_REPORT).
+    n_arith_cells = sum(1 for _, _, t, _, _ in blocks if t in GF_NEURONS) * len(METHODS)
+    per_task = Counter(t for _, _, t, _, rs in blocks for _, ns in rs for n in ns
+                       if gf_mark(n, t, sub))
+    star, dag = gf[r"$^{\star}$"], gf[r"$^{\dagger}$"]
+    print(f"  prior work ({GOODFIRE['_paper'].split(':')[0]}): {star} exact-neuron marks, "
+          f"{dag} layer-{GF_LAYER}-block marks over {n_arith_cells} arithmetic cells"
+          + (f"  [{', '.join(f'{k} {v}' for k, v in sorted(per_task.items()))}]" if per_task else ""))
     if missing:
         print("MISSING runs:", ", ".join(missing))
 
