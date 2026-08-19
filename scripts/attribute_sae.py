@@ -282,7 +282,7 @@ def main():
                          "topk = differentiable sigmoid top-k in forward AND backward (canonical); "
                          "hard_topk = hard top-k forward, sigmoid-STE backward (the legacy path). "
                          "Evaluation always uses a hard top-k mask regardless of this flag.")
-    ap.add_argument("--loss", default="ce", choices=["ce", "logit_diff"],
+    ap.add_argument("--loss", default="ce", choices=["ce", "logit_diff", "acc"],
                     help="--method mattr: training objective, via learning_to_attribute.losses. "
                          "ce (default) is bit-identical to the previous hardcoded behaviour")
     ap.add_argument("--method", default="mattr", choices=["mattr", "ixg"],
@@ -290,7 +290,7 @@ def main():
                          "ixg = closed-form I x G over the same SAE variable set (no training)")
     ap.add_argument("--grad-examples", type=int, default=4000,
                     help="--method ixg: #examples in the attribution average (matches MAttr's --steps)")
-    ap.add_argument("--grad-loss", default="ce", choices=["ce", "logit_diff"],
+    ap.add_argument("--grad-loss", default="ce", choices=["ce", "logit_diff", "acc"],
                     help="--method ixg: metric differentiated for I x G. ce matches the MAttr "
                          "training objective; logit_diff is the repo's canonical logit difference")
     ap.add_argument("--n-eval", type=int, default=80)
