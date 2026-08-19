@@ -29,16 +29,25 @@
 #     whose Gemma-2 forward is wrong (CLAUDE.md; proved against an HF reference in 525673a).
 #     submit_lr_sweep_topklog.sh hardcodes $ABS/.venv/bin/python for every model, so re-running
 #     it would silently reintroduce the bad Gemma numbers.
+#     ...and that venv needs an explicit PYTHONPATH. It is the MIB repo's own environment and
+#     does NOT have learning_to_attribute installed, so invoking its python directly dies at
+#     `from learning_to_attribute import ...` with ModuleNotFoundError. The first four gemma2
+#     jobs of this sweep failed exactly that way before $PP was added. `src` is ours; the other
+#     two entries are the precedent from scripts/reeval_bern_gemma.sh:41, kept so eval_mib.py's
+#     MIB-side imports resolve the same way they do there.
 #
 # Protocol is otherwise byte-for-byte submit_lr_sweep_topklog.sh -- 500 steps, --include-input,
 # --mode sufficient, train->validation, llama3/ioi capped at --eval-examples 200 -- because the
 # comparison is only meaningful against the arm it mirrors.
 #
-# DRYRUN=1 to preview.  LRS="0.05 0.1" to override the grid.
+# DRYRUN=1 to preview.  LRS="0.05 0.1" to override the grid.  ONLY=gemma2 to restrict to one
+# model's cells (used to resubmit just the gemma2 arm after the PYTHONPATH fix above).
 set -u
 ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"
 PY_L2A=$ABS/.venv/bin/python                 # gpt2 / qwen2.5 / llama3
 PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
+# Prefix for PY_TL2 only; PY_L2A has the package installed editable and needs none.
+PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}
 # Same grid as the paper's LR sweep (tabs/lr_sweep.tex) so the new row is directly comparable.
 LRS=${LRS:-"0.005 0.01 0.05 0.1 0.3"}
@@ -48,22 +57,24 @@ PAIRS=(
   "qwen2.5 mcqa" "gemma2 mcqa" "llama3 mcqa"
   "gemma2 arc_easy" "llama3 arc_easy" "llama3 arc_challenge"
 )
+ONLY=${ONLY:-}
 n=0
 submit() { # lr model task
   local lr=$1 model=$2 task=$3
-  local py=$PY_L2A
+  if [ -n "$ONLY" ] && [ "$model" != "$ONLY" ]; then return 0; fi
+  local py=$PY_L2A pp=""
   case $model in
     gpt2|qwen2.5) local cpus=2 mem=32G tlim=04:00:00 bs="" ;;
-    gemma2)       local cpus=3 mem=64G tlim=08:00:00 bs="--batch-size 4"; py=$PY_TL2 ;;
+    gemma2)       local cpus=3 mem=64G tlim=08:00:00 bs="--batch-size 4"; py=$PY_TL2; pp=$PP_TL2 ;;
     llama3)       local cpus=4 mem=96G tlim=12:00:00 bs="--batch-size 2" ;;
   esac
   local ec=""; [ "$model" = "llama3" ] && [ "$task" = "ioi" ] && { ec="--eval-examples 200"; tlim=06:00:00; }
   local name="softsgd-lr${lr}-${task}-${model}"
   local cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
-$py scripts/eval_mib.py --model $model --task $task --steps 500 --k-schedule log \
+$pp$py scripts/eval_mib.py --model $model --task $task --steps 500 --k-schedule log \
 --masking topk --optimizer sgd --mode sufficient --lr $lr --split validation --train-split train \
 --include-input $bs $ec --output results/softlog_sgd_lr_$lr"
-  if [ "$DRYRUN" = "1" ]; then echo "DRY $name ${ec:+[$ec]} [py=${py#$ABS/}]"; else
+  if [ "$DRYRUN" = "1" ]; then echo "DRY $name ${ec:+[$ec]} [py=${py#$ABS/}]${pp:+ [+PYTHONPATH]}"; else
     sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \
       --job-name="$name" --output="$ABS/logs/${name}.out" --wrap="$cmd" >/dev/null \
       && echo "submitted $name ${ec:+[$ec]}"
