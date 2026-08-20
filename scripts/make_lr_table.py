@@ -65,21 +65,41 @@ LR_METHODS = [
     # 0.361, results/sva_mlp_lr) -- i.e. the shared grid was chosen for Adam and there is no
     # reason it brackets SGD's optimum. If 1.0 wins, the row is not comparable to the Adam rows
     # at equal lr and needs saying so in prose.
+    #
+    # 3.0/10.0 exist to BRACKET that 1.0 peak from above, which they do: on acc-AUC both lose
+    # to 1.0 nearly cell-for-cell (2/11 and 1/9 wins). Read them on acc-AUC, not on CPR. The
+    # CPR deficit at 3.0 is one cell -- ioi/gpt2 drops 1.84 -> 0.25 because the two top-ranked
+    # nodes (`input`, `m0`) get the largest gradients, so at 3x the step they overshoot furthest
+    # past zero, saturate the gate (sp = m(1-m) -> 0), and never come back; `input` ends ranked
+    # last, so every circuit below k=100% reads corrupted input and sits at the corrupt floor.
+    # Excluding that one cell, 3.0's CPR mean vs 1.0 is +0.009 at 6/10 -- i.e. a wash, and the
+    # bracketing claim rests on acc-AUC alone. Do not read the CPR Avg here as an LR effect.
     ("$+$ SGD", [
         ("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
         ("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
         ("0.3", "softlog_sgd_lr_0.3"), ("1.0", "softlog_sgd_lr_1.0"),
+        ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0"),
     ]),
-    # submit_softuni_sgd_lr.sh, submitted 2026-08-20, nothing on disk yet -- render() drops any
-    # block with fewer than two LRs present, so this stays invisible until it lands.
-    # It crosses the k-schedule with the optimizer: "$+$ SGD" above is soft/log/SGD and the
-    # "$+$ unif $k$" row of mib_results.tex is soft/uniform/Adam, so neither says whether the
-    # uniform-k and SGD effects are the same effect. They look alike on disk -- both score
-    # better on CPR-AUC and worse on acc-AUC than the headline -- which is exactly the
-    # dense-end/sparse-end split, so the corner is needed to separate them.
+    # submit_softuni_sgd_lr.sh. Crosses the k-schedule with the optimizer: "$+$ SGD" above is
+    # soft/log/SGD and the "$+$ unif $k$" row of mib_results.tex is soft/uniform/Adam, so
+    # neither says whether the uniform-k and SGD effects are the same effect. They look alike
+    # on disk -- both score better on CPR-AUC and worse on acc-AUC than the headline -- which
+    # is exactly the dense-end/sparse-end split, so the corner is needed to separate them.
+    #
+    # THE ANSWER, from this block against the one above: they are NOT the same effect and are
+    # separable. Moving the optimizer (Adam -> SGD) moves acc-AUC and CPR-AUC the SAME way;
+    # moving the k-schedule (log -> uniform) TRADES them -- uniform-k is best-in-sweep on
+    # CPR-AUC (9/11 vs the Adam headline) and among the worst on acc-AUC. That is the
+    # dense-end/sparse-end split showing up as a k-schedule effect, not an optimizer one.
+    #
+    # This arm is also far FLATTER in LR than log-k: 3.0 is -0.010 CPR / -0.003 acc vs 1.0,
+    # against log-k's -0.15 / -0.035, and it has not blown up on any cell. Consistent with it
+    # spending most steps at large k, where the gate stays far from saturation and so cannot
+    # take the overshoot-past-zero path that kills log-k's ioi/gpt2 at 3.0.
     ("$+$ SGD, $+$ unif $k$", [
         ("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
         ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
+        ("3.0", "softuni_sgd_lr_3.0"), ("10.0", "softuni_sgd_lr_10.0"),
     ]),
     ("$+$ hard", [
         ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
@@ -229,6 +249,11 @@ DAGGER_CELLS = {("ioi", "llama3")}  # capped at 200 in all 3 MAttr blocks (not R
 STEPS = {
     "\\ourmethod{}": "500 steps",
     "$+$ SGD": "500 steps",
+    # submit_softuni_sgd_lr.sh passes --steps 500, same as every other MAttr block. Without an
+    # entry here the block renders with NO step note while the blocks around it carry one,
+    # which reads as "unknown/unmatched budget" for the one block whose whole job is to be
+    # matched to "$+$ SGD".
+    "$+$ SGD, $+$ unif $k$": "500 steps",
     "$+$ hard": "500 steps",
     "$+$ unif $k$, $+$ hard": "500 steps",
     "$+$ hard bwd (REINFORCE)": "500 steps; 2000 in the last row",
