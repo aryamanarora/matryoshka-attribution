@@ -52,11 +52,34 @@ LR_METHODS = [
     # optimizer differs. Included because the three MAttr arms on disk never isolated the
     # optimizer -- the id-STE arm flips the backward and switches to SGD at once -- so this is
     # the block that says whether Adam's per-parameter normalisation is doing the work.
-    # submit_softlog_sgd_lr.sh; all five LRs run all 11 cells (llama3/ioi capped at 200).
+    # submit_softlog_sgd_lr.sh. COVERAGE IS UNEVEN AND THE AVG COLUMN IS THE ONLY SAFE READ:
+    # the first submission was killed after 10/55 jobs, so 0.005 and 0.01 are 5/11 cells
+    # (ioi gpt2/llama3/qwen2.5 + mcqa llama3/qwen2.5) and permanently so -- they were NOT
+    # resubmitted, because at 5/11 they already lose to Adam on every one and the SVA neuron
+    # substrate puts this arm's optimum at lr>=1. The resubmission runs 0.05/0.1/0.3/1.0 on all
+    # 11. render() suppresses Avg below full coverage, so the two short rows show cells but no
+    # Avg; do not hand-average them against the 11-cell rows.
+    #
+    # lr=1.0 is OUTSIDE the 0.005-0.3 grid every other block in this table uses. It is here
+    # because at the SVA neuron substrate soft+SGD peaks at lr=1 (acc-AUC 0.496 vs soft+Adam's
+    # 0.361, results/sva_mlp_lr) -- i.e. the shared grid was chosen for Adam and there is no
+    # reason it brackets SGD's optimum. If 1.0 wins, the row is not comparable to the Adam rows
+    # at equal lr and needs saying so in prose.
     ("$+$ SGD", [
         ("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
         ("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
-        ("0.3", "softlog_sgd_lr_0.3"),
+        ("0.3", "softlog_sgd_lr_0.3"), ("1.0", "softlog_sgd_lr_1.0"),
+    ]),
+    # submit_softuni_sgd_lr.sh, submitted 2026-08-20, nothing on disk yet -- render() drops any
+    # block with fewer than two LRs present, so this stays invisible until it lands.
+    # It crosses the k-schedule with the optimizer: "$+$ SGD" above is soft/log/SGD and the
+    # "$+$ unif $k$" row of mib_results.tex is soft/uniform/Adam, so neither says whether the
+    # uniform-k and SGD effects are the same effect. They look alike on disk -- both score
+    # better on CPR-AUC and worse on acc-AUC than the headline -- which is exactly the
+    # dense-end/sparse-end split, so the corner is needed to separate them.
+    ("$+$ SGD, $+$ unif $k$", [
+        ("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
+        ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
     ]),
     ("$+$ hard", [
         ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
