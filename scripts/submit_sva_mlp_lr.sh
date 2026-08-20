@@ -32,7 +32,38 @@
 # rest, and the sweep would look like it ran while holding one run. One subdir per LR is what
 # keeps them apart; do not "tidy" them into a shared dir.
 #
+# THE THREE ARMS (2026-08-20). VARIANT/OPT/LRS are env overrides, one output subdir per arm,
+# so all three live side by side under $OUTBASE. They complete the optimizer x gate cross that
+# submit_sva_sweep.sh's MATTR_CONFIGS never runs -- it bundles variant WITH optimizer
+# (hard_topk:adam, hard_topk_identity:sgd, topk:adam) and never crosses them, which is why no
+# neuron-substrate cell had a controlled optimizer contrast before this.
+#
+#   topk / adam                 lr 0.001..10   the headline; DONE, flat, argmax at 0.05 = 0.361
+#   hard_topk_identity / adam   lr 0.001..10   id-STE with the optimizer swapped
+#   topk / sgd                  lr 0.05..300   soft gate with the optimizer swapped
+#
+# WHY id-STE+ADAM IS THE DECISIVE ONE. At node level the same contrast (mib_node_identity_sgd
+# vs ident_adam_lr_0.01, uniform-k, 500 steps) gives SGD 5/5 with mean +0.404 CPR AUC. Under
+# identity STE dL/ds = dL/dm exactly -- the raw effect size -- and SGD keeps that magnitude
+# while Adam divides by sqrt(v) per node, so only sign-consistency survives. If that is what
+# id-STE's 0.437 is buying at 2.29M units, this arm drops to ~0.36.
+#
+# AND IT DOUBLES AS A FALSIFICATION TEST. hard fwd + identity bwd should be EXACTLY lr-invariant
+# (the mask reads only the score RANKING, the backward reads no magnitude, so scores = lr x a
+# fixed vector and the selection never moves). Verified at node level: Spearman +1.0000 across
+# lr, std exactly x2/x10, byte-identical validation.pkl. If this arm returns 9 identical
+# acc_auc values, that is the prediction confirmed at neuron scale, NOT a broken sweep -- check
+# scores.pt md5s (they should DIFFER while the ranking matches) before calling it a bug.
+#
+# WHY topk/SGD NEEDS A GRID 1000x HIGHER. The sigmoid-slope backward carries dm/ds ~ k/n
+# (~6e-3 here). Adam normalises that factor away, which is exactly why the n/k lr prediction
+# failed for the topk/adam arm; SGD does NOT normalise it, so the same prediction should hold
+# here and the useful lr should sit ~n/k ~ 160x above Adam's optimum. A grid stopping at 0.3
+# would return a guaranteed-uninformative null -- the same trap as the first sweep, in reverse.
+#
 # DRY=1 to preview.  LRS="1.0 3.0" to override the grid.
+# VARIANT=hard_topk_identity OPT=adam LRS="0.001 0.005 0.01 0.05 0.1 0.3 1.0 3.0 10.0" bash $0
+# VARIANT=topk OPT=sgd LRS="0.05 0.3 1.0 3.0 10.0 30.0 100.0 300.0" bash $0
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
