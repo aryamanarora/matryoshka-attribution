@@ -176,10 +176,20 @@ def main():
     tokenizer.padding_side = "right"  # last_pos = attn_mask.sum()-1 assumes right padding
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # transformers renamed from_pretrained's `torch_dtype` to `dtype` in v5, and THIS FILE RUNS
+    # UNDER BOTH. Per CLAUDE.md every gemma2 cell must be trained/scored in
+    # MIB-circuit-track/.venv (transformers 4.46.3, TL 2.15.4, whose Gemma-2 forward is the
+    # correct one), while gpt2/qwen2.5/llama3 run in .venv (transformers 5.9.0). Hardcoding
+    # `dtype=` killed all 12 gemma2 jobs of the 2026-08-20 softlog_sgd sweep 28s in, with
+    # `Gemma2ForCausalLM.__init__() got an unexpected keyword argument 'dtype'`. Gate on the
+    # major version rather than trusting v5's deprecated `torch_dtype` alias to stay.
+    import transformers as _tf
+    _dtype_kw = "dtype" if int(_tf.__version__.split(".")[0]) >= 5 else "torch_dtype"
     hf_model = AutoModelForCausalLM.from_pretrained(
         hf_model_name,
-        dtype=torch.bfloat16 if args.model in ("gemma2", "llama3", "qwen2.5") else torch.float32,
         device_map="auto" if args.model in ("gemma2", "llama3") else None,
+        **{_dtype_kw: torch.bfloat16
+           if args.model in ("gemma2", "llama3", "qwen2.5") else torch.float32},
     )
     if args.model not in ("gemma2", "llama3"):
         hf_model = hf_model.to(device)
