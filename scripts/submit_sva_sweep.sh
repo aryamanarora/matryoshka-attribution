@@ -36,12 +36,18 @@ LOSSES=(ce acc logit_diff)
 GRAD=(ig ixg attnlrp)
 KS=(log uniform)
 # gate:optimizer[:lr] (topk = soft fwd). LR field is OPTIONAL and defaults to $MATTR_LR.
-# topk:sgd runs at lr=1.0, off the sweep's shared 0.05 protocol, deliberately: soft-fwd + SGD
-# has no per-parameter step normalisation, so at 0.05 the gate never leaves its linear region
-# and the run degenerates (the mask stays at m=k/n and the update collapses to a mean-centred
-# path integral -- i.e. it stops being MAttr and becomes IG). The node-level MIB LR sweep puts
-# this arm's optimum at lr=1.0 on both metrics (log-k CPR-AUC 1.41@0.05 -> 1.89@1.0, and 1.0 is
-# bracketed: 3.0 and 10.0 both lose), and results/sva_mlp_lr/topk_sgd peaks at 1.0 too.
+# topk:sgd runs at lr=1.0, off the sweep's shared 0.05 protocol. CORRECTED 2026-08-20: the
+# justification originally written here was that soft-fwd+SGD degenerates at 0.05 (gate stuck
+# in its linear region, mask pinned at m=k/n, update collapsing to a mean-centred path integral
+# = IG). That is a NODE-substrate fact imported from the MIB LR sweep (log-k CPR-AUC
+# 1.41@0.05 -> 1.89@1.0, 1.0 bracketed: 3.0 and 10.0 both lose). It does NOT hold at the neuron
+# substrate this sweep mostly runs on: results/sva_mlp_lr/topk_sgd (addition, mlp, 8 LRs) reads
+# 0.490@0.05 vs 0.496@1.0 and stays in 0.44-0.50 from lr=0.05 all the way to 100. So lr=1.0
+# buys ~0.006 here and costs one-protocol comparability. If this arm is re-run, prefer 0.05.
+#
+# What the deviation is NOT needed for: this arm's win over soft Adam is not an LR artifact.
+# The same probe sweeps topk_adam over 8 LRs at the same substrate; its BEST is 0.346, below
+# topk_sgd's WORST in-range 0.436. Adam cannot be tuned into that gap.
 # The existing three configs stay at 0.05 -- they are Adam (invariant to this) or identity-STE
 # (lr-invariant by construction), and 613 finished runs are already at that LR.
 # NOTE: run_tag() does NOT encode lr, so an lr=1.0 run writes the filename an lr=0.05 run would.
