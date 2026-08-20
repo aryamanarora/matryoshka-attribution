@@ -35,10 +35,22 @@ NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn he
 LOSSES=(ce acc logit_diff)
 GRAD=(ig ixg attnlrp)
 KS=(log uniform)
-MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd" "topk:adam")   # gate:optimizer (topk = soft fwd)
+# gate:optimizer[:lr] (topk = soft fwd). LR field is OPTIONAL and defaults to $MATTR_LR.
+# topk:sgd runs at lr=1.0, off the sweep's shared 0.05 protocol, deliberately: soft-fwd + SGD
+# has no per-parameter step normalisation, so at 0.05 the gate never leaves its linear region
+# and the run degenerates (the mask stays at m=k/n and the update collapses to a mean-centred
+# path integral -- i.e. it stops being MAttr and becomes IG). The node-level MIB LR sweep puts
+# this arm's optimum at lr=1.0 on both metrics (log-k CPR-AUC 1.41@0.05 -> 1.89@1.0, and 1.0 is
+# bracketed: 3.0 and 10.0 both lose), and results/sva_mlp_lr/topk_sgd peaks at 1.0 too.
+# The existing three configs stay at 0.05 -- they are Adam (invariant to this) or identity-STE
+# (lr-invariant by construction), and 613 finished runs are already at that LR.
+# NOTE: run_tag() does NOT encode lr, so an lr=1.0 run writes the filename an lr=0.05 run would.
+# Safe only because zero topk_sgd outputs exist. If you ever sweep LR here, add it to the tag.
+MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd" "topk:adam" "topk:sgd:1.0")
 
 STEPS=2000
-MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --lr 0.05 --eval-examples 100)
+MATTR_LR=${MATTR_LR:-0.05}
+MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-examples 100)
 
 # Reproduce eval_sva.py's output tag so we can skip already-finished configs.
 # These two must stay byte-identical to eval_sva.run_tag() or the skip-if-exists check silently
@@ -73,7 +85,7 @@ submit() {   # $1=name $2=tag ; rest = eval_sva.py args
 }
 
 emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one (task, substrate)
-  local task=$1 nodes=$2 dataset=$3 nabbr=${2//+/-} loss gm cfg variant opt vabbr ks
+  local task=$1 nodes=$2 dataset=$3 nabbr=${2//+/-} loss gm cfg variant opt lr vabbr ks
   # long-prompt MIB tasks: shrink the IG/IxG attribution batch (captured with grad over all
   # layers at once) to avoid OOM; eval sweep still uses 100 test pairs.
   # long-prompt tasks: shrink the IG/IxG attribution batch (captured with grad over all
@@ -89,14 +101,14 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
         "${ABL_ARG[@]}" --output "$OUT"
     done
     for cfg in "${MATTR_CONFIGS[@]}"; do
-      variant=${cfg%:*}; opt=${cfg#*:}
+      IFS=: read -r variant opt lr <<< "$cfg"; lr=${lr:-$MATTR_LR}
       vabbr=$(case "$variant" in hard_topk_identity) echo idste;; topk) echo stopk;; *) echo soft;; esac)
       for ks in "${KS[@]}"; do
         submit "sva_${task}_${nabbr}_mattr_${vabbr}_${opt}_${ks}_${loss}" \
           "$(mattr_tag "$variant" "$opt" "$loss" "$ks")" \
           --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
           --method mattr --loss "$loss" --k-schedule "$ks" \
-          --variant "$variant" --optimizer "$opt" "${MATTR_COMMON[@]}" \
+          --variant "$variant" --optimizer "$opt" --lr "$lr" "${MATTR_COMMON[@]}" \
           "${ABL_ARG[@]}" --output "$OUT"
       done
       if [[ "$IGS" -gt 1 ]]; then   # MAttr-IG variants (env-gated), IG_KS schedules only
@@ -105,7 +117,7 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
             "$(mattr_tag "$variant" "$opt" "$loss" "$ks" "$IGS")" \
             --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
             --method mattr --loss "$loss" --k-schedule "$ks" \
-            --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" \
+            --variant "$variant" --optimizer "$opt" --mattr-ig-steps "$IGS" --lr "$lr" \
             "${MATTR_COMMON[@]}" "${ABL_ARG[@]}" --output "$OUT"
         done
       fi
