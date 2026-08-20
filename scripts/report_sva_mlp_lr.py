@@ -5,14 +5,22 @@ Prints acc-AUC / faith-AUC / k*_50 for the sweep next to every baseline on the s
 sigmoid_topk gate temperature T=1.0. Spread far below T means the gates never left the linear
 region (undertrained, ranking ~ one-shot gradient); far above means saturated.
 
-RESULT, 2026-08-20 -- this sweep is a NULL, and that is its point. lr=0.05 (the headline) is
-already the argmax: a 0.30-0.36 plateau over 0.005-0.3 decaying either side, against IG's
-0.500. LR does move saturation across four orders of magnitude (std 0.17 -> 261 vs T=1), so
-the knob works and is simply already tuned -- the arithmetic/neuron-substrate deficit is a
-property of the objective or substrate, not of optimizer settings. Do not re-run this to
-explain that gap. The prior "gate slope ~ k/n so useful LR scales like n/k, and 0.05 must be
-far too small at 2.29M units" argument is what this falsifies, for the Adam/soft-top-k arm.
-(SGD has never been swept at neuron scale, so it survives there.)
+RESULT, 2026-08-20 -- lr=0.05 (the headline) is already the argmax: a 0.30-0.36 plateau over
+0.005-0.3 decaying either side, against IG's 0.500. LR does move saturation across four orders
+of magnitude (std 0.17 -> 261 vs T=1), so the knob works and is simply already tuned. This
+falsifies the "gate slope ~ k/n so useful LR scales like n/k, and 0.05 must be far too small
+at 2.29M units" argument, for the Adam/soft-top-k arm. (SGD has never been swept at neuron
+scale, so it survives there.)
+
+DO NOT READ THE FLAT CURVE AS A CEILING. Every run here is still rising at step 1999 (+0.03 to
++0.09 over its last 800 probe steps), and per eval_sva.py:773 a rising probe means UNDER-
+CONVERGED. The pre-existing results/probe_* sweep -- 29 runs, same cell, --loss acc, lr crossed
+with step budget -- shows the budget is the binding constraint and that the lr optimum moves
+with it: topk goes 0.367 (2k) -> 0.465 (8k) -> 0.472 (16k) at lr=0.02, i.e. ~5x the entire
+spread of this grid, and 0.02 overtakes 0.05 once the budget grows. id-STE at lr=0.05/16000
+reaches 0.502, matching IG. So the gradient-methods win at this substrate is NOT established
+at convergence, and the open experiment is an 8000-step step-matched re-run at logit_diff --
+not more lr points. See plots/plot_sva_mlp_lr_probe.py for both halves in one figure.
 
 Both halves read only from disk; safe to re-run. Run from the repo root.
 """
