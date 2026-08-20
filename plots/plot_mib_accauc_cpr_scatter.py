@@ -9,6 +9,7 @@ Three variants of one plot, all raw matplotlib with direct point labels:
   --full     appendix, full page, every node point             -> ..._full.pdf
   --edge     appendix, full page, every edge point             -> ..._edge_full.pdf
   --both     appendix, full page, node over edge in one float  -> ..._both.pdf
+  --lr       appendix, full page, ONLY the LR sweeps (node)    -> ..._lr.pdf
 
 acc-AUC sources mirror make_mib_accauc_table; CPR = `area_under` (mirrors make_mib_table).
 Run:  uv run python plots/plot_mib_accauc_cpr_scatter.py  ->  plots/mib_accauc_cpr_scatter.pdf
@@ -219,6 +220,84 @@ EPRUN_LR_ANCHOR = {"eprun_eval_s0.5_ld": ("NP s=0.5", 0.8),
                    "eprun_eval_s0.8_ld": ("NP s=0.8", 0.8)}
 
 
+# =========================================================================================
+# --lr: every LR sweep in the paper on one frame, and NOTHING else
+# =========================================================================================
+# The --full/--both figures answer "do the two metrics agree across methods?", and the LR paths
+# are a minor part of that picture -- 59 points, of which the swept ones are a minority, and the
+# gradient cloud sets the axis limits. This variant asks the other question: how much of the gap
+# between any two methods here is just learning rate? Dropping the fixed-setting points lets the
+# axes zoom onto the swept region, which is where that question is legible.
+#
+# NODE LEVEL ONLY, and not by choice: there is no edge-level LR sweep on disk. Every edge dir is
+# a single setting at lr=0.05 (mib_edge_{topk,hard_topk}_{log,uniform}_lr05) plus the two
+# gradient baselines, so an edge panel here would be four points with no path through them --
+# not a sweep. That is a gap in the experiments, not in this figure; if edge LR sweeps land,
+# add an EDGE_LR_SERIES and switch this to the two-panel layout main_both() already implements.
+#
+# Colour follows palette.py's rule -- a colour is a METHOD, a hyperparameter variant is a
+# LINETYPE -- so all four MAttr-family paths take MAttr's blue and separate by dash pattern.
+# That is why draw_points() takes `colors`/`order`/`path_style`: the group key here names a
+# series, not a family, so it can no longer double as the hue the way FULL_COLORS does.
+LR_SERIES_STYLE = {}          # filled below, keyed "lr:<short>" to match build_lr_rows
+LR_COLORS, LR_ORDER = {}, []
+
+# (legend name, short label used on the points, colour, linestyle, [(lr, dir), ...])
+# Points are labelled "<short> lr=<v>" by build_lr_rows, so `short` is kept to a few characters:
+# 34 labels on one panel and the long legend names would not fit even at XPAD 1.0.
+#
+# COMPLETENESS (11/11 cells on BOTH axes) is what decides membership, as everywhere else here,
+# and build_lr_rows prints every exclusion. Verified 2026-08-20; what that currently drops:
+#   htk_lr_{0.005,0.1,0.3}  acc 10/11 -- one missing cell kills the whole "+unif k, +hard" path
+#   bern_lr_0.05            acc 10/11 (0.01 and 0.3 survive, so the path is drawn through two)
+#   bern_lr_0.1_2k          complete, but 2000 steps against everything else's 500 -- excluded
+#                           deliberately: it is a step-count point, not an LR point
+#   softlog_sgd_lr_{0.005,0.01}   5/11
+#   softlog_sgd_lr_{3.0,10.0}, softuni_sgd_lr_{3.0,10.0}   still running (submitted 2026-08-20);
+#                           they join automatically on the next render, no edit needed
+#   eprun_eval_ld_dcm_*     3/11 across all 15 dirs -- DCM was swept on the cheap cells only
+LR_ONLY_SERIES = [
+    ("MAttr (log $k$, Adam)", "MAttr", P.METHOD["MAttr"], "solid",
+     [("0.005", "topklog_lr_0.005"), ("0.05", "topklog_lr_0.05"),
+      ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3")]),
+    ("MAttr (log $k$, SGD)", "M-SGD", P.METHOD["MAttr"], "dashed",
+     [("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
+      ("0.3", "softlog_sgd_lr_0.3"), ("1.0", "softlog_sgd_lr_1.0"),
+      ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0")]),
+    ("MAttr (unif. $k$, SGD)", "M-SGDu", P.METHOD["MAttr"], "dotted",
+     [("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
+      ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
+      ("3.0", "softuni_sgd_lr_3.0"), ("10.0", "softuni_sgd_lr_10.0")]),
+    ("$+$ hard (log $k$, Adam)", "+hard", P.METHOD["+hard"], "solid",
+     [("0.005", "htklog_lr_0.005"), ("0.05", "htklog_lr_0.05"),
+      ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3")]),
+    # REINFORCE backward, uniform k. Two surviving points is barely a path, but it is the only
+    # evidence we have that this variant's collapse is not an LR artifact, so it is plotted.
+    ("$+$ hard bwd (unif. $k$)", "+hbwd", P.METHOD["+hard"], "dashdot",
+     [("0.01", "bern_lr_0.01"), ("0.3", "bern_lr_0.3")]),
+    # NOTE the lr=0.001 node is the dir with no lr suffix -- eprun_eval_ld_sig IS the default-LR
+    # run, the same anchoring trick LR_ANCHOR plays for MAttr. The --full figure draws this path
+    # through TWO points (0.001 and 0.3) because LR_SERIES lists only those; the other three
+    # dirs are complete and have been on disk all along, so that path is under-drawn there.
+    ("DBM", "DBM", P.METHOD["DBM"], "solid",
+     [("0.001", "eprun_eval_ld_sig"), ("0.01", "eprun_eval_ld_sig_lr0.01"),
+      ("0.1", "eprun_eval_ld_sig_lr0.1"), ("0.3", "eprun_eval_ld_sig_lr0.3"),
+      ("1.0", "eprun_eval_ld_sig_lr1.0")]),
+    ("Node Pruning $s{=}0.5$", "NP.5", P.METHOD["Node Pruning"], "solid",
+     [("0.1", "eprun_eval_s0.5_ld_lr0.1"), ("0.3", "eprun_eval_s0.5_ld_lr0.3"),
+      ("0.8", "eprun_eval_s0.5_ld"), ("1.5", "eprun_eval_s0.5_ld_lr1.5"),
+      ("3.0", "eprun_eval_s0.5_ld_lr3.0")]),
+    ("Node Pruning $s{=}0.8$", "NP.8", P.METHOD["Node Pruning"], "dashed",
+     [("0.1", "eprun_eval_s0.8_ld_lr0.1"), ("0.3", "eprun_eval_s0.8_ld_lr0.3"),
+      ("0.8", "eprun_eval_s0.8_ld"), ("1.5", "eprun_eval_s0.8_ld_lr1.5"),
+      ("3.0", "eprun_eval_s0.8_ld_lr3.0")]),
+]
+for _leg, _short, _col, _ls, _ in LR_ONLY_SERIES:
+    LR_ORDER.append(_leg)
+    LR_COLORS[_leg] = _col
+    LR_SERIES_STYLE[f"lr:{_short}"] = _ls
+
+
 def _pair(dirn, t, m):
     """(acc_auc, area_under) for one cell, from whichever layout this dir uses.
 
@@ -295,7 +374,7 @@ def delatex(s):
 # leaves room for the caption inside ICLR's ~9in text height.
 FIG_W, FIG_H = 5.4, 8.4
 # --both stacks both levels in one float, so the two panels have to share one page. The node
-# panel carries 49 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.5in total
+# panel carries 59 labelled points against edge's 9, hence height_ratios=[2, 1]; 8.5in total
 # leaves the node panel ~5.5in, i.e. LESS room than the standalone 8.4in figure, which is why
 # the ladder pass in place_labels matters more here than it does for --full.
 # This is a HARD ceiling, not a preference. ICLR's \\textwidth is 5.5in and \\textheight is
@@ -305,6 +384,12 @@ FIG_W, FIG_H = 5.4, 8.4
 # i.e. ONE line of caption and nothing more, which is a trap for a figure that needs to explain
 # six series. 8.2in scales to 8.35in and leaves ~47pt, enough for a three-line caption.
 FIG_H_BOTH = 8.2
+# --lr carries ~34 points against --full's 49, and all of them sit in the swept region rather
+# than being spread by a gradient cloud, so it needs less vertical room. 6.5in is set by the
+# label-overlap diagnostic in place_labels(), not by taste: at 5.5in the dense lr=0.05 cluster
+# leaves residual overlaps, at 6.5in it reports 0. XPAD is likewise measured -- the short point
+# labels ("M-SGDu lr=0.05") are ~half the width of --full's, so 0.34 is more than they need.
+FIG_H_LR, XPAD_LR = 6.5, 0.26
 
 # normalized-axes label geometry. Widths are MEASURED, not estimated (see label_boxes) -- the
 # old len(label)*CHAR_W estimate ran 15-30% narrow at 6.5pt Inter, so repel() would report a
@@ -549,7 +634,8 @@ def edge_rows():
 
 
 def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
-                fs=(9, 8, 7.5), msize=46):
+                fs=(9, 8, 7.5), msize=46, colors=None, order=None, maskset=None,
+                path_style=None):
     """Markers, dashed series, axes furniture. Returns the frame; labels come later.
 
     Split from place_labels() because label geometry is measured in axes-fraction units, so it
@@ -561,7 +647,17 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
     arguments, not constants, because the compact figure goes in at 0.30\\textwidth (1.65in)
     against the full-page variants' 5.5in: point sizes are absolute, so the same numbers that
     read correctly on a full page render ~3x oversized in the small float.
+
+    `colors`/`order`/`maskset` default to the FULL_* group encoding shared by the three figures
+    above. --lr overrides them because it groups by SERIES rather than by family: it plots four
+    MAttr-family paths that all take MAttr's blue (palette.py's rule -- colour is a method,
+    a hyperparameter variant is a linetype), so the group key can no longer double as the hue.
+    `path_style` is that linetype, keyed by the same path name build_lr_rows() joins points on.
     """
+    colors = FULL_COLORS if colors is None else colors
+    order = FULL_ORDER if order is None else order
+    maskset = FULL_MASK if maskset is None else maskset
+    path_style = path_style or {}
     df = pd.DataFrame(rows)
     # Dashed guides through every ordered series: the two Node Pruning objectives ordered
     # sparse-ward ("kl"/"ld"), each swept method ordered by learning rate ("lr:<method>"), and
@@ -578,15 +674,16 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
     for key, pts in segs.items():
         pts.sort()
         if len(pts) > 1:
-            ax.plot([p[1] for p in pts], [p[2] for p in pts], ls="dashed", lw=0.7,
-                    alpha=0.55, zorder=1, color=FULL_COLORS[pts[0][3]])
-    for grp in FULL_ORDER:
+            ax.plot([p[1] for p in pts], [p[2] for p in pts],
+                    ls=path_style.get(key, "dashed"), lw=0.7,
+                    alpha=0.55, zorder=1, color=colors[pts[0][3]])
+    for grp in order:
         sub = df[df.grp == grp]
         if not len(sub):
             continue
         ax.scatter(sub.acc, sub.cpr, s=msize,
-                   marker=FAMILY_SHAPE[MASK if grp in FULL_MASK else GRADIENT],
-                   c=FULL_COLORS[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
+                   marker=FAMILY_SHAPE[MASK if grp in maskset else GRADIENT],
+                   c=colors[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
                    label=grp)
 
     xr, yr = ax.get_xlim(), ax.get_ylim()
@@ -615,7 +712,7 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
     return df
 
 
-def place_labels(fig, ax, df, pt=LAB_PT, msize=46):
+def place_labels(fig, ax, df, pt=LAB_PT, msize=46, colors=None):
     """Direct labels with leader lines. Call AFTER the figure is laid out (see draw_points).
 
     `msize` must match the marker area draw_points() used: matplotlib's `s` is an area in
@@ -625,6 +722,7 @@ def place_labels(fig, ax, df, pt=LAB_PT, msize=46):
     full-page figure these were tuned on), so a label always clears its own marker by the same
     visible gap at any figure size.
     """
+    colors = FULL_COLORS if colors is None else colors
     xr, yr = ax.get_xlim(), ax.get_ylim()
     w, h = label_boxes(ax, df.label.tolist(), fig, pt=pt)
     axb = ax.get_window_extent(renderer=fig.canvas.get_renderer())
@@ -635,7 +733,7 @@ def place_labels(fig, ax, df, pt=LAB_PT, msize=46):
     for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
         ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
         ax.annotate(lab, (lxi, lyi), fontsize=pt, va="center", ha="left",
-                    color=FULL_COLORS[grp], zorder=4,
+                    color=colors[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
     # Report what the layout could not solve. A label sitting under another one is the failure
     # mode this whole file exists to avoid, and it is invisible in the console otherwise -- the
@@ -719,7 +817,7 @@ def main_both():
     at edge level the one complete gradient baseline lands at comparable acc-AUC but a quarter
     of the CPR). Two separate float environments put them on different pages as often as not.
 
-    Height is split 2:1, not evenly. The node panel carries 49 labelled points against the edge
+    Height is split 2:1, not evenly. The node panel carries 59 labelled points against the edge
     panel's 9, and vertical room is what label placement is actually short of -- an even split
     would spend half the page resolving nine labels that have never collided.
 
@@ -739,6 +837,48 @@ def main_both():
     fig.savefig(out, dpi=300)
     print(f"wrote {out} ({len(dfn)} node + {len(dfe)} edge points)\n"
           f"{node_rho(dfn)}\n{edge_rho(dfe)}")
+
+
+def main_lr():
+    """--lr: node level, LR sweeps only, full page, every point named.
+
+    Every point is a mask-learning method, so the marker SHAPE that carries gradient-vs-mask in
+    the other variants is uninformative here and every point is a square. The legend is rebuilt
+    by hand rather than taken from ax.legend()'s scatter handles: three of the eight series are
+    MAttr blue and separate only by dash pattern, so marker-only handles would show three
+    identical blue squares. Line2D handles carry both.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    plt.rcParams.update(RC)
+    series = [(leg, short, vals) for leg, short, _, _, vals in LR_ONLY_SERIES]
+    rows = build_lr_rows(series)
+    if not rows:
+        raise SystemExit("--lr: no complete LR series on disk")
+    fig, ax = plt.subplots(figsize=(FIG_W, FIG_H_LR))
+    df = draw_points(ax, rows, xpad=XPAD_LR, legend=False, colors=LR_COLORS, order=LR_ORDER,
+                     maskset=set(LR_ORDER), path_style=LR_SERIES_STYLE)
+    drawn = set(df.grp)
+    ax.legend(handles=[Line2D([0], [0], color=c, ls=ls, lw=0.9, marker="s", ms=4.5,
+                              mec="#000000", mew=0.5, label=leg)
+                       for leg, _, c, ls, _ in LR_ONLY_SERIES if leg in drawn],
+              fontsize=7.5, loc="lower right", frameon=True, framealpha=0.95,
+              borderpad=0.5, handletextpad=0.4, handlelength=2.4)
+    fig.tight_layout()
+    place_labels(fig, ax, df, colors=LR_COLORS)
+    out = "plots/mib_accauc_cpr_scatter_lr.pdf"
+    fig.savefig(out, dpi=300)
+    print(f"wrote {out} ({len(df)} points, {len(drawn)} series)")
+    # Per-series LR spread: the number this figure exists to make visible. A method whose range
+    # here is wider than its gap to a rival is a method whose ranking is an LR artifact.
+    for leg in LR_ORDER:
+        s = df[df.grp == leg]
+        if len(s) < 2:
+            continue
+        print(f"  {leg:<26} n={len(s)}  acc {s.acc.min():.3f}-{s.acc.max():.3f} "
+              f"(spread {s.acc.max()-s.acc.min():.3f})  "
+              f"cpr {s.cpr.min():.2f}-{s.cpr.max():.2f} "
+              f"(spread {s.cpr.max()-s.cpr.min():.2f})")
 
 
 # === compact figure: which points survive ===
@@ -853,7 +993,9 @@ def main():
 
 
 if __name__ == "__main__":
-    if "--both" in sys.argv:
+    if "--lr" in sys.argv:
+        main_lr()             # always full-page, node only: no edge LR sweep exists
+    elif "--both" in sys.argv:
         main_both()           # always full-page: node and edge panels in one figure
     elif "--edge" in sys.argv:
         main_full_edge()      # always full-page; there is no compact edge variant
