@@ -1,41 +1,31 @@
-"""The 2026-08-20 neuron-substrate lr grid, plotted against TRAINING STEP -- and the reason
-its flat result is NOT the conclusion it looks like.
+"""The 2026-08-20 neuron-substrate lr x {gate, optimizer} grid: what actually moves the score
+at addition / llama3 / --nodes mlp (2,293,760 units).
 
-Data: results/sva_mlp_lr/topk_adam/lr_*, addition / llama3 / --nodes mlp (2,293,760 units),
-headline config (soft top-k fwd, Adam, log-k, --loss logit_diff), bs=1, 2000 steps, lr
-0.001..10. The lr=0.05 point is the pre-existing headline run in results/sva_sweep, reused as
-the grid's centre rather than recomputed.
+Data: results/sva_mlp_lr/<variant>_<optimizer>/lr_*, 2000 steps, bs=1, log-k, --loss
+logit_diff, --mode sufficient. Three arms, completing the cross that submit_sva_sweep.sh's
+MATTR_CONFIGS never runs (it bundles gate WITH optimizer and never crosses them):
 
-Two series per run, and the difference between them is the whole point (same convention as
-plot_mattr_lr_probe.py, whose docstring has the longer version):
-  * line = acc-AUC on a FIXED 20-example TRAIN subset, logged every 200 steps. The train LOSS
-    cannot be plotted this way -- log-k redraws the budget each step, so loss at step 200 and
-    at step 2000 are not the same quantity. The AUCs integrate the whole k grid and ARE
-    comparable across steps.
-  * star = the final TEST value (100 held-out examples), the number that goes in a table.
+    topk  / sgd    lr 0.05..300   best 0.496 @ lr=1
+    topk  / adam   lr 0.001..10   best 0.361 @ lr=0.05   (the paper headline)
+    id-STE/ adam   lr 0.001..10   best 0.349 @ lr=0.05
+    id-STE/ sgd    single run on disk in results/sva_sweep, 0.437 (drawn as a reference line)
 
-WHAT THE LEFT PANEL SHOWS, AND WHY IT OVERTURNS THE FLAT lr CURVE. Every line at or below the
-optimum is still RISING at step 1999 -- lr=0.05 climbs 0.285 -> 0.324 over its last 800 steps.
-Per the probe's own contract (eval_sva.py:773) a rising probe is evidence of UNDER-CONVERGENCE.
-So the right panel's flat 0.30-0.36 plateau over lr 0.005-0.3 does not say "lr is not the
-knob and MAttr is simply worse"; it says every one of these runs was stopped early, and a grid
-run at a single truncated budget cannot locate the optimum of a surface whose optimum moves
-with that budget.
+THE HEADLINE IS THE OPTIMIZER, NOT THE GATE OR THE lr. Holding the gate fixed and swapping
+Adam -> SGD moves acc-AUC 0.361 -> 0.496; holding the optimizer fixed and swapping the gate
+moves it at most ~0.02. The lr grid inside any one arm spans less than the gap between arms.
 
-THE PRIOR SWEEP IS THE EVIDENCE THAT IT DOES MOVE (right panel, dashed). results/probe_* holds
-29 earlier runs on this same cell with --loss acc, crossing lr with step budget. There, going
-2000 -> 8000 steps is worth ~+0.10 acc-AUC (topk lr=0.02: 0.367 -> 0.465), roughly five times
-the entire spread of my 2000-step lr grid -- and the lr optimum SHIFTS DOWN as the budget grows
-(0.05 >= 0.02 at 2k; 0.02 > 0.05 at both 8k and 16k). The headline claim of that sweep, that
-identity-STE reaches 0.502 at lr=0.05/16000 steps, meets IG's 0.500 on this cell.
-
-Caveat on mixing them: the dashed series are --loss acc and the solid are --loss logit_diff, so
-they are not the same experiment and the vertical offset between them is not interpretable.
-The step-budget effect is quoted WITHIN the acc series, where it is a controlled contrast.
-
-Bottom line to read off the figure: steps, not lr, are the binding constraint at this
-substrate. The open experiment is an 8000-step step-matched re-run at --loss logit_diff, not
-more lr points.
+TWO THINGS THE FIGURE DELIBERATELY SHOWS SO THE TIE WITH IG IS NOT OVERSOLD.
+ 1. Left panel: the SGD arm is CONVERGED and the Adam arms are NOT. The three best SGD runs
+    move -0.009/+0.009/-0.004 over their last 800 probe steps; every Adam run is still rising
+    (+0.02 to +0.04). Per eval_sva.py:773 a rising probe means under-converged, so the earlier
+    "the flat lr curve is an under-convergence artifact" reading applies to the Adam arms only.
+ 2. Right panel, second axis: top-2082 overlap between each run's score vector and IG's. The
+    SGD runs that tie IG (0.73-0.77) overlap with IG MORE than IxG does (0.55, dotted line).
+    Their score spread is 0.001-0.03 against gate T=1.0, i.e. 30-1000x below it, so the gates
+    never leave sigmoid's linear region and the score is ~ -lr * sum_t g_t -- an
+    accumulated-gradient ranking. Where the gate actually engages (lr 30-100) overlap falls to
+    0.43-0.55 and so does acc-AUC. The tie is a gradient method in disguise, and it costs 2000
+    passes against IG's 10.
 
 Run:  uv run python plots/plot_sva_mlp_lr_probe.py   -> plots/sva_mlp_lr_probe.pdf
 """
@@ -46,105 +36,127 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
+import torch
 
 ROOT = Path(__file__).resolve().parent.parent
-SWEEP = ROOT / "results/sva_mlp_lr/topk_adam"
-# The headline run predates this grid and lives in the shared sweep dir; it IS the lr=0.05 point.
-CENTRE = ROOT / "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json"
-IG = ROOT / "results/sva_sweep/addition_llama3_mlp_ig.json"
+SWEEP = ROOT / "results/sva_mlp_lr"
+SVA = ROOT / "results/sva_sweep"
+# lr=0.05 of the topk/adam arm predates this grid and lives in the shared sweep dir (run_tag()
+# does not encode lr), so it is grafted in as that arm's centre rather than re-run.
+CENTRE = {"topk_adam": (0.05, SVA / "addition_llama3_mlp_sufficient_topk_adam_bs1.json")}
+ARMS = [("topk_sgd", "soft top-k / SGD", "#1f77b4"),
+        ("topk_adam", "soft top-k / Adam  (headline)", "#d62728"),
+        ("hard_topk_identity_adam", "id-STE / Adam", "#7f7f7f")]
+REFS = [("IG", "addition_llama3_mlp_ig.json", "crimson", ":"),
+        ("id-STE / SGD", "addition_llama3_mlp_sufficient_hard_topk_identity_sgd_bs1.json",
+         "#2ca02c", "--")]
+K = 2082  # IG's k*_50 on this cell; the log-k grid point the overlap is measured at
 
 
-def load_grid():
-    """(lr, probe curve, final test acc-AUC) for the 2000-step logit_diff grid."""
+def lrkey(p):
+    return float(re.search(r"lr_([0-9.]+)", str(p)).group(1))
+
+
+def load_scores(p):
+    s = torch.load(p, map_location="cpu")
+    if isinstance(s, dict):
+        s = list(s.values())[0]
+    return s.float().flatten()
+
+
+def load_arm(tag):
+    """(lr, probe curve, final test acc-AUC, scores path) per run, ascending in lr."""
     runs = []
-    for d in sorted(glob.glob(str(SWEEP / "lr_*"))):
-        lr = float(re.search(r"lr_([0-9.]+)", d).group(1))
-        for f in glob.glob(f"{d}/*.json"):
+    if tag in CENTRE:
+        lr, f = CENTRE[tag]
+        if f.exists():
             j = json.load(open(f))
             runs.append({"lr": lr, "probe": j.get("train_eval_log", []),
-                         "test": j.get("acc_auc")})
-    if CENTRE.exists():
-        j = json.load(open(CENTRE))
-        runs.append({"lr": 0.05, "probe": j.get("train_eval_log", []),
-                     "test": j.get("acc_auc")})
+                         "test": j.get("acc_auc"),
+                         "scores": f.with_suffix(".scores.pt")})
+    for d in glob.glob(str(SWEEP / tag / "lr_*")):
+        for f in glob.glob(f"{d}/*.json"):
+            j = json.load(open(f))
+            runs.append({"lr": lrkey(d), "probe": j.get("train_eval_log", []),
+                         "test": j.get("acc_auc"),
+                         "scores": Path(f).with_suffix(".scores.pt")})
     return sorted(runs, key=lambda r: r["lr"])
 
 
-def load_prior():
-    """The earlier --loss acc lr x step-budget grid, addition/topk only, seed 42 only."""
-    out = []
-    for f in sorted(glob.glob(str(ROOT / "results/probe_*/*/*.json"))):
-        j = json.load(open(f))
-        c = j.get("config", {})
-        if not c or c["task"] != "addition" or c["variant"] != "topk":
-            continue
-        if c.get("seed", 42) != 42:          # replicates are a spread estimate, not a series
-            continue
-        out.append({"lr": c["lr"], "steps": c["steps"], "test": j.get("acc_auc")})
-    return out
-
-
 def main():
-    runs, prior = load_grid(), load_prior()
-    ig = json.load(open(IG))["acc_auc"] if IG.exists() else None
+    arms = {tag: load_arm(tag) for tag, _, _ in ARMS}
+    refs = {name: json.load(open(SVA / fn))["acc_auc"]
+            for name, fn, _, _ in REFS if (SVA / fn).exists()}
 
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11.5, 4.6))
-    lrs = [r["lr"] for r in runs]
-    norm = plt.Normalize(np.log10(min(lrs)), np.log10(max(lrs)))
-    cmap = plt.get_cmap("viridis")
-    col = {r["lr"]: cmap(norm(np.log10(r["lr"]))) for r in runs}
+    ig_scores = load_scores(SVA / "addition_llama3_mlp_ig.scores.pt")
+    ig_top = set(torch.topk(ig_scores, K).indices.tolist())
+    ixg_ov = len(ig_top & set(torch.topk(
+        load_scores(SVA / "addition_llama3_mlp_ixg.scores.pt"), K).indices.tolist())) / K
 
-    # ---- left: convergence. The shape here is the finding; the endpoints are not.
-    for r in runs:
-        pts = [(p["step"], p["acc_auc"]) for p in r["probe"] if p.get("acc_auc") is not None]
-        if pts:
-            ax0.plot(*zip(*pts), color=col[r["lr"]], lw=1.5, alpha=.9)
-        if r["test"] is not None:
-            ax0.plot(2000, r["test"], "*", color=col[r["lr"]], ms=13, mec="k", mew=.5, zorder=5)
-    if ig is not None:
-        ax0.axhline(ig, color="crimson", ls=":", lw=1.3, zorder=1)
-        ax0.text(1980, ig + .012, f"IG = {ig:.3f}", color="crimson", size=9, ha="right")
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12.5, 4.8))
+
+    # ---- left: convergence. Whether a curve has flattened is the finding, not its height.
+    for tag, label, c in ARMS:
+        best = max(arms[tag], key=lambda r: r["test"])
+        for r in arms[tag]:
+            pts = [(p["step"], p["acc_auc"]) for p in r["probe"]
+                   if p.get("acc_auc") is not None]
+            if pts:
+                ax0.plot(*zip(*pts), color=c, lw=2.0 if r is best else 0.9,
+                         alpha=1.0 if r is best else 0.35, zorder=4 if r is best else 2)
+        ax0.plot(2000, best["test"], "*", color=c, ms=14, mec="k", mew=.5, zorder=6)
+    for name, _, c, ls in REFS:
+        if name in refs:
+            ax0.axhline(refs[name], color=c, ls=ls, lw=1.3, zorder=1)
+            ax0.text(1990, refs[name] + .008, f"{name} = {refs[name]:.3f}",
+                     color=c, size=8.5, ha="right")
     ax0.set_xlabel("training step")
     ax0.set_ylabel("acc-AUC $\\uparrow$")
-    ax0.set_title("still rising at the budget's end\n(line = 20-ex TRAIN probe, star = 100-ex TEST)",
-                  size=10)
+    ax0.set_title("SGD converges by 2000 steps; Adam is still climbing\n"
+                  "(bold = each arm's best lr, star = its 100-ex TEST value)", size=10)
     ax0.grid(alpha=.25, lw=.5)
-    # lr=0.05 predates train_eval_log, so it is a star with no line -- flagged, not a bug.
-    ax0.legend(handles=[Line2D([], [], color=col[r["lr"]], lw=1.5, label=f"lr={r['lr']:g}"
-                               + (" (star only)" if not r["probe"] else ""))
-                        for r in runs],
-               fontsize=8, ncol=2, loc="upper left", frameon=False)
+    ax0.legend(handles=[plt.Line2D([], [], color=c, lw=2, label=lab) for _, lab, c in ARMS],
+               fontsize=8.5, loc="lower right", frameon=False)
 
-    # ---- right: the lr surface, my one budget against the prior sweep's three.
-    ax1.plot([r["lr"] for r in runs], [r["test"] for r in runs], "o-", color="k", lw=1.6,
-             ms=5, label="2000 steps, logit_diff (this grid)")
-    for steps, c in [(2000, "#8c8c8c"), (8000, "#1f77b4"), (16000, "#d62728")]:
-        pts = sorted((p["lr"], p["test"]) for p in prior if p["steps"] == steps)
-        if pts:
-            ax1.plot(*zip(*pts), "s--", color=c, lw=1.3, ms=4, alpha=.9,
-                     label=f"{steps} steps, acc loss (prior)")
-    if ig is not None:
-        ax1.axhline(ig, color="crimson", ls=":", lw=1.3, zorder=1)
+    # ---- right: the lr surface per arm, with "is this just IG?" on the twin axis.
+    for tag, label, c in ARMS:
+        ax1.plot([r["lr"] for r in arms[tag]], [r["test"] for r in arms[tag]],
+                 "o-", color=c, lw=1.7, ms=5, label=label)
+    for name, _, c, ls in REFS:
+        if name in refs:
+            ax1.axhline(refs[name], color=c, ls=ls, lw=1.3, zorder=1)
     ax1.set_xscale("log")
     ax1.set_xlabel("learning rate")
     ax1.set_ylabel("final test acc-AUC $\\uparrow$")
-    ax1.set_title("steps move the surface ~5x more than lr does\n"
-                  "(dashed = different loss; compare WITHIN a series)", size=10)
     ax1.grid(alpha=.25, lw=.5)
-    ax1.legend(fontsize=8, loc="lower center", frameon=False)
+    ax1.legend(fontsize=8.5, loc="lower left", frameon=False)
 
-    fig.suptitle("MAttr lr grid, addition / llama3 / mlp (2,293,760 units) -- "
-                 "the flat lr curve is an under-convergence artifact", size=11)
-    fig.tight_layout(rect=[0, 0, 1, .94])
+    ax2 = ax1.twinx()
+    for tag, _, c in ARMS:
+        ov = [len(ig_top & set(torch.topk(load_scores(r["scores"]), K).indices.tolist())) / K
+              if Path(r["scores"]).exists() else np.nan for r in arms[tag]]
+        ax2.plot([r["lr"] for r in arms[tag]], ov, "^:", color=c, lw=1.0, ms=4, alpha=.55)
+    ax2.axhline(ixg_ov, color="k", ls=(0, (1, 3)), lw=1.0)
+    ax2.text(ax1.get_xlim()[1], ixg_ov + .012, f"I$\\times$G vs IG = {ixg_ov:.2f}",
+             size=8, ha="right", color="k")
+    ax2.set_ylabel(f"top-{K} overlap with IG (dotted $\\triangle$)", size=9)
+    ax2.set_ylim(0, 1)
+    ax1.set_title("the arms that tie IG are the arms that AGREE with IG\n"
+                  "(solid = score, dotted = overlap with IG's ranking)", size=10)
+
+    fig.suptitle("addition / llama3 / mlp (2,293,760 units): the optimizer moves acc-AUC "
+                 "~7x more than the lr or the gate", size=11)
+    fig.tight_layout(rect=[0, 0, 1, .93])
     out = ROOT / "plots/sva_mlp_lr_probe.pdf"
     fig.savefig(out)
     fig.savefig(out.with_suffix(".png"), dpi=180)
     print(f"wrote {out}")
-    for r in runs:
-        pts = [p["acc_auc"] for p in r["probe"] if p.get("acc_auc") is not None]
-        rise = (pts[-1] - pts[-5]) if len(pts) >= 5 else float("nan")
-        print(f"  lr={r['lr']:<7g} test={r['test']:.3f}  probe last-800-step rise={rise:+.3f}")
+    for tag, label, _ in ARMS:
+        for r in arms[tag]:
+            pts = [p["acc_auc"] for p in r["probe"] if p.get("acc_auc") is not None]
+            rise = (pts[-1] - pts[-5]) if len(pts) >= 5 else float("nan")
+            print(f"  {tag:24s} lr={r['lr']:<7g} test={r['test']:.3f}  "
+                  f"probe last-800-step rise={rise:+.3f}")
 
 
 if __name__ == "__main__":

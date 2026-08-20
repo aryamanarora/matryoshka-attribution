@@ -22,16 +22,47 @@ reaches 0.502, matching IG. So the gradient-methods win at this substrate is NOT
 at convergence, and the open experiment is an 8000-step step-matched re-run at logit_diff --
 not more lr points. See plots/plot_sva_mlp_lr_probe.py for both halves in one figure.
 
-THE OTHER TWO ARMS (2026-08-20). This now reads every `<variant>_<opt>` subdir under
-results/sva_mlp_lr, not just topk_adam, so the optimizer x gate cross that submit_sva_sweep.sh
-never runs is readable in one place. Two things to know before reading them:
-  * hard_topk_identity/adam is EXPECTED to return the same acc_auc at every lr. Hard forward =
-    the mask reads only the score RANKING; identity backward = no magnitude enters dL/ds; so
-    scores = lr x (fixed vector) and the selection never moves. Identical rows are the
-    PREDICTION CONFIRMED, not a broken sweep -- the score-spread table below is the check:
-    std must scale exactly linearly with lr while acc_auc stays pinned.
-  * topk/sgd is swept 0.05..300 because SGD does not normalise the ~k/n (~6e-3) gate slope the
-    way Adam does, so its useful lr should sit ~n/k above Adam's optimum.
+RESULT OF THE OTHER TWO ARMS (2026-08-20) -- THE OPTIMIZER IS THE WHOLE STORY AT THIS
+SUBSTRATE, NOT THE GATE. Completing the optimizer x gate cross (submit_sva_sweep.sh bundles
+them and never crosses) moves acc-AUC far more than lr ever did:
+
+    variant / optimizer        best acc-AUC over its lr grid
+    topk  / sgd                0.496  (lr=1)      <- ties IG's 0.500
+    id-STE / sgd               0.437  (on disk, sva_sweep)
+    topk  / adam               0.361  (lr=0.05)
+    id-STE / adam              0.349  (lr=0.05/0.1)
+
+Same gate, swap Adam->SGD: 0.361 -> 0.496. Same optimizer, swap gate: at most 0.02. And
+id-STE's 0.437 was bought entirely by its optimizer -- run it with Adam and the best MAttr
+variant on this cell becomes the WORST, below the soft/Adam headline.
+
+DO NOT REPORT "MAttr TIES IG" WITHOUT THE TWO CAVEATS BELOW.
+ 1. The winning SGD runs are in the UNDERTRAINED regime and are converging on IG's own answer.
+    std(scores) is 0.001-0.03 against gate T=1.0, i.e. 30-1000x BELOW it, so the gates never
+    leave sigmoid's linear region and the score is ~ -lr * sum_t g_t, an accumulated-gradient
+    ranking. Measured: top-2082 overlap with the IG score vector is 0.73-0.77, HIGHER than
+    IxG's own 0.55 overlap with IG. Where the gate actually engages (lr 30-100, spread ~1-2xT)
+    overlap falls to 0.43-0.55 and acc-AUC falls to 0.44-0.46. So the tie is a gradient method
+    in disguise, not evidence that mask learning solves this substrate.
+ 2. It costs 2000 forward+backward passes against IG's 10. Compute-matched, IG still wins by a
+    mile; this is a "200x the compute buys a tie" result.
+Faithfulness corroborates: the SGD arm's faith-AUC is 0.50-0.53, right on IG's 0.488, while
+every Adam arm sits at 1.0-1.2 -- the logit_diff gap-padding signature (see the sweep memo).
+
+ON THE lr-INVARIANCE PREDICTION FOR hard_topk_identity. It holds only MODULO FLOAT
+TIE-BREAKING, which the node-level check could not see. Hard fwd reads only the ranking and
+identity bwd reads no magnitude, so scores = lr x (fixed vector) -- but `scores` init to
+exactly ZERO, so the step-0 top-k is fully degenerate and rounding breaks those ties
+differently at different lr. Ratios that are exact in binary preserve the tie order and give
+bit-identical results (2*s(0.005) - s(0.01) is EXACTLY 0 over all 2,293,760 entries, argsort
+identical, acc-AUC 0.3317 both; likewise 0.05 and 0.1 both 0.3487). Ratios that are not (0.001
+vs 0.005) diverge: Pearson 0.54, top-k overlap 0.35. Net effect is still a flat arm
+(0.328-0.349), just not a constant one.
+WHY ADAM IS SO BAD UNDER IDENTITY STE, precisely: with dL/ds = dL/dm exactly, Adam's update is
+m_hat/(sqrt(v_hat)+eps) ~ sign(g), so the score becomes a signed COUNT of steps and all effect
+magnitude is discarded. s/lr lands on a near-integer lattice (23% of units within 0.01 of an
+integer) with std ~64 against sqrt(2000)=45 for a pure coin-flip walk -- the ranking is only
+~1.4x above a random walk. That is the mechanism behind the node-level "SGD 5/5, +0.404".
 
 Both halves read only from disk; safe to re-run. Run from the repo root (uv run python, for torch).
 """
