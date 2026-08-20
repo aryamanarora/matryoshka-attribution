@@ -50,6 +50,26 @@ PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
 PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}
 # Same grid as the paper's LR sweep (tabs/lr_sweep.tex) so the new row is directly comparable.
+#
+# STATUS 2026-08-20: this sweep was killed after 10/55 jobs, so only 0.005 and 0.01 landed, on
+# 5 of the 11 cells. Two consequences, both live:
+#  * make_mib_table.py:72 pins the \ourmethod{} node SGD row to `softlog_sgd_lr_0.05`, which
+#    was never run and does NOT exist on disk. The generator drops missing dirs silently, so
+#    the \ourmethod{}-SGD node block of tabs/mib_results.tex currently has no plain soft-top-k
+#    row at all. Re-running 0.05 restores it.
+#  * The two LRs we do have lose to Adam 5/5 (mean area_under 1.34 vs 1.86), but they are the
+#    BOTTOM of the intended grid, and at the SVA neuron substrate soft+SGD peaks at lr=1.0
+#    (acc-AUC 0.496 vs soft+Adam's 0.361, results/sva_mlp_lr) with 0.05 already at 0.490. So
+#    the existing node-level evidence is 100x below where this arm was later found to work.
+# Hence the resubmit grid is "0.05 0.1 0.3 1.0" -- the three intended-but-never-run points plus
+# lr=1.0, which is outside tabs/lr_sweep.tex's grid and is there because of the neuron result.
+# If 1.0 wins here, it is NOT comparable to the Adam LR sweep rows and needs its own note.
+#
+# CORRECTION to trap 1 below (verified 2026-08-20): `results/ident_adam_lr_*` is NOT three
+# copies of one run. The `*_scores.pt` md5s differ across lr (ioi_gpt2: 9e0300.. vs 48af6a..)
+# and std(scores) scales exactly with lr. The pkls are byte-identical because hard-fwd +
+# identity-bwd is lr-invariant up to float tie-breaking -- identical rankings, identical evals.
+# The runs are real; do not discard those dirs. Passing --lr explicitly is still correct.
 LRS=${LRS:-"0.005 0.01 0.05 0.1 0.3"}
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi"
