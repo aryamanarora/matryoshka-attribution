@@ -1,6 +1,6 @@
-"""LaTeX table: how learning rate influences node CPR AUC, per task, for each method
-we swept LR on (hard_topk / MAttr, bernoulli_reinforce / +hard bwd, and the pyvene
-sigmoid-mask baseline).
+"""LaTeX tables: how learning rate influences node CPR AUC -- and, in a third table with the
+same blocks, node acc-AUC -- per task, for each method we swept LR on (hard_topk / MAttr,
+bernoulli_reinforce / +hard bwd, and the pyvene sigmoid-mask baseline).
 
 Reads results/<dir>/<task>_<model>_validation.pkl, or MIB's own
 <dir>/**/<task-with-dashes>_<model>_validation_abs-*.pkl for the eprun_eval_* dirs.
@@ -20,6 +20,14 @@ RESULTS_BASE = Path("results")
 # adjustbox+tabular in a float and the width takes care of itself.
 LR_OUTPUT = Path("paper/tabs/lr_sweep.tex")
 SPARSITY_OUTPUT = Path("paper/tabs/sparsity_sweep.tex")
+# Same blocks as LR_OUTPUT, same pkls, read at "acc_auc" instead of "area_under". A third
+# table rather than extra columns in the first: 13 columns already need adjustbox to fit
+# \textwidth, and CPR and acc-AUC do not share a scale (CPR is unbounded and ~1 at chance,
+# acc-AUC is in [0,1]), so interleaving them would put two units under one set of headers.
+# Worth having separately because the two metrics disagree about which LR wins -- acc-AUC is
+# log-x weighted and so is dominated by the sparse end, where these methods actually differ
+# (see the cpr-auc-is-dense-end-dominated note: ~90% of a CPR AUC is k>=20%, where they tie).
+LR_ACCAUC_OUTPUT = Path("paper/tabs/lr_sweep_accauc.tex")
 
 COLUMNS = [
     ("ioi", "gpt2", "GPT"), ("ioi", "qwen2.5", "Qwen"), ("ioi", "gemma2", "Gemma"),
@@ -197,6 +205,7 @@ DAGGER_CELLS = {("ioi", "llama3")}  # capped at 200 in all 3 MAttr blocks (not R
 # logs/eprun_*.out counts to /3000 for every eprun_* dir including the default-LR rows.
 STEPS = {
     "\\ourmethod{}": "500 steps",
+    "$+$ SGD": "500 steps",
     "$+$ hard": "500 steps",
     "$+$ unif $k$, $+$ hard": "500 steps",
     "$+$ hard bwd (REINFORCE)": "500 steps; 2000 in the last row",
@@ -218,22 +227,71 @@ def steps_note(method):
     return "" if v is None else f"\\quad{{\\footnotesize ({v})}}"
 
 
-def cpr(d, task, model):
-    d = DIR_OVERRIDE.get((d, task, model), d)
-    p = RESULTS_BASE / d / f"{task}_{model}_validation.pkl"
+# Legacy acc-AUC re-evaluations, in the MIB tree. Runs scored before MIB's evaluation.py
+# started returning acc_auc have acc_auc=None in their eval_mib pkl -- that is every lr=0.01
+# main-run dir (mib_node_*), htk_lr_*, and bern_lr_*, i.e. most of two blocks and all of a
+# third. Those cells were re-evaluated later into these two folders, so the values EXIST and a
+# table that showed "---" there would be reporting a gap in its own routing as a gap in the
+# results. Same fallback chain, same folders and same layout as
+# make_mib_accauc_table.acc_mattr, so the two acc-AUC tables agree cell-for-cell by
+# construction rather than by coincidence.
+#
+# Mixing an ordinary eval with a re-eval is safe and was checked there rather than assumed:
+# over every cell present in both sources the values agree to 2dp, and the largest CPR AUC
+# difference between any method's _eval and its _accauc rerun is 0.02 -- run-to-run
+# nondeterminism, not a different evaluation setting.
+#
+# CPR never needs this (area_under is in every pkl ever written), so the chain is only
+# consulted for acc_auc and the default table is byte-identical to before.
+ACCAUC_FALLBACK_ROOTS = [
+    Path("/home/guests/aryaman/MIB-circuit-track/results/mattr_accauc"),
+    Path("/home/guests/aryaman/MIB-circuit-track/results/mattr_accauc_val"),
+]
+
+
+def _read(p, key):
+    """`key` from one pkl, or None if the file, the key, or the value is absent.
+
+    An older pkl can carry the key with a None VALUE rather than not carrying it at all;
+    both mean "this metric was not computed for this run" and both must fall through to the
+    next source in the chain, so they are collapsed here instead of relying on round() to
+    raise and be swallowed.
+    """
     if not p.exists():
-        # MIB's own run_evaluation.py (what the eprun_eval_* dirs come from) writes a
-        # different layout: <dir>/EdgePruning_patching_node/<task-with-dashes>_<model>_
-        # validation_abs-False.pkl. Same "area_under" key inside.
-        hits = list((RESULTS_BASE / d).glob(
-            f"**/{task.replace('_', '-')}_{model}_validation_abs-*.pkl"))
-        if not hits:
-            return None
-        p = hits[0]
+        return None
     try:
-        return round(pickle.load(open(p, "rb"))["area_under"], 2)
+        v = pickle.load(open(p, "rb"))[key]
     except Exception:
         return None
+    return None if v is None else round(v, 2)
+
+
+def cpr(d, task, model, key="area_under"):
+    """The pkl's `key` for one cell, rounded to the 2dp the table prints.
+
+    `key` selects the metric: "area_under" is CPR AUC (the default, what every block was
+    written for), "acc_auc" the log-x-weighted decision accuracy in [0,1]. Both live in the
+    SAME pkl for anything evaluated recently -- acc_auc comes free with the CPR run -- so the
+    acc-AUC table needs no new evaluation pass; older runs come from the fallback roots above.
+    """
+    d = DIR_OVERRIDE.get((d, task, model), d)
+    stask = task.replace("_", "-")
+    v = _read(RESULTS_BASE / d / f"{task}_{model}_validation.pkl", key)
+    if v is None:
+        # MIB's own run_evaluation.py (what the eprun_eval_* dirs come from) writes a
+        # different layout: <dir>/EdgePruning_patching_node/<task-with-dashes>_<model>_
+        # validation_abs-False.pkl. Same keys inside.
+        for p in (RESULTS_BASE / d).glob(f"**/{stask}_{model}_validation_abs-*.pkl"):
+            v = _read(p, key)
+            if v is not None:
+                break
+    if v is None and key == "acc_auc":
+        for root in ACCAUC_FALLBACK_ROOTS:
+            v = _read(root / f"{d}_patching_node"
+                      / f"{stask}_{model}_validation_abs-False.pkl", key)
+            if v is not None:
+                break
+    return v
 
 
 def empty_circuit(d, task, model):
@@ -268,7 +326,7 @@ def fmt(v, bold=False, dagger=False, empty=False):
     return ("$^{\\dagger}$" + s) if dagger else s
 
 
-def render(methods, output, stub):
+def render(methods, output, stub, key="area_under"):
     """Emit one adjustbox+tabular fragment, to be \\input inside a table float.
 
     No float, no caption, no \\label here: this file is overwritten on every run, so anything
@@ -277,8 +335,15 @@ def render(methods, output, stub):
 
     `stub` is the top-left header cell -- the two tables sweep different knobs, so calling
     both columns "LR" would mislabel half the rows of the sparsity one.
+
+    `key` is the pkl metric (see cpr): the CPR and acc-AUC tables are the SAME blocks,
+    the same bolding and the same daggers, read from the same pkls at a different key.
     """
     ncols = len(COLUMNS)
+    # Both tables render the same blocks, so every SKIP/WARNING below fires twice per run
+    # with identical text. Tag them or the acc-AUC table's coverage holes read as duplicates
+    # of the CPR table's, which they are not -- acc_auc is missing from strictly more cells.
+    tag = "acc-AUC" if key == "acc_auc" else "CPR"
     # adjustbox rather than a hand-tuned \footnotesize: 13 columns want ~500pt against a
     # 5.5in (~397pt) \textwidth, and `max width` shrinks to fit whatever the content turns
     # out to be instead of relying on a font-size guess. It works here only because each of
@@ -301,14 +366,14 @@ def render(methods, output, stub):
     for entry in methods:
         method, lrs = entry[0], entry[1]
         prefix = entry[2] if len(entry) > 2 else "LR$=$"
-        data = {lr: {(t, m): cpr(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
+        data = {lr: {(t, m): cpr(d, t, m, key) for t, m, _ in COLUMNS} for lr, d in lrs}
         empty = {lr: {(t, m): empty_circuit(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
         # A block whose only populated row is the control (an existing run reused as the
         # sweep's zero point) is not yet a sweep -- it would render as one row of numbers
         # over four rows of "---". Skip it until a second point lands; it then appears on
         # the next regeneration with no edit here.
         if sum(any(v is not None for v in data[lr].values()) for lr, _ in lrs) < 2:
-            print(f"SKIP block {method!r}: <2 populated rows (jobs still pending)")
+            print(f"[{tag}] SKIP block {method!r}: <2 populated rows (jobs still pending)")
             continue
         if emitted:
             lines.append("\\midrule")
@@ -328,6 +393,13 @@ def render(methods, output, stub):
                      f"{steps_note(method)}}} \\\\")
         for lr, _ in lrs:
             present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
+            # Same rule as the block-level skip above, one level down: a row with no populated
+            # cells renders as 12 "---" and reads as an LR that was run and scored nothing,
+            # which is a wrong claim rather than a gap. Drop it until its first cell lands; it
+            # reappears on the next regeneration with no edit here. Announced, never silent.
+            if not present:
+                print(f"[{tag}] SKIP row {method} {prefix}{lr}: no cells yet")
+                continue
             # An Avg over populated cells only is NOT comparable to the row above it when the two
             # rows have different cell counts, and the bias is not even zero-mean: the columns that
             # go missing are the slow llama3 ones, which are also the high-CPR ones, so a partial
@@ -338,7 +410,7 @@ def render(methods, output, stub):
             else:
                 avg = "---"
                 if present:
-                    print(f"WARNING: {method} {prefix}{lr} has {len(present)}/{len(COLUMNS)} cells; "
+                    print(f"[{tag}] WARNING: {method} {prefix}{lr} has {len(present)}/{len(COLUMNS)} cells; "
                           f"Avg suppressed (missing "
                           f"{[f'{t}/{m}' for t, m, _ in COLUMNS if data[lr][(t, m)] is None]})")
             cells = [fmt(data[lr][(t, m)],
@@ -353,7 +425,7 @@ def render(methods, output, stub):
             n_empty = sum(1 for t, m, _ in COLUMNS
                           if empty[lr][(t, m)] and data[lr][(t, m)] is not None)
             if n_empty:
-                print(f"WARNING: {method} {prefix}{lr} has {n_empty}/{len(present)} cells whose "
+                print(f"[{tag}] WARNING: {method} {prefix}{lr} has {n_empty}/{len(present)} cells whose "
                       f"circuit is EMPTY; those scores are the pruning-order tie-break")
                 if avg != "---" and n_empty == len(present):
                     avg = "$^{\\varnothing}$" + avg
@@ -370,6 +442,7 @@ def render(methods, output, stub):
 def main():
     render(LR_METHODS, LR_OUTPUT, "Method / LR")
     render(SPARSITY_METHODS, SPARSITY_OUTPUT, "Method / sparsity")
+    render(LR_METHODS, LR_ACCAUC_OUTPUT, "Method / LR", key="acc_auc")
 
 
 if __name__ == "__main__":

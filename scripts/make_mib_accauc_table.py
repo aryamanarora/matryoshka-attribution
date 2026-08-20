@@ -22,7 +22,10 @@ MATTR_ACC = MIB / "mattr_accauc"       # lr01 ablations (acc_auc already compute
 MATTR_REEVAL = MIB / "mattr_accauc_val"  # htk_lr_0.05, final_node (re-eval)
 OUTPUT = Path("paper/tabs/mib_accauc_results.tex")
 COLUMNS = M.COLUMNS
-LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05"}
+# M's, not a second copy -- same reasoning as opt_of below. This set decides which rows get
+# the n=200 dagger, so a copy that misses a newly swept dir does not just look different from
+# the CPR table, it silently drops a caveat that table carries.
+LR05_CAPPED = M.LR05_CAPPED
 # Dirs whose acc_auc lives in the eval_mib validation pkl (results/<dir>/<task>_<model>_
 # validation.pkl) rather than in a run_evaluation.py re-eval folder.
 #
@@ -38,7 +41,15 @@ LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05"}
 #
 # Safe to reroute rather than a change of measurement: on the three cells present in BOTH
 # sources the values agree to 2dp (ioi 0.403/0.40, mcqa 0.485/0.48, arc_easy 0.478/0.48).
-LR05_EVALMIB = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05"}
+#
+# softlog_sgd_lr_0.05 is the optimizer ablation (submit_softlog_sgd_lr.sh). It is new enough
+# that its eval_mib pkl carries acc_auc directly, so it belongs here and NOT in the legacy
+# fallback -- an unrouted dir falls through to MATTR_ACC, which holds nothing for it, and the
+# row would render all-dashes forever while the numbers sat in results/. That is the failure
+# the "+ unif k" note above describes, so listing the dir when the sweep is submitted (not
+# when someone notices the blank row) is the habit that avoids repeating it.
+LR05_EVALMIB = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05",
+                "softlog_sgd_lr_0.05"}
 # htk_lr_0.05 predates evaluation.py returning acc_auc, so its eval_mib pkl has acc_auc=None
 # and it genuinely needs the re-eval folder. final_node is vestigial (see above); it is kept
 # only so the entry does not have to be re-derived if that row is ever restored.
@@ -118,8 +129,13 @@ MASK_BASELINES += [(disp, L2A / d, "EdgePruning_patching_node")
                    for disp, d in M.SIGMOID_MASK_ROWS]
 
 
-def opt_of(d):   # id-STE variants use SGD; everything else Adam (mirrors make_mib_table)
-    return "sgd" if "identity" in d else "adam"
+# opt_of is M's, not a local copy. There WAS a local one here that only matched "identity",
+# and it went stale the moment make_mib_table's grew a second SGD arm (softlog_sgd_*): this
+# table filed that run under the "\ourmethod{}-Adam" header while the CPR table had it under
+# SGD -- two tables making contradictory claims about which optimizer a run used. The module
+# docstring already says this file mirrors make_mib_table's conventions; importing the
+# function is what makes that true instead of aspirational.
+opt_of = M.opt_of
 
 
 def _acc(p):
@@ -249,8 +265,18 @@ def main():
             continue
         L.append(f"\\textbf{{{label}}} \\\\")
         for n, d in ours:
+            if not any(v is not None for v in mattr[d].values()):
+                # Same rule as make_mib_table's emit_ours: a row of 12 "---" claims a run that
+                # was scored and produced nothing, which is a wrong statement rather than a
+                # blank. Drop it until its first cell lands; it reappears on the next
+                # regeneration with no edit here. Announced, never silent.
+                print(f"SKIP row {n!r} ({d}): no acc_auc yet")
+                continue
             L.append(emit(n, mattr[d], llama_ioi if d in LR05_CAPPED else set()))
         for n, d in unif:
+            if not any(v is not None for v in mattr[d].values()):
+                print(f"SKIP row {unifk(n)!r} ({d}): no acc_auc yet")
+                continue
             L.append(emit(unifk(n), mattr[d], llama_ioi if d in LR05_CAPPED else set()))
     L += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
 

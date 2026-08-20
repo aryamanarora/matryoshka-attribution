@@ -372,6 +372,25 @@ COST_OURS = {"node": "0.5k", "edge": "5k"}
 COST_IG5_ROWS = {"NAP-IG", "Conductance", "EAP-IG-inp (CF, repro)"}
 
 
+# MODULE level, not nested inside the renderer: make_mib_accauc_table.py renders the same rows
+# under the same optimizer headers with the same daggers, and while it kept private copies of
+# these they went stale the moment a second SGD arm was added -- that table filed softlog_sgd_*
+# under "\ourmethod{}-Adam" while this one had it under SGD. Two tables contradicting each
+# other about which optimizer a run used is a wrong claim about the run, not a layout nit, so
+# the definitions live here once and that module imports them.
+def opt_of(results_dir):
+    # id-STE variants are trained with SGD, and so is the soft-topk optimizer ablation
+    # (softlog_sgd_*); everything else with Adam. Matching on "identity" alone was enough
+    # while id-STE was the ONLY SGD arm, but it silently files any other SGD dir under the
+    # \ourmethod{}-Adam header.
+    return "sgd" if ("identity" in results_dir or "_sgd" in results_dir) else "adam"
+
+
+# lr=0.05 swept dirs cap llama/ioi at 200 -> dagger just that cell for those rows.
+LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05", "softlog_sgd_lr_0.05"}
+LR05_DAGGER = {("ioi", "llama3")}
+
+
 def eprun_label(level, suffix):
     """Row label for one Node/Edge Pruning variant -- the single formatting site."""
     return f"{EPRUN_NAME[level]} ({suffix})"
@@ -588,17 +607,6 @@ def main():
 
     def mask_cost(name):
         return COST_UGS if name == "UGS" else COST_EPRUN
-
-    def opt_of(results_dir):
-        # id-STE variants are trained with SGD, and so is the soft-topk optimizer ablation
-        # (softlog_sgd_*); everything else with Adam. Matching on "identity" alone was enough
-        # while id-STE was the ONLY SGD arm, but it silently files any other SGD dir under the
-        # \ourmethod{}-Adam header -- which is a wrong claim about the run, not a layout nit.
-        return "sgd" if ("identity" in results_dir or "_sgd" in results_dir) else "adam"
-
-    # lr=0.05 swept dirs cap llama/ioi at 200 -> dagger just that cell for those rows.
-    LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05", "softlog_sgd_lr_0.05"}
-    LR05_DAGGER = {("ioi", "llama3")}
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
         # Split the "Ours" rows into two optimizer sets, each with a header.
