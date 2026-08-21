@@ -44,6 +44,12 @@ KS=(log uniform)
 # substrate this sweep mostly runs on: results/sva_mlp_lr/topk_sgd (addition, mlp, 8 LRs) reads
 # 0.490@0.05 vs 0.496@1.0 and stays in 0.44-0.50 from lr=0.05 all the way to 100. So lr=1.0
 # buys ~0.006 here and costs one-protocol comparability. If this arm is re-run, prefer 0.05.
+# SUPERSEDED FOR THE ZERO-ABLATION SETTING (2026-08-21): the 156 topk:sgd cells backfilled into
+# results/sva_zeroabl were run at 1.0, NOT 0.05, because their whole purpose is the paired
+# patch-vs-zero comparison in scripts/compare_ablation.py, which matches the two settings by
+# filename. Dropping to 0.05 there would have compared a 0.05 zero run against a 1.0 patch run
+# and charged the difference to the ablation. Same-LR beats better-LR when the axis under test
+# is the ablation.
 #
 # What the deviation is NOT needed for: this arm's win over soft Adam is not an LR artifact.
 # The same probe sweeps topk_adam over 8 LRs at the same substrate; its BEST is 0.346, below
