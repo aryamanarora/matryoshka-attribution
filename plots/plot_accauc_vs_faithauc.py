@@ -21,6 +21,7 @@ Data: results/sva_sweep (patched, input excluded), results/sva_sweep_input (patc
 results/sva_zeroabl (zeroed, input excluded -- the `+input` column is empty there by design).
 Run:  uv run python plots/plot_accauc_vs_faithauc.py  ->  plots/accauc_vs_faithauc.pdf
 """
+import argparse
 import glob
 import json
 import os
@@ -108,6 +109,12 @@ METHODS = {
     # for the whole LRP family here.
     "AttnLRP":    ("AttnLRP",      P.color("AttnLRP")),
     "stopk-log":  ("MAttr (log)",  P.color("MAttr")),   # headline = soft top-k fwd, log k
+    # Same forward and same backward as the headline; Adam -> SGD is the only change. Has its
+    # own hex in palette.py (black) rather than sharing MAttr's blue, so it is an ordinary
+    # series here; drawn under --sgd only, to keep the default panels legible -- see
+    # FIGURE_METHODS. Runs at lr=1.0, off this sweep's shared 0.05 protocol (documented in
+    # submit_sva_sweep.sh), which is a real confound with the Adam row and not just a label.
+    "softsgd-log": ("MAttr (SGD)", P.color("MAttr (SGD)")),
     "soft-log":   ("+hard (log)",  P.color("+hard")),   # sigmoid-STE hard forward ablation
     # Node Pruning trained through the SAME loss_fn as MAttr (eval_sva.py --method edge_pruning),
     # so its points move along the loss axis like every other series here and the ONLY difference
@@ -137,7 +144,12 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # "+hard (log)" is omitted here only: it sits nearly on top of the MAttr (log) points in every
 # facet, so it costs a legend entry and 12 overlapping markers without separating anything.
 # It is still the "$+$ hard" ablation row in the tables, and still drawn in the cause figure.
-FIGURE_METHODS = [k for k in METHODS if k != "soft-log"]
+# "softsgd-log" is omitted BY DEFAULT only to keep the panels legible -- it adds 12 markers to
+# already-dense facets and a seventh legend entry. It is fully drawable: palette.py now gives
+# MAttr (SGD) its own hex (black), so it separates from MAttr by FILL like every other series
+# and needs no second encoding. `--sgd` turns it on.
+FIGURE_METHODS = [k for k in METHODS if k not in ("soft-log", "softsgd-log")]
+SGD_METHODS = [k for k in METHODS if k not in ("soft-log",)]
 
 
 def parse_method(fname, d):
@@ -160,7 +172,13 @@ def parse_method(fname, d):
         if re.search(r"_ig\d+", tag):
             return None
         ks = "unif" if "uniformk" in tag else "log"
-        return f"stopk-{ks}"
+        # The OPTIMIZER has to be in the key. Until 2026-08-21 this branch keyed on the gate and
+        # k-schedule only, so when the `topk:sgd` arm landed (72 runs, submit_sva_sweep.sh) every
+        # one of them parsed to `stopk-log`/`stopk-unif` and was averaged into the MAttr headline
+        # series by group_avg -- 36 SGD runs silently pooled with 78 Adam ones per key, in this
+        # figure and in every consumer that imports parse_method. Same failure mode the strict
+        # catch-all below was written to prevent, one branch up.
+        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}"
     # Be STRICT here. This used to fall through to "IG" for anything unrecognised, which meant a
     # cause-trained MAttr run (tag `necessary_topk_adam_bs1`, from --mode necessary) would be
     # silently relabelled "IG" and averaged into the IG points. Unknown tags must drop out, not
@@ -251,10 +269,16 @@ def group_avg(raw, m, loss, sub):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--sgd", action="store_true",
+                    help="also draw MAttr (SGD) (its own fill; +12 markers, +1 legend entry)")
+    a = ap.parse_args()
+    figure_methods = SGD_METHODS if a.sgd else FIGURE_METHODS
+
     rows, dropped = [], []
     for res, inp_label, abl in SOURCES:
         raw = load(res)
-        for m in FIGURE_METHODS:
+        for m in figure_methods:
             mlabel = METHODS[m][0]
             for lkey, llabel in LOSSES.items():
                 for sub, slabel in SUBSTRATES:
@@ -277,7 +301,7 @@ def main():
     df = pd.DataFrame(rows)
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
-    df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in FIGURE_METHODS])
+    df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
     node_g, mlp_g = "·".join(REQUIRED["node"]), "·".join(REQUIRED["mlp"])
     facet_order = [f"Node, −input\n{node_g}", f"Node, +input\n{node_g}",
@@ -290,7 +314,7 @@ def main():
     df["_path"] = pd.Categorical(df["loss"], LOSS_PATH).codes
     df = df.sort_values(["ablation", "facet", "method", "_path"])
 
-    colors = {METHODS[m][0]: METHODS[m][1] for m in FIGURE_METHODS}
+    colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
         # Dashed guide joining a method's three losses, drawn BEFORE the points so markers sit
@@ -316,7 +340,7 @@ def main():
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
-    out = "plots/accauc_vs_faithauc.pdf"
+    out = f"plots/accauc_vs_faithauc{'_sgd' if a.sgd else ''}.pdf"
     p.save(out, dpi=300, verbose=False)
     # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
     # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
@@ -324,7 +348,7 @@ def main():
     print("wrote", out, f"({len(df)} points)")
     # Every panel must show ONE group set (group_avg enforces it) and the full method x loss
     # grid. A short count is a coverage hole, not a styling choice, so print both.
-    n_full = len(FIGURE_METHODS) * len(LOSSES)
+    n_full = len(figure_methods) * len(LOSSES)
     cov = df.groupby(["ablation", "facet"], observed=True).agg(
         n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
     cov["of"] = n_full
