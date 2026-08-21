@@ -534,8 +534,46 @@ def repel(x, y, w, lab_h, xr, yr, n=900, anchor_dx=DX, mark_r=MARK_R):
 RC = P.RC
 
 
-def node_rows():
-    """One row per node-level point: gradient baselines, MAttr ablations, Node Pruning, DBM."""
+# =========================================================================================
+# test_only: collapse every swept family to the ONE setting carried to the test split
+# =========================================================================================
+# The full-page figures were 68 node points, most of them rungs of an LR or sparsity ladder:
+# 12 Node Pruning budgets x 2 objectives, 8 NP learning rates, 7 MAttr-SGD LRs, 5 DBM lambdas.
+# That cloud answers "how much of the gap is hyperparameters?" -- which is exactly what the
+# --lr variant exists for -- while crowding out the question this figure asks, "do the two
+# metrics agree across METHODS?". Worse, it lets a reader pick any rung as the baseline's
+# score, including ones we never committed to.
+#
+# So under test_only each swept family shows the setting we actually took to the test split,
+# read from the same constants the test table uses rather than re-argmaxed here:
+#
+#   Node Pruning  M.EPRUN_BEST_SPARSITY        (s=0.5, logit-diff)  == make_mib_test_table
+#                                                                      .NODE_PRUNING
+#   DBM           eprun_eval_ld_sig_lr0.3_l16.0 (lr=0.3, lambda=6)  == the headline DBM row of
+#                                                                      both MIB tables
+#   MAttr         nothing to do -- the four test-carried settings (log/unif x Adam lr=0.05 /
+#                 SGD lr=1.0,3.0) are already the M.OUR_METHODS rows, and the ladders around
+#                 them lived entirely in LR_SERIES.
+#
+# Verified against disk: the dirs holding test-split pkls are eprun_eval_s0.5_ld,
+# eprun_eval_ld_sig_lr0.3_l16.0, eprun_eval (s=0.9 KL) and the test_node_*/test_edge_* trees.
+# eprun_eval is the ONE case where disk is broader than the claim -- s=0.9 KL was the old
+# headline budget and its test pkls predate the repoint to s=0.5 logit-diff. Following
+# EPRUN_BEST_SPARSITY keeps this figure agreeing with the test table instead of with history.
+#
+# The MAttr ablations (+hard, -c_k, +hard bwd, id-STE, Gumbel) are NOT filtered: they are
+# separate methods at the selected LR, not rungs of a ladder, and dropping them would delete
+# the ablation story rather than de-duplicate a sweep. Note this is a weaker bar than the test
+# TABLE applies -- it ships soft-forward rows only, and -c_k/+hard bwd/Gumbel have no test run
+# at all. Tighten here if the figure should mirror the table exactly.
+TEST_ONLY_DBM = ("DBM ($\\lambda{=}6$)", "eprun_eval_ld_sig_lr0.3_l16.0")
+
+
+def node_rows(test_only=False):
+    """One row per node-level point: gradient baselines, MAttr ablations, Node Pruning, DBM.
+
+    test_only=True keeps just the test-carried setting of each swept family (see above).
+    """
     rows = []
     for disp, dacc, sub in A.BASELINES:
         acc = avg({(t, m): A.acc_base(dacc, sub, t, m) for t, m, _ in COLS})
@@ -579,7 +617,7 @@ def node_rows():
                          label=label,
                          paths=[(f"lr:{base}", lr)] if base else []))
     # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
-    for label, dirn in M.EPRUN_SPARSITIES:
+    for label, dirn in ([M.EPRUN_BEST_SPARSITY] if test_only else M.EPRUN_SPARSITIES):
         sub = "EdgePruning_patching_node"
         acc = avg({(t, m): A._acc(RB / dirn / sub /
                                   f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
@@ -594,8 +632,26 @@ def node_rows():
         if dirn in EPRUN_LR_ANCHOR:           # also the lr=0.8 node of its own LR path
             b, lr = EPRUN_LR_ANCHOR[dirn]
             paths.append((f"lr:{b}", lr))
+        # With the ladder gone there is no path for the point to sit on, and a bare "s=0.5"
+        # stops being self-explanatory once it is the only budget on the frame.
         rows.append(dict(acc=acc, cpr=cpr, grp=G_NPLD if ld else G_NPKL,
-                         label=delatex(label).replace(", logit-diff", ""), paths=paths))
+                         label=("Node Pruning (" + delatex(label).replace(", logit-diff", "") + ")"
+                                if test_only else delatex(label).replace(", logit-diff", "")),
+                         paths=[] if test_only else paths))
+    if test_only:
+        # DBM has NO source outside the LR/L1 series, so dropping those would delete the
+        # baseline from the figure rather than thin it. Re-added here as its single test point.
+        lab, dirn = TEST_ONLY_DBM
+        pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
+        acc = [a for a, _ in pairs if a is not None]
+        cpr = [c for _, c in pairs if c is not None]
+        if len(acc) < len(COLS) or len(cpr) < len(COLS):
+            print(f"  skip {lab} ({dirn}): acc {len(acc)}/{len(COLS)}, cpr {len(cpr)}/"
+                  f"{len(COLS)} -- incomplete", file=sys.stderr)
+        else:
+            rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
+                             grp=G_DBM, label=delatex(lab), paths=[]))
+        return rows
     # every complete swept lr, incl. both complete DBM points (the only DBM source here)
     rows += build_lr_rows()
     # ...and the DBM sparsity-penalty sweep at that best lr ("L1=" rather than "lr=")
@@ -809,7 +865,7 @@ def main_full():
     import matplotlib.pyplot as plt
     plt.rcParams.update(RC)
     fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
-    df = draw_points(ax, node_rows())
+    df = draw_points(ax, node_rows(test_only=True))
     fig.tight_layout()
     place_labels(fig, ax, df)
     out = "plots/mib_accauc_cpr_scatter_full.pdf"
@@ -849,7 +905,7 @@ def main_both():
     plt.rcParams.update(RC)
     fig, (ax_n, ax_e) = plt.subplots(
         2, 1, figsize=(FIG_W, FIG_H_BOTH), gridspec_kw=dict(height_ratios=[2, 1]))
-    dfn = draw_points(ax_n, node_rows(), title="(a) Node level", xlabel=False)
+    dfn = draw_points(ax_n, node_rows(test_only=True), title="(a) Node level", xlabel=False)
     dfe = draw_points(ax_e, edge_rows(), xpad=0.22, legend=False, title="(b) Edge level")
     fig.tight_layout()
     place_labels(fig, ax_n, dfn)
