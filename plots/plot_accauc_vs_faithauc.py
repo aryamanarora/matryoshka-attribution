@@ -1,25 +1,32 @@
 """Scatter of accuracy-AUC (x) vs faithfulness-AUC (y), one point per (method, loss).
 
 Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + Arith (mean of its 4)
-+ the 2 MIB tasks (ARC-E, IOI) when present. Columns are substrate x whether the input node is
-included in scoring/ablation; only the `node` substrate has the MIB tasks and the +input
-variant, so mlp / mlp+attn_head carry SVA and Arith only, no-input.
++ the 2 MIB tasks (ARC-E, IOI) when present. A panel is (ablation setting) x (substrate x
+whether the input node is included in scoring/ablation); only the `node` substrate has the MIB
+tasks and the +input variant, so mlp / mlp+attn_head carry SVA and Arith only, no-input.
 
-ROWS are the ablation SETTING: `Patched` sets every non-top-k unit to its counterfactual source
-activation, `Zero-abl.` sets it to 0. Read the ordering WITHIN a row and never a point's
-position across rows -- the two rows are different experiments, not two scorings of one. MAttr
-and the two mask baselines are retrained through whichever intervention they are scored under,
-and the gradient baselines change estimator outright (I×G -> Gradient×Input, IG -> textbook
-zero-baseline IG). The settings agree at only Spearman ~0.44 on matched cells, which is the
-reason the second row is worth drawing at all. Both axes of the zero row are on their own scale:
-x carries a ~0.5 baseline (a destroyed model still wins the binary base-vs-source comparison
-about half the time, and `load` explains why correcting for that per-run is worse than living
-with it), and y is inflated ~1.9x because faith-AUC's (F_clean - F_patch) denominator shrinks
-when the ablated model is destroyed rather than flipped. Neither is comparable across rows.
+The layout is a WRAP, ncol=4, ordered so the four `Patched` panels fill the first row and the
+three `Zero-abl.` ones the second -- it reads as a grid but is not one, because facet_grid can
+only free scales per row/column and every panel here needs its OWN y (faith-AUC spans 0.6 in
+the patched Node panel and 3.0 in the zeroed MLP one). `facet_order` fixes the sequence; the
+ablation is the first line of each strip rather than a row label.
+
+`Patched` sets every non-top-k unit to its counterfactual source activation, `Zero-abl.` sets
+it to 0. Read the ordering WITHIN a setting and never a point's position across settings --
+they are different experiments, not two scorings of one. MAttr is retrained through whichever
+intervention it is scored under, and the gradient baselines change estimator outright (I×G ->
+Gradient×Input, IG -> textbook zero-baseline IG). The settings agree at only Spearman ~0.44 on
+matched cells, which is the reason the zero panels are worth drawing at all. Both axes of the
+zero panels are on their own scale: x carries a ~0.5 baseline (a destroyed model still wins the
+binary base-vs-source comparison about half the time, and `load` explains why correcting for
+that per-run is worse than living with it), and y is inflated ~1.9x because faith-AUC's
+(F_clean - F_patch) denominator shrinks when the ablated model is destroyed rather than
+flipped. Neither is comparable across settings.
 
 Data: results/sva_sweep (patched, input excluded), results/sva_sweep_input (patched, included),
-results/sva_zeroabl (zeroed, input excluded -- the `+input` column is empty there by design).
-Run:  uv run python plots/plot_accauc_vs_faithauc.py  ->  plots/accauc_vs_faithauc.pdf
+results/sva_zeroabl (zeroed, input excluded -- there is no zeroed `+input` panel by design).
+Run:  uv run python plots/plot_accauc_vs_faithauc.py        -> plots/accauc_vs_faithauc.pdf
+      uv run python plots/plot_accauc_vs_faithauc.py --all  -> plots/accauc_vs_faithauc_all.pdf
 """
 import argparse
 import glob
@@ -31,7 +38,7 @@ import numpy as np
 import pandas as pd
 import palette as P
 from plotnine import (
-    ggplot, aes, geom_point, geom_path, facet_grid, labs, theme, theme_set, theme_bw,
+    ggplot, aes, geom_point, geom_path, facet_wrap, labs, theme, theme_set, theme_bw,
     element_text, element_line, element_blank, scale_fill_manual, scale_shape_manual,
     scale_color_manual, guides, guide_legend, expand_limits,
 )
@@ -40,7 +47,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 3.0),
+        figure_size=(5.5, 3.3),
         axis_title=element_text(size=8),
         axis_text=element_text(size=6),
         panel_grid_major=element_line(size=0.25, color="#dddddd"),
@@ -141,15 +148,19 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # Methods drawn in THIS figure. METHODS itself stays the full registry -- it is the shared
 # method set/colour map that plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py
 # iterate, so deleting a key there would silently drop the series from those figures too.
-# "+hard (log)" is omitted here only: it sits nearly on top of the MAttr (log) points in every
-# facet, so it costs a legend entry and 12 overlapping markers without separating anything.
-# It is still the "$+$ hard" ablation row in the tables, and still drawn in the cause figure.
-# "softsgd-log" is omitted BY DEFAULT only to keep the panels legible -- it adds 12 markers to
-# already-dense facets and a seventh legend entry. It is fully drawable: palette.py now gives
-# MAttr (SGD) its own hex (black), so it separates from MAttr by FILL like every other series
-# and needs no second encoding. `--sgd` turns it on.
-FIGURE_METHODS = [k for k in METHODS if k not in ("soft-log", "softsgd-log")]
-SGD_METHODS = [k for k in METHODS if k not in ("soft-log",)]
+#
+# The default is now the THREE-method cut: our headline arm (MAttr under SGD, the optimiser the
+# SVA+ story is about) against the two gradient baselines it is claimed to Pareto-dominate.
+# Everything else the registry knows -- MAttr (log) under Adam, +hard, Node Pruning, DBM -- is
+# still drawn by `--all`, and is still what the tables report; it is dropped HERE because at
+# seven series the facets carried 21 markers each, the legend overflowed \textwidth (the
+# logit-diff shape entry clipped), and the mask baselines sat on top of each other.
+#
+# COVERAGE HAZARD in this cut: "softsgd-log" has no results/sva_sweep_input runs, so the
+# `Node, +input` panel draws IG and I×G only. group_avg cannot catch that (it guards missing
+# TASKS within a method, not a missing method), so main() checks it explicitly and warns.
+FIGURE_METHODS = ["IG", "IxG", "softsgd-log"]
+ALL_METHODS = [k for k in METHODS if k != "soft-log"]
 
 
 def parse_method(fname, d):
@@ -270,10 +281,11 @@ def group_avg(raw, m, loss, sub):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sgd", action="store_true",
-                    help="also draw MAttr (SGD) (its own fill; +12 markers, +1 legend entry)")
+    ap.add_argument("--all", action="store_true", dest="draw_all",
+                    help="draw the full registry (MAttr-Adam, Node Pruning, DBM) instead of the "
+                         "three-method cut; legend overflows \\textwidth at this width")
     a = ap.parse_args()
-    figure_methods = SGD_METHODS if a.sgd else FIGURE_METHODS
+    figure_methods = ALL_METHODS if a.draw_all else FIGURE_METHODS
 
     rows, dropped = [], []
     for res, inp_label, abl in SOURCES:
@@ -286,7 +298,13 @@ def main():
                     # substrate (node has ARC-E/IOI, the per-position ones structurally cannot),
                     # so putting it in the strip is what stops the two column families from
                     # being read as the same average. Abbreviated to fit the panel width.
-                    facet = f"{slabel}, {inp_label}\n{'·'.join(REQUIRED[sub])}"
+                    # The ablation is IN the strip, not a facet_grid row label, because the
+                    # grid is now a wrap -- see the facet_wrap comment in the plot spec. THREE
+                    # lines, not two with the ablation prefixed: "Patched   MLP+Attn, -input"
+                    # is 26 characters and clipped past the right edge of the last panel at
+                    # \textwidth/4. Stacked, the longest line is the group list (19), which
+                    # already fit.
+                    facet = f"{abl}\n{slabel}, {inp_label}\n{'·'.join(REQUIRED[sub])}"
                     r = group_avg(raw, m, lkey, sub)
                     if r is None:
                         have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
@@ -304,8 +322,13 @@ def main():
     df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
     node_g, mlp_g = "·".join(REQUIRED["node"]), "·".join(REQUIRED["mlp"])
-    facet_order = [f"Node, −input\n{node_g}", f"Node, +input\n{node_g}",
-                   f"MLP, −input\n{mlp_g}", f"MLP+Attn, −input\n{mlp_g}"]
+    # Wrap order, read left-to-right: all four Patched panels, then the three Zero-abl. ones
+    # (the zero sweep has no +input arm). ncol=4 below therefore reproduces the old grid's
+    # rows without reserving a framed empty cell for the combination that does not exist.
+    facet_order = [f"{abl}\n{sub_in}\n{g}"
+                   for abl in ("Patched", "Zero-abl.")
+                   for sub_in, g in (("Node, −input", node_g), ("Node, +input", node_g),
+                                     ("MLP, −input", mlp_g), ("MLP+Attn, −input", mlp_g))]
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
     df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
@@ -328,11 +351,14 @@ def main():
         # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
         # wherever markers overlap, which is exactly where the distinction has to hold.
         + geom_point(size=1.9, color="#000000", stroke=0.3)
-        # Rows = ablation setting, cols = substrate x input. `scales="free"` is per-PANEL here,
-        # not per-column, which is what we want: the zero row's baseline-shifted acc-AUC and inflated
-        # faith-AUC live on their own scales and sharing an axis with the patched row would
-        # invite exactly the cross-setting comparison the docstring warns against.
-        + facet_grid("ablation ~ facet", scales="free")
+        # WRAP, not grid, and that is the whole point of the layout. Under facet_grid,
+        # `scales="free"` frees x per COLUMN and y per ROW -- it is never per panel -- so all
+        # four Patched panels shared one y axis, and the single largest point in the row
+        # (MAttr's ~2.2 on MLP) set the scale for the Node panels where nothing exceeds 0.9.
+        # facet_wrap's free scales ARE per panel. The cost is losing the row/column strips;
+        # `facet` now carries the ablation in its own label and `facet_order` fixes the
+        # left-to-right sequence so the wrap still reads as the old 4+3 grid.
+        + facet_wrap("~facet", ncol=4, scales="free")
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
         + scale_fill_manual(values=colors, name="Method")
         + scale_color_manual(values=colors, guide=None)   # line colour only; no second legend
@@ -340,7 +366,7 @@ def main():
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
-    out = f"plots/accauc_vs_faithauc{'_sgd' if a.sgd else ''}.pdf"
+    out = f"plots/accauc_vs_faithauc{'_all' if a.draw_all else ''}.pdf"
     p.save(out, dpi=300, verbose=False)
     # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
     # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
@@ -352,6 +378,15 @@ def main():
     cov = df.groupby(["ablation", "facet"], observed=True).agg(
         n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
     cov["of"] = n_full
+    # A method with NO runs at all for a substrate/input combo is invisible to group_avg (which
+    # guards missing tasks within a method, not a missing method), so a panel can silently draw
+    # a smaller method set than its neighbours. With the three-method cut that is not cosmetic:
+    # MAttr (SGD) has no sva_sweep_input runs, so `Node, +input` would show the two BASELINES
+    # and no MAttr, i.e. exactly the panel a reader would misread as a loss.
+    cov["methods"] = df.groupby(["ablation", "facet"], observed=True)["method"].agg(
+        lambda s: ",".join(m for m in [METHODS[k][0] for k in figure_methods]
+                           if m not in set(s)) or "-")
+    cov = cov.rename(columns={"methods": "MISSING"})
     print("\npoints and task-groups per panel:")
     print(cov.to_string())
     if dropped:
@@ -361,8 +396,8 @@ def main():
         # to-run list, and an empty list is the signal the figure is ready for the paper.
         print(f"\nDROPPED {len(dropped)} partial cells (missing task-groups):")
         for abl, facet, m, loss, miss in sorted(dropped):
-            # facet carries the two-line strip label; flatten it so the report stays tabular.
-            print(f"  {abl:10s} {facet.split(chr(10))[0]:18s} {m:14s} {loss:11s} missing {miss}")
+            # facet carries the multi-line strip label; flatten it so the report stays tabular.
+            print(f"  {abl:10s} {facet.split(chr(10))[1]:18s} {m:14s} {loss:11s} missing {miss}")
     else:
         print("\nno partial cells: every panel is complete.")
 
