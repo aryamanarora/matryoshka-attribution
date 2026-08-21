@@ -65,6 +65,13 @@ METHODS = [
     ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
     ("MAttr (unif)",      "final_node",                                    "flat"),   # soft-fwd uniform-k
     ("MAttr (log)*",      "topklog_lr_0.05",                               "flat"),   # HEADLINE: soft-fwd log-k (lr=0.05, best from sweep)
+    # The optimizer ablation, each arm at ITS OWN best LR -- the same dirs make_mib_table's two
+    # \ourmethod{}-SGD rows point at (log-k peaks at lr=1.0, uniform-k at 3.0; see OUR_METHODS).
+    # Matching LRs instead would make these rows a statement about SGD being 20x off its
+    # optimum rather than about the optimizer, which is exactly the reading the table repoint
+    # was made to avoid. Both are complete (11/11 importances.json).
+    ("MAttr SGD (log)",   "softlog_sgd_lr_1.0",                            "flat"),
+    ("MAttr SGD (unif)",  "softuni_sgd_lr_3.0",                            "flat"),
     ("$-c_k$",            "mib_node_detached_tau",                         "flat"),
     ("$-c_k$ (log)",      "mib_node_detached_tau_log",                     "flat"),
     ("+id-STE",           "mib_node_identity_sgd",                         "flat"),
@@ -212,6 +219,15 @@ print("Saved method_corr_heatmap")
 # mask learner. Both are still in the full-set appendix heatmaps above.
 MAIN_LABELS = [
     "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
+    # The optimizer ablation. It earns a main-text row on the same grounds as the two IG budgets
+    # beside it: the eval metrics say Adam and SGD tie (CPR 1.879 vs 1.886, IIA .499 vs .504),
+    # and only a rank correlation can say whether that is the SAME circuit found twice or two
+    # different circuits scoring alike -- which is precisely what this panel is for.
+    # LOG-k ONLY. "MAttr SGD (unif)" is in METHODS and so in the appendix heatmaps, but its
+    # Adam twin is not in this cut, so a lone uniform-k row would be read against log-k rows and
+    # confound the two knobs. Adding both would also take the panel to 12 columns; see the
+    # tile-width note under sd["lab"] below.
+    "MAttr SGD (log)",
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
     "NAP-IG (5 steps)", "NAP-IG (10 steps)",                     # gradient, one method two budgets
     "RelP+QK", "GIM", "AttnLRP", "I$\\times$G",                  # gradient (4)
@@ -221,6 +237,9 @@ SUBSETS = ["Attention heads", "MLPs"]
 # The two IG rows keep their step count in the tick label -- dropping it and relying on the
 # clustering to imply the pairing does not work, because they do NOT always land adjacent.
 DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
+           # matches the label the companion scatter uses for the same dir (softlog_sgd_lr_1.0),
+           # so the two subfigures of fig:mib-combined name one method one way
+           "MAttr SGD (log)": "+SGD",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune"}
 
@@ -254,6 +273,10 @@ sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
 # numbers overlap. Every value here is a correlation, so the units digit is always 0 and
 # carries nothing. Do not widen the figure to buy the space back: its 3.69in is set by the
 # 0.67*textwidth slot it shares with the scatter, and breaking that misaligns the subfigures.
+# At 11 (the +SGD row) the tile is ~8.5pt and the widest string here, "-.22" at size 3.6, is
+# ~8.6pt of glyphs but renders inside its tile -- checked at 600dpi, gutters still visible. That
+# is the ceiling: a 12th column needs geom_text size ~3.2, so if another method is added here,
+# drop one or shrink the text rather than assuming it still fits.
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
 # sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
 # companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
