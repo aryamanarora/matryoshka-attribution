@@ -39,6 +39,14 @@ CONFIGS=(
   "mib_edge_detached_tau|topk_detached|log|0.01|adam|validation"
   "mib_edge_identity_sgd_log|hard_topk_identity|log|0.01|sgd|validation"
   "mib_edge_identity_sgd_uniform|hard_topk_identity|uniform|0.01|sgd|validation"
+  # soft-fwd SGD, LRs imported from the node optima (submit_mib_edge_soft_sgd.sh). Unlike every
+  # other line here the LR is NOT this dir's swept optimum -- but that is exactly why these two
+  # cells must exist: without them the row averages 9 cells against its siblings' 11, and the two
+  # missing cells are ARC/llama3, the highest-scoring columns in the edge section (id-STE reads
+  # 8.96/8.55 there vs a 6.57 row average), so omitting them biases the row DOWNWARD and would
+  # make the already-negative LR-transfer result look worse than it is.
+  "mib_edge_softlog_sgd_lr_1.0|topk|log|1.0|sgd|validation"
+  "mib_edge_softuni_sgd_lr_3.0|topk|uniform|3.0|sgd|validation"
   "test_edge_topk_log_lr05|topk|log|0.05|adam|test"
   "test_edge_hard_topk_log_lr05|hard_topk|log|0.05|adam|test"
   "test_edge_hard_topk_uniform_lr05|hard_topk|uniform|0.05|adam|test"

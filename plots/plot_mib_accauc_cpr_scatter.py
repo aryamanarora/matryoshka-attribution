@@ -641,6 +641,14 @@ def edge_rows():
                   f"{len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
             continue
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
+        # Same disambiguation the node loop above needs, applied BEFORE it can bite: the edge
+        # block gained soft-fwd SGD rows (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}"
+        # now names four edge dirs as well as four node ones. Those two rows are currently
+        # incomplete (missing the ARC/llama3 cells) and so are skipped above -- the moment
+        # submit_edge_arc_llama3.sh fills them they would silently plot as a second unnamed
+        # "MAttr" point on top of the Adam one, which is exactly how the node collision hid.
+        if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
+            label += " (SGD)"
         rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
                          grp=G_MLOG if g == "ours" else G_MUNI, label=label, paths=[]))
     return rows

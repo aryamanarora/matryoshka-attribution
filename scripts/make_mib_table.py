@@ -103,12 +103,30 @@ OUR_METHODS = [
     ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_uniform", "node", "uniform"),
     # Edge level (log k-schedule = default). Swept methods -> lr=0.05.
     ("\\ourmethod{}", "mib_edge_topk_log_lr05", "edge", "ours"),
+    # Edge twin of the node SGD row, submit_mib_edge_soft_sgd.sh. SAME LABEL POLICY as node
+    # (filed under the \ourmethod{}-SGD header, so "+ SGD" would name the optimizer twice), but
+    # NOT the same LR policy, and the difference matters:
+    #
+    #   node rows  = SGD at its OWN swept optimum (1.0 log / 3.0 uniform, both bracketed)
+    #   edge rows  = those same two LRs IMPORTED, never swept at edge scale
+    #
+    # Edge n is 207-1507x node n (gpt2 157 -> 32,491; llama3 1057 -> 1,592,881) and soft-fwd SGD
+    # is LR-sensitive, so the import is not justified by the node bracket. It also demonstrably
+    # did not land: over the 9 cells shared with the headline edge row, log-k reads -1.221 mean
+    # area_under, llama3-concentrated (arith_sub -3.45, ioi -3.74, mcqa -2.42) while gemma2 gains;
+    # uniform-k is at parity (+0.154) and loses only on llama3. So these rows say "the node LR
+    # does not transfer", NOT "SGD is worse than Adam at edge level" -- the second claim needs an
+    # edge LR sweep (LR= override in submit_mib_edge_soft_sgd.sh). Do not caption them as an
+    # optimiser result until that exists.
+    ("\\ourmethod{}", "mib_edge_softlog_sgd_lr_1.0", "edge", "ours"),
     ("$+$ hard", "mib_edge_hard_topk_log_lr05", "edge", "ours"),
     ("$-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),
     ("$+$ id-STE", "mib_edge_identity_sgd_log", "edge", "ours"),
     # Edge level (uniform k-schedule). Swept -> lr=0.05.
     ("\\ourmethod{}", "mib_edge_topk_uniform_lr05", "edge", "uniform"),
+    # Uniform-k twin of the imported-LR edge SGD row above (lr=3.0). See that comment.
+    ("\\ourmethod{}", "mib_edge_softuni_sgd_lr_3.0", "edge", "uniform"),
     ("$+$ hard", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
     ("$+$ id-STE", "mib_edge_identity_sgd_uniform", "edge", "uniform"),
 ]
