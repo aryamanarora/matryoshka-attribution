@@ -512,22 +512,11 @@ def repel(x, y, w, lab_h, xr, yr, n=900, anchor_dx=DX, mark_r=MARK_R):
     return lx * (xr[1] - xr[0]) + xr[0], ly * (yr[1] - yr[0]) + yr[0]
 
 
-# Font setup, shared by every raw-matplotlib figure here. Inter matches the plotnine theme the
-# rest of the paper's figures use (`family="Inter"` in theme_set above); these figures are raw
-# matplotlib rather than plotnine because the label placement needs per-annotation control, so
-# the font has to be set on rcParams by hand -- plotnine's theme does not reach it. mathtext
-# gets Inter too: on the DejaVu default, "$-c_k$" and the legend's "$k$" would render in a
-# visibly different face from the text right next to them. cal/sf/tt are unused, but a "custom"
-# fontset resolves all of them at import time and the cal default ("cursive") is not installed,
-# so leaving them emits a findfont warning on every run. fonttype 42 embeds real TrueType
-# outlines instead of Type-3, which is what arXiv and most camera-ready checkers want.
-RC = {
-    "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
-    "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
-    "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
-    "pdf.fonttype": 42, "text.color": "#000000",
-    "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
-}
+# Font setup, shared by every raw-matplotlib figure here -- MOVED TO palette.py, which is where
+# the rest of this file's shared styling already lived. Other figures had started copying this
+# dict out of here to match, which is the same duplication the hexes were centralised to stop.
+# Aliased rather than replaced at the call sites so `S.RC` keeps working for importers.
+RC = P.RC
 
 
 def node_rows():

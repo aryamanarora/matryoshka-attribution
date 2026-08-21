@@ -39,8 +39,57 @@ METHOD = {
     # NOT the warm #d98d3a it started as -- that is a near-twin of IG's Wong orange, and in
     # the curve figures the two would cross each other in every panel.
     "DBM": "#cc79a7",
+    # MAttr with Adam -> SGD. Previously aliased to MAttr's blue and separated by linetype, on
+    # the argument that an optimizer change is not a different method; that made it undrawable
+    # in any figure where linetype is already spoken for or absent (the acc/faith scatter),
+    # so it now has a hex.
+    #
+    # BLACK, and that is a measured choice rather than a stylistic one. Every cool hue this
+    # could plausibly have taken collapses the palette: navy 10.6 dE (vs Node Pruning,
+    # tritanopia), Tol light blue 9.6 (vs GIM), steel 8.7 (vs GIM), Tol teal 4.3 (vs DBM) --
+    # all BELOW the palette's pre-existing worst pair of 16.1 (+hard vs GIM, tritanopia), i.e.
+    # each would have become the new binding constraint. Of everything tried only black and Tol
+    # sand (#ddcc77) leave that 16.1 intact; black wins on separation (30.9 dE worst case, vs
+    # I×G under protanopia) and stays out of the warm family, which this palette reserves for
+    # the gradient BASELINES. It does break the "ours = cool" rule, so read it as a neutral
+    # rather than a cool -- the alternative was making some other pair harder to tell apart.
+    # Re-verify with `python plots/palette.py`.
+    "MAttr (SGD)": "#000000",
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
+
+# Font setup for the raw-matplotlib figures. Lives here for the same reason the hexes do: it was
+# hand-copied into plot_mib_accauc_cpr_scatter and then again into every figure that wanted to
+# match it, which is the duplication this module exists to end. plot_mib_accauc_cpr_scatter.RC
+# is now an alias for this dict, so the two cannot drift.
+#
+# Inter matches the plotnine theme the rest of the paper's figures use; these figures are raw
+# matplotlib (label placement needs per-annotation control), so the font has to be set on
+# rcParams by hand -- plotnine's theme does not reach it. mathtext gets Inter too: on the DejaVu
+# default, "$k^\\star$" would render in a visibly different face from the text beside it. cal/sf/tt
+# are unused, but a "custom" fontset resolves all of them at import time and the cal default
+# ("cursive") is not installed, so leaving them emits a findfont warning on every run. fonttype
+# 42 embeds real TrueType outlines instead of Type-3, which is what arXiv wants.
+RC = {
+    "font.family": "Inter", "mathtext.fontset": "custom", "mathtext.rm": "Inter",
+    "mathtext.it": "Inter:italic", "mathtext.bf": "Inter:bold",
+    "mathtext.cal": "Inter:italic", "mathtext.sf": "Inter", "mathtext.tt": "Inter",
+    "pdf.fonttype": 42, "text.color": "#000000",
+    "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000",
+}
+
+# Axis furniture every raw-matplotlib figure here shares: hairline grid behind the data,
+# half-weight spines. A function rather than more rcParams because `set_axisbelow` and the spine
+# widths are per-Axes, and figures in this repo mix gridded panels with ungridded ones.
+GRID_LW, GRID_COLOR, SPINE_LW = 0.25, "#dddddd", 0.5
+
+
+def furnish(ax):
+    """Apply the shared grid/spine treatment to one Axes."""
+    ax.grid(True, lw=GRID_LW, color=GRID_COLOR)
+    ax.set_axisbelow(True)
+    for sp in ax.spines.values():
+        sp.set_linewidth(SPINE_LW)
 
 # Qualitative suitability marks (+ / o / -) in the teaser figure's method-property table.
 # Not method colours -- a separate three-level ordinal scale -- but kept here so the whole
@@ -70,13 +119,11 @@ ALIASES = {
     # near-twin of an existing method. Ordered hyperparameter -> ordered linetype is also the
     # more honest encoding: colour is reserved for "different method" everywhere else here.
     "IG (5 steps)": "IG", "IG (10 steps)": "IG", "IG (30 steps)": "IG",
-    # Same reasoning as the IG ladder: MAttr-SGD is the SAME forward and the same backward as
-    # MAttr, differing only in the optimizer, so it shares MAttr's blue and separates by
-    # linetype. It is deliberately not given a hex of its own -- the cool region is already
-    # occupied by +hard (bluish green), GIM (sky blue) and Node Pruning (indigo), and a fifth
-    # cool hue would become this palette's binding CVD constraint for what is a hyperparameter
-    # change, not a different method.
-    "MAttr (SGD)": "MAttr", "MAttr-SGD": "MAttr", "softsgd-log": "MAttr",
+    # MAttr-SGD now has its own hex (see METHOD) -- these are just its other spellings. NOTE
+    # this is the one place the IG-ladder reasoning above does NOT apply: that ladder stays
+    # linetype-encoded because all three rungs appear in figures that HAVE a spare linetype,
+    # whereas the SGD arm had to be droppable from the acc/faith scatter for want of one.
+    "MAttr-SGD": "MAttr (SGD)", "softsgd-log": "MAttr (SGD)",
 }
 
 
