@@ -60,16 +60,24 @@ OUR_METHODS = [
     # Node level (log k-schedule = default). Swept methods use lr=0.05 (best); llama/ioi capped 200.
     # MAttr headline = SOFT top-k forward, log k. "+ hard" = sigmoid-STE hard forward.
     ("\\ourmethod{}", "topklog_lr_0.05", "node", "ours"),
-    # Optimizer ablation: identical forward and backward to the row above, Adam -> SGD. Pinned
-    # to lr=0.05 so it sits at the SAME learning rate as the headline and the row is a
-    # single-knob contrast. NOTE: if the LR sweep (tabs/lr_sweep.tex, submit_softlog_sgd_lr.sh)
-    # finds SGD peaks elsewhere, this should be repointed to SGD's own best LR AND the
-    # \ourmethod{} row left where it is -- the two rows are then each at their own optimum,
-    # which is the comparison the ablation is meant to make.
+    # Optimizer ablation: identical forward and backward to the row above, Adam -> SGD, EACH AT
+    # ITS OWN BEST LR. This was pinned to lr=0.05 (matched to the headline, a single-knob
+    # contrast) until submit_softlog_sgd_lr.sh's grid came in, at which point the condition the
+    # old comment set out was met: SGD peaks well away from Adam's optimum. Validation CPR over
+    # the grid is 0.05 -> 1.413, 0.1 -> 1.584, 0.3 -> 1.592, *1.0 -> 1.886*, 3.0 -> 1.750,
+    # 10 -> 1.681, against Adam's 1.879 at lr=0.05.
+    #
+    # The repoint MATERIALLY CHANGES THE CLAIM and that is the point: at the matched LR the
+    # ablation reads "SGD costs 0.47 CPR", which is really a statement about SGD being 20x off
+    # its optimum, not about the optimizer. At its own optimum SGD matches Adam (1.886 vs
+    # 1.879), and the honest ablation is "the optimizer does not matter once tuned; the LR at
+    # which it is tuned does". Do NOT re-pin these to a shared LR to recover a bigger gap.
+    # The matched-LR numbers are not lost -- the whole grid is in tabs/lr_sweep.tex.
+    #
     # Labelled "\ourmethod{}" rather than "+ SGD" because emit_ours() files it under the
     # \ourmethod{}-SGD header (opt_of matches _sgd), where it IS the plain method -- the
     # optimizer is already named by the header, so "+ SGD" there would read as a second one.
-    ("\\ourmethod{}", "softlog_sgd_lr_0.05", "node", "ours"),
+    ("\\ourmethod{}", "softlog_sgd_lr_1.0", "node", "ours"),
     ("$+$ hard", "htklog_lr_0.05", "node", "ours"),
     ("$-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
@@ -81,6 +89,12 @@ OUR_METHODS = [
     # everywhere else, and than the test table's row of the same name. Repointed once
     # submit_softuni_lr05.sh produced the lr=0.05 run. final_node stays on disk.
     ("\\ourmethod{}", "mib_node_topk_uniform_lr05", "node", "uniform"),
+    # The uniform-k twin of the SGD row above, same own-best-LR policy. submit_softuni_sgd_lr.sh
+    # completes the forward x k-schedule x optimizer square, and SGD peaks at lr=3.0 here rather
+    # than 1.0: 0.05 -> 1.563, 0.1 -> 1.676, 0.3 -> 1.881, 1.0 -> 1.977, *3.0 -> 2.031*,
+    # 10 -> 1.985, against Adam's 2.092. So the optimum MOVES with the k-schedule, which is why
+    # each of the two SGD rows carries its own LR instead of sharing one.
+    ("\\ourmethod{}", "softuni_sgd_lr_3.0", "node", "uniform"),
     ("$+$ hard", "htk_lr_0.05", "node", "uniform"),
     ("$+$ hard, $+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     ("$-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
@@ -386,9 +400,20 @@ def opt_of(results_dir):
     return "sgd" if ("identity" in results_dir or "_sgd" in results_dir) else "adam"
 
 
-# lr=0.05 swept dirs cap llama/ioi at 200 -> dagger just that cell for those rows.
-LR05_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05", "softlog_sgd_lr_0.05"}
-LR05_DAGGER = {("ioi", "llama3")}
+# Swept dirs that cap ioi/llama3 at --eval-examples 200 -> dagger just that ONE cell for those
+# rows, rather than the whole-row dagger the uncapped baselines get.
+#
+# Named for the CONDITION, not the LR. It was IOI_LLAMA_CAPPED while every member happened to be an
+# lr=0.05 dir; that stopped being true when the SGD rows were repointed to their own optima
+# (softlog_sgd_lr_1.0, softuni_sgd_lr_3.0), and a set literally named "LR05" holding an lr=3.0
+# dir is the kind of drift this file warns about everywhere else.
+#
+# MEMBERSHIP IS A PROPERTY OF THE SUBMIT SCRIPT, not of the LR: submit_softlog_sgd_lr.sh:91 and
+# submit_softuni_sgd_lr.sh:67 both apply `--eval-examples 200` to ioi/llama3 at EVERY lr in the
+# grid, so any dir from those sweeps belongs here whichever LR the table ends up pointing at.
+IOI_LLAMA_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05",
+                    "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0"}
+IOI_LLAMA_DAGGER = {("ioi", "llama3")}
 
 
 def eprun_label(level, suffix):
@@ -625,7 +650,7 @@ def main():
             # "+ unif k" row showed 7.90 over 8 cells against 6.99 over 11 purely because its
             # three held gemma cells are the lowest-scoring columns in that section.
             for n, r, g in rows_o:
-                dg = LR05_DAGGER if r in LR05_CAPPED else dagger
+                dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
                 # A row with no populated cells renders as 12 "---" and claims a run exists
                 # that scored nothing, which is worse than not listing it. Skip until the
@@ -639,7 +664,7 @@ def main():
                                       suppress_avg=len(d) < len(COLUMNS),
                                       cost=COST_OURS[level]))
             for n, r, g in rows_u:
-                dg = LR05_DAGGER if r in LR05_CAPPED else dagger
+                dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
                 lines.append(make_row(unifk(n), d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
@@ -684,7 +709,7 @@ def main():
     # not just mcqa -- the pre-existing DAGGER["NAP-IG"] entry above marked only mcqa/llama3, so
     # five capped cells were rendering as if they were full-validation numbers. It matters most
     # in exactly the columns being argued over: \ourmethod{}'s lr05 dirs cap ONLY ioi/llama3
-    # (LR05_DAGGER), so e.g. the mcqa/llama3 column puts a full-val MAttr number next to a
+    # (IOI_LLAMA_DAGGER), so e.g. the mcqa/llama3 column puts a full-val MAttr number next to a
     # 200-example NAP-IG one, and the dagger is the table's only disclosure of that.
     DAGGER["NAP-IG"] = TILDE_LLAMA3_DAGGER
     # ig-steps 10 / 30 rows, same runner and same cap -> same dagger set.

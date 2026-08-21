@@ -31,6 +31,12 @@ SECTIONS = [
     # hard-concrete gates under an annealed L0 budget.
     ("Mask learning", [("Node Pruning", "eprun-s090"), ("DBM", "sig_lr0.3_l16.0")]),
     (r"MAttr (soft top-$k$ fwd, Adam)", [(r"log-$k$", "stopk-log"), (r"unif-$k$", "stopk-unif")]),
+    # Same gate and same backward as the block above; Adam -> SGD is the only change. It is its
+    # own subsection rather than two more rows in that block because the k-schedule contrast
+    # reverses here: Adam loses ~0.19 acc-AUC going log -> unif at the two neuron substrates,
+    # SGD loses 0.006, so "log-$k$ vs unif-$k$" means something different under each optimizer.
+    # Runs at lr=1.0 (submit_sva_sweep.sh MATTR_CONFIGS), not the sweep's shared 0.05.
+    (r"$+$ SGD (soft top-$k$ fwd)", [(r"log-$k$", "softsgd-log"), (r"unif-$k$", "softsgd-unif")]),
     (r"$+$ hard (sigmoid-STE, Adam)", [(r"log-$k$", "soft-log"), (r"unif-$k$", "soft-unif")]),
     (r"$+$ hard (identity-STE, SGD)", [(r"log-$k$", "idSTE-log"), (r"unif-$k$", "idSTE-unif")]),
 ]
@@ -87,7 +93,10 @@ def parse_method(fname, d):
         if re.search(r"_ig\d+", tag):
             return None
         ks = "unif" if "uniformk" in tag else "log"
-        return f"stopk-{ks}"
+        # Optimizer belongs in the key -- see the matching comment in
+        # plot_accauc_vs_faithauc.parse_method (this function mirrors it). Without the split the
+        # 2026-08-21 `topk:sgd` arm lands in the MAttr rows of every fingerprint table.
+        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}"
     # eprun_s090[_ce|_acc] -> one key per budget. This branch must stay ABOVE the catch-all:
     # the tag matches none of the tests above, so without it every Node Pruning run is
     # silently averaged into the IG rows.

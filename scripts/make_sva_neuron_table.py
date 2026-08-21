@@ -180,10 +180,18 @@ LOSSES = [("logit_diff", "", "Logit difference"),
 METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
            ("sig_lr0.3_l16.0", "sig_lr0.3_l16.0%s"),
            ("stopk-log", "sufficient_topk_adam%s_bs1"),
-           ("stopk-unif", "sufficient_topk_adam%s_uniformk_bs1")]
+           ("stopk-unif", "sufficient_topk_adam%s_uniformk_bs1"),
+           # Same gate, same backward, Adam -> SGD (lr=1.0). Only the log-k arm is a column: the
+           # unif-k one would be an eighth, and unif-k is where the two OPTIMIZERS differ most
+           # (Adam drops ~0.19 acc-AUC log -> unif at the neuron substrates, SGD 0.006), so a
+           # unif-k SGD column would be read as a k-schedule statement about \ourmethod{} when it
+           # is really about Adam. Adding a column also re-opens the 14-of-72 recurrence cut
+           # below -- main() prints the counts either side of the gap; check it after a rerun.
+           ("softsgd-log", "sufficient_topk_sgd%s_bs1")]
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
           "sig_lr0.3_l16.0": "DBM",
-          "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$"}
+          "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$",
+          "softsgd-log": r"\ourmethod{} $+$ SGD"}
 # Truncation budget per description. The layout is one column per METHOD, so the space per
 # description shrinks with the number of methods -- but the font drops a step at six columns
 # (see `font` in make()), and the two roughly cancel: ~68pt at \small and ~59pt at \scriptsize

@@ -25,7 +25,7 @@ COLUMNS = M.COLUMNS
 # M's, not a second copy -- same reasoning as opt_of below. This set decides which rows get
 # the n=200 dagger, so a copy that misses a newly swept dir does not just look different from
 # the CPR table, it silently drops a caveat that table carries.
-LR05_CAPPED = M.LR05_CAPPED
+IOI_LLAMA_CAPPED = M.IOI_LLAMA_CAPPED
 # Dirs whose acc_auc lives in the eval_mib validation pkl (results/<dir>/<task>_<model>_
 # validation.pkl) rather than in a run_evaluation.py re-eval folder.
 #
@@ -42,14 +42,24 @@ LR05_CAPPED = M.LR05_CAPPED
 # Safe to reroute rather than a change of measurement: on the three cells present in BOTH
 # sources the values agree to 2dp (ioi 0.403/0.40, mcqa 0.485/0.48, arc_easy 0.478/0.48).
 #
-# softlog_sgd_lr_0.05 is the optimizer ablation (submit_softlog_sgd_lr.sh). It is new enough
-# that its eval_mib pkl carries acc_auc directly, so it belongs here and NOT in the legacy
-# fallback -- an unrouted dir falls through to MATTR_ACC, which holds nothing for it, and the
-# row would render all-dashes forever while the numbers sat in results/. That is the failure
-# the "+ unif k" note above describes, so listing the dir when the sweep is submitted (not
-# when someone notices the blank row) is the habit that avoids repeating it.
-LR05_EVALMIB = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05",
-                "softlog_sgd_lr_0.05"}
+# The two SGD optimizer ablations (submit_softlog_sgd_lr.sh, submit_softuni_sgd_lr.sh). Both
+# are new enough that their eval_mib pkls carry acc_auc directly, so they belong here and NOT
+# in the legacy fallback -- an unrouted dir falls through to MATTR_ACC, which holds nothing for
+# it, and the row would render all-dashes forever while the numbers sat in results/. That is
+# the failure the "+ unif k" note above describes, so listing the dir when the sweep is
+# submitted (not when someone notices the blank row) is the habit that avoids repeating it.
+#
+# THIS SET IS KEYED BY DIR, SO IT MOVES WHEN A ROW IS REPOINTED. When the SGD rows went from
+# the matched lr=0.05 to their own optima (make_mib_table.py OUR_METHODS), the old
+# softlog_sgd_lr_0.05 entry stopped matching and BOTH SGD rows silently dropped out of this
+# table while staying in the CPR one. The `SKIP row ... no acc_auc yet` warning in main() is
+# what surfaced it; keep that warning, it is the only thing standing between a repoint and two
+# tables that disagree about which rows exist.
+#
+# Renamed off "LR05_" because it no longer holds only lr=0.05 dirs -- see the same rename of
+# make_mib_table.IOI_LLAMA_CAPPED.
+EVALMIB_ACC = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05",
+               "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0"}
 # htk_lr_0.05 predates evaluation.py returning acc_auc, so its eval_mib pkl has acc_auc=None
 # and it genuinely needs the re-eval folder. final_node is vestigial (see above); it is kept
 # only so the entry does not have to be re-derived if that row is ever restored.
@@ -172,7 +182,7 @@ def acc_base(dirs, sub, t, m):
 
 
 def acc_mattr(dir_, t, m):
-    if dir_ in LR05_EVALMIB:                            # lr05 swept log methods: eval_mib pkl
+    if dir_ in EVALMIB_ACC:                            # acc_auc straight from the eval_mib pkl
         return _acc(L2A / dir_ / f"{t}_{m}_validation.pkl")
     base = MATTR_REEVAL if dir_ in REEVAL_DIRS else MATTR_ACC
     return _acc(base / f"{dir_}_patching_node" / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
@@ -272,12 +282,12 @@ def main():
                 # regeneration with no edit here. Announced, never silent.
                 print(f"SKIP row {n!r} ({d}): no acc_auc yet")
                 continue
-            L.append(emit(n, mattr[d], llama_ioi if d in LR05_CAPPED else set()))
+            L.append(emit(n, mattr[d], llama_ioi if d in IOI_LLAMA_CAPPED else set()))
         for n, d in unif:
             if not any(v is not None for v in mattr[d].values()):
                 print(f"SKIP row {unifk(n)!r} ({d}): no acc_auc yet")
                 continue
-            L.append(emit(unifk(n), mattr[d], llama_ioi if d in LR05_CAPPED else set()))
+            L.append(emit(unifk(n), mattr[d], llama_ioi if d in IOI_LLAMA_CAPPED else set()))
     L += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)

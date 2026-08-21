@@ -57,7 +57,10 @@ def parse_method(fname, nodes):
     elif "hard_topk" in tag:
         fam = "MAttr+hard"
     elif "sufficient_topk" in tag:
-        fam = "MAttr"                      # soft top-k forward = headline
+        # Soft top-k forward = headline. The optimizer has to be in the family name: the
+        # 2026-08-21 `topk:sgd` arm shares this tag prefix and would otherwise be averaged into
+        # the headline MAttr rows -- the same silent-folding failure this docstring warns about.
+        fam = "MAttr-SGD" if "_topk_sgd" in tag else "MAttr"
     elif tag.startswith("ixg"):
         return "IxG"
     elif tag.startswith("attnlrp"):
