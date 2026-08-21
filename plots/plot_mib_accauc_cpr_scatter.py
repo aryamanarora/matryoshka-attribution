@@ -670,43 +670,74 @@ def edge_rows():
     the edge panel is therefore "our ablations against ONE baseline", not a survey -- but where
     that one baseline lands is the point.
     """
-    def pair_avg(dirn):
-        pairs = [_pair(dirn, t, m) for t, m, _ in COLS]
-        return ([a for a, _ in pairs if a is not None],
-                [c for _, c in pairs if c is not None])
+    def cells(dirn):
+        """{(task, model): (acc_auc, area_under)} for the cells this dir has BOTH metrics on."""
+        out = {}
+        for t, m, _ in COLS:
+            a, c = _pair(dirn, t, m)
+            if a is not None and c is not None:
+                out[(t, m)] = (a, c)
+        return out
 
-    rows = []
-    # Same completeness bar as build_lr_rows: 11/11 on BOTH axes, because every point here is a
-    # mean over cells and a 3-cell mean is not comparable to an 11-cell one.
+    # Candidates, in plot order: (label, dir, group).
     EDGE_BASELINES = [("EAP-IG-inp", "eapig_clean_eval", G_GRAD),
                       ("UGS", "ugs_eval", G_GRAD)]
-    for disp, dirn, grp in EDGE_BASELINES:
-        acc, cpr = pair_avg(dirn)
-        if len(acc) < len(COLS) or len(cpr) < len(COLS):
-            print(f"  skip {disp} ({dirn}): acc {len(acc)}/{len(COLS)}, cpr {len(cpr)}/"
-                  f"{len(COLS)} -- incomplete", file=sys.stderr)
-            continue
-        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)), grp=grp,
-                         label=delatex(disp), paths=[]))
+    cand = [(delatex(disp), dirn, grp) for disp, dirn, grp in EDGE_BASELINES]
     for name, d, level, g in M.OUR_METHODS:
         if level != "edge":
             continue
-        acc, cpr = pair_avg(d)
-        if len(acc) < len(COLS) or len(cpr) < len(COLS):
-            print(f"  skip {delatex(name)} ({d}): acc {len(acc)}/{len(COLS)}, cpr "
-                  f"{len(cpr)}/{len(COLS)} -- incomplete", file=sys.stderr)
-            continue
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
-        # Same disambiguation the node loop above needs, applied BEFORE it can bite: the edge
-        # block gained soft-fwd SGD rows (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}"
-        # now names four edge dirs as well as four node ones. Those two rows are currently
-        # incomplete (missing the ARC/llama3 cells) and so are skipped above -- the moment
-        # submit_edge_arc_llama3.sh fills them they would silently plot as a second unnamed
-        # "MAttr" point on top of the Adam one, which is exactly how the node collision hid.
+        # Same disambiguation the node loop above needs: the edge block gained soft-fwd SGD rows
+        # (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}" names four edge dirs as well as
+        # four node ones. Without the suffix the SGD point plots as a second unnamed "MAttr" on
+        # top of the Adam one, which is exactly how the node collision hid.
         if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
             label += " (SGD)"
-        rows.append(dict(acc=float(np.mean(acc)), cpr=float(np.mean(cpr)),
-                         grp=G_MLOG if g == "ours" else G_MUNI, label=label, paths=[]))
+        cand.append((label, d, G_MLOG if g == "ours" else G_MUNI))
+
+    data = {d: cells(d) for _, d, _ in cand}
+
+    # COMPARABILITY IS ENFORCED BY A COMMON CELL SET, NOT BY AN 11/11 BAR.
+    #
+    # The bar used to be 11/11 on both axes, which is the right instinct -- every point here is a
+    # mean over cells, so a 3-cell mean next to an 11-cell one reads as comparable when it is not.
+    # But applied to the soft-SGD dirs it silently deleted them: they cover 9/11, missing exactly
+    # arc_easy/llama3 and arc_challenge/llama3, and those two are the HIGHEST-scoring columns in
+    # this section. So the bar dropped the points, and simply lowering it would have plotted them
+    # over a subset biased against them -- both failure modes, in opposite directions.
+    #
+    # Instead every point is averaged over the INTERSECTION of the plotted dirs' cells. That is a
+    # paired comparison at whatever coverage the thinnest plotted dir has, and it self-heals:
+    # when submit_edge_arc_llama3.sh's four jobs land the intersection becomes 11/11 and every
+    # coordinate returns to its full-coverage value with no edit here.
+    #
+    # EDGE_MIN_CELLS keeps a badly-covered dir from dragging the intersection down for everyone:
+    # 9 is "may be missing only the two ARC/llama3 cells that no edge dir had before that script",
+    # so UGS (3/11 -- gpt2/qwen2.5 on ioi+mcqa only) still falls out rather than cutting the
+    # panel to three cells. Every exclusion is printed, never silent.
+    EDGE_MIN_CELLS = 9
+    kept = []
+    for label, dirn, grp in cand:
+        if len(data[dirn]) < EDGE_MIN_CELLS:
+            print(f"  skip {label} ({dirn}): {len(data[dirn])}/{len(COLS)} cells on both "
+                  f"axes -- below EDGE_MIN_CELLS={EDGE_MIN_CELLS}", file=sys.stderr)
+            continue
+        kept.append((label, dirn, grp))
+    if not kept:
+        return []
+
+    common = set.intersection(*(set(data[d]) for _, d, _ in kept))
+    if len(common) < len(COLS):
+        missing = sorted(f"{t}/{m}" for t, m, _ in COLS if (t, m) not in common)
+        print(f"  NOTE edge panel: every point averaged over the {len(common)}/{len(COLS)} cells "
+              f"common to all plotted dirs; dropped {', '.join(missing)}", file=sys.stderr)
+
+    rows = []
+    for label, dirn, grp in kept:
+        vals = [data[dirn][c] for c in common]
+        rows.append(dict(acc=float(np.mean([a for a, _ in vals])),
+                         cpr=float(np.mean([c for _, c in vals])),
+                         grp=grp, label=label, paths=[]))
     return rows
 
 
