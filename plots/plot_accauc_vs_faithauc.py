@@ -5,8 +5,8 @@ Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + Arith (m
 whether the input node is included in scoring/ablation); only the `node` substrate has the MIB
 tasks and the +input variant, so mlp / mlp+attn_head carry SVA and Arith only, no-input.
 
-The layout is a WRAP, ncol=4, ordered so the four `Patched` panels fill the first row and the
-three `Zero-abl.` ones the second -- it reads as a grid but is not one, because facet_grid can
+The layout is a WRAP, ncol=4, ordered so the `Patched` panels fill the first row and the
+`Zero-abl.` ones the second -- it reads as a grid but is not one, because facet_grid can
 only free scales per row/column and every panel here needs its OWN y (faith-AUC spans 0.6 in
 the patched Node panel and 3.0 in the zeroed MLP one). `facet_order` fixes the sequence; the
 ablation is the first line of each strip rather than a row label.
@@ -23,8 +23,8 @@ that per-run is worse than living with it), and y is inflated ~1.9x because fait
 (F_clean - F_patch) denominator shrinks when the ablated model is destroyed rather than
 flipped. Neither is comparable across settings.
 
-Data: results/sva_sweep (patched, input excluded), results/sva_sweep_input (patched, included),
-results/sva_zeroabl (zeroed, input excluded -- there is no zeroed `+input` panel by design).
+Data: one dir per (ablation x input) cell -- results/sva_sweep, sva_sweep_input, sva_zeroabl,
+sva_zeroabl_input. See SOURCES for which methods each carries.
 Run:  uv run python plots/plot_accauc_vs_faithauc.py        -> plots/accauc_vs_faithauc.pdf
       uv run python plots/plot_accauc_vs_faithauc.py --all  -> plots/accauc_vs_faithauc_all.pdf
 """
@@ -89,16 +89,24 @@ GROUPS = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi
 REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
             "mlp": ["SVA", "Arith"],
             "mlp+attn_head": ["SVA", "Arith"]}
-# (results dir, input-included label, ablation-row label). The ablation dimension is the FACET
-# ROW: `Patched` ablates non-top-k units to the counterfactual source activation, `Zero-abl.`
-# sets them to 0. That is a different SETTING, not a rescoring -- MAttr trains through it, and
-# the gradient baselines change estimator (I×G -> Gradient×Input, IG -> zero-baseline IG) -- so
-# read the ORDERING within a row, never a point's position across rows. The two settings agree
-# at only Spearman ~0.44 on matched cells, which is why the row is worth drawing.
-# The zero sweep was run without --include-input, so its `+input` column is empty by design.
+# (results dir, input-included label, ablation label). The ablation is the first strip line of
+# each panel: `Patched` ablates non-top-k units to the counterfactual source activation,
+# `Zero-abl.` sets them to 0. That is a different SETTING, not a rescoring -- MAttr trains
+# through it, and the gradient baselines change estimator (I×G -> Gradient×Input, IG ->
+# zero-baseline IG) -- so read the ORDERING within a setting, never a point's position across
+# them. The two settings agree at only Spearman ~0.44 on matched cells, which is why the zero
+# panels are worth drawing.
+#
+# sva_zeroabl_input carries ONLY this figure's three default series (IG, I×G, MAttr-SGD),
+# submitted 2026-08-21 by `ONLY="ig ixg softsgd" OUT=results/sva_zeroabl_input ABLATION=zero
+# bash scripts/submit_input_replication.sh`. So `--all` will report the zeroed `+input` panel
+# as short: the registry's other methods (MAttr-Adam, Node Pruning, DBM, AttnLRP) were never
+# run there. That is a scope choice, not a stalled wave -- the MISSING column in main()'s
+# panel report names them, and the same ONLY= line with more arms fills them in.
 SOURCES = [("results/sva_sweep", "−input", "Patched"),
            ("results/sva_sweep_input", "+input", "Patched"),
-           ("results/sva_zeroabl", "−input", "Zero-abl.")]
+           ("results/sva_zeroabl", "−input", "Zero-abl."),
+           ("results/sva_zeroabl_input", "+input", "Zero-abl.")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 
 # method key -> (display label, colour); order = legend order.

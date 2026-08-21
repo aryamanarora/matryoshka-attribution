@@ -5,9 +5,31 @@
 # Idempotent; separate output dir so nothing in results/sva_sweep/ is touched.
 #   bash scripts/submit_input_replication.sh          # submit missing
 #   DRY=1 bash scripts/submit_input_replication.sh    # print only
+#
+# ONLY / OUT / ABLATION fill the two holes in the `+input` column of fig:acc-faith
+# (plots/plot_accauc_vs_faithauc.py), whose default method set is IG / I×G / MAttr (SGD):
+#
+#   ONLY=softsgd bash scripts/submit_input_replication.sh                      # 30 jobs
+#   ONLY="ig ixg softsgd" OUT=results/sva_zeroabl_input ABLATION=zero \
+#     bash scripts/submit_input_replication.sh                                 # 90 jobs
+#
+# ONLY is a space-separated list of ARM names (see `want` below); empty = every arm, the
+# original behaviour. ABLATION=zero adds --ablation zero AND the `_zeroabl` tag fragment, so
+# the skip-if-exists check still predicts the right filename -- eval_sva.run_tag inserts it
+# right after the loss fragment (`ig_ce_zeroabl`, `sufficient_topk_sgd_zeroabl_bs1`), which is
+# why AB is spliced into $ls rather than appended to the whole tag.
+#
+# A DIFFERENT OUT dir means a different experiment, so job names carry the dir: the QUEUED
+# guard below matches on name, and `inp_ioi_ig_ce` submitted against sva_sweep_input would
+# otherwise suppress the zero-ablation cell of the same name.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-OUT=results/sva_sweep_input
+OUT=${OUT:-results/sva_sweep_input}
+ABLATION=${ABLATION:-patch}
+ONLY=${ONLY:-}
+PFX=inp; [[ "$ABLATION" != patch ]] && PFX=inp0
+AB=""; [[ "$ABLATION" != patch ]] && AB="_${ABLATION}abl"
+want() { [[ -z "$ONLY" ]] || grep -qw -- "$1" <<<"$ONLY"; }
 mkdir -p logs "$OUT"
 
 LOSSES=(ce acc logit_diff)
@@ -50,31 +72,55 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
   ge=(); [[ "$ds" == mib ]] && ge=(--grad-examples 32)
   [[ -n "${GRAD_EXAMPLES[$task]:-}" ]] && ge=(--grad-examples "${GRAD_EXAMPLES[$task]}")
   common=(--model "$model" --task "$task" --dataset "$ds" --nodes node --include-input
-          --eval-examples 100 --output "$OUT")
+          --eval-examples 100 --output "$OUT" --ablation "$ABLATION")
   mattr_common=(--mode sufficient --train-batch-size 1 --steps 2000 --lr 0.05)
   for loss in "${LOSSES[@]}"; do
     ls=""; [[ "$loss" != logit_diff ]] && ls="_$loss"
+    ls="${ls}${AB}"    # tag order is base + _loss + _zeroabl + ... ; see the header
     # gradient methods (loss = target)
-    for gm in ig ixg attnlrp; do sub "inp_${task}_${gm}_${loss}" "${gm}${ls}" \
+    for gm in ig ixg attnlrp; do want "$gm" && sub "${PFX}_${task}_${gm}_${loss}" "${gm}${ls}" \
         "${common[@]}" --method "$gm" --loss "$loss" "${ge[@]}"; done
-    sub "inp_${task}_cond_${loss}" "conductance${ls}" \
+    want conductance && sub "${PFX}_${task}_cond_${loss}" "conductance${ls}" \
         "${common[@]}" --method conductance --loss "$loss" --ig-steps 10 "${ge[@]}"
     # MAttr: soft/idste x {log, uniform, fixed-10%, IG5}
     for cfg in "${MATTR_CFG[@]}"; do
       variant=${cfg%%:*}; opt=${cfg#*:}; opt=${opt%%:*}; ab=${cfg##*:}
+      want "$ab" || continue
       base="sufficient_${variant}_${opt}${ls}"   # _bs1 suffix: train-batch-size=1 (eval_sva tag)
-      sub "inp_${task}_${ab}_log_${loss}"   "${base}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log     "${mattr_common[@]}"
-      sub "inp_${task}_${ab}_unif_${loss}"  "${base}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule uniform "${mattr_common[@]}"
-      sub "inp_${task}_${ab}_fixed_${loss}" "${base}_fixedk10_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --fixed-k-frac 0.1 "${mattr_common[@]}"
-      sub "inp_${task}_${ab}_ig5_${loss}"   "${base}_ig5_bs1"      "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --mattr-ig-steps 5 "${mattr_common[@]}"
+      sub "${PFX}_${task}_${ab}_log_${loss}"   "${base}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log     "${mattr_common[@]}"
+      sub "${PFX}_${task}_${ab}_unif_${loss}"  "${base}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule uniform "${mattr_common[@]}"
+      sub "${PFX}_${task}_${ab}_fixed_${loss}" "${base}_fixedk10_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --fixed-k-frac 0.1 "${mattr_common[@]}"
+      sub "${PFX}_${task}_${ab}_ig5_${loss}"   "${base}_ig5_bs1"      "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --mattr-ig-steps 5 "${mattr_common[@]}"
     done
     # soft top-k forward (topk gate, Adam): log + uniform only (fixed/ig not used in fingerprints)
-    sub "inp_${task}_stopk_log_${loss}"  "sufficient_topk_adam${ls}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule log     "${mattr_common[@]}"
-    sub "inp_${task}_stopk_unif_${loss}" "sufficient_topk_adam${ls}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule uniform "${mattr_common[@]}"
+    if want stopk; then
+    sub "${PFX}_${task}_stopk_log_${loss}"  "sufficient_topk_adam${ls}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule log     "${mattr_common[@]}"
+    sub "${PFX}_${task}_stopk_unif_${loss}" "sufficient_topk_adam${ls}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule uniform "${mattr_common[@]}"
+    fi
+    # Same soft top-k forward, Adam -> SGD. This is the `MAttr (SGD)` series of fig:acc-faith,
+    # and it is the arm the `+input` column was missing entirely.
+    #
+    # LR IS 1.0, NOT mattr_common's 0.05, and the trailing --lr wins over the earlier one. That
+    # deviates from this script's shared protocol on purpose: results/sva_sweep's topk:sgd cells
+    # are all lr=1.0 (60 node runs, verified), and the figure plots the -input and +input panels
+    # side by side as the same method under a different substrate treatment. At 0.05 the two
+    # panels would differ in LR as well as in --include-input, and the input effect would be
+    # confounded by it. Soft-fwd + SGD is genuinely LR-sensitive (Adam normalises the k/n gate
+    # slope away, SGD does not), so this is not a formality. Same call, same reason, as the
+    # zero-ablation backfill documented in submit_sva_sweep.sh.
+    #
+    # LOG-k ONLY. results/sva_sweep carries both schedules for this arm, but nothing consumes
+    # the +input uniform-k cells: fig:acc-faith uses `softsgd-log`, and
+    # plot_kschedule_accauc_vs_faithauc.py -- the one figure that faces the schedules off across
+    # both sweep dirs -- filters to `hard_topk` and never sees the soft forward at all. Adding
+    # uniform would double the wave for a series no artifact reads.
+    want softsgd && sub "${PFX}_${task}_softsgd_log_${loss}" "sufficient_topk_sgd${ls}_bs1" \
+      "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer sgd \
+      --k-schedule log "${mattr_common[@]}" --lr 1.0
   done
   # random baseline (MIB tasks only, 3 seeds)
-  if [[ "$ds" == mib ]]; then
-    for seed in 42 43 44; do sub "inp_${task}_random_s${seed}" "random_s${seed}" \
+  if [[ "$ds" == mib ]] && want random; then
+    for seed in 42 43 44; do sub "${PFX}_${task}_random_s${seed}" "random_s${seed}" \
         "${common[@]}" --method random --seed "$seed"; done
   fi
 done
