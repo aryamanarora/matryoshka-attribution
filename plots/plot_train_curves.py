@@ -47,7 +47,7 @@ Run:  uv run python plots/plot_train_curves.py
       uv run python plots/plot_train_curves.py --metric faith_auc
       uv run python plots/plot_train_curves.py --metric kstar_pct --tasks sva
       uv run python plots/plot_train_curves.py --substrate MLP     # one subfigure-sized panel
-      uv run python plots/plot_train_curves.py --overlay           # metric x substrate, losses overlaid
+      uv run python plots/plot_train_curves.py --overlay           # 3 metrics x substrate, losses overlaid
 """
 import argparse
 import glob
@@ -81,6 +81,9 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 # size plot_optimizer_lr.py uses, so an SVA+ training curve can sit in a subfigure row beside
 # the MIB learning-rate panels. Point sizes are absolute, so the small panel needs its own.
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
+# Per-row height of the --overlay layout, which is as tall as it has rows. 1.55in keeps the
+# 3-metric version square-ish (5.4 x 5.25) rather than a column that runs off a page.
+ROW_H = 1.55
 FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/annotation)
 # `--overlay` puts all three losses in one panel, so the loss needs its own channel. It gets
 # LINETYPE and the arm keeps ARM_COLOR, so the two layouts are colour-identical: a reader moving
@@ -180,11 +183,12 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
         fig.tight_layout()
     elif overlay:
         # metric rows x substrate columns, all three losses in every panel. sharey by ROW only:
-        # the substrates within a row are meant to be compared, but acc-AUC and faith-AUC are
-        # different scales and forcing them onto one axis flattens whichever has less range.
+        # the substrates within a row are meant to be compared, but the three metrics are on
+        # unrelated scales -- k* is a percentage of a unit count that differs 30x between Node
+        # and MLP -- and forcing them onto one axis flattens whichever has least range.
         fs = FS_GRID
         nr = len(mrows)
-        fig, axes = plt.subplots(nr, len(subs), figsize=(FIG_GRID[0], 1.75 * nr + 0.6),
+        fig, axes = plt.subplots(nr, len(subs), figsize=(FIG_GRID[0], ROW_H * nr + 0.6),
                                  sharex=True, sharey="row", squeeze=False)
         for r, met in enumerate(mrows):
             for i, s in enumerate(subs):
@@ -201,8 +205,16 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
                     ax.set_ylabel(METRICS[met], fontsize=fs[0])
                 if r == nr - 1:
                     ax.set_xlabel(xlab, fontsize=fs[0])
+                if met == "kstar_pct":
+                    # k* spans 0.003% to 100% -- 4.5 decades -- because a run that never reaches
+                    # 50% faithfulness is CENSORED to the full unit count. On a linear axis the
+                    # censored head at 100 owns the panel and everything after step ~400 is a
+                    # flat line on the floor. The hairline marks that ceiling for what it is:
+                    # "did not reach 50%", not "selected every unit".
+                    ax.set_yscale("log")
+                    ax.axhline(100, lw=0.4, ls=(0, (1, 2)), color="#999999", zorder=0)
         fig.tight_layout()
-        top = 1.0 - 0.6 / (1.75 * nr + 0.6)
+        top = 1.0 - 0.6 / (ROW_H * nr + 0.6)
         fig.subplots_adjust(top=top)
         fig.legend(handles=handles(True), fontsize=fs[2], ncol=6, loc="lower center",
                    bbox_to_anchor=(0.5, top + 0.012), frameon=False,
@@ -254,8 +266,9 @@ def main():
     ap.add_argument("--tasks", choices=["arith", "sva", "all"], default="arith")
     # In the 3x3 grid the loss is the facet. `--overlay` is the other view: the three losses share
     # a panel (linetype) so the loss dependence is read WITHIN a panel rather than across columns,
-    # which frees the column axis for the substrate and the ROW axis for a second metric. Colour
-    # stays the arm in both, so the two layouts are directly comparable.
+    # which frees the column axis for the substrate and the ROW axis for the METRIC -- all three
+    # of them, so --metric does nothing here. Colour stays the arm in both layouts, so a reader
+    # moving between them does not have to relearn which line is Adam.
     ap.add_argument("--overlay", action="store_true")
     # One substrate x one loss, at plot_optimizer_lr.py's subfigure size. Ignores --overlay,
     # since a single panel has no row axis to spend on a second metric.
@@ -266,13 +279,15 @@ def main():
     tasks = {"arith": ARITH, "sva": SVA, "all": ARITH + SVA}[a.tasks]
     one = a.substrate is not None
     overlay = a.overlay and not one     # a single panel has no row axis to spend on a metric
-    # The overlay layout has a spare axis, so it carries faith-AUC as a second row alongside
-    # whatever --metric asked for. dict.fromkeys, not a set: row order is the argument order,
-    # and `--metric faith_auc --overlay` collapses to the one row rather than drawing it twice.
-    mrows = list(dict.fromkeys([a.metric, "faith_auc"])) if overlay else [a.metric]
-    suf = (f"_{a.substrate.lower().replace('+', '')}_{a.loss.replace('-', '')}" if one
-           else "_byloss" if overlay else "")
-    out = a.out or f"plots/train_curves_{a.tasks}_{a.metric}{suf}.pdf"
+    # The overlay layout spends its row axis on the metric, so it draws ALL of them and ignores
+    # --metric -- which is also why its filename carries no metric. Sparsity last: the two AUCs
+    # are the quality axis and read together, k* is the cost that buys them.
+    mrows = list(METRICS) if overlay else [a.metric]
+    if overlay:
+        out = a.out or f"plots/train_curves_{a.tasks}_overlay.pdf"
+    else:
+        suf = (f"_{a.substrate.lower().replace('+', '')}_{a.loss.replace('-', '')}" if one else "")
+        out = a.out or f"plots/train_curves_{a.tasks}_{a.metric}{suf}.pdf"
 
     cells = load(a.res, tasks)
     lab = dict(TRAINED)
