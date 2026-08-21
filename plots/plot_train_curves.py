@@ -13,7 +13,7 @@ be wrong; it is a constant that the trained curves either do or do not cross.
 IG ALSO HAS NO LOSS, and this figure gives that fact a job. The sweep carries a `loss` field on
 the IG runs because every run has one, but IG's attribution does not use it: k* -- a
 deterministic function of the scores -- is IDENTICAL across the three loss labels in 10/12 ARITH
-and 8/12 SVA (substrate, task) cells. So the three IG lines in a `--color loss` panel are
+and 8/12 SVA (substrate, task) cells. So the three IG lines in an `--overlay` panel are
 REPLICATES OF ONE CIRCUIT, and their spread is the evaluation's own noise floor, not a loss
 effect. On ARITH acc-AUC that floor is mean 0.015, max 0.027 (faith-AUC: mean 0.034), which is
 the yardstick any small Adam/SGD/IG gap in this figure has to clear. Do not read the IG spread
@@ -47,6 +47,7 @@ Run:  uv run python plots/plot_train_curves.py
       uv run python plots/plot_train_curves.py --metric faith_auc
       uv run python plots/plot_train_curves.py --metric kstar_pct --tasks sva
       uv run python plots/plot_train_curves.py --substrate MLP     # one subfigure-sized panel
+      uv run python plots/plot_train_curves.py --overlay           # metric x substrate, losses overlaid
 """
 import argparse
 import glob
@@ -81,13 +82,17 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 # the MIB learning-rate panels. Point sizes are absolute, so the small panel needs its own.
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
 FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/annotation)
-# `--color loss` overlays the three losses in one substrate panel, so the loss needs a hue.
-# There is no project-wide loss palette (palette.py is a METHOD palette and deliberately says
-# so), and inventing one there would bind every other figure. These are viridis stops, chosen
-# because the losses have a natural order -- the sweep's own softest-signal-to-hardest order,
-# CE -> acc -> logit-diff -- so an ordered ramp is the honest encoding; it is also CVD-safe and
-# stays dark->mid->light in greyscale. Local to this figure on purpose.
-LOSS_COLOR = {"CE": "#3b528b", "acc": "#21918c", "logit-diff": "#7ad151"}
+# `--overlay` puts all three losses in one panel, so the loss needs its own channel. It gets
+# LINETYPE and the arm keeps ARM_COLOR, so the two layouts are colour-identical: a reader moving
+# between them does not have to relearn which line is Adam. The earlier version of this view did
+# the opposite (a local viridis ramp for the loss, arm on linetype), which meant the same figure
+# script drew Adam in blue in one layout and in three different greens in the other.
+#
+# Ordered hyperparameter -> ordered channel is preserved: dotted / dashed / solid follows the
+# sweep's own softest-signal-to-hardest order, CE -> acc -> logit-diff, with the headline loss
+# solid. IG carries a `loss` field it does not use, so it draws three lines here; per the
+# docstring those are replicates of one circuit and their spread is the evaluation noise floor.
+LOSS_LINETYPE = {"CE": "dotted", "acc": "dashed", "logit-diff": "solid"}
 
 
 def load(res=RES, tasks=None):
@@ -113,21 +118,28 @@ def load(res=RES, tasks=None):
     return cells
 
 
-def panel(ax, mean, per, colors, by_loss, fs, note=None):
-    """One substrate x loss cell: thin per-task curves under the bold arm means.
+def dash(arm, loss, overlay):
+    """Linetype carries the loss when the losses share a panel, the arm otherwise."""
+    return LOSS_LINETYPE[loss] if overlay else LINETYPE[arm]
+
+
+def panel(ax, mean, per, overlay, fs, note=None):
+    """One cell: thin per-task curves under the bold arm means.
 
     The per-task lines are not decoration. Every panel here averages 2-3 tasks, so the mean is
     not a converged average and must not be able to look like one -- if the thin lines disagree
-    about the sign of the Adam/SGD gap, the panel is not evidence.
+    about the sign of the Adam/SGD gap, the panel is not evidence. They are drawn fainter in the
+    overlay layout, which stacks three losses into the space the grid gives one: 18 thin lines
+    at the grid's weight is a wash the 9 means cannot be read out of.
     """
-    key = "loss" if by_loss else "arm"
-    for (kval, arm, _), g in per.groupby([key, "arm", "task"], observed=True):
+    lw, al = (0.3, 0.14) if overlay else (0.35, 0.28)
+    for (arm, loss, _), g in per.groupby(["arm", "loss", "task"], observed=True):
         g = g.sort_values("step")
-        ax.plot(g.step, g.y, ls=LINETYPE[arm], lw=0.35, alpha=0.28,
-                color=colors[kval], zorder=1)
-    for (kval, arm), g in mean.groupby([key, "arm"], observed=True):
+        ax.plot(g.step, g.y, ls=dash(arm, loss, overlay), lw=lw, alpha=al,
+                color=ARM_COLOR[arm], zorder=1)
+    for (arm, loss), g in mean.groupby(["arm", "loss"], observed=True):
         g = g.sort_values("step")
-        ax.plot(g.step, g.y, ls=LINETYPE[arm], lw=1.1, color=colors[kval], zorder=3)
+        ax.plot(g.step, g.y, ls=dash(arm, loss, overlay), lw=1.1, color=ARM_COLOR[arm], zorder=3)
     if note:
         ax.annotate(note, (0.03, 0.97), xycoords="axes fraction", ha="left", va="top",
                     fontsize=fs[2], color="#666666")
@@ -135,76 +147,100 @@ def panel(ax, mean, per, colors, by_loss, fs, note=None):
     P.furnish(ax)
 
 
-def handles(colors, by_loss):
-    """Legend handles. Built by hand because hue and linetype carry different variables: under
-    --color loss the three loss colours and the three arm linetypes are independent, so one
+def handles(overlay):
+    """Legend handles. Built by hand because in the overlay layout hue and linetype carry
+    different variables -- three arm colours and three loss dashes are independent, so one
     combined handle set would imply nine series that do not exist."""
-    if by_loss:
-        return ([Line2D([0], [0], color=colors[lb], lw=1.1, label=lb) for _, lb in LOSSES]
-                + [Line2D([0], [0], color="#444444", lw=1.1, ls=LINETYPE[lb], label=lb)
-                   for lb in [x for _, x in TRAINED] + [REF[1]]])
-    return [Line2D([0], [0], color=colors[lb], lw=1.1, ls=LINETYPE[lb], label=lb)
+    arms = [Line2D([0], [0], color=ARM_COLOR[lb], lw=1.1,
+                   ls="solid" if overlay else LINETYPE[lb], label=lb)
             for lb in [x for _, x in TRAINED] + [REF[1]]]
+    if not overlay:
+        return arms
+    return arms + [Line2D([0], [0], color="#444444", lw=1.1, ls=LOSS_LINETYPE[lb], label=lb)
+                   for _, lb in LOSSES]
 
 
-def render(a, out, mean, per, nlab, colors, by_loss, one):
+def render(a, out, mean, per, nlab, mrows, overlay, one):
     plt.rcParams.update(P.RC)
-    ylab, xlab = METRICS[a.metric], "training step"
+    xlab = "training step"
+    subs = [s for _, s in SUBSTRATES]
 
     if one:
         fs = FS_ONE
-        m = mean[(mean.substrate == a.substrate) & (mean.loss == a.loss)]
-        p = per[(per.substrate == a.substrate) & (per.loss == a.loss)]
+        sel = (mean.substrate == a.substrate) & (mean.loss == a.loss) & (mean.metric == a.metric)
+        selp = (per.substrate == a.substrate) & (per.loss == a.loss) & (per.metric == a.metric)
         fig, ax = plt.subplots(figsize=FIG_ONE)
-        panel(ax, m, p, colors, False, fs,
-              note=f"{a.substrate}, {a.loss}, n={p.task.nunique()} tasks")
+        panel(ax, mean[sel], per[selp], False, fs,
+              note=f"{a.substrate}, {a.loss}, n={per[selp].task.nunique()} tasks")
         ax.set_xlabel(xlab, fontsize=fs[0])
-        ax.set_ylabel(ylab, fontsize=fs[0])
-        ax.legend(handles=handles(colors, False), fontsize=fs[2], loc="lower right",
+        ax.set_ylabel(METRICS[a.metric], fontsize=fs[0])
+        ax.legend(handles=handles(False), fontsize=fs[2], loc="lower right",
                   frameon=True, framealpha=0.95, borderpad=0.35, handletextpad=0.4,
                   handlelength=2.0, labelspacing=0.3)
         fig.tight_layout()
+    elif overlay:
+        # metric rows x substrate columns, all three losses in every panel. sharey by ROW only:
+        # the substrates within a row are meant to be compared, but acc-AUC and faith-AUC are
+        # different scales and forcing them onto one axis flattens whichever has less range.
+        fs = FS_GRID
+        nr = len(mrows)
+        fig, axes = plt.subplots(nr, len(subs), figsize=(FIG_GRID[0], 1.75 * nr + 0.6),
+                                 sharex=True, sharey="row", squeeze=False)
+        for r, met in enumerate(mrows):
+            for i, s in enumerate(subs):
+                ax = axes[r][i]
+                nn = nlab[nlab.substrate == s]
+                # The n-per-loss note goes on the top row only; it is a property of the column,
+                # and repeating it under every metric is the clutter this layout is trying to cut.
+                panel(ax, mean[(mean.substrate == s) & (mean.metric == met)],
+                      per[(per.substrate == s) & (per.metric == met)], True, fs,
+                      note=(nn.label.iloc[0] if len(nn) else "n=0") if r == 0 else None)
+                if r == 0:
+                    ax.set_title(s, fontsize=fs[0], pad=3)
+                if i == 0:
+                    ax.set_ylabel(METRICS[met], fontsize=fs[0])
+                if r == nr - 1:
+                    ax.set_xlabel(xlab, fontsize=fs[0])
+        fig.tight_layout()
+        top = 1.0 - 0.6 / (1.75 * nr + 0.6)
+        fig.subplots_adjust(top=top)
+        fig.legend(handles=handles(True), fontsize=fs[2], ncol=6, loc="lower center",
+                   bbox_to_anchor=(0.5, top + 0.012), frameon=False,
+                   handletextpad=0.4, handlelength=2.0, columnspacing=1.2)
     else:
         fs = FS_GRID
-        subs = [s for _, s in SUBSTRATES]
-        cols = [None] if by_loss else [lb for _, lb in LOSSES]
-        # by_loss puts the three substrates in a row; otherwise substrates are rows and losses
-        # columns. sharey across the WHOLE grid, as the plotnine version did: the substrates are
-        # meant to be compared, and a free y-scale per row hides that MLP sits below Node.
-        nr, nc = (1, len(subs)) if by_loss else (len(subs), len(cols))
-        fig, axes = plt.subplots(nr, nc, figsize=(FIG_GRID[0], 2.3 if by_loss else FIG_GRID[1]),
+        cols = [lb for _, lb in LOSSES]
+        # Substrates are rows and losses columns. sharey across the WHOLE grid, as the plotnine
+        # version did: the substrates are meant to be compared, and a free y-scale per row hides
+        # that MLP sits below Node.
+        fig, axes = plt.subplots(len(subs), len(cols), figsize=FIG_GRID,
                                  sharex=True, sharey=True, squeeze=False)
         for i, s in enumerate(subs):
             for j, c in enumerate(cols):
-                ax = axes[0][i] if by_loss else axes[i][j]
-                sel = mean.substrate == s
-                selp = per.substrate == s
-                if c is not None:
-                    sel &= mean.loss == c
-                    selp &= per.loss == c
-                nn = nlab[(nlab.substrate == s) & ((nlab.loss == c) if c is not None
-                                                   else True)] if len(nlab) else nlab
-                panel(ax, mean[sel], per[selp], colors, by_loss, fs,
+                ax = axes[i][j]
+                sel = (mean.substrate == s) & (mean.loss == c) & (mean.metric == a.metric)
+                selp = (per.substrate == s) & (per.loss == c) & (per.metric == a.metric)
+                nn = nlab[(nlab.substrate == s) & (nlab.loss == c)] if len(nlab) else nlab
+                panel(ax, mean[sel], per[selp], False, fs,
                       note=(nn.label.iloc[0] if len(nn) else "n=0"))
-                if by_loss or i == 0:
-                    ax.set_title(s if by_loss else c, fontsize=fs[0], pad=3)
-                if (by_loss and i == 0) or (not by_loss and j == 0):
-                    ax.set_ylabel(ylab, fontsize=fs[0])
-                if by_loss or i == len(subs) - 1:
+                if i == 0:
+                    ax.set_title(c, fontsize=fs[0], pad=3)
+                if j == 0:
+                    ax.set_ylabel(METRICS[a.metric], fontsize=fs[0])
+                if i == len(subs) - 1:
                     ax.set_xlabel(xlab, fontsize=fs[0])
-            if not by_loss:
-                # Substrate names on the right edge, where facet_grid put them. An extra ylabel
-                # on the left would collide with the metric label the first column already owns.
-                axes[i][-1].annotate(s, (1.02, 0.5), xycoords="axes fraction", rotation=270,
-                                     ha="left", va="center", fontsize=fs[0])
+            # Substrate names on the right edge, where facet_grid put them. An extra ylabel on
+            # the left would collide with the metric label the first column already owns.
+            axes[i][-1].annotate(s, (1.02, 0.5), xycoords="axes fraction", rotation=270,
+                                 ha="left", va="center", fontsize=fs[0])
         fig.tight_layout()
         # Shrink the axes block FIRST, then anchor the legend in the strip that opens up. Doing
         # it the other way round (legend at y=1.0, then subplots_adjust) put the handles on top
         # of the column titles, since tight_layout has no idea a figure-level legend exists.
-        top = 0.86 if by_loss else 0.93
+        top = 0.93
         fig.subplots_adjust(top=top)
-        fig.legend(handles=handles(colors, by_loss), fontsize=fs[2], ncol=6 if by_loss else 3,
-                   loc="lower center", bbox_to_anchor=(0.5, top + 0.015), frameon=False,
+        fig.legend(handles=handles(False), fontsize=fs[2], ncol=3, loc="lower center",
+                   bbox_to_anchor=(0.5, top + 0.015), frameon=False,
                    handletextpad=0.4, handlelength=2.0, columnspacing=1.2)
     fig.savefig(out, dpi=300)
     fig.savefig(out.replace(".pdf", ".png"), dpi=200)
@@ -216,22 +252,26 @@ def main():
     ap.add_argument("--res", default=RES)
     ap.add_argument("--metric", choices=list(METRICS), default="acc_auc")
     ap.add_argument("--tasks", choices=["arith", "sva", "all"], default="arith")
-    # In the 3x3 grid the loss is the facet and colour is the arm, which is now the encoding that
-    # earns it (Adam blue / SGD black -- see the docstring). `--color loss` is the other view:
-    # the losses overlay in one substrate panel, hue carries the loss and linetype the arm, so
-    # the loss dependence is read WITHIN a panel rather than across columns. Three panels
-    # instead of nine, at the cost of the optimizer contrast this figure is mainly about.
-    ap.add_argument("--color", choices=["arm", "loss"], default="arm")
-    # One substrate x one loss, at plot_optimizer_lr.py's subfigure size. Ignores --color, since
-    # a single panel has no facet to spend hue on.
+    # In the 3x3 grid the loss is the facet. `--overlay` is the other view: the three losses share
+    # a panel (linetype) so the loss dependence is read WITHIN a panel rather than across columns,
+    # which frees the column axis for the substrate and the ROW axis for a second metric. Colour
+    # stays the arm in both, so the two layouts are directly comparable.
+    ap.add_argument("--overlay", action="store_true")
+    # One substrate x one loss, at plot_optimizer_lr.py's subfigure size. Ignores --overlay,
+    # since a single panel has no row axis to spend on a second metric.
     ap.add_argument("--substrate", choices=[s for _, s in SUBSTRATES], default=None)
     ap.add_argument("--loss", choices=[lb for _, lb in LOSSES], default="logit-diff")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     tasks = {"arith": ARITH, "sva": SVA, "all": ARITH + SVA}[a.tasks]
     one = a.substrate is not None
+    overlay = a.overlay and not one     # a single panel has no row axis to spend on a metric
+    # The overlay layout has a spare axis, so it carries faith-AUC as a second row alongside
+    # whatever --metric asked for. dict.fromkeys, not a set: row order is the argument order,
+    # and `--metric faith_auc --overlay` collapses to the one row rather than drawing it twice.
+    mrows = list(dict.fromkeys([a.metric, "faith_auc"])) if overlay else [a.metric]
     suf = (f"_{a.substrate.lower().replace('+', '')}_{a.loss.replace('-', '')}" if one
-           else "_byloss" if a.color == "loss" else "")
+           else "_byloss" if overlay else "")
     out = a.out or f"plots/train_curves_{a.tasks}_{a.metric}{suf}.pdf"
 
     cells = load(a.res, tasks)
@@ -253,20 +293,23 @@ def main():
             if not keys:
                 notes.append((slabel, llabel, 0, []))
                 continue
-            for arm, alabel in TRAINED:
-                per_step = {}
-                for k in keys:
-                    for step, v in cells[k][arm]["curve"]:
-                        per_step.setdefault(step, []).append(v[a.metric])
-                        rows.append(dict(substrate=slabel, loss=llabel, arm=alabel, task=k[1],
-                                         step=step, y=v[a.metric], kind="task"))
-                for step, vs in sorted(per_step.items()):
-                    rows.append(dict(substrate=slabel, loss=llabel, arm=alabel, task="__mean__",
-                                     step=step, y=float(np.mean(vs)), kind="mean"))
-            ref = float(np.mean([cells[k][REF[0]]["final"][a.metric] for k in keys]))
-            for step in (0, 1999):
-                refs.append(dict(substrate=slabel, loss=llabel, arm=REF[1], task="__mean__",
-                                 step=step, y=ref, kind="mean"))
+            for met in mrows:
+                for arm, alabel in TRAINED:
+                    per_step = {}
+                    for k in keys:
+                        for step, v in cells[k][arm]["curve"]:
+                            per_step.setdefault(step, []).append(v[met])
+                            rows.append(dict(substrate=slabel, loss=llabel, arm=alabel,
+                                             metric=met, task=k[1], step=step, y=v[met],
+                                             kind="task"))
+                    for step, vs in sorted(per_step.items()):
+                        rows.append(dict(substrate=slabel, loss=llabel, arm=alabel, metric=met,
+                                         task="__mean__", step=step, y=float(np.mean(vs)),
+                                         kind="mean"))
+                ref = float(np.mean([cells[k][REF[0]]["final"][met] for k in keys]))
+                for step in (0, 1999):
+                    refs.append(dict(substrate=slabel, loss=llabel, arm=REF[1], metric=met,
+                                     task="__mean__", step=step, y=ref, kind="mean"))
             notes.append((slabel, llabel, len(keys), sorted(k[1] for k in keys)))
     if not rows:
         print("no cell has train_eval_log for both arms -- nothing to draw")
@@ -277,13 +320,9 @@ def main():
     df["loss"] = pd.Categorical(df["loss"], [lb for _, lb in LOSSES])
     order = [lb for _, lb in TRAINED] + [REF[1]]
     df["arm"] = pd.Categorical(df["arm"], order)
-    # plain string column: aes("arm+task") cannot add a categorical to a str. The loss must be
-    # in the group key for --color loss, where three losses share one panel.
-    df["grp"] = df["arm"].astype(str) + "/" + df["loss"].astype(str) + "/" + df["task"]
     mean, per = df[df.kind == "mean"], df[df.kind == "task"]
 
-    by_loss = a.color == "loss"
-    if by_loss:
+    if overlay:
         # One label per panel, spelling out every loss's n -- including the zeroes, since a loss
         # with no paired cell is simply ABSENT from an overlay panel and would otherwise be
         # invisible (Node/logit-diff is exactly this case).
@@ -299,14 +338,11 @@ def main():
         nlab = pd.DataFrame([dict(substrate=s, loss=l, label=f"n={n} tasks")
                              for s, l, n, _ in notes if n]).astype({"loss": df["loss"].dtype})
     nlab = nlab.astype({"substrate": df["substrate"].dtype})
-    nlab["step"] = 0
-    nlab["y"] = mean["y"].max()
 
-    colors = ({lb: LOSS_COLOR[lb] for _, lb in LOSSES} if by_loss else ARM_COLOR)
     if one and not len(mean[(mean.substrate == a.substrate) & (mean.loss == a.loss)]):
         raise SystemExit(f"--substrate {a.substrate} --loss {a.loss}: no paired cell "
                          f"(Node/logit-diff is the known-empty one)")
-    render(a, out, mean, per, nlab, colors, by_loss, one)
+    render(a, out, mean, per, nlab, mrows, overlay, one)
     print("wrote", out)
     print("\npaired cells per panel (substrate x loss) -- both arms must have train_eval_log:")
     for slabel, llabel, n, ts in notes:
