@@ -20,6 +20,8 @@ Run `python plots/palette.py` to re-verify: it simulates deuteranopia / protanop
 is comfortably distinguishable. Keep the worst-case above that if you change anything.
 """
 
+OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
+
 # canonical name -> hex
 METHOD = {
     "MAttr": "#0072b2",   # Wong blue
@@ -55,6 +57,18 @@ METHOD = {
     # rather than a cool -- the alternative was making some other pair harder to tell apart.
     # Re-verify with `python plots/palette.py`.
     "MAttr (SGD)": "#000000",
+    # The random-ranking floor. Achromatic on purpose: it is a REFERENCE, not a competitor, so
+    # it should not read as another method fighting for attention. Same value as OTHER, which is
+    # already this palette's "un-highlighted" grey -- and under a black marker edge it reads as
+    # a hollow marker, which is the right visual weight for a floor.
+    #
+    # It has to be a LIGHT grey. A neutral is separated from the hues only by lightness, and
+    # mid-greys land on top of the desaturated CVD renderings of the chromatic entries: checked
+    # against _check(), #999999 gives 7.1 dE (deuteranopia, vs DBM), #aaaaaa 9.6, #888888 9.3
+    # (vs +hard), #666666 8.4 (vs I×G) -- every one of them BELOW this palette's pre-existing
+    # worst pair of 16.1 (+hard vs GIM, tritanopia), i.e. each would have become the new binding
+    # constraint. #cccccc and lighter leave that 16.1 untouched.
+    "Random": OTHER,
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
 

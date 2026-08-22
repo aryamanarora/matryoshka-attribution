@@ -1,5 +1,11 @@
 """Scatter of accuracy-AUC (x) vs faithfulness-AUC (y), one point per (method, loss).
 
+The exception is `Random`, the random-ranking floor, which has no training loss and so draws ONE
+point per panel under its own shape -- see LOSSLESS. It is the reference the ordering of every
+other series should be read against; without it a panel shows which method wins but not whether
+any of them beat chance, which on the zero-ablation row (where x carries a ~0.5 baseline) is the
+whole question.
+
 Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + Arith (mean of its 4)
 + the 2 MIB tasks (ARC-E, IOI) when present. A panel is (ablation setting) x (substrate x
 whether the input node is included in scoring/ablation); only the `node` substrate has the MIB
@@ -86,6 +92,23 @@ ARITH = ["addition", "months", "weekdays", "hours"]
 # pairs, 83 distinct lengths) and 28.5% of IOI. A 15-example "ARC-E" would read in the figure as
 # a task-group average while being a single-length fluke, so those cells are not run.
 GROUPS = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi"])]
+# Which MODEL each task is this sweep family's cell for. IOI is qwen2.5 and everything else is
+# llama3 -- the pin every submitter in the family carries (submit_input_replication.sh:39,
+# submit_sva_cause.sh:42 "ioi is qwen2.5, everything else llama3", submit_sva_dbm.sh:73,
+# submit_sva_node_pruning.sh:64), and sva_sweep_input / sva_zeroabl / sva_zeroabl_input hold
+# qwen2.5 IOI runs and nothing else.
+#
+# It has to be ENFORCED here, not assumed. results/sva_sweep also holds a wave of llama3 IOI
+# runs (64 files, 2026-08-21), and `load`'s key has no model in it, so before this pin the two
+# files for a cell collided and glob order -- the filesystem -- picked the winner. It kept
+# qwen2.5 for every series that has both, but `softsgd-log` had ONLY the llama3 run, so this
+# figure's headline arm was drawn from a different model than the baselines beside it, with
+# nothing on the figure to show it. On IOI that is worth 0.443 vs 0.495 acc-AUC for IG and
+# 0.022 vs 0.256 for I×G. The 3 missing qwen2.5 cells were submitted by
+# scripts/submit_softsgd_ioi_qwen.sh; until they land, group_avg drops the series and the
+# panel report's MISSING column names it.
+TASK_MODEL = dict.fromkeys(SVA + ARITH + ["arc_easy"], "llama3")
+TASK_MODEL["ioi"] = "qwen2.5"
 REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
             "mlp": ["SVA", "Arith"],
             "mlp+attn_head": ["SVA", "Arith"]}
@@ -144,9 +167,24 @@ METHODS = {
     # (lr 0.3, L1 6.0) because that pair, not the method name, decides the circuit -- it is the
     # MIB validation argmax carried over, and a re-swept lr would be a DIFFERENT series.
     "sig_lr0.3_l16.0": ("DBM", P.color("DBM")),
+    # The random-ranking floor: score every unit i.i.d. uniform, then run the same eval sweep.
+    # Not a competitor -- it is the reference the other series are only interesting relative to,
+    # which is why it is grey (see palette.py) and why it sits last in the legend. 3 seeds per
+    # cell, averaged in `load`. Filled in for all 68 previously-missing cells by
+    # scripts/submit_random_baseline.sh; before that it existed only for the 2 MIB tasks in the
+    # 2 patched dirs, so group_avg's all-or-nothing rule dropped it from every panel.
+    "Random": ("Random", P.color("Random")),
 }
 LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
-LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s"}   # all fillable: black edge + method fill
+# Methods with NO training loss. A random ranking is not an optimisation, so it exists once per
+# cell rather than once per loss -- on disk it carries eval_sva's default `logit_diff`, which is
+# a filename artefact, not a fact about the run. Drawing it as a logit-diff square would claim it
+# was trained with logit-diff and would put it on the loss trajectory the dashed guide traces, so
+# it gets its own shape and is excluded from the guide. One extra legend key, no caption change.
+LOSSLESS = {"Random"}
+NO_LOSS = "n/a"
+# all fillable: black edge + method fill ("X" is the filled cross; lowercase "x" is not fillable)
+LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s", NO_LOSS: "X"}
 # Order the dashed guide visits a method's three points. NOT the legend order (that stays
 # LOSSES order) and not sorted by x -- it is the loss's own sharpness ordering, CE (softest
 # training signal) -> acc -> logit-diff (hardest), so the line reads as a trajectory rather
@@ -167,7 +205,7 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # COVERAGE HAZARD in this cut: "softsgd-log" has no results/sva_sweep_input runs, so the
 # `Node, +input` panel draws IG and I×G only. group_avg cannot catch that (it guards missing
 # TASKS within a method, not a missing method), so main() checks it explicitly and warns.
-FIGURE_METHODS = ["IG", "IxG", "softsgd-log"]
+FIGURE_METHODS = ["IG", "IxG", "softsgd-log", "Random"]
 ALL_METHODS = [k for k in METHODS if k != "soft-log"]
 
 
@@ -175,8 +213,13 @@ def parse_method(fname, d):
     """Method label from filename tag (mirrors make_fingerprint_tables.parse_method)."""
     tag = fname.split("_" + d["nodes"].replace("+", "-") + "_", 1)[1].rsplit(".json", 1)[0]
     tag = tag.replace("_zeroabl", "")   # ablation is a facet ROW, not a method
-    if tag.startswith(("random", "conductance")) or "fixedk" in tag:
+    if tag.startswith("conductance") or "fixedk" in tag:
         return None
+    # `random_s42` / `random_s43` / `random_s44` -- the seed lives in the TAG and not in the key,
+    # so all three land on one key and `load` averages them. Kept ahead of every other branch for
+    # the same reason `conductance` is dropped there: no later branch should see these tags.
+    if tag.startswith("random"):
+        return "Random"
     if tag.startswith("eprun_s"):        # eprun_s090[_ce|_acc] -> one key per budget
         return "eprun-s" + tag.split("_")[1][1:]
     if tag.startswith("sig_"):           # sig_lr0.3_l16.0[_ce|_acc] -> one key per recipe
@@ -248,15 +291,25 @@ def load(res):
     visually flatters it next to the patched row -- which is why the rows must be read
     separately, as the module docstring says. See scripts/method_winrate.py for the same
     reasoning applied to the win-rate tables.
+
+    Files are filtered to TASK_MODEL[task] first -- see that comment for why the model cannot be
+    left out of the identity of a cell -- and anything still sharing a key is AVERAGED. The only
+    intended collision is Random's 3 seeds; averaging rather than last-wins means a repeated run
+    can never depend on glob order again, and a `print` of the group sizes below would show 1
+    everywhere but Random.
     """
-    raw = {}
+    runs = {}
     for f in glob.glob(res + "/*.json"):
         d = json.load(open(f))
         m = parse_method(os.path.basename(f), d)
         if m is None or m not in METHODS:
             continue
-        raw[(m, d["loss"], d["nodes"], d["task"])] = (d["acc_auc"], d["faith_auc"])
-    return raw
+        if d["model"] != TASK_MODEL.get(d["task"], d["model"]):
+            continue
+        runs.setdefault((m, d["loss"], d["nodes"], d["task"]), []).append(
+            (d["acc_auc"], d["faith_auc"]))
+    return {k: (float(np.mean([v[0] for v in vs])), float(np.mean([v[1] for v in vs])))
+            for k, vs in runs.items()}
 
 
 def group_avg(raw, m, loss, sub):
@@ -301,6 +354,13 @@ def main():
         for m in figure_methods:
             mlabel = METHODS[m][0]
             for lkey, llabel in LOSSES.items():
+                # A lossless method (Random) has one point per cell, not three. It is stored
+                # under eval_sva's default logit_diff, so ride that pass and relabel; the other
+                # two passes would emit the same point three times under three shapes.
+                if m in LOSSLESS:
+                    if lkey != "logit_diff":
+                        continue
+                    llabel = NO_LOSS
                 for sub, slabel in SUBSTRATES:
                     # Second strip line names the task-groups the panel averages. It differs by
                     # substrate (node has ARC-E/IOI, the per-position ones structurally cannot),
@@ -328,7 +388,7 @@ def main():
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
     df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
-    df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()))
+    df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()) + [NO_LOSS])
     node_g, mlp_g = "·".join(REQUIRED["node"]), "·".join(REQUIRED["mlp"])
     # Wrap order, read left-to-right: all four Patched panels, then the three Zero-abl. ones
     # (the zero sweep has no +input arm). ncol=4 below therefore reproduces the old grid's
@@ -342,7 +402,10 @@ def main():
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
     # a plotnine setting. Sorting by facet/method too keeps each method's three rows contiguous.
     # `ablation` leads the sort so a method's path never runs between the two settings.
-    df["_path"] = pd.Categorical(df["loss"], LOSS_PATH).codes
+    # NO_LOSS is appended rather than left out: pandas warns (and will raise) on values outside
+    # the category list, and a lossless method sorts last within its method block -- which costs
+    # nothing, since it is one row and the path layer never sees it.
+    df["_path"] = pd.Categorical(df["loss"], LOSS_PATH + [NO_LOSS]).codes
     df = df.sort_values(["ablation", "facet", "method", "_path"])
 
     colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
@@ -352,8 +415,13 @@ def main():
         # on top. It carries no information the markers do not -- it groups them, so it is thin,
         # dashed and semi-transparent, and adds no legend entry (the colour scale has guide=None;
         # method is already keyed by fill).
-        + geom_path(aes(color="method", group="method"), linetype="dashed",
-                    size=0.3, alpha=0.55, show_legend=False)
+        # Lossless methods are excluded from the frame this layer sees: the guide traces a
+        # method's path ACROSS losses, and a one-point group has no path to trace (plotnine would
+        # emit a zero-length segment, and ggplot2 the "each group consists of only one
+        # observation" warning). Passing filtered data is what keeps the guide's meaning exact.
+        + geom_path(aes(color="method", group="method"), data=df[~df["method"].isin(
+                        [METHODS[m][0] for m in LOSSLESS])],
+                    linetype="dashed", size=0.3, alpha=0.55, show_legend=False)
         # Black edge on every marker: method is carried by FILL, not colour, so points stay
         # legible where two methods land on top of each other and against the grid lines.
         # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
@@ -382,7 +450,9 @@ def main():
     print("wrote", out, f"({len(df)} points)")
     # Every panel must show ONE group set (group_avg enforces it) and the full method x loss
     # grid. A short count is a coverage hole, not a styling choice, so print both.
-    n_full = len(figure_methods) * len(LOSSES)
+    # Per-method, not len(methods) x len(LOSSES): a lossless method contributes ONE point, so a
+    # flat product would report every complete panel as permanently one short.
+    n_full = sum(1 if m in LOSSLESS else len(LOSSES) for m in figure_methods)
     cov = df.groupby(["ablation", "facet"], observed=True).agg(
         n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
     cov["of"] = n_full
