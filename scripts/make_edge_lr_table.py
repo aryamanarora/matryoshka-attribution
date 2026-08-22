@@ -17,8 +17,15 @@ WHAT THE SWEEP ANSWERED, and why four cells were enough:
  - Adam's imported lr=0.05 is essentially at the argmax. CPR-AUC peaks at 0.1 on three of the
    four cells and 0.05 is within 0.15 everywhere, so the paper's edge numbers do not rest on a
    badly chosen LR and no headline re-run is needed.
- - SGD does not transfer from gpt2 to llama3. On ioi/gpt2 it beats Adam on acc-AUC; on all
-   three llama3 cells it is at roughly half Adam's CPR-AUC.
+ - SGD's edge optimum is lr ~ 3-10, an ORDER OF MAGNITUDE above the node table's argmax of 1.0
+   -- which is what the n/k scaling predicts, since edges outnumber nodes. Read at the node's
+   LR the SGD block looks broken (0.3/1.0 sit at half Adam's CPR-AUC on every llama3 cell);
+   read at its own optimum it is competitive, Avg 6.89 at lr=3 vs Adam's best 7.65, and it
+   BEATS Adam on arithmetic_subtraction (6.34 at lr=10 vs Adam's best 4.78). An earlier draft
+   of this docstring concluded "SGD does not transfer to llama3" from the truncated 0.3/1.0
+   grid; that was an artifact of reading an LR-invariant optimizer off a grid tuned for a
+   different unit count. Do not reintroduce it, and do not compare the two blocks row-by-row
+   at the same numeric LR -- only block-argmax vs block-argmax means anything here.
 
 TWO CEILING EFFECTS THAT DECIDE WHICH TABLE TO READ:
  - acc-AUC SATURATES at 1.00 on llama3 ioi and mcqa for most settings, so in those columns it
@@ -28,6 +35,12 @@ TWO CEILING EFFECTS THAT DECIDE WHICH TABLE TO READ:
    k >= 20% where methods tie), so a CPR-AUC win that acc-AUC does not corroborate is a win at
    sparsities nobody reads a circuit at. On ioi/gpt2 the two metrics disagree in SIGN about
    SGD vs Adam. Report both; when they disagree, say so rather than picking one.
+
+HOW FINELY THE LR CAN BE READ: not very. ioi/llama3 under SGD goes 6.83 -> 5.30 -> 6.38 at
+lr 3/10/30, which is not a shape any LR story explains -- it bounds run-to-run variance at
+roughly +/-0.8 CPR-AUC on that cell. Single-run gaps below ~1 point are not LR effects. There
+are no seed replicates in this sweep, so that non-monotonicity is the only variance estimate
+available; treat every block-argmax as "somewhere in this range", not a tuned value.
 
 5000 STEPS, not the node table's 500 -- see STEPS below. Do not compare a block Avg here
 against a block Avg in lr_sweep.tex as if the budgets matched.
@@ -69,9 +82,11 @@ TASK_LABEL = {"ioi": "IOI", "arithmetic_subtraction": "Arith", "mcqa": "MCQA",
 LR_METHODS = [
     ("\\ourmethod{}", [(lr, f"mib_edge_lrsweep_adam_log_lr_{lr}")
                        for lr in ("0.005", "0.01", "0.05", "0.1", "0.3", "1.0")]),
-    # 3.0/10.0/30.0/100.0 are gpt2-only until the running llama3 jobs land; render() suppresses
-    # the Avg on a partial row and announces it, so regenerating later fills them in with no
-    # edit here. 100.0 is permanently gpt2-only -- its llama3 jobs were in the cancelled batch.
+    # 3.0 and 10.0 are complete. Two rows are permanently partial and their Avg is suppressed:
+    # 30.0 is missing mcqa/llama3 and 100.0 is gpt2-only, both because those jobs were in the
+    # cancelled batch. Extending the grid further up is NOT worth resubmitting -- lr=30 is
+    # already past the argmax on every populated cell, and ioi/gpt2's acc-AUC has collapsed to
+    # 0.81-0.83 there from 0.98 at lr<=3.
     ("$+$ SGD", [(lr, f"mib_edge_lrsweep_sgd_log_lr_{lr}")
                  for lr in ("0.3", "1.0", "3.0", "10.0", "30.0", "100.0")]),
 ]
