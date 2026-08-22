@@ -19,6 +19,15 @@ import numpy as np
 
 RES = "results/sva_sweep"
 TABDIR = "paper/tabs"
+# Which MODEL each task is this sweep family's cell for: IOI is qwen2.5, everything else llama3.
+# That is the pin every submitter carries (submit_input_replication.sh:39, submit_sva_cause.sh:42,
+# submit_sva_dbm.sh:73, submit_sva_node_pruning.sh:64) and it has to be enforced on READ too:
+# results/sva_sweep also holds a wave of llama3 IOI runs (2026-08-21), and `load`'s key is
+# (method, loss, task) with no model in it, so 26 keys had two files and glob order -- the
+# filesystem -- decided which one reached the table. Same bug, same fix, as
+# plots/plot_accauc_vs_faithauc.TASK_MODEL; see that comment for what it is worth on IOI.
+# A task absent from this dict is unconstrained, so adding one later cannot silently drop it.
+TASK_MODEL = {"ioi": "qwen2.5"}
 # (metric key, header label, higher_is_better); k* rendered as % of total
 METRICS = [("acc_auc", "acc", True), ("faith_auc", "faith", True), ("kstar_pct", r"$k^\star$\%", False)]
 # MAttr headline = soft top-k fwd; the STE variants are "+ hard" ablations
@@ -120,6 +129,8 @@ def load(nodes, res=RES):
     for f in glob.glob(res + "/*.json"):
         d = json.load(open(f))
         if d["nodes"] != nodes:
+            continue
+        if d["model"] != TASK_MODEL.get(d["task"], d["model"]):
             continue
         m = parse_method(os.path.basename(f), d)
         if m is None:
