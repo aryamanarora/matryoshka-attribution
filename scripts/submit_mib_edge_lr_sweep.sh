@@ -45,8 +45,9 @@
 #
 # Cost, from sacct on the 2026-08-21 esgd wave: gpt2/ioi 0:31, qwen2.5/ioi 1:42, qwen2.5/mcqa
 # 0:52, gemma2/mcqa 1:02, gemma2/arc_easy 2:01, llama3 {ioi,arith,mcqa} ~2:40, gemma2/ioi 6:22.
-# The 12 gemma2/ioi jobs are the long pole and run concurrently, so a full 108-job wave lands in
-# ~6.5h wall-clock, ~245 GPU-hours.
+# That is ~245 GPU-hours for the full 108-job wave. It does NOT land in 6.5h: this account is
+# capped at 8 concurrent GPUs, so wall-clock is ~31h and the SUBMISSION ORDER decides what you
+# have by morning. See the footer.
 #
 # DRYRUN=1 to preview.  OPTS="sgd" / SCHEDS="uniform" / ONLY=llama3 / LRS_SGD=... to narrow.
 set -u
