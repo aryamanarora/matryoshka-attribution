@@ -97,8 +97,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log",
-                        choices=["uniform", "log"],
-                        help="How to sample k: uniform or log-uniform")
+                        choices=["uniform", "log", "logit"],
+                        help="How to sample k: uniform, log-uniform, or logit-uniform "
+                             "(logit cancels the sigmoid_topk gate slope, making zero-init "
+                             "SGD's expected score exactly activation-path IG -- schedules.py)")
     parser.add_argument("--mode", default="iso", choices=MODE_CHOICES,
                         help="iso (=sufficient, denoising): top-k stay clean, complement "
                              "corrupted; maximize retained clean behavior (this is "
