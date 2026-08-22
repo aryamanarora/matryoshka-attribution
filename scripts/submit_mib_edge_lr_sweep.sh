@@ -110,3 +110,14 @@ $pp$py scripts/eval_mib_edge.py --model $model --task $task --steps 5000 --k-sch
 done
 [ "$DRYRUN" = "1" ] && pfx="DRY " || pfx=""
 echo "== ${pfx}total $n edge LR-sweep validation jobs =="
+
+# SUBMIT BY MODEL, IN COST ORDER -- the account is capped at 8 concurrent GPUs
+# (guests/guest-dev, GrpTRES gres/gpu=8), so all 108 jobs at once is ~31 h wall-clock, not one
+# night. SLURM runs this QOS roughly FIFO, so submission order IS priority order:
+#
+#   for m in gpt2 llama3 qwen2.5 gemma2; do ONLY=$m bash scripts/submit_mib_edge_lr_sweep.sh; done
+#
+# cumulative completion at 8-wide:  gpt2 0.8 h | +llama3 12.7 h | +qwen2.5 16.5 h | +gemma2 30.6 h
+# llama3 is the cell the sweep exists to answer (soft_sgd's transfer failure is llama3-concentrated:
+# arith_sub -3.45, ioi -3.74, mcqa -2.42), and gemma2/ioi alone is 76 GPU-h -- 31% of the budget
+# for the one cell where the SGD transfer already WON (+0.95). So gemma2 goes last, not first.
