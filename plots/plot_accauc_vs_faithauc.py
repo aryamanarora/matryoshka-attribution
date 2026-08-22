@@ -222,6 +222,15 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # `Node, +input` panel draws IG and I×G only. group_avg cannot catch that (it guards missing
 # TASKS within a method, not a missing method), so main() checks it explicitly and warns.
 FIGURE_METHODS = ["IG", "IxG", "softsgd-log", "Random"]
+# `--adam`: the default cut plus MAttr under Adam, i.e. the optimiser contrast on the same axes
+# the SVA+ claim is made on. Five series still fits the one-row legend; the full registry does
+# not (that is what --all is for, and why it is documented as overflowing).
+#
+# COVERAGE, and it is asymmetric by DESIGN, not a stalled wave: results/sva_zeroabl_input was
+# submitted with ONLY="ig ixg softsgd" (see SOURCES), so `Zero-abl. / Node, +input` draws no
+# MAttr-Adam point. main()'s MISSING column names it every run -- do not read that panel's
+# absence as Adam failing there.
+ADAM_METHODS = ["IG", "IxG", "stopk-log", "softsgd-log", "Random"]
 ALL_METHODS = [k for k in METHODS if k != "soft-log"]
 
 
@@ -361,8 +370,12 @@ def main():
     ap.add_argument("--all", action="store_true", dest="draw_all",
                     help="draw the full registry (MAttr-Adam, Node Pruning, DBM) instead of the "
                          "three-method cut; legend overflows \\textwidth at this width")
+    ap.add_argument("--adam", action="store_true",
+                    help="default cut plus MAttr (Adam), for the optimiser contrast")
     a = ap.parse_args()
-    figure_methods = ALL_METHODS if a.draw_all else FIGURE_METHODS
+    figure_methods = (ALL_METHODS if a.draw_all
+                      else ADAM_METHODS if a.adam else FIGURE_METHODS)
+    suffix = "_all" if a.draw_all else "_adam" if a.adam else ""
 
     rows, dropped = [], []
     for res, inp_label, abl in SOURCES:
@@ -465,7 +478,7 @@ def main():
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
-    out = f"plots/accauc_vs_faithauc{'_all' if a.draw_all else ''}.pdf"
+    out = f"plots/accauc_vs_faithauc{suffix}.pdf"
     p.save(out, dpi=300, verbose=False)
     # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
     # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.

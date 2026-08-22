@@ -61,9 +61,27 @@
 # here and the useful lr should sit ~n/k ~ 160x above Adam's optimum. A grid stopping at 0.3
 # would return a guaranteed-uninformative null -- the same trap as the first sweep, in reverse.
 #
+# THE STEPS ARM (2026-08-22). Every Adam run above is STILL RISING at step 2000 (+0.02 to +0.09
+# acc-AUC over its last 800 probe steps) while the three best topk/sgd runs are flat (±0.009), so
+# the 0.135 best-vs-best gap is confounded with training budget. STEPS=20000 settles whether
+# Adam's deficit is structural (its scores are flat at EVERY lr -- mass@top-200 0.0010-0.0037
+# across four decades, vs SGD 0.12-0.19) or just undertrained.
+#
+#   SUBMIT THE SGD CONTROL TOO. A 20k Adam run that gains 0.1 proves nothing on its own if SGD
+#   gains as much over the same span; the claim is about the GAP, so both arms have to move to
+#   the same step count. That is why the 2026-08-22 launch is three jobs, not two.
+#
+#   AND RAISE THE PROBE. At the default --train-eval-examples 20 the probe SATURATES (see
+#   eval_sva.py:773 -- flat at 2000 and 6250 on nounpp/mlp while the real test acc-AUC rose
+#   +0.04). Reading "has Adam converged" off a 20-example probe is precisely the mistake that
+#   comment documents, so this arm runs it at 64. --train-eval-every rises with it to keep the
+#   probe cost per run roughly where it was at 2000 steps.
+#
 # DRY=1 to preview.  LRS="1.0 3.0" to override the grid.
 # VARIANT=hard_topk_identity OPT=adam LRS="0.001 0.005 0.01 0.05 0.1 0.3 1.0 3.0 10.0" bash $0
 # VARIANT=topk OPT=sgd LRS="0.05 0.3 1.0 3.0 10.0 30.0 100.0 300.0" bash $0
+# STEPS=20000 OUTBASE=results/sva_mlp_steps20k LRS="0.005 0.05" bash $0            # Adam, long
+# STEPS=20000 OUTBASE=results/sva_mlp_steps20k VARIANT=topk OPT=sgd LRS="1.0" bash $0  # control
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
@@ -79,6 +97,12 @@ VARIANT=${VARIANT:-topk}
 OPT=${OPT:-adam}
 LRS=${LRS:-"0.001 0.005 0.01 0.1 0.3 1.0 3.0 10.0"}
 OUTBASE=${OUTBASE:-results/sva_mlp_lr}
+# 2000 keeps every default invocation byte-identical to the runs already in results/sva_mlp_lr.
+# Override ONLY together with OUTBASE: run_tag() encodes neither lr nor steps, so a 20k run
+# written into the 2000-step tree would silently overwrite its own control.
+STEPS=${STEPS:-2000}
+PROBE_EVERY=${PROBE_EVERY:-200}
+PROBE_EX=${PROBE_EX:-20}
 
 n=0
 for lr in $LRS; do
@@ -86,7 +110,8 @@ for lr in $LRS; do
   name="svalr-${TASK}-${NODES}-${VARIANT}-${OPT}-lr${lr}"
   args=(--model "$MODEL" --task "$TASK" --dataset "$DATASET" --nodes "$NODES"
         --method mattr --variant "$VARIANT" --optimizer "$OPT" --k-schedule log
-        --loss logit_diff --mode sufficient --train-batch-size 1 --steps 2000
+        --loss logit_diff --mode sufficient --train-batch-size 1 --steps "$STEPS"
+        --train-eval-every "$PROBE_EVERY" --train-eval-examples "$PROBE_EX"
         --eval-examples 100 --lr "$lr" --output "$out")
   if [ "${DRY:-0}" = "1" ]; then echo "DRY $name -> $out"
   else mkdir -p "$out"; sbatch -J "$name" sva_sweep.sbatch "${args[@]}" >/dev/null && echo "submitted $name"
