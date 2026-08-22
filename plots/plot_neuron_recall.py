@@ -19,6 +19,15 @@ recovers a published neuron in its top 5 in 12/12 cells (4 tasks x 3 losses) -- 
 rank 141. Node Pruning never finds one at any k below 200; DBM and the uniform-k Adam arm
 manage 5/12 and 3/12. Do not read the flat lines as "mask learning cannot do this".
 
+*** THAT HEADLINE IS PATCHED-ONLY, and the zero row says so. *** Under zero-ablation the SGD
+advantage does not survive: top-5 goes 12/12 -> 2/12, which is a TIE with IG (also 2/12), and at
+top-200 SGD is BEATEN by the gradient baselines, 8/12 against 12/12 for both IG and I×G. So the
+optimizer result is a claim about the patched setting, not about attribution in general, and any
+prose saying \\ourmethod{}+SGD "matches or outperforms IG on recall" is scoped to the top row.
+The gradient baselines are the more robust ones here, which is the opposite of the acc-AUC story
+in plot_accauc_vs_faithauc, where zeroing puts IG/I×G at the random floor -- worth stating rather
+than quietly reporting whichever setting flatters the method.
+
 NOT A LAYER ARTIFACT. The obvious deflation is that these methods merely like layer 18 and the
 published set is most of what is interesting there. It does not hold: of the L18 neurons each
 method puts in its top-n, essentially every one is a published neuron (IG 3/3 on hours, 5/5 on
@@ -33,6 +42,13 @@ own numbers were computed from, for IG/I×G especially, whose scores are signed 
 ONE NEURON, MANY POSITIONS. The score index is per-(layer, position, neuron); we reduce to
 distinct neurons by taking each neuron's BEST-scoring position, matching
 make_sva_neuron_table.py's dedupe so the two artifacts rank the same objects.
+
+TWO ABLATION ROWS. `Patched` (results/sva_sweep) and `Zero-abl.` (results/sva_zeroabl) are two
+SETTINGS, not two scorings of one run: the mask methods train through the ablation and the
+gradient baselines change estimator with it. They share a y axis here -- legitimately, unlike the
+faithfulness figures, because recall is scored against a FIXED external neuron set rather than
+against a within-setting faithfulness curve that the setting itself inflates. Read ordering within
+a row first; the cross-row comparison is the secondary question of whether the result survives.
 
 *** The published set is layer-18-only by construction: Feucht et al. searched layer 18. ***
 So recall here is recall of "the L18 neurons they name", and a method that localises the task
@@ -54,8 +70,16 @@ import numpy as np
 import palette as P
 import torch
 
-RES = Path("results/sva_sweep")
 GT = Path("src/learning_to_attribute/data/arith_wild_l18_neurons.json")
+# (row label, results dir, tag fragment). The ablation is a SETTING, not a rescoring: the mask
+# methods train through it and the gradient baselines change estimator (I×G -> Gradient×Input,
+# IG -> zero-baseline IG), so the two rows are two experiments and only the ORDERING within a row
+# is meaningful. Worth a row here because the setting reorders methods elsewhere (Spearman ~0.44
+# on matched cells, see plot_accauc_vs_faithauc), so "does the recall result survive zeroing?" is
+# a real question rather than a formality -- and unlike faithfulness, recall is scored against a
+# FIXED external neuron set, so the two rows are directly comparable on the same y axis.
+ABLATIONS = [("Patched", Path("results/sva_sweep"), ""),
+             ("Zero-abl.", Path("results/sva_zeroabl"), "_zeroabl")]
 MODEL, SUB = "llama3", "mlp"
 TASKS = [("hours", "Hours"), ("months", "Months"), ("weekdays", "Weekdays"),
          ("addition", "Addition")]
@@ -85,13 +109,25 @@ PANEL_W, ROW_H = 1.35, 1.45
 LEG_NCOL, LEG_ROW_H, LEG_PAD, TITLE_H = 4, 0.20, 0.10, 0.20
 
 
-def hit_ranks(task, tag, gt_layer, gt_neurons):
+def tag_for(tpl, lfrag, zfrag):
+    """Fill a METHODS template for one (loss, ablation).
+
+    The sweep's run_tag puts the zero-ablation fragment directly AFTER the loss fragment, i.e.
+    before the trailing `_uniformk`/`_bs1` -- `sufficient_topk_sgd_ce_zeroabl_bs1`, never
+    `..._bs1_zeroabl`. Appending instead of inserting resolves to nothing on disk for the four
+    mask arms, which would silently drop them from the zero row rather than error. Verified
+    against all 7 methods x 3 losses in results/sva_zeroabl.
+    """
+    return tpl.replace("%s", "%s" + zfrag) % lfrag
+
+
+def hit_ranks(task, tag, gt_layer, gt_neurons, res):
     """Ranks (1-based) at which this run's neuron ordering hits the published set.
 
     Returns None when the run is absent, so a missing cell is a gap in the figure rather than
     a silently-zero curve -- the two are very different claims about a method.
     """
-    j, s = RES / f"{task}_{MODEL}_{SUB}_{tag}.json", RES / f"{task}_{MODEL}_{SUB}_{tag}.scores.pt"
+    j, s = res / f"{task}_{MODEL}_{SUB}_{tag}.json", res / f"{task}_{MODEL}_{SUB}_{tag}.scores.pt"
     if not (j.exists() and s.exists()):
         return None, None
     m = json.load(open(j))
@@ -118,27 +154,29 @@ def layer_control(gt_layer, gt):
     versus how many are published. If the two are equal the method is not merely finding the
     layer. E is what you would expect published if the L18 picks were uniform within the layer.
     """
-    print(f"{'task':10s}{'n':>4s}  " + "".join(f"{lab:>26s}" for lab, *_ in METHODS))
-    for task, _ in TASKS:
-        pn = gt[task]
-        n = len(pn)
-        cells = []
-        for lab, tpl, _, _ in METHODS:
-            tag = tpl % ""
-            j = RES / f"{task}_{MODEL}_{SUB}_{tag}.json"
-            if not j.exists():
-                cells.append("--")
-                continue
-            m = json.load(open(j))
-            m = m.get("meta", m)
-            L, Pos, N = m["num_layers"], m["seq_len"], m["intermediate_size"]
-            sc = torch.load(RES / f"{task}_{MODEL}_{SUB}_{tag}.scores.pt", map_location="cpu")
-            best = sc.float().view(L, Pos, N).max(dim=1).values.reshape(-1)
-            top = torch.argsort(best, descending=True).numpy()[:n]
-            in18 = int((top // N == gt_layer).sum())
-            pub = int(((top // N == gt_layer) & np.isin(top % N, pn)).sum())
-            cells.append(f"L18 {in18:2d}  pub {pub:2d}  E{in18 * n / N:.2f}")
-        print(f"{task:10s}{n:>4d}  " + "".join(f"{c:>26s}" for c in cells))
+    for abl, res, zfrag in ABLATIONS:
+        print(f"\n== {abl} ({res})")
+        print(f"{'task':10s}{'n':>4s}  " + "".join(f"{lab:>26s}" for lab, *_ in METHODS))
+        for task, _ in TASKS:
+            pn = gt[task]
+            n = len(pn)
+            cells = []
+            for lab, tpl, _, _ in METHODS:
+                tag = tag_for(tpl, "", zfrag)
+                j = res / f"{task}_{MODEL}_{SUB}_{tag}.json"
+                if not j.exists():
+                    cells.append("--")
+                    continue
+                m = json.load(open(j))
+                m = m.get("meta", m)
+                L, Pos, N = m["num_layers"], m["seq_len"], m["intermediate_size"]
+                sc = torch.load(res / f"{task}_{MODEL}_{SUB}_{tag}.scores.pt", map_location="cpu")
+                best = sc.float().view(L, Pos, N).max(dim=1).values.reshape(-1)
+                top = torch.argsort(best, descending=True).numpy()[:n]
+                in18 = int((top // N == gt_layer).sum())
+                pub = int(((top // N == gt_layer) & np.isin(top % N, pn)).sum())
+                cells.append(f"L18 {in18:2d}  pub {pub:2d}  E{in18 * n / N:.2f}")
+            print(f"{task:10s}{n:>4d}  " + "".join(f"{c:>26s}" for c in cells))
 
 
 def main():
@@ -154,7 +192,12 @@ def main():
         layer_control(gt_layer, gt)
         return
 
-    rows = LOSSES if a.all_losses else LOSSES[:1]
+    # Rows are (ablation x loss), ablation OUTER so the two settings stay adjacent blocks rather
+    # than interleaving by loss -- the comparison the figure exists to support is within a column,
+    # across settings. Default is one loss, so the default figure is exactly two rows.
+    losses = LOSSES if a.all_losses else LOSSES[:1]
+    rows = [(abl, res, zfrag, lname, lfrag)
+            for abl, res, zfrag in ABLATIONS for lname, lfrag in losses]
     plt.rcParams.update(P.RC)
     nr, nc = len(rows), len(TASKS)
     nleg = LEG_ROW_H * -(-(len(METHODS) + 1) // LEG_NCOL) + LEG_PAD     # +1 = the chance entry
@@ -162,12 +205,12 @@ def main():
     fig, axes = plt.subplots(nr, nc, figsize=(PANEL_W * nc, ROW_H * nr + leg_h),
                              sharex=True, sharey=True, squeeze=False)
     ks, total = None, None
-    for r, (lname, frag) in enumerate(rows):
+    for r, (abl, res, zfrag, lname, frag) in enumerate(rows):
         for c, (task, tlab) in enumerate(TASKS):
             ax = axes[r][c]
             pn = np.array(gt[task])
             for lab, tpl, ckey, ls in METHODS:
-                ranks, tot = hit_ranks(task, tpl % frag, gt_layer, pn)
+                ranks, tot = hit_ranks(task, tag_for(tpl, frag, zfrag), gt_layer, pn, res)
                 if ranks is None:
                     continue
                 total = tot
@@ -184,7 +227,10 @@ def main():
             if r == 0:
                 ax.set_title(tlab, fontsize=FS[0])
             if c == 0:
-                ax.set_ylabel("recall" if not a.all_losses else f"{lname}\nrecall", fontsize=FS[0])
+                # The ablation always names the row now; the loss only when there is more than
+                # one of them, so the default two-row figure is not labelled with a constant.
+                stack = abl if not a.all_losses else f"{abl}\n{lname}"
+                ax.set_ylabel(f"{stack}\nrecall", fontsize=FS[0])
             if r == nr - 1:
                 ax.set_xlabel("$k$ (neurons)", fontsize=FS[0])
             # n varies 15-28 by task, so the reader cannot assume a shared denominator. Sits
@@ -216,17 +262,23 @@ def main():
 
     # Hit counts at two budgets, so the numbers quoted in prose come from this script and not
     # from a probe that is not in the repo.
+    # Reported PER ABLATION, never pooled: the headline "12/12 at top-5" is a claim about the
+    # patched setting, and averaging the two settings into one fraction would silently redefine
+    # it. `ncell` is per-setting for the same reason.
+    ncell = len(losses) * len(TASKS)
     for k in (5, 200):
-        print(f"\ncells (of {len(rows) * len(TASKS)}) with a published neuron in the top-{k}:")
-        for lab, tpl, _, _ in METHODS:
-            n = best = 0
-            for _, frag in rows:
-                for task, _ in TASKS:
-                    ranks, _t = hit_ranks(task, tpl % frag, gt_layer, np.array(gt[task]))
-                    if ranks is not None and len(ranks) and ranks[0] <= k:
-                        n += 1
-                        best = ranks[0] if not best else min(best, ranks[0])
-            print(f"  {lab:18s} {n:2d}/{len(rows) * len(TASKS)}   best rank {best or '--'}")
+        for abl, res, zfrag in ABLATIONS:
+            print(f"\n{abl}: cells (of {ncell}) with a published neuron in the top-{k}:")
+            for lab, tpl, _, _ in METHODS:
+                n = best = 0
+                for _, frag in losses:
+                    for task, _ in TASKS:
+                        ranks, _t = hit_ranks(task, tag_for(tpl, frag, zfrag), gt_layer,
+                                              np.array(gt[task]), res)
+                        if ranks is not None and len(ranks) and ranks[0] <= k:
+                            n += 1
+                            best = ranks[0] if not best else min(best, ranks[0])
+                print(f"  {lab:18s} {n:2d}/{ncell}   best rank {best or '--'}")
 
 
 if __name__ == "__main__":
