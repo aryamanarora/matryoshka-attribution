@@ -183,8 +183,13 @@ LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 # it gets its own shape and is excluded from the guide. One extra legend key, no caption change.
 LOSSLESS = {"Random"}
 NO_LOSS = "n/a"
-# all fillable: black edge + method fill ("X" is the filled cross; lowercase "x" is not fillable)
-LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s", NO_LOSS: "X"}
+# All FILLABLE, and that has to be checked rather than assumed: method is carried by fill, so a
+# shape plotnine will not fill silently drops the method encoding. matplotlib lists "X" and "P"
+# among its filled markers, but plotnine renders both solid in `color` and ignores `fill` -- the
+# first cut used "X" here and Random came out solid BLACK, i.e. indistinguishable from
+# MAttr (SGD), the one series it must not be confused with. Verified: o ^ s * p h D d 8 v fill,
+# X and P do not. "*" also reads as a footnote mark, which is the right connotation for "n/a".
+LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s", NO_LOSS: "*"}
 # Order the dashed guide visits a method's three points. NOT the legend order (that stays
 # LOSSES order) and not sorted by x -- it is the loss's own sharpness ordering, CE (softest
 # training signal) -> acc -> logit-diff (hardest), so the line reads as a trajectory rather
@@ -409,6 +414,7 @@ def main():
     df = df.sort_values(["ablation", "facet", "method", "_path"])
 
     colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
+    lossless = df["method"].isin([METHODS[m][0] for m in LOSSLESS])
     p = (
         ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
         # Dashed guide joining a method's three losses, drawn BEFORE the points so markers sit
@@ -419,14 +425,20 @@ def main():
         # method's path ACROSS losses, and a one-point group has no path to trace (plotnine would
         # emit a zero-length segment, and ggplot2 the "each group consists of only one
         # observation" warning). Passing filtered data is what keeps the guide's meaning exact.
-        + geom_path(aes(color="method", group="method"), data=df[~df["method"].isin(
-                        [METHODS[m][0] for m in LOSSLESS])],
+        + geom_path(aes(color="method", group="method"), data=df[~lossless],
                     linetype="dashed", size=0.3, alpha=0.55, show_legend=False)
         # Black edge on every marker: method is carried by FILL, not colour, so points stay
         # legible where two methods land on top of each other and against the grid lines.
         # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
         # wherever markers overlap, which is exactly where the distinction has to hold.
-        + geom_point(size=1.9, color="#000000", stroke=0.3)
+        + geom_point(data=df[~lossless], size=1.9, color="#000000", stroke=0.3)
+        # Random gets its OWN layer purely for marker geometry. A star packs less fill area into
+        # its bounding box than o/s/^, so at the shared 1.9pt its #cccccc would read darker than
+        # the other series rather than lighter -- backwards for a marker that is meant to read as
+        # hollow. Size is not an aesthetic here (nothing is mapped to it), so a second layer is
+        # the only way to vary it per series; both layers keep show_legend on so the Method and
+        # Loss keys are still assembled from the shared scales.
+        + geom_point(data=df[lossless], size=3.6, color="#000000", stroke=0.2)
         # WRAP, not grid, and that is the whole point of the layout. Under facet_grid,
         # `scales="free"` frees x per COLUMN and y per ROW -- it is never per panel -- so all
         # four Patched panels shared one y axis, and the single largest point in the row
