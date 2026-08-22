@@ -14,6 +14,7 @@ import glob
 import json
 import os
 import re
+import sys
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,9 @@ from plotnine import (
     labs, theme, theme_set, theme_bw, element_text, element_line, element_blank,
     scale_fill_gradientn, scale_color_brewer, scale_shape_manual,
 )
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from plot_accauc_vs_faithauc import on_model   # noqa: E402  (one canonical task->model pin)
 
 theme_set(theme_bw(base_size=8) + theme(
     text=element_text(color="#000", family="Inter"), figure_size=(2.4, 1.7),
@@ -32,7 +36,10 @@ theme_set(theme_bw(base_size=8) + theme(
     legend_text=element_text(size=6), legend_key_size=6, legend_position="top"))
 
 RES = "results/sva_sweep"
-METHODS = ["IG", "IxG", "AttnLRP", "soft-log", "soft-unif", "soft-fixed",
+METHODS = ["IG", "IxG", "AttnLRP",
+           "stopk-log", "stopk-unif", "stopk-fixed",       # soft top-k fwd + Adam = headline
+           "softsgd-log", "softsgd-unif",                  # same, Adam -> SGD (lr=1.0)
+           "soft-log", "soft-unif", "soft-fixed",
            "idSTE-log", "idSTE-unif", "idSTE-fixed"]
 LOSSES = ["ce", "acc", "logit_diff"]
 METRICS = [("acc_auc", "acc-AUC", True), ("faith_auc", "faith-AUC", True),
@@ -63,9 +70,22 @@ def parse_method(fname, d):
     # catch-all was sweeping them into the IG series too. No METHODS entry here either.
     if tag.startswith("sig_"):
         return None
+    # Soft top-k forward (no STE) -- the headline variant since 2026-07-21, and the `topk:sgd`
+    # arm since 2026-08-21. This branch was MISSING: `sufficient_topk_*` matches none of the
+    # tests above, so the catch-all below labelled all of them "IG" and averaged 228 MAttr runs
+    # into the IG series. Exactly the hazard the eprun_/sig_ comments describe, one variant over.
+    if "sufficient_topk_" in tag:
+        if re.search(r"_ig\d+", tag):
+            return None
+        ks = "fixed" if "fixedk" in tag else ("unif" if "uniformk" in tag else "log")
+        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}"
     if tag.startswith("attnlrp"):
         return "AttnLRP"
-    return "IxG" if tag.startswith("ixg") else "IG"
+    if tag.startswith("ixg"):
+        return "IxG"
+    # Strict: an unrecognised tag drops out rather than becoming an IG point. The old
+    # `return "IxG" if ... else "IG"` catch-all is what let the branch above go unnoticed.
+    return "IG" if tag.startswith("ig") else None
 
 
 def taskgroup(d):
@@ -84,6 +104,11 @@ def load():
             continue
         m = parse_method(os.path.basename(f), d)
         if m not in METHODS:
+            continue
+        # `taskgroup` folds anything that is not SVA/Arith/arc_easy into "IOI", so the stray
+        # llama3 IOI runs would land in the same group as the canonical qwen2.5 ones and be
+        # AVERAGED with them -- a double-count, not a collision. Gate before the groupby.
+        if not on_model(d):
             continue
         rows.append({"method": m, "loss": d["loss"], "grp": taskgroup(d),
                      "acc_auc": d["acc_auc"], "faith_auc": d["faith_auc"],
