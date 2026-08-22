@@ -33,12 +33,17 @@ import argparse
 import glob
 import json
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "plots"))
+# This file deliberately keeps its OWN parse_method (see below), but the task->model pin is not a
+# parsing choice -- it is a fact about what is on disk, so it is imported rather than restated.
+from plot_accauc_vs_faithauc import on_model   # noqa: E402
 
 
 def parse_method(fname, nodes):
@@ -86,6 +91,10 @@ def load(resdir):
         d = json.load(open(f))
         m = parse_method(Path(f).name, d["nodes"])
         if m is None:
+            continue
+        # results/sva_sweep holds a llama3 IOI wave; the key below has no model in it, so the
+        # patch-vs-zero comparison could otherwise read the two settings off different models.
+        if not on_model(d):
             continue
         acc = d["iso_metrics"]["acc_base"]
         a0 = acc[0]

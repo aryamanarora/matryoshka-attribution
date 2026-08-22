@@ -48,7 +48,7 @@ sys.path.insert(0, str(ROOT / "plots"))
 # a history of silently folding the headline `sufficient_topk_` runs and `attnlrp` into the IG
 # series via a catch-all `else: return "IG"`, so a second copy here is a real hazard.
 from plot_accauc_vs_faithauc import (  # noqa: E402
-    METHODS, SVA, ARITH, parse_method)
+    METHODS, SVA, ARITH, parse_method, on_model)
 
 SOURCES = [("results/sva_sweep", "Patched", "−input"),
            ("results/sva_sweep_input", "Patched", "+input"),
@@ -87,6 +87,11 @@ def load(split_loss=True):
             d = json.load(open(f))
             m = parse_method(os.path.basename(f), d)
             if m is None or m not in METHODS:
+                continue
+            # Same pin as the figure: results/sva_sweep carries a llama3 IOI wave, and the cell key
+            # below has no model in it, so both files would land on one key and glob order would
+            # decide which model the IOI column reports. Imported, not restated -- see on_model.
+            if not on_model(d):
                 continue
             # acc-AUC as stored. There is no chance correction here (see `plot_accauc_vs_faithauc
             # .load` for the full autopsy): every method inside a cell shares that cell's task,

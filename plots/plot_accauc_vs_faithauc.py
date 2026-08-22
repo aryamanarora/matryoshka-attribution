@@ -109,6 +109,17 @@ GROUPS = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi
 # panel report's MISSING column names it.
 TASK_MODEL = dict.fromkeys(SVA + ARITH + ["arc_easy"], "llama3")
 TASK_MODEL["ioi"] = "qwen2.5"
+
+
+def on_model(d):
+    """True if this run is the canonical model for its task. Every consumer of results/sva_sweep
+    must gate on this, whatever its key -- a model-less key COLLIDES (glob order picks a model)
+    and a model-bearing one DOUBLE-COUNTS (ioi contributes twice to any task average). It is
+    exported rather than restated so the pin cannot drift between the figure and its consumers;
+    scripts/method_winrate.py already imports this module for exactly that reason."""
+    return d["model"] == TASK_MODEL.get(d["task"], d["model"])
+
+
 REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
             "mlp": ["SVA", "Arith"],
             "mlp+attn_head": ["SVA", "Arith"]}
@@ -309,7 +320,7 @@ def load(res):
         m = parse_method(os.path.basename(f), d)
         if m is None or m not in METHODS:
             continue
-        if d["model"] != TASK_MODEL.get(d["task"], d["model"]):
+        if not on_model(d):
             continue
         runs.setdefault((m, d["loss"], d["nodes"], d["task"]), []).append(
             (d["acc_auc"], d["faith_auc"]))

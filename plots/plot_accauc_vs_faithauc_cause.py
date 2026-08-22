@@ -95,6 +95,10 @@ def load(res):
         m = R.parse_method(os.path.basename(f), d)
         if m is None or m not in R.METHODS:
             continue
+        # results/sva_sweep also holds a llama3 IOI wave; this key has no model in it, so without
+        # the gate the two files for a cell collide and glob order picks the model. See R.on_model.
+        if not R.on_model(d):
+            continue
         raw[(m, d["loss"], d["nodes"], d["task"])] = d
     return raw
 
@@ -115,7 +119,12 @@ def group_avg(raw, m, loss, sub, get):
 
 def main():
     rows = []
-    for res, inp_label in R.SWEEPS:
+    # R.SWEEPS was renamed SOURCES and gained a third field when the parent grew its zero-ablation
+    # row. This figure is the PATCHED sweep only (see the docstring), so the zero dirs are skipped
+    # rather than silently folded in as extra facets.
+    for res, inp_label, abl in R.SOURCES:
+        if abl != "Patched":
+            continue
         raw = load(res)
         for dir_label, get in DIRECTIONS:
             for m, (mlabel, _) in R.METHODS.items():

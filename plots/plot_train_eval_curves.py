@@ -41,7 +41,7 @@ from plotnine import (
 )
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from plot_accauc_vs_faithauc import METHODS, parse_method  # noqa: E402
+from plot_accauc_vs_faithauc import METHODS, parse_method, on_model  # noqa: E402
 
 theme_set(
     theme_bw(base_size=8)
@@ -93,6 +93,10 @@ def collect(task, substrate, metric):
         for f in glob.glob(f"{res}/*.json"):
             d = json.load(open(f))
             if d["task"] != task or d["nodes"] != substrate:
+                continue
+            # `--task ioi` would otherwise draw BOTH the canonical qwen2.5 run and the stray
+            # llama3 one as separate rows of the same method, since nothing here keys on model.
+            if not on_model(d):
                 continue
             m = parse_method(os.path.basename(f), d)
             if m not in TRAINED and m not in UNTRAINED:
