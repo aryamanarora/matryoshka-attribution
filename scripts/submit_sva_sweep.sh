@@ -33,7 +33,16 @@ ABL_SUF=""; [[ "$ABLATION" != "patch" ]] && ABL_SUF="_${ABLATION}abl"
 read -ra TASKS <<< "${SVA_TASKS-nounpp rc simple within_rc}"   # SVA_TASKS="" (set, empty) runs only MIB_TASKS
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
 LOSSES=(ce acc logit_diff)
-GRAD=(ig ixg attnlrp)
+GRAD=(ig ixg attnlrp mc_ig)
+# "Stepless IG": alpha ~ U(0,1) per example instead of the fixed grid. MC_DRAWS=1 is the arm
+# that matters -- it costs exactly what ixg costs (one fwd+bwd), so mc_ig vs ixg is a
+# compute-matched contrast and mc_ig vs ig is a 1x-vs-10x one. eval_sva.py's --ig-steps default
+# is 10, which for this method would silently buy a 10x run, so it is ALWAYS passed explicitly.
+# MC_SEED defaults to eval_sva.py's own --seed default (42) so that the only thing differing
+# between an mc_ig run and the ixg run beside it is the alpha placement -- not the global RNG
+# that also seeds everything else. Replicates for the noise floor: MC_SEED=43, 44.
+MC_DRAWS=${MC_DRAWS:-1}
+MC_SEED=${MC_SEED:-42}
 KS=(log uniform)
 # gate:optimizer[:lr] (topk = soft fwd). LR field is OPTIONAL and defaults to $MATTR_LR.
 # topk:sgd runs at lr=1.0, off the sweep's shared 0.05 protocol. CORRECTED 2026-08-20: the
@@ -68,7 +77,13 @@ MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-exa
 # These two must stay byte-identical to eval_sva.run_tag() or the skip-if-exists check silently
 # resubmits everything. run_tag appends the ablation suffix directly after the loss.
 grad_tag() {   # $1=method $2=loss
-  local t=$1; [[ "$2" != "logit_diff" ]] && t="${t}_$2"; echo "${t}${ABL_SUF}"
+  # mc_ig's identity carries its draw count and seed (run_tag encodes both, because --ig-steps
+  # is otherwise absent from every tag and the seed IS this estimator's error bar). Order here
+  # must match run_tag: method, then loss, then ablation.
+  local t=$1
+  [[ "$1" == "mc_ig" ]] && t="mc_ig_m${MC_DRAWS}_s${MC_SEED}"
+  [[ "$2" != "logit_diff" ]] && t="${t}_$2"
+  echo "${t}${ABL_SUF}"
 }
 mattr_tag() {  # $1=variant $2=optimizer $3=loss $4=kschedule $5=ig_steps(optional,>1)
   local t="sufficient_$1_$2"
@@ -107,10 +122,12 @@ emit_grid() {   # $1=task $2=nodes $3=dataset -- full method x loss grid for one
   [[ "$dataset" == mib || "$task" == hours ]] && grad_extra=(--grad-examples 32)
   for loss in "${LOSSES[@]}"; do
     for gm in "${GRAD[@]}"; do
+      local gm_extra=()
+      [[ "$gm" == "mc_ig" ]] && gm_extra=(--ig-steps "$MC_DRAWS" --seed "$MC_SEED")
       submit "sva_${task}_${nabbr}_${gm}_${loss}" "$(grad_tag "$gm" "$loss")" \
         --model "$MODEL" --task "$task" --dataset "$dataset" --nodes "$nodes" \
         --method "$gm" --loss "$loss" --eval-examples 100 "${grad_extra[@]}" \
-        "${ABL_ARG[@]}" --output "$OUT"
+        "${gm_extra[@]}" "${ABL_ARG[@]}" --output "$OUT"
     done
     for cfg in "${MATTR_CONFIGS[@]}"; do
       IFS=: read -r variant opt lr <<< "$cfg"; lr=${lr:-$MATTR_LR}

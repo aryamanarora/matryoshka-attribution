@@ -129,7 +129,8 @@ MODEL_FULLNAMES = {"gpt2": "gpt2", "qwen2.5": "Qwen/Qwen2.5-0.5B",
 
 
 def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100, relp=False, ig_steps=1,
-                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0, conductance=False, attnlrp=False):
+                    loss="logit_diff", hinge_margin=2.0, acc_temp=1.0, conductance=False, attnlrp=False,
+                    mc=False, mc_seed=0):
     """Closed-form gradient attribution (IxG = grad x delta) over the hooker's node layout.
 
     Captures the clean activation at each node module (down_proj / o_proj input) with a
@@ -137,6 +138,24 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     node by g . (clean - patch), summed over a batch. relp=True applies the RelP modified
     backward first (LN-freeze + MLP gate rule + QK-detach); attnlrp=True applies AttnLRP's
     instead (LN-freeze + MLP gate rule + half-rule on the QK/OV matmuls, softmax kept).
+
+    mc=True is "stepless IG": draw alpha ~ U(0,1) PER EXAMPLE instead of walking the fixed grid
+    alpha = s/ig_steps. The grid below is a LEFT-endpoint Riemann sum over [0,1) -- it contains
+    the clean endpoint (alpha=0) and omits the patch one -- so at ig_steps=1 it degenerates to
+    the single point alpha=0 and IG *is* IxG (that is exactly what --method ixg computes). The
+    MC estimator is unbiased for the same integral at EVERY ig_steps, including 1, at identical
+    cost: one forward+backward per draw either way. So `--method mc_ig --ig-steps 1` against
+    `--method ixg` is a compute-matched contrast whose only difference is where alpha is placed.
+
+    Alpha is [B,1,1] so it broadcasts over (pos, d_model) -- B independent draws for the price
+    of one forward, and since scores sum over the batch before anything else the estimator error
+    falls like 1/sqrt(n_examples), not 1/sqrt(n_batches).
+
+    This mirrors get_scores_eap_ig_mc in MIB-circuit-track/EAP-IG/src/eap/attribute_node.py; the
+    two harnesses must stay in step or the SVA and MIB stepless-IG numbers stop being the same
+    estimator. Note the ALPHA CONVENTION IS REVERSED between them (here alpha=0 is clean and
+    alpha=1 is patch; there alpha=1 is clean) -- U(0,1) is symmetric so the estimator is
+    identical, but do not copy an alpha expression across without checking which end is which.
     """
     if hooker.mask_type in ("mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"):
         raise NotImplementedError("gradient attribution not supported for SAE/DAS nodes; use --method mattr")
@@ -217,8 +236,14 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         patch_acts = {k: torch.zeros_like(v) for k, v in patch_acts.items()}
 
     # embeddings for the IG path (interpolate clean->patch input embedding, downstream live)
+    # CPU generator: the alpha stream then depends only on mc_seed and the batch shape, not on
+    # how much of the global torch RNG the rest of the run has already consumed. Without this a
+    # seed replicate would silently stop being a clean replicate the moment anything upstream
+    # (dataset shuffling, a random baseline) changed its own draw count.
+    gen = torch.Generator(device="cpu"); gen.manual_seed(mc_seed)
+
     emb_override = None
-    if ig_steps > 1 or conductance or hooker.include_input:
+    if ig_steps > 1 or conductance or hooker.include_input or mc:
         cap = {}
         h = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: cap.__setitem__("e", o.detach()))
         with torch.no_grad(): hf(bid, attention_mask=bam); ec = cap["e"]
@@ -234,7 +259,15 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         S = ig_steps if ig_steps > 1 else 1
         g_acc = torch.zeros_like(ec)
         for step in range(1, S + 1):
-            eo = (ep + (step / S) * (ec - ep)).detach().requires_grad_(True)   # step=S -> clean
+            # MC draws alpha per example here too. If it did not, the input node would be the one
+            # unit in the circuit still scored off the grid while every other unit was scored by
+            # MC -- a mixed estimator, and specifically one where the input node is the unit most
+            # likely to be mis-ranked (it is top-1 on the SVA depth artifact).
+            if mc:
+                a = torch.rand(ec.shape[0], 1, 1, generator=gen).to(ec)
+                eo = (ep + a * (ec - ep)).detach().requires_grad_(True)
+            else:
+                eo = (ep + (step / S) * (ec - ep)).detach().requires_grad_(True)  # step=S -> clean
             hh = hf.model.embed_tokens.register_forward_hook(lambda m, i, o: eo)
             metric_of(hf(bid, attention_mask=bam).logits.float()).backward()
             hh.remove()
@@ -272,16 +305,23 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         return scores.to(device)
 
     grad_acc = {k: torch.zeros_like(v) for k, v in clean_acts.items()}
-    alphas = [s / ig_steps for s in range(ig_steps)] if ig_steps > 1 else [0.0]
-    for alpha in alphas:
-        if ig_steps > 1:
-            emb_override = (1 - alpha) * ec + alpha * ep
+    # The grid is LEFT-endpoint over [0,1): alpha in {0, 1/m, ..., (m-1)/m}, clean end included,
+    # patch end excluded. At m=1 that is the single point alpha=0, i.e. the gradient at the clean
+    # input -- IxG, not an integral estimate. MC replaces the grid with ig_steps independent
+    # U(0,1) draws per example, which IS an integral estimate at the very same m.
+    n_draws = ig_steps if (mc or ig_steps > 1) else 1
+    for step in range(n_draws):
+        if mc:
+            a = torch.rand(ec.shape[0], 1, 1, generator=gen).to(ec)
+            emb_override = (1 - a) * ec + a * ep
+        elif ig_steps > 1:
+            emb_override = (1 - step / ig_steps) * ec + (step / ig_steps) * ep
         store_g, logits = capture(bid, bam, True, embed_override=emb_override)
         metric_of(logits).backward()
         for k in grad_acc:
             grad_acc[k] += store_g[k].grad
     for k in grad_acc:
-        grad_acc[k] /= len(alphas)
+        grad_acc[k] /= n_draws
 
     tied = hooker.mask_type == "mlp_tied"
     scores = torch.zeros(total)
@@ -383,6 +423,15 @@ def run_tag(args):
     tag = args.method if args.method != "mattr" else f"{args.mode}_{args.variant}_{args.optimizer}"
     if args.method == "random":
         tag = f"random_s{args.seed}"
+    if args.method == "mc_ig":
+        # BOTH the draw count and the seed are part of the identity, unlike every other method
+        # here. Two things force it. (1) --ig-steps is NOT otherwise encoded in a tag -- `ig` at
+        # 5 and at 30 steps already collide on disk -- and mc_ig's headline claim is specifically
+        # about m=1, so an unlabelled m=10 run sitting in the same filename would silently
+        # restate a 10x-cost result as the free one. (2) The seed IS the error bar: replicates
+        # differing only in --seed are how this estimator's noise floor gets measured, so they
+        # must not overwrite each other the way MIB's would have without a per-seed circuit dir.
+        tag = f"mc_ig_m{args.ig_steps}_s{args.seed}"
     if args.method == "edge_pruning":   # e.g. eprun_s090 -- budget is part of the identity
         tag = f"eprun_s{int(round(args.target_sparsity * 100)):03d}"
     if args.method == "sigmoid_mask":
@@ -438,8 +487,8 @@ def main():
     p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
     p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib", "arith"])
     p.add_argument("--method", default="mattr",
-                   choices=["mattr", "ixg", "relp", "attnlrp", "ig", "conductance", "random",
-                            "edge_pruning", "sigmoid_mask"])
+                   choices=["mattr", "ixg", "relp", "attnlrp", "ig", "mc_ig", "conductance",
+                            "random", "edge_pruning", "sigmoid_mask"])
     # Node/Edge Pruning (Bhaskar et al., 2024) on this harness: hard-concrete gates + a
     # Lagrangian L0 budget instead of MAttr's top-k. It takes the SAME loss_fn as MAttr, so
     # --loss still selects the objective and the only thing that differs is how the mask is
@@ -803,14 +852,17 @@ def main():
     train_loss_log = None
     if args.method == "random":
         scores = torch.randn(total, device=device)   # random-ranking baseline (seeded)
-    elif args.method in ("ixg", "relp", "attnlrp", "ig", "conductance"):
+    elif args.method in ("ixg", "relp", "attnlrp", "ig", "mc_ig", "conductance"):
         cond = args.method == "conductance"
+        # mc_ig reads --ig-steps as its NUMBER OF DRAWS, so it must be in this list; the whole
+        # point of the arm is --ig-steps 1, which for every other method here means "no path".
         scores = gradient_scores(hf, hooker, train, seq_len, total, tok, device,
                                  n_examples=(args.grad_examples or args.eval_examples),
                                  relp=(args.method == "relp"), attnlrp=(args.method == "attnlrp"),
-                                 ig_steps=args.ig_steps if args.method in ("ig", "conductance") else 1,
+                                 ig_steps=args.ig_steps if args.method in ("ig", "mc_ig", "conductance") else 1,
                                  loss=args.loss, hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
-                                 conductance=cond)
+                                 conductance=cond,
+                                 mc=(args.method == "mc_ig"), mc_seed=args.seed)
     elif args.method == "edge_pruning":
         # Same loss_fn as MAttr -- only the mask parameterization differs (hard-concrete gates
         # under an annealed L0 budget vs top-k). No k_sampler: the budget IS the L0 target, and
