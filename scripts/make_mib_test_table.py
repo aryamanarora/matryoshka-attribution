@@ -352,6 +352,41 @@ def complete_or_skip(name, level, d, data, split="test"):
     return True
 
 
+# A baseline row needs at least this fraction of the columns before it is printed at all.
+#
+# The old rule was `if not data: skip`, i.e. only a completely empty dir was held back, with the
+# stated reason that "a row of eleven dashes reads as 'the method scored nothing', not 'the jobs
+# have not landed yet'". That reason does not stop applying at one cell. GIM is the case that
+# exposed it: its 11-job test wave went out, ioi/gpt2 landed first, and the very next regeneration
+# produced `GIM & 1.36 & --- & ... & ---`, a row that is WORSE than the all-dashes one the guard
+# was written to prevent -- a real number next to ten dashes invites the reader to conclude the
+# dashes are failures rather than pending jobs, and 1.36 sits right in the range where GIM looks
+# like it beat several complete rows on the one task it has.
+#
+# Half is the threshold because that is where the row stops being a progress report and starts
+# being a comparison: with most columns present the dashes read as gaps in an otherwise real row
+# (which is what they are for UGS, whose missing cells are a genuine limitation, not a queue),
+# and the Avg is suppressed anyway whenever a row is partial, so a mostly-complete row cannot be
+# misread as a complete average. Below half there is not enough row left to carry that reading.
+#
+# This is deliberately LOOSER than complete_or_skip, which holds OUR rows until 11/11: a
+# baseline's gap can be a real limitation, ours is only ever a pending job.
+MIN_BASELINE_FRAC = 0.5
+
+
+def baseline_or_skip(name, where, data):
+    """Print/skip decision for a BASELINE row; warns about stragglers. False means skip."""
+    if len(data) < MIN_BASELINE_FRAC * len(COLUMNS):
+        why = "no test cells" if not data else f"only {len(data)}/{len(COLUMNS)} test cells"
+        print(f"SKIP {name}: {why} in results/{where} "
+              f"(no results on disk -- job pending, or never launched)")
+        return False
+    if len(data) < len(COLUMNS):
+        print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
+              f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in data]}")
+    return True
+
+
 def main():
     # Load our test results: 3 node variants (name -> {cell: cpr}) + 1 edge.
     ours_nodes = {}
@@ -371,29 +406,21 @@ def main():
         v = load_run_eval_cpr(np_dir, np_sub, task, model)
         if v is not None:
             node_pruning[(task, model)] = round(v, 2)
-    mask_nodes = {np_name: node_pruning} if node_pruning else {}
-    if node_pruning and len(node_pruning) < len(COLUMNS):
-        print(f"WARNING: {np_name} has {len(node_pruning)}/{len(COLUMNS)} test cells; "
-              f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in node_pruning]}")
+    mask_nodes = ({np_name: node_pruning}
+                  if baseline_or_skip(np_name, f"{np_dir}/{np_sub}", node_pruning) else {})
 
-    # DBM rows, same rule: a dir with no test cells yet is skipped rather than printed as a row
-    # of dashes, which would read as "the method scored nothing" instead of "not run yet".
+    # DBM rows, same rule as Node Pruning, via the shared guard below.
     for name, d, sub in MASK_NODE_BASELINES:
         data = {}
         for task, model, _ in COLUMNS:
             v = load_run_eval_cpr(d, sub, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
-        if not data:
-            print(f"SKIP {name}: no test cells in results/{d}/{sub} (no results on disk -- job pending, or never launched)")
+        if not baseline_or_skip(name, f"{d}/{sub}", data):
             continue
-        if len(data) < len(COLUMNS):
-            print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
-                  f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in data]}")
         mask_nodes[name] = data
 
-    # GIM / RelP+QK, same loader and same "no cells -> no row" rule as Node Pruning: a row of
-    # eleven dashes reads as "the method scored nothing", not "the jobs have not landed yet".
+    # GIM / RelP+QK, same loader and same rule.
     grad_nodes = {}
     for name, d, sub in GRAD_NODE_BASELINES:
         data = {}
@@ -401,12 +428,8 @@ def main():
             v = load_run_eval_cpr(d, sub, task, model)
             if v is not None:
                 data[(task, model)] = round(v, 2)
-        if not data:
-            print(f"SKIP {name}: no test cells in results/{d}/{sub} (no results on disk -- job pending, or never launched)")
+        if not baseline_or_skip(name, f"{d}/{sub}", data):
             continue
-        if len(data) < len(COLUMNS):
-            print(f"WARNING: {name} has {len(data)}/{len(COLUMNS)} test cells; "
-                  f"missing {[f'{t}/{m}' for t, m, _ in COLUMNS if (t, m) not in data]}")
         grad_nodes[name] = data
 
     ours_edges = {}
