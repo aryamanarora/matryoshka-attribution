@@ -75,9 +75,23 @@ EDGE_BASELINES = {
 # The uniform-k dirs come from submit_softuni_lr05.sh -- soft + uniform k had never been run at
 # lr=0.05 on either split, nor at edge level at all, so the row could not simply be pointed at
 # an existing dir.
+#
+# The last two rows are the SGD optimiser arm, added 2026-08-23. Together with the two Adam rows
+# above them they form a 2x2 over {Adam, SGD} x {log k, uniform k}.
+#
+# THE TWO SGD ROWS ARE AT DIFFERENT LEARNING RATES ON PURPOSE (1.0 and 3.0), and that is not a
+# sloppiness to be tidied up into one number. MAttr+SGD is LR-invariant by construction (zero
+# init, no momentum), so its useful LR scales like n/k, and the uniform-k schedule additionally
+# has E[alpha(1-alpha)] = 1/6 against log-k's 1/(2 ln n) -- about 3x larger, which moves the
+# optimum by roughly that factor on its own. Each row therefore sits at its own block-argmax
+# from the LR sweep. Forcing both to a single LR would compare one tuned row against one
+# detuned one; see the edge LR sweep, where reading SGD at the node table's LR made a
+# competitive optimiser look broken.
 OUR_NODE_METHODS = [
     ("\\ourmethod{}",          "test_node_topk_log_lr05"),
     ("$+$ unif $k$",           "test_node_topk_uniform_lr05"),
+    ("$+$ SGD",                "test_node_softlog_sgd_lr_1.0"),
+    ("$+$ SGD, unif $k$",      "test_node_softuni_sgd_lr_3.0"),
 ]
 OUR_EDGE_METHODS = [
     ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
@@ -136,10 +150,39 @@ NODE_PRUNING = (_M.eprun_label("node", _M.EPRUN_BEST_SPARSITY[0]),
 # circuits in results/attnlrp that the validation row already scored, so the row below and the
 # validation row describe the SAME circuits on two splits rather than two separate attributions.
 # Full-split including llama3, per the no-dagger rule documented above.
+#
+# The last four entries are the QUADRATURE LADDER for NAP-IG (added 2026-08-23), all four scoring
+# circuits attributed on the train split by MIB-circuit-track/run_stepless_test.sh -- eval-only,
+# same circuits the validation wave scored, so these rows and their validation twins describe the
+# same circuits on two splits.
+#
+# What the ladder varies is ONLY how the input-path integral is quadratured:
+#   m=1 grid   -- the right-endpoint rule at m=1 degenerates to alpha=1, the clean input, so this
+#                 row IS input x gradient. It is the COMPUTE-MATCHED CONTROL for the MC row, not
+#                 a weaker setting of it: one forward+backward per batch either way.
+#   m=5 grid   -- Hanna et al.'s defended default (COLM'24 App. C), 5x cost.
+#   m=30 grid  -- converged reference, 30x cost.
+#   MC alpha   -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral at every m,
+#                 here at m=1. Same cost as the I x G row.
+#
+# So the honest reading of these four rows is a cost-vs-quality ladder in which the first and
+# last are free and the middle two are not. Do NOT reorder them by score; the ordering is the
+# cost ordering and that is the point.
+#
+# The MC row's subfolder is EAP-IG-inputs-mc_patching_node, not EAP-IG-inputs_patching_node --
+# run_stepless_test.sh passes --method EAP-IG-inputs-mc precisely so its output does not land in
+# the grid arms' folder and overwrite them.
+#
+# These are distinct from the "NAP-IG (CF)" literal above, which is transcribed from MIB's
+# Table 1 and uses a counterfactual ablation; everything here is patching, our own runs.
 GRAD_NODE_BASELINES = [
     ("AttnLRP",  "attnlrp_eval",     "AttnLRP_patching_node"),
     ("GIM",      "gim_eval",         "GIM_patching_node"),
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
+    ("I$\\times$G ($m{=}1$)",     "ig1_test",        "EAP-IG-inputs_patching_node"),
+    ("NAP-IG ($m{=}5$)",          "napig_ref_test",  "EAP-IG-inputs_patching_node"),
+    ("NAP-IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
+    ("NAP-IG (MC $\\alpha$)",     "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
 ]
 
 # DBM, the other mask-learning baseline (pyvene's SigmoidMaskIntervention). Same loader and
@@ -167,6 +210,36 @@ GRAD_NODE_BASELINES = [
 MASK_NODE_BASELINES = [
     ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node"),
 ]
+
+
+# --- family assignment for the LITERAL baseline dicts -------------------------------------
+# NODE_BASELINES / EDGE_BASELINES are plain name->cells dicts with no family field, so the
+# grouping has to be declared out here. The rule is deliberately EXHAUSTIVE-BY-DEFAULT: only
+# controls and mask methods are named, and everything else falls through to "Gradient-based".
+#
+# Why that direction. The obvious implementation -- listing the members of each group -- means a
+# baseline added to NODE_BASELINES later matches no group and is silently dropped from the table,
+# which is invisible in the output because the row simply is not there. Defaulting to a family
+# makes the failure mode "a new baseline appears under a possibly-wrong heading", which a reader
+# notices. If you add a mask-learning or control baseline, name it here; if you add a gradient
+# one, do nothing.
+CONTROL_NAMES = ("Random",)
+MASK_BASELINE_NAMES = ("UGS",)   # UGS learns edge masks; it is not a gradient attribution.
+
+
+def classify(baselines, family):
+    """Members of `baselines` belonging to `family`, in the dict's own (declaration) order.
+
+    `family` is "gradient" or "mask"; controls are excluded from both and emitted ungrouped.
+    """
+    out = []
+    for name, data in baselines.items():
+        if name in CONTROL_NAMES:
+            continue
+        fam = "mask" if name in MASK_BASELINE_NAMES else "gradient"
+        if fam == family:
+            out.append((name, data))
+    return out
 
 
 def load_run_eval_cpr(results_dir, sub, task, model):
@@ -366,36 +439,82 @@ def main():
     header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"
     lines.append(header)
 
+    def level_header(text):
+        return f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{text}}}}} \\\\"
+
+    def group_header(text):
+        """Second-level heading INSIDE a level section (Gradient-based / Mask-based / MAttr).
+
+        `text` is raw LaTeX and carries its OWN emphasis, rather than being wrapped in \\textit
+        here. The two baseline families want italic, but \\ourmethod{} expands to \\texttt{MAttr}
+        and \\textit{\\texttt{...}} silently renders as upright typewriter in this template's
+        font -- so a wrapper would give two italic headings and one that merely looks unstyled.
+
+        Emitted only when the group has at least one row: a heading over zero rows reads as
+        "this family scored nothing", which is exactly the confusion the "no cells -> no row"
+        rule elsewhere in this file exists to prevent. GIM is the live case -- it has no test
+        pkls (see the note above GRAD_NODE_BASELINES), so it contributes no row, and if the
+        whole gradient family were ever in that state the heading must vanish with it.
+        """
+        return f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\quad {text}}} \\\\"
+
+    # The MAttr heading says "(ours)" so it is not verbatim identical to the \ourmethod{} ROW
+    # sitting directly beneath it -- the heading names the family, the row names the headline
+    # configuration, and the three "$+$" rows below it are ablations OF that row, not siblings
+    # of it. Without the suffix the table shows "MAttr" twice in consecutive lines for no
+    # visible reason.
+    GRAD_H, MASK_H = "\\textit{Gradient-based}", "\\textit{Mask-based}"
+    OURS_H = "\\ourmethod{} \\textit{(ours)}"
+
+    def emit(group, rows, best, second, avb, avs, dagger=None, suppress_partial=True):
+        """One group heading + its rows, indented one level under the heading."""
+        if not rows:
+            return
+        if group:
+            lines.append(group_header(group))
+        for name, data in rows:
+            lines.append(make_row(name, data, best, second, dagger=dagger,
+                                  avg_best=avb, avg_second=avs, indent=bool(group),
+                                  suppress_avg=suppress_partial and len(data) < len(COLUMNS)))
+
     # Node level
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    lines.append(level_header("Node-level"))
     navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(grad_nodes.values())
                                   + list(mask_nodes.values()) + list(ours_nodes.values()))
-    for name, data in NODE_BASELINES.items():
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
-    for name, data in grad_nodes.items():
-        # Same Avg rule as the mask rows below: every node cell exists, so a gap is an
-        # unfinished job rather than something the method cannot do.
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs,
-                              suppress_avg=len(data) < len(COLUMNS)))
-    for name, data in mask_nodes.items():
-        # Node level has all 11 cells, so anything missing here is an unfinished job rather
-        # than a cell the method cannot do -- dash the Avg until the sweep completes.
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs,
-                              suppress_avg=len(data) < len(COLUMNS)))
-    for name, data in ours_nodes.items():
-        lines.append(make_row(name, data, best_node, second_node, avg_best=navb, avg_second=navs))
+    # Random is deliberately OUTSIDE the three families and unindented. It is a control, not a
+    # method: filing it under "Gradient-based" would be false, and giving it its own heading
+    # would imply a family with one member. It stays the first row of the section, which is also
+    # where a reader looks for the floor.
+    emit(None, [(n, NODE_BASELINES[n]) for n in CONTROL_NAMES if n in NODE_BASELINES],
+         best_node, second_node, navb, navs)
+    # NAP / NAP-IG are MIB's own gradient baselines, so they head the gradient family rather
+    # than sitting in a separate "transcribed from Table 1" block -- provenance is a comment
+    # concern, not a reader-facing grouping.
+    emit(GRAD_H,
+         classify(NODE_BASELINES, "gradient") + list(grad_nodes.items()),
+         best_node, second_node, navb, navs)
+    emit(MASK_H, list(mask_nodes.items()), best_node, second_node, navb, navs)
+    # Ours are held to completeness by complete_or_skip, so a partial one never reaches here and
+    # suppress_partial has nothing to act on -- passed explicitly so the asymmetry is visible.
+    emit(OURS_H, list(ours_nodes.items()), best_node, second_node, navb, navs,
+         suppress_partial=False)
 
-    # Edge level
+    # Edge level. Same three families, so that a reader who has learned the node section's
+    # structure does not have to relearn it here. The groups are thinner (one row each for the
+    # two baselines), which is itself informative: the edge baselines are one gradient method
+    # and one mask method, and the flat version of this section did not say so.
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    lines.append(level_header("Edge-level"))
     eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + list(ours_edges.values()))
-    for name, data in EDGE_BASELINES.items():
-        lines.append(make_row(name, data, best_edge, second_edge, avg_best=eavb, avg_second=eavs))
+    emit(GRAD_H, classify(EDGE_BASELINES, "gradient"),
+         best_edge, second_edge, eavb, eavs, suppress_partial=False)
+    emit(MASK_H, classify(EDGE_BASELINES, "mask"),
+         best_edge, second_edge, eavb, eavs, suppress_partial=False)
     # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
     EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
-    for name, data in ours_edges.items():
-        lines.append(make_row(name, data, best_edge, second_edge, dagger=EDGE_DAGGER, avg_best=eavb, avg_second=eavs))
+    emit(OURS_H, list(ours_edges.items()), best_edge, second_edge, eavb, eavs,
+         dagger=EDGE_DAGGER, suppress_partial=False)
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")
