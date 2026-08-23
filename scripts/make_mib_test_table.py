@@ -154,22 +154,21 @@ NODE_PRUNING = (_M.EPRUN_NAME["node"],
 # run_evaluation.py while the \ourmethod{} rows come from our eval_mib.py, and the two do not
 # agree cell-for-cell (worst on Gemma). A small gap either way is inside harness noise.
 #
-# *** GIM CURRENTLY PRODUCES NO ROW HERE, AND THAT IS DELIBERATE. ***
-# results/gim_eval has 12 validation pkls and ZERO test pkls -- corrected GIM (post
-# scale_mlp_gate) was never evaluated on test. The only GIM test pkls on disk belong to
-# results/gim_nomlp_eval, the pre-scale_mlp_gate BUGGY run, now quarantined to
-# results/_stale_gim_nomlp/ (same treatment as the TL 3.2.1 wave in _stale_tl321).
+# *** GIM'S ROW IS THE CORRECTED RUN AS OF 2026-08-23. Do NOT repoint it at gim_nomlp_eval. ***
+# The 11-cell test wave of the CORRECTED (post scale_mlp_gate) circuits landed that day and this
+# entry filled itself with no edit, exactly as the paragraph below predicted; the row now reads
+# 1.36 1.33 1.44 1.83 1.14 1.23 1.55 1.02 1.48 1.03 1.02, avg 1.31 -- consistent with the
+# corrected validation row's 1.32 and with AttnLRP, which is the check that it is the right run.
 #
-# Until 2026-08-10 this table shipped a GIM row that WAS the buggy run, matching
-# gim_nomlp_eval cell-for-cell (1.36 0.71 0.78 0.25 1.12 0.25 1.24 0.99 1.34 1.11 1.06,
-# avg 0.93). It predates the quarantine: the buggy pkls used to sit in gim_eval, so the row
-# generated cleanly and then froze in the .tex while the dirs were reorganised underneath it.
-# The paper therefore showed buggy GIM on test next to corrected GIM on validation (avg 1.32)
-# under one label -- exactly the confusion make_mib_accauc_table.py:60 warns about.
-#
-# Do NOT repoint this entry at gim_nomlp_eval to refill the row. The fix is a test-split eval
-# of the CORRECTED circuits in MIB-circuit-track/results/gim, after which this entry fills
-# itself with no edit (the "no cells -> no row" rule below means an empty dir is simply absent).
+# The history matters because the failure mode is silent. Until 2026-08-10 this table shipped a
+# GIM row that WAS the pre-scale_mlp_gate BUGGY run, matching gim_nomlp_eval cell-for-cell
+# (1.36 0.71 0.78 0.25 1.12 0.25 1.24 0.99 1.34 1.11 1.06, avg 0.93). Those buggy pkls used to
+# sit in gim_eval, so the row generated cleanly and then FROZE in the .tex while the dirs were
+# reorganised underneath it -- the paper showed buggy GIM on test beside corrected GIM on
+# validation (1.32) under one label, the confusion make_mib_accauc_table.py:60 warns about. The
+# buggy wave is now quarantined in results/_stale_gim_nomlp/ (same treatment as the TL 3.2.1
+# wave in _stale_tl321). Note ioi/gpt2 is 1.36 in BOTH runs, so that one cell cannot tell them
+# apart; qwen2.5 (0.71 buggy vs 1.33 corrected) is the discriminating column.
 #
 # AttnLRP was validated on all 12 cells but had never been evaluated on test at all, so the
 # strongest gradient baseline in the validation table was simply absent from this one. Its 11
