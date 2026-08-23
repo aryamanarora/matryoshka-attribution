@@ -169,6 +169,25 @@ NODE_PRUNING = (_M.EPRUN_NAME["node"],
 #   m=1 grid   -- the right-endpoint rule at m=1 degenerates to alpha=1, the clean input, so this
 #                 row IS input x gradient. It is the COMPUTE-MATCHED CONTROL for the MC row, not
 #                 a weaker setting of it: one forward+backward per batch either way.
+#
+#                 *** AND IT IS THE SAME ESTIMATOR AS THE "NAP (CF)" ROW ABOVE IT. ***
+#                 get_scores_eap_ig at steps=1 sets new_input = corrupted + (1/1)(clean -
+#                 corrupted) = the clean input (attribute_node.py:239), so its forward is the
+#                 plain clean forward and its gradient is taken at the clean input -- identical
+#                 to get_scores_eap (attribute_node.py:182-185), which is attribution patching.
+#                 There is no separate NAP method in attribute_node's dispatch list; NAP *is*
+#                 EAP, and EAP-IG-inputs at m=1 collapses onto it. Hence the label: this row is
+#                 our run of NAP, not a second method.
+#
+#                 THE TWO ROWS DO NOT AGREE NUMERICALLY AND THAT IS UNEXPLAINED. NAP (CF) is
+#                 transcribed from MIB's Table 1; this row is ours. They match on the IOI cells
+#                 (both at chance) and diverge on mcqa/llama3 (1.69 vs 0.38), mcqa/gemma2
+#                 (1.47 vs 0.92), arc_easy/gemma2 (1.01 vs 1.25) and arc_challenge/llama3
+#                 (0.26 vs 0.59) -- in BOTH directions, so it is not a scaling factor or a sign
+#                 convention. Either MIB's NAP differs from EAP in some detail we have not
+#                 found, or the two harnesses disagree by more than the "worst on Gemma" caveat
+#                 elsewhere in this file allows. Do not present the two rows as independent
+#                 methods, and do not quietly drop one: the gap is a reproduction finding.
 #   m=5 grid   -- Hanna et al.'s defended default (COLM'24 App. C), 5x cost.
 #   m=30 grid  -- converged reference, 30x cost.
 #   MC alpha   -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral at every m,
@@ -188,7 +207,7 @@ GRAD_NODE_BASELINES = [
     ("AttnLRP",  "attnlrp_eval",     "AttnLRP_patching_node"),
     ("GIM",      "gim_eval",         "GIM_patching_node"),
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
-    ("I$\\times$G ($m{=}1$)",     "ig1_test",        "EAP-IG-inputs_patching_node"),
+    ("NAP $=$ I$\\times$G (ours)", "ig1_test",        "EAP-IG-inputs_patching_node"),
     ("NAP-IG ($m{=}5$)",          "napig_ref_test",  "EAP-IG-inputs_patching_node"),
     ("NAP-IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
     ("NAP-IG (MC $\\alpha$)",     "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
