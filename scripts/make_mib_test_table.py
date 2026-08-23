@@ -93,9 +93,27 @@ OUR_NODE_METHODS = [
     ("$+$ SGD",                "test_node_softlog_sgd_lr_1.0"),
     ("$+$ SGD, unif $k$",      "test_node_softuni_sgd_lr_3.0"),
 ]
+# Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
+# the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which
+# rows exist. The validation table has carried a full \ourmethod{}-SGD block at edge level for a
+# while; the test table carrying only the two Adam rows was the same table-disagreement defect
+# that the node SGD rows above were added to fix, one granularity down.
+#
+# The two dirs do not exist yet -- the runs are submitted by scripts/submit_test_edge_sgd.sh
+# (2 configs x 11 cells). Declaring them here before they land is safe and self-filling:
+# complete_or_skip() prints a SKIP and omits the row until all 11 cells are present, so this
+# table stays correct in the meantime and gains the rows the moment the wave finishes.
+#
+# SAME OWN-BEST-LR POLICY as the node rows above (1.0 for log k, 3.0 for uniform k). One caveat
+# specific to edge level: these two LRs are the NODE optima carried over, not an edge-level
+# argmax -- submit_mib_edge_soft_sgd.sh:10-11 did the same for the two validation dirs these
+# mirror. Re-tuning here and not there would mean the two tables report different
+# hyperparameters under one row label, which is worse than untuned-but-consistent.
 OUR_EDGE_METHODS = [
     ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
     ("$+$ unif $k$",           "test_edge_topk_uniform_lr05"),
+    ("$+$ SGD",                "test_edge_softlog_sgd_lr_1.0"),
+    ("$+$ SGD, unif $k$",      "test_edge_softuni_sgd_lr_3.0"),
 ]
 
 
