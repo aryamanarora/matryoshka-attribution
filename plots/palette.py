@@ -35,6 +35,19 @@ METHOD = {
     # the dE>20 rule of thumb but above this palette's pre-existing worst pair (16.1), so it
     # does not become the binding constraint. Checked with `python plots/palette.py`.
     "AttnLRP": "#d55e00",
+    # Tol sand: "stepless" IG (alpha ~ U(0,1) per example at m=1) on SVA+. It is an IG ESTIMATOR
+    # variant, not a new method, so it belongs in the warm gradient family with IG and AttnLRP --
+    # but the family already holds three hues, and this is the fourth. Sand is the ONLY candidate
+    # tried that does not become the new binding constraint: its worst CVD distance is 17.0 dE
+    # (tritanopia, vs Random), just above this palette's pre-existing worst pair of 16.1 (+hard
+    # vs GIM, tritanopia). Every other warm collapses against the family it has to join --
+    # goldenrod #b8860b 3.2 dE and olive #999933 13.5 (both vs AttnLRP), sienna #a65628 15.2 and
+    # #7f3b08 10.7 (vs I×G), salmon #ee8866 10.0 (vs +hard). The comment on "MAttr (SGD)" below
+    # already identified sand and black as the only two additions that leave 16.1 intact; black
+    # went there, sand comes here. The 17.0 is against Random, which in the scatter also carries
+    # its own marker SHAPE (a star, LOSS_SHAPE[NO_LOSS]), so hue is not the only cue there.
+    # Re-verify with `python plots/palette.py`.
+    "Stepless IG": "#ddcc77",
     "Node Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter + curves
     # Wong reddish purple: the other mask-learning baseline, so it stays in Node Pruning's
     # cool-purple family while separating from it by lightness (L* ~60 vs ~24). Deliberately

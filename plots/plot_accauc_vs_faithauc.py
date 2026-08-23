@@ -150,6 +150,11 @@ SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 METHODS = {
     "IG":         ("IG",           P.color("IG")),
     "IxG":        ("I×G",          P.color("I×G")),
+    # "Stepless" IG: alpha ~ U(0,1) drawn per example at m=1, instead of IG's fixed grid. Same
+    # integral, unbiased at every m, and at m=1 it costs exactly what I×G costs -- so it sits
+    # BETWEEN the two baselines above by construction and the three-way ordering is the point.
+    # Tag on disk is `mc_ig_m{draws}_s{seed}`; only the m=1/s=42 arm is drawn (see parse_method).
+    "mc_ig":      ("Stepless IG",  P.color("Stepless IG")),
     # Single-pass like I×G (only the backward RULES change): LN-freeze, gated-MLP secant +
     # half-rule, and the uniform half-rule on the QK/OV matmuls. The HF-side implementation is
     # src/learning_to_attribute/grad_attribution.py, verified against vanilla eager attention
@@ -231,7 +236,28 @@ FIGURE_METHODS = ["IG", "IxG", "softsgd-log", "Random"]
 # MAttr-Adam point. main()'s MISSING column names it every run -- do not read that panel's
 # absence as Adam failing there.
 ADAM_METHODS = ["IG", "IxG", "stopk-log", "softsgd-log", "Random"]
-ALL_METHODS = [k for k in METHODS if k != "soft-log"]
+ALL_METHODS = [k for k in METHODS if k not in ("soft-log", "mc_ig")]
+# `--stepless`: the default cut plus Stepless IG. It is a SEPARATE cut, and a narrowed one, for a
+# coverage reason that cannot be fixed by adding a key to FIGURE_METHODS.
+#
+# Stepless IG exists ONLY in results/sva_sweep (patched, −input) and ONLY for the four SVA tasks:
+# 36 runs = 4 tasks x 3 substrates x 3 losses, submitted 2026-08-22. There are no Arith, ARC-E or
+# IOI runs, and none in the other three SOURCES dirs. Under the normal REQUIRED sets every panel
+# demands SVA+Arith (and ARC-E+IOI at `node`), so group_avg would drop Stepless IG from all seven
+# panels and the figure would come out looking exactly like the default one -- a silent no-op.
+#
+# So this cut narrows the figure to what the arm actually covers, and says so on the figure: one
+# ablation, one input setting, three substrates, task-group = SVA alone. Every OTHER series is
+# narrowed with it, so the panels still compare one task population. Read it as a preview of the
+# arm, not as a drop-in for the paper figure -- the numbers are not comparable to the default
+# cut's, whose points average four task-groups. Backfilling is one submitter away:
+#   ARITH_TASKS="addition months weekdays hours" bash scripts/submit_sva_sweep.sh
+#   MIB_TASKS=arc_easy bash scripts/submit_sva_sweep.sh
+#   MIB_TASKS=ioi MODEL=qwen2.5 bash scripts/submit_sva_sweep.sh
+# (each also re-emits the other GRAD arms, but the submitter skips runs already on disk).
+STEPLESS_METHODS = ["IG", "IxG", "mc_ig", "softsgd-log", "Random"]
+STEPLESS_SOURCES = [("results/sva_sweep", "−input", "Patched")]
+STEPLESS_REQUIRED = {sub: ["SVA"] for sub in REQUIRED}
 
 
 def parse_method(fname, d):
@@ -271,6 +297,14 @@ def parse_method(fname, d):
     # silently relabelled "IG" and averaged into the IG points. Unknown tags must drop out, not
     # masquerade as a baseline. All `necessary_*` runs are therefore invisible to these figures
     # by design -- they belong in a cause-trained figure of their own.
+    # `mc_ig_m{draws}_s{seed}`. Draws and seed are BOTH in the key, so the m=1 arm (the only one
+    # that is compute-matched to I×G) can never be averaged with a 10-draw run, and seed
+    # replicates for the noise floor stay separate points rather than silently pooling the way
+    # Random's three seeds deliberately do. Only m=1/s=42 is in METHODS, so anything else drops.
+    # Must precede the `ig` branch below only in spirit -- "mc_ig" does not start with "ig" -- but
+    # it is placed with the other gradient tags so the family reads together.
+    if tag.startswith("mc_ig"):
+        return "mc_ig" if tag.startswith("mc_ig_m1_s42") else None
     if tag.startswith("ixg"):
         return "IxG"
     if tag.startswith("attnlrp"):
@@ -337,8 +371,12 @@ def load(res):
             for k, vs in runs.items()}
 
 
-def group_avg(raw, m, loss, sub):
-    """Macro-average over the task-groups REQUIRED[sub]; None if any of them is incomplete.
+def group_avg(raw, m, loss, sub, required=None):
+    """Macro-average over the task-groups required[sub] (default REQUIRED); None if incomplete.
+
+    `required` is a parameter rather than a global read so `--stepless` can narrow every series
+    in the figure to one task-group at once. Narrowing it for ONE series would be the exact
+    failure this function exists to prevent, so the caller passes one dict for the whole figure.
 
     Macro-average over groups, not over tasks, so the eight subtasks that come in fours do not
     outvote the two single-task MIB cells.
@@ -350,10 +388,11 @@ def group_avg(raw, m, loss, sub):
     SOME of its subtasks are present (`set(tasks) <= have`), since a 2-of-4 Arith mean is the
     same failure one level down. Callers report what was dropped rather than swallowing it.
     """
+    required = REQUIRED if required is None else required
     have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, loss, sub)}
     gx, gy = [], []
     for gname, tasks in GROUPS:
-        if gname not in REQUIRED[sub]:
+        if gname not in required[sub]:
             continue
         if not set(tasks) <= have:
             return None
@@ -362,7 +401,7 @@ def group_avg(raw, m, loss, sub):
         gy.append(np.mean([v[1] for v in vs]))
     if not gx:
         return None
-    return float(np.mean(gx)), float(np.mean(gy)), tuple(REQUIRED[sub])
+    return float(np.mean(gx)), float(np.mean(gy)), tuple(required[sub])
 
 
 def main():
@@ -372,13 +411,19 @@ def main():
                          "three-method cut; legend overflows \\textwidth at this width")
     ap.add_argument("--adam", action="store_true",
                     help="default cut plus MAttr (Adam), for the optimiser contrast")
+    ap.add_argument("--stepless", action="store_true",
+                    help="default cut plus Stepless IG; NARROWS the figure to patched/−input and "
+                         "to the SVA task-group, which is all that arm has been run on")
     a = ap.parse_args()
     figure_methods = (ALL_METHODS if a.draw_all
+                      else STEPLESS_METHODS if a.stepless
                       else ADAM_METHODS if a.adam else FIGURE_METHODS)
-    suffix = "_all" if a.draw_all else "_adam" if a.adam else ""
+    suffix = "_all" if a.draw_all else "_stepless" if a.stepless else "_adam" if a.adam else ""
+    sources = STEPLESS_SOURCES if a.stepless else SOURCES
+    required = STEPLESS_REQUIRED if a.stepless else REQUIRED
 
     rows, dropped = [], []
-    for res, inp_label, abl in SOURCES:
+    for res, inp_label, abl in sources:
         raw = load(res)
         for m in figure_methods:
             mlabel = METHODS[m][0]
@@ -401,12 +446,12 @@ def main():
                     # is 26 characters and clipped past the right edge of the last panel at
                     # \textwidth/4. Stacked, the longest line is the group list (19), which
                     # already fit.
-                    facet = f"{abl}\n{slabel}, {inp_label}\n{'·'.join(REQUIRED[sub])}"
-                    r = group_avg(raw, m, lkey, sub)
+                    facet = f"{abl}\n{slabel}, {inp_label}\n{'·'.join(required[sub])}"
+                    r = group_avg(raw, m, lkey, sub, required)
                     if r is None:
                         have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
                         miss = [g for g, ts in GROUPS
-                                if g in REQUIRED[sub] and not set(ts) <= have]
+                                if g in required[sub] and not set(ts) <= have]
                         if have:   # nothing at all on disk = not submitted; only flag partials
                             dropped.append((abl, facet, mlabel, llabel, "+".join(miss)))
                         continue
@@ -418,7 +463,7 @@ def main():
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
     df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
     df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()) + [NO_LOSS])
-    node_g, mlp_g = "·".join(REQUIRED["node"]), "·".join(REQUIRED["mlp"])
+    node_g, mlp_g = "·".join(required["node"]), "·".join(required["mlp"])
     # Wrap order, read left-to-right: all four Patched panels, then the three Zero-abl. ones
     # (the zero sweep has no +input arm). ncol=4 below therefore reproduces the old grid's
     # rows without reserving a framed empty cell for the combination that does not exist.
@@ -470,7 +515,7 @@ def main():
         # facet_wrap's free scales ARE per panel. The cost is losing the row/column strips;
         # `facet` now carries the ablation in its own label and `facet_order` fixes the
         # left-to-right sequence so the wrap still reads as the old 4+3 grid.
-        + facet_wrap("~facet", ncol=4, scales="free")
+        + facet_wrap("~facet", ncol=min(4, df["facet"].nunique()), scales="free")
         + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
         + scale_fill_manual(values=colors, name="Method")
         + scale_color_manual(values=colors, guide=None)   # line colour only; no second legend
@@ -478,6 +523,11 @@ def main():
         + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
         + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
+    # The global figure_size is sized for the default TWO rows of panels. `--stepless` draws one
+    # row (patched/−input only), so keeping 3.3in would stretch three panels to twice the height
+    # of every other version of this figure and make the same points look like a different result.
+    if df["facet"].nunique() <= 4:
+        p += theme(figure_size=(5.5, 2.1))
     out = f"plots/accauc_vs_faithauc{suffix}.pdf"
     p.save(out, dpi=300, verbose=False)
     # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
