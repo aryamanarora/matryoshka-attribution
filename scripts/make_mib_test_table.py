@@ -115,7 +115,16 @@ OUR_EDGE_METHODS = [
 #     on Edge Pruning's KL, not MAttr's logit-diff -- see EPRUN_SPARSITIES on that confound.
 import make_mib_table as _M   # noqa: E402  (label/dir are defined there, one source of truth)
 
-NODE_PRUNING = (_M.eprun_label("node", _M.EPRUN_BEST_SPARSITY[0]),
+# Plain "Node Pruning", NOT eprun_label()'s "Node Pruning (s=0.5, logit-diff)". That parenthetical
+# earns its place in the validation table, where several budgets and both objectives appear as
+# separate rows and the label is what tells them apart. Here exactly ONE configuration is carried
+# to test, so the suffix distinguishes the row from nothing -- it just states a hyperparameter
+# next to a set of baselines whose own hyperparameters are not in their labels.
+#
+# The dir still comes from EPRUN_BEST_SPARSITY, so which configuration this is stays defined in
+# make_mib_table.py; only the display name is overridden. Anyone needing the setting can read
+# it there or in this comment: s=0.5, logit-diff objective.
+NODE_PRUNING = (_M.EPRUN_NAME["node"],
                 _M.EPRUN_BEST_SPARSITY[1], "EdgePruning_patching_node")
 
 # Gradient node baselines WE ran (unlike the NODE_BASELINES literals above, which are
@@ -445,10 +454,16 @@ def main():
     def group_header(text):
         """Second-level heading INSIDE a level section (Gradient-based / Mask-based / MAttr).
 
-        `text` is raw LaTeX and carries its OWN emphasis, rather than being wrapped in \\textit
-        here. The two baseline families want italic, but \\ourmethod{} expands to \\texttt{MAttr}
-        and \\textit{\\texttt{...}} silently renders as upright typewriter in this template's
-        font -- so a wrapper would give two italic headings and one that merely looks unstyled.
+        MATCHES make_mib_table.py (the validation table), which is the layout to copy rather
+        than invent against: a family heading there is a bare bold cell in the FIRST COLUMN
+        (`\\textbf{Gradient attribution} \\\\`, make_mib_table.py:802/814) and the rows under it
+        carry the \\quad via make_row(indent=True). The hierarchy is therefore produced by
+        indenting the ROWS, not the heading.
+
+        The first version of this function wrapped the heading in \\multicolumn AND prefixed it
+        with \\quad, which put heading and rows at the SAME indent and destroyed the nesting --
+        the level headers (\\textit{Node-level}) are the ones that use \\multicolumn, and copying
+        their form one level down is what broke it.
 
         Emitted only when the group has at least one row: a heading over zero rows reads as
         "this family scored nothing", which is exactly the confusion the "no cells -> no row"
@@ -456,15 +471,19 @@ def main():
         pkls (see the note above GRAD_NODE_BASELINES), so it contributes no row, and if the
         whole gradient family were ever in that state the heading must vanish with it.
         """
-        return f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\quad {text}}} \\\\"
+        return f"{text} \\\\"
 
-    # The MAttr heading says "(ours)" so it is not verbatim identical to the \ourmethod{} ROW
-    # sitting directly beneath it -- the heading names the family, the row names the headline
-    # configuration, and the three "$+$" rows below it are ablations OF that row, not siblings
-    # of it. Without the suffix the table shows "MAttr" twice in consecutive lines for no
-    # visible reason.
-    GRAD_H, MASK_H = "\\textit{Gradient-based}", "\\textit{Mask-based}"
-    OURS_H = "\\ourmethod{} \\textit{(ours)}"
+    # Bold, matching the validation table's family headings. The MAttr heading says "(ours)" so
+    # it is not verbatim identical to the \ourmethod{} ROW directly beneath it -- the heading
+    # names the family, the row names the headline configuration, and the three "$+$" rows below
+    # are ablations OF that row rather than siblings of it.
+    #
+    # NAMES DIFFER FROM THE VALIDATION TABLE ON PURPOSE-ISH: that one says "Gradient attribution"
+    # and "Mask learning". These are the names asked for. If the two tables should agree, change
+    # them here (one line) rather than renaming the validation table's, which several captions
+    # may refer to.
+    GRAD_H, MASK_H = "\\textbf{Gradient-based}", "\\textbf{Mask-based}"
+    OURS_H = "\\textbf{\\ourmethod{} (ours)}"
 
     def emit(group, rows, best, second, avb, avs, dagger=None, suppress_partial=True):
         """One group heading + its rows, indented one level under the heading."""
