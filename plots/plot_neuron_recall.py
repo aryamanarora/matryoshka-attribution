@@ -222,9 +222,9 @@ def main():
     fs = FS_WIDE if a.wide else FS
     panel_w = PANEL_W_WIDE if a.wide else PANEL_W
     row_h = ROW_H_WIDE if a.wide else ROW_H
-    # 8 handles across 2.65in is 4 rows of 2, not 2 rows of 4: at ncol=4 the entries overrun the
-    # figure and bbox_inches clips the outermost, which is the one series the figure is about.
-    leg_ncol = LEG_NCOL if a.wide else 2
+    # 8 handles across 2.7in is 3 columns (so 3 rows); ncol=4 overruns the figure and
+    # bbox_inches clips the outermost entry, which is the one series the figure is about.
+    leg_ncol = LEG_NCOL if a.wide else 3
     nr, nc = len(rows), len(TASKS)
     nleg = LEG_ROW_H * -(-(len(METHODS) + 1) // leg_ncol) + LEG_PAD     # +1 = the chance entry
     leg_h = nleg + TITLE_H
@@ -277,7 +277,12 @@ def main():
     handles = [plt.Line2D([], [], color=P.METHOD[k], ls=ls, lw=1.0, label=lab)
                for lab, _, k, ls in METHODS]
     handles.append(plt.Line2D([], [], color="#999999", lw=0.4, ls=(0, (1, 2)), label="chance"))
-    fig.tight_layout()
+    # w_pad=0 between columns. The columns share y and so carry no inner tick labels, which
+    # means the default padding is spent on nothing; what gap remains is the x tick labels'
+    # own overhang past the axes at each end ($10^0$ sits on the left spine), and tight_layout
+    # reserves that whatever the pad. Vertical padding is left alone -- the rows do not share
+    # x labels in the same way and the two ablation rows need the separation.
+    fig.tight_layout(w_pad=0.0)
     if not a.wide:
         fig.supxlabel("$k$ (neurons)", fontsize=fs[0], y=0.005)
     fh = row_h * nr + leg_h

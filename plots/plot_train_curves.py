@@ -232,7 +232,10 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
                     ax.set_xlabel(xlab, fontsize=fs[0])
                 if met == "kstar_pct":
                     kstar_axis(ax)
-        fig.tight_layout()
+        # w_pad=0: the substrate columns share y within a row and so have no inner tick labels
+        # to separate. The gap that survives is the x tick labels' overhang ("2000" sits on the
+        # right spine), which tight_layout reserves regardless of the pad.
+        fig.tight_layout(w_pad=0.0)
         top = 1.0 - leg_h / (row_h * nr + leg_h)
         fig.subplots_adjust(top=top)
         # 6 handles fit one row across 5.4in and need two across 2.7in. Wrapping is not automatic
