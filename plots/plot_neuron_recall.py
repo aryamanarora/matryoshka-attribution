@@ -99,8 +99,26 @@ METHODS = [
     ("MAttr + SGD", "sufficient_topk_sgd%s_bs1", "MAttr (SGD)", "solid"),
 ]
 LOSSES = [("logit-diff", ""), ("CE", "_ce"), ("Accuracy", "_acc")]
-FS = (7.5, 6.5, 6.5)        # (axis label, tick, legend)
-PANEL_W, ROW_H = 1.35, 1.45
+# HALF-WIDTH (2.65in ~ 0.48\linewidth) by default, so this can sit in a subfigure beside
+# train_curves_arith_overlay.pdf. That is a re-LAYOUT, not a scale: \includegraphics stays at
+# width=\linewidth inside the subfigure, so the point sizes here are what prints. Scaling the
+# old 5.4in figure down with a width= key instead would have put these labels on the page at
+# ~3.7pt. `--wide` restores the full-\linewidth constants; --all-losses (6 rows) wants it.
+# Tick labels are the one thing set below 6pt, and only in the narrow layout: three "$10^n$"
+# labels are ~33pt of text in a 40pt panel at 5.5pt and touch. Dropping to two ticks would fix
+# it with room to spare but would delete the $10^2$ decade, which is exactly where this
+# figure's claims live (top-5 and top-200), so the tick font gives way instead.
+FS, FS_WIDE = (6.5, 5.0, 5.5), (7.5, 6.5, 6.5)        # (axis label, tick, legend)
+# 0.69*4 = 2.76in of figure, which bbox_inches="tight" trims to a 2.70in PDF -- deliberately
+# the same width as train_curves_arith_overlay.pdf. Two subfigures at the same \linewidth
+# scale by (2.64/bbox), so unequal bboxes print the same nominal point size at two different
+# sizes; matching them is what keeps the fonts in the two panels of that row identical.
+PANEL_W, ROW_H = 0.69, 1.0
+PANEL_W_WIDE, ROW_H_WIDE = 1.35, 1.45
+# Four decades of k in a 0.55in panel: matplotlib's default log locator offers 10^0..10^5 and
+# draws every other one, which still collides. Pinned to three so the spacing is a decision
+# rather than whatever the locator picks for the axis limits of the day.
+XTICKS = [1e0, 1e2, 1e4]
 # Legend strip height, DERIVED from how many rows the legend actually wraps to rather than
 # fixed: 8 entries at ncol=4 is two rows, and a hardcoded reserve sized for one row put the
 # second row straight through the panel titles. TITLE_H is part of the same reserve because
@@ -183,6 +201,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all-losses", action="store_true", help="3 loss rows instead of logit-diff")
     ap.add_argument("--layer-control", action="store_true", help="print the control, no figure")
+    ap.add_argument("--wide", action="store_true",
+                    help="full-\\linewidth layout (the pre-2026-08-24 size); use with --all-losses")
     ap.add_argument("--out")
     a = ap.parse_args()
 
@@ -199,10 +219,16 @@ def main():
     rows = [(abl, res, zfrag, lname, lfrag)
             for abl, res, zfrag in ABLATIONS for lname, lfrag in losses]
     plt.rcParams.update(P.RC)
+    fs = FS_WIDE if a.wide else FS
+    panel_w = PANEL_W_WIDE if a.wide else PANEL_W
+    row_h = ROW_H_WIDE if a.wide else ROW_H
+    # 8 handles across 2.65in is 4 rows of 2, not 2 rows of 4: at ncol=4 the entries overrun the
+    # figure and bbox_inches clips the outermost, which is the one series the figure is about.
+    leg_ncol = LEG_NCOL if a.wide else 2
     nr, nc = len(rows), len(TASKS)
-    nleg = LEG_ROW_H * -(-(len(METHODS) + 1) // LEG_NCOL) + LEG_PAD     # +1 = the chance entry
+    nleg = LEG_ROW_H * -(-(len(METHODS) + 1) // leg_ncol) + LEG_PAD     # +1 = the chance entry
     leg_h = nleg + TITLE_H
-    fig, axes = plt.subplots(nr, nc, figsize=(PANEL_W * nc, ROW_H * nr + leg_h),
+    fig, axes = plt.subplots(nr, nc, figsize=(panel_w * nc, row_h * nr + leg_h),
                              sharex=True, sharey=True, squeeze=False)
     ks, total = None, None
     for r, (abl, res, zfrag, lname, frag) in enumerate(rows):
@@ -222,22 +248,26 @@ def main():
                         ls=ls, lw=1.0, solid_joinstyle="round")
             ax.set_xscale("log")
             ax.set_ylim(-0.03, 1.03)
+            if not a.wide:
+                ax.set_xticks(XTICKS)
             P.furnish(ax)
-            ax.tick_params(labelsize=FS[1], length=2, width=0.5)
+            ax.tick_params(labelsize=fs[1], length=2, width=0.5)
             if r == 0:
-                ax.set_title(tlab, fontsize=FS[0])
+                ax.set_title(tlab, fontsize=fs[0])
             if c == 0:
                 # The ablation always names the row now; the loss only when there is more than
                 # one of them, so the default two-row figure is not labelled with a constant.
                 stack = abl if not a.all_losses else f"{abl}\n{lname}"
-                ax.set_ylabel(f"{stack}\nrecall", fontsize=FS[0])
-            if r == nr - 1:
-                ax.set_xlabel("$k$ (neurons)", fontsize=FS[0])
+                ax.set_ylabel(f"{stack}\nrecall", fontsize=fs[0])
+            # Four copies of "$k$ (neurons)" is wider than four half-width panels, so the narrow
+            # layout carries ONE figure-level label instead (added after tight_layout below).
+            if r == nr - 1 and a.wide:
+                ax.set_xlabel("$k$ (neurons)", fontsize=fs[0])
             # n varies 15-28 by task, so the reader cannot assume a shared denominator. Sits
             # top-LEFT: that corner is "high recall at tiny k", which nothing reaches, whereas
             # the bottom-right corner it started in is where every curve converges on 1.0.
             ax.annotate(f"$n{{=}}${len(gt[task])}", (0.05, 0.94), xycoords="axes fraction",
-                        ha="left", va="top", fontsize=FS[2] - 0.5, color="#666666")
+                        ha="left", va="top", fontsize=fs[2] - 0.5, color="#666666")
     # Chance: a uniformly random ranking recovers k/total of the set. Drawn because at the k
     # where the good methods are already at 0.2-0.4 it is ~1e-4, which is the whole point, and
     # a reader should not have to compute that to know the flat lines are flat at chance.
@@ -248,13 +278,15 @@ def main():
                for lab, _, k, ls in METHODS]
     handles.append(plt.Line2D([], [], color="#999999", lw=0.4, ls=(0, (1, 2)), label="chance"))
     fig.tight_layout()
-    fh = ROW_H * nr + leg_h
+    if not a.wide:
+        fig.supxlabel("$k$ (neurons)", fontsize=fs[0], y=0.005)
+    fh = row_h * nr + leg_h
     top = 1.0 - leg_h / fh
     fig.subplots_adjust(top=top)
     # anchored above the TITLE band, not above the axes -- see TITLE_H
-    fig.legend(handles=handles, ncol=LEG_NCOL, loc="lower center",
+    fig.legend(handles=handles, ncol=leg_ncol, loc="lower center",
                bbox_to_anchor=(0.5, top + TITLE_H / fh),
-               frameon=False, fontsize=FS[2], handlelength=1.6, columnspacing=1.1,
+               frameon=False, fontsize=fs[2], handlelength=1.6, columnspacing=1.1,
                handletextpad=0.5, borderpad=0)
     out = a.out or (f"plots/neuron_recall{'_losses' if a.all_losses else ''}.pdf")
     fig.savefig(out, bbox_inches="tight")

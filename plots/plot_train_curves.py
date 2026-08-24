@@ -81,10 +81,21 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 # size plot_optimizer_lr.py uses, so an SVA+ training curve can sit in a subfigure row beside
 # the MIB learning-rate panels. Point sizes are absolute, so the small panel needs its own.
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
-# Per-row height of the --overlay layout, which is as tall as it has rows. 1.55in puts the
-# 2-row version at 5.4 x 3.7, which is a \linewidth float that does not eat half a page.
-ROW_H = 1.55
+# Per-row height of the --overlay layout, which is as tall as it has rows.
+ROW_H = 1.05
 FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/annotation)
+# The --overlay layout is drawn HALF-WIDTH (2.7in, i.e. ~0.48\linewidth) so it can sit in a
+# subfigure beside neuron_recall.pdf. That is a re-LAYOUT, not a scale: \includegraphics is
+# left at width=\linewidth inside the subfigure, so the point sizes below are what prints.
+# Shrinking the old 5.4in figure with a width= key instead would have put 7.5pt labels on the
+# page at 3.7pt. If it ever goes back to a full-width float, pass --wide; the two sets of
+# constants are kept side by side so neither is a magic number.
+FIG_OVERLAY_W, FS_OVERLAY = 2.7, (6.5, 5.5, 5.5)
+FIG_OVERLAY_WIDE_W, ROW_H_WIDE = 5.4, 1.55
+# Legend strip reserved above the axes. 2 rows of 3 handles at 5.5pt needs less than the
+# single 6-handle row the wide layout used, but not much less once the column titles (drawn
+# ABOVE the axes rectangle, into the same band) are counted.
+LEG_H, LEG_H_WIDE = 0.52, 0.6
 # `--overlay` puts all three losses in one panel, so the loss needs its own channel. It gets
 # LINETYPE and the arm keeps ARM_COLOR, so the two layouts are colour-identical: a reader moving
 # between them does not have to relearn which line is Adam. The earlier version of this view did
@@ -194,9 +205,12 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
         # metric rows x substrate columns, all three losses in every panel. sharey by ROW only:
         # the substrates within a row are meant to be compared, but acc-AUC and faith-AUC are
         # different scales and forcing them onto one axis flattens whichever has less range.
-        fs = FS_GRID
+        fs = FS_GRID if a.wide else FS_OVERLAY
+        w = FIG_OVERLAY_WIDE_W if a.wide else FIG_OVERLAY_W
+        row_h = ROW_H_WIDE if a.wide else ROW_H
+        leg_h = LEG_H_WIDE if a.wide else LEG_H
         nr = len(mrows)
-        fig, axes = plt.subplots(nr, len(subs), figsize=(FIG_GRID[0], ROW_H * nr + 0.6),
+        fig, axes = plt.subplots(nr, len(subs), figsize=(w, row_h * nr + leg_h),
                                  sharex=True, sharey="row", squeeze=False)
         for r, met in enumerate(mrows):
             for i, s in enumerate(subs):
@@ -211,15 +225,21 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
                     ax.set_title(s, fontsize=fs[0], pad=3)
                 if i == 0:
                     ax.set_ylabel(METRICS[met], fontsize=fs[0])
-                if r == nr - 1:
+                # Once, under the middle column, unless the figure is wide enough for three.
+                # "training step" is ~0.75in at 6.5pt against a 0.75in panel, so three copies at
+                # half width leave the outer two overlapping their neighbours' tick labels.
+                if r == nr - 1 and (a.wide or i == len(subs) // 2):
                     ax.set_xlabel(xlab, fontsize=fs[0])
                 if met == "kstar_pct":
                     kstar_axis(ax)
         fig.tight_layout()
-        top = 1.0 - 0.6 / (ROW_H * nr + 0.6)
+        top = 1.0 - leg_h / (row_h * nr + leg_h)
         fig.subplots_adjust(top=top)
-        fig.legend(handles=handles(True), fontsize=fs[2], ncol=6, loc="lower center",
-                   bbox_to_anchor=(0.5, top + 0.012), frameon=False,
+        # 6 handles fit one row across 5.4in and need two across 2.7in. Wrapping is not automatic
+        # -- ncol=6 at half width silently overruns the figure and the outer handles are clipped
+        # by bbox_inches, so the arm the reader most needs to identify goes missing.
+        fig.legend(handles=handles(True), fontsize=fs[2], ncol=6 if a.wide else 3,
+                   loc="lower center", bbox_to_anchor=(0.5, top + 0.012), frameon=False,
                    handletextpad=0.4, handlelength=2.0, columnspacing=1.2)
     else:
         fs = FS_GRID
@@ -274,6 +294,12 @@ def main():
     # of them, so --metric does nothing here. Colour stays the arm in both layouts, so a reader
     # moving between them does not have to relearn which line is Adam.
     ap.add_argument("--overlay", action="store_true")
+    # The overlay layout is half-width by DEFAULT (see FIG_OVERLAY_W) because that is the size
+    # the paper uses it at. Default rather than an opt-in flag so that re-running this script
+    # bare reproduces the committed figs/train_curves_arith_overlay.pdf instead of silently
+    # overwriting it with a full-width one that then prints at 3.7pt.
+    ap.add_argument("--wide", action="store_true",
+                    help="full-\\linewidth overlay (the pre-2026-08-24 size)")
     # One substrate x one loss, at plot_optimizer_lr.py's subfigure size. Ignores --overlay,
     # since a single panel has no row axis to spend on a second metric.
     ap.add_argument("--substrate", choices=[s for _, s in SUBSTRATES], default=None)
@@ -351,11 +377,20 @@ def main():
         agg = {}
         for s, l, n, _ in notes:
             agg.setdefault(s, []).append(f"{l} {n}")
-        # Wrapped after the second loss: on one line this label is wider than a 1.8in panel, so
-        # it ran under the column title and into the neighbouring panel.
-        nlab = pd.DataFrame([dict(substrate=s, label="n tasks: " + ", ".join(v[:2]) + ",\n"
-                                  + ", ".join(v[2:]))
-                             for s, v in agg.items()])
+        # Collapsed to "n=3" when the three losses agree, which today they all do -- the long
+        # form spelled "3" out three times per panel and, at the half-width size this layout is
+        # now drawn at, overran the panel and printed across its neighbour. The full per-loss
+        # form is kept for the case it exists to cover: when the n's DIFFER, the zeroes are the
+        # whole point (a loss with no paired cell is simply absent from the panel), so it is a
+        # collapse-when-redundant, not a truncation. Wrapped after the second loss because on
+        # one line it is wider than the panel either way.
+        def note(v):
+            ns = {x.rsplit(" ", 1)[1] for x in v}
+            if len(ns) == 1:
+                return f"n={ns.pop()}"
+            return "n tasks: " + ", ".join(v[:2]) + ",\n" + ", ".join(v[2:])
+
+        nlab = pd.DataFrame([dict(substrate=s, label=note(v)) for s, v in agg.items()])
     else:
         nlab = pd.DataFrame([dict(substrate=s, loss=l, label=f"n={n} tasks")
                              for s, l, n, _ in notes if n]).astype({"loss": df["loss"].dtype})
