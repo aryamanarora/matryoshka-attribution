@@ -243,13 +243,24 @@ DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune"}
 
-# re-cluster the subset on its avg all-node correlation so blocks are tight for these methods
-Msub = df.pivot(index="a", columns="b", values="rho").reindex(index=MAIN_LABELS, columns=MAIN_LABELS).values
-Msub = np.nan_to_num((Msub + Msub.T) / 2.0, nan=0.0)
-Dsub = np.clip(1.0 - Msub, 0.0, None); np.fill_diagonal(Dsub, 0.0)
-Zsub = linkage(squareform(Dsub, checks=False), method="average", optimal_ordering=True)
-ORDER_MAIN = [MAIN_LABELS[i] for i in leaves_list(Zsub)]
-print("main-text clustered order:", ORDER_MAIN)
+# ORDER matches paper/tabs/mib_test_results.tex's node-level row order exactly (ascending avg
+# CPR AUC within Gradient-based / Mask-based / Ours), NOT a re-cluster. Two of these 11 rows
+# have no table counterpart, since MAIN_LABELS pulls from the appendix's fuller method set:
+#   "NAP-IG (10 steps)" (IG m=10) -- the table doesn't have this rung yet (t-m10-* wave pending,
+#     see GRAD_NODE_BASELINES in make_mib_test_table.py); placed at the avg-CPR slot it should
+#     land in once it does (validation area_under 1.35, between IG-5's 0.85 and RelP+QK's 0.90 --
+#     see IG-10 val vs IG-5/IG-30 in stepless-ig-mc-alpha memory), i.e. right after IG-5.
+#   "+hard (log)*" -- a MAttr ablation the test table deliberately drops (see the SOFT FORWARD
+#     ONLY comment above OUR_NODE_METHODS in make_mib_test_table.py); it never got a test row to
+#     match, so it sits beside its parent MAttr row rather than floating with no table anchor.
+# If the table's row order changes, this list has to be updated by hand to match.
+ORDER_MAIN = [
+    "I$\\times$G", "NAP-IG (5 steps)", "NAP-IG (10 steps)", "RelP+QK", "GIM", "AttnLRP",
+    "DBM", "Node Pruning",
+    "MAttr (log)*", "+hard (log)*", "MAttr SGD (log)",
+]
+assert set(ORDER_MAIN) == set(MAIN_LABELS), "ORDER_MAIN must be a permutation of MAIN_LABELS"
+print("main-text order (matches mib_test_results.tex):", ORDER_MAIN)
 
 srows = []
 for sublab in SUBSETS:
