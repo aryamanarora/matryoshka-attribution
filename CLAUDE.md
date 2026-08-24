@@ -23,19 +23,39 @@ wrong intervention, check this first.
 
 ## CRITICAL: which results dir is the "MAttr" / "Ours" headline
 
-**As of 2026-07-21 the headline MAttr is the SOFT top-k forward, log-k schedule, lr=0.05
-variant** (best test CPR avg, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The
-hard sigmoid-STE forward is now the "$+$ hard" ablation; uniform-k rows are "+ unif k".
+**As of 2026-07-21 the headline MAttr is the SOFT top-k forward, log-k schedule variant**
+(best test CPR avg, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The hard sigmoid-STE
+forward is the "$+$ hard" ablation; uniform-k rows are "+ unif k".
 
-| Results dir (`results/...`)        | Variant                     | Paper role            |
-|------------------------------------|-----------------------------|-----------------------|
-| `topklog_lr_0.05`                  | soft fwd, log k (node, val) | **MAttr headline**    |
-| `test_node_topk_log_lr05`          | soft fwd, log k (node, test)| **MAttr headline**    |
-| `mib_edge_topk_log_lr05`           | soft fwd, log k (edge, val) | **MAttr headline**    |
-| `test_edge_topk_log_lr05`          | soft fwd, log k (edge, test)| **MAttr headline**    |
-| `htklog_lr_0.05` (+test/edge twins)| hard STE fwd, log k         | "$+$ hard" ablation   |
-| `htk_lr_0.05`                      | hard STE fwd, uniform k     | "+ unif k, + hard"    |
-| `final_node`                       | soft fwd, uniform k         | "+ unif k"            |
+**As of 2026-08-24 SGD (at its own tuned LR) is the default OPTIMIZER for that headline, not
+Adam.** MAttr+SGD is LR-invariant by construction (zero init, no momentum) and matches Adam at
+its own optimum (node val CPR 1.886 vs 1.879) — the honest reading is "the optimizer doesn't
+matter once tuned, the LR it's tuned at does", so SGD is now the unmarked `\ourmethod{}` row
+and Adam is the labelled "$+$ Adam" ablation. This is a LABEL/ORDER change only, in
+`make_mib_table.py`, `make_mib_accauc_table.py`, `make_mib_test_table.py`,
+`plots/plot_method_corr_heatmap.py` and `plots/plot_mib_accauc_cpr_scatter.py` — no dirs
+were re-run or re-pointed, `topklog_lr_0.05` is unchanged Adam data, still on disk.
+
+| Results dir (`results/...`)              | Variant                      | Paper role         |
+|-------------------------------------------|------------------------------|---------------------|
+| `softlog_sgd_lr_1.0`                       | soft fwd, log k, SGD (node, val)  | **MAttr headline** |
+| `test_node_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (node, test) | **MAttr headline** |
+| `mib_edge_softlog_sgd_lr_1.0`              | soft fwd, log k, SGD (edge, val)  | **MAttr headline** |
+| `test_edge_topk_log_lr05`                  | soft fwd, log k, Adam (edge, test)| **MAttr headline** (edge-test SGD wave not landed yet — see below) |
+| `topklog_lr_0.05`                          | soft fwd, log k, Adam        | "$+$ Adam" ablation |
+| `test_node_topk_log_lr05`                  | soft fwd, log k, Adam (test) | "$+$ Adam" ablation |
+| `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam (edge) | "$+$ Adam" ablation (edge val); **headline** (edge test, until SGD lands) |
+| `htklog_lr_0.05` (+test/edge twins)        | hard STE fwd, log k, Adam    | "$+$ hard" ablation |
+| `htk_lr_0.05`                              | hard STE fwd, uniform k      | "+ unif k, + hard"  |
+| `softuni_sgd_lr_3.0`                       | soft fwd, uniform k, SGD     | "+ unif k"          |
+| `final_node` / `topk_uniform_lr05`         | soft fwd, uniform k, Adam    | "+ unif k, + Adam"  |
+
+**Edge-test asymmetry (as of 2026-08-24):** SGD data exists at node level (val AND test) and at
+edge level for validation only. `scripts/submit_test_edge_sgd.sh` (22 jobs) is filling in edge
+SGD *test*; until it completes, `make_mib_test_table.py`'s `OUR_EDGE_METHODS` still points the
+bare `\ourmethod{}` row at the Adam test dir (would otherwise SKIP the whole edge-ours block —
+see that file's comments) and the edge test table row is the one place a bare `\ourmethod{}`
+does NOT mean SGD. Flip it once the wave lands.
 
 Do NOT use uniform-k dirs as the headline — their CPR averages look strong (esp. edge)
 but acc-AUC is the worst of the three and they collapse on IOI/Qwen test; using them
@@ -43,12 +63,14 @@ as "MAttr" makes ablations look deceptively good. (Pre-2026-07-21 history/artifa
 used the hard log-k `htklog`/`mib_node_hard_topk_log` as headline — beware stale labels.)
 
 ### Verification anchor
-`topklog_lr_0.05` `area_under` matches the `\ourmethod{}` row of `paper/tabs/mib_results.tex`
-cell-for-cell. If your "headline" numbers don't match that row, you're reading the wrong dir.
-Compare against the table as it is on disk — do NOT hardcode expected values here or in a
-script. Re-evaluations overwrite pkls in place (e.g. the 2026-07-24 Gemma TL 2.15.4 pass moved
-every gemma cell), so any number copied out of the table goes stale silently and then reads as
-"you're in the wrong dir" when the dir is fine.
+`softlog_sgd_lr_1.0` `area_under` matches the bare `\ourmethod{}` row of
+`paper/tabs/mib_results.tex` cell-for-cell (node section); `topklog_lr_0.05` matches the
+`\ourmethod{}$+$Adam` row instead. If your "headline" numbers don't match the row you expect,
+check you're not reading the pre-2026-08-24 (Adam-default) convention out of memory or an old
+note. Compare against the table as it is on disk — do NOT hardcode expected values here or in
+a script. Re-evaluations overwrite pkls in place (e.g. the 2026-07-24 Gemma TL 2.15.4 pass
+moved every gemma cell), so any number copied out of the table goes stale silently and then
+reads as "you're in the wrong dir" when the dir is fine.
 
 ## Reading CPR AUC apples-to-apples
 

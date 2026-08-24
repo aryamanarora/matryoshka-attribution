@@ -161,31 +161,36 @@ IG_STEP_LABEL = {"NAP-IG": "IG (5 steps)",
 # so the plotted series are MAttr log-k and +hard log-k at {0.005, 0.05, 0.1, 0.3} and DBM at
 # {0.001, 0.3}. build_lr_rows() prints every exclusion rather than dropping it silently.
 #
-# lr=0.05 is deliberately NOT listed: those two dirs are already plotted from M.OUR_METHODS as
-# the headline "MAttr" and "+hard" points, and a second point at the same coordinates would
-# double-count them in the Spearman.
+# lr=0.05 / lr=1.0 / lr=3.0 are deliberately NOT listed: those dirs are already plotted from
+# M.OUR_METHODS as the "MAttr (Adam)" and "+hard" points, and a second point at the same
+# coordinates would double-count them in the Spearman.
+#
+# SGD is the default as of 2026-08-24 (LR-invariant by construction, matches Adam at its own
+# optimum -- see make_mib_table.py's OUR_METHODS comments), so its ladder is the bare "MAttr"
+# path, listed first; Adam's is the "(Adam)" ablation path below. This is a rename only -- same
+# dirs, same data -- flipped from the pre-2026-08-24 naming, which had it the other way round.
 LR_SERIES = [
-    (G_MLOG, "MAttr", [("0.005", "topklog_lr_0.005"), ("0.1", "topklog_lr_0.1"),
-                       ("0.3", "topklog_lr_0.3")]),
-    # MAttr's optimizer ablation. Unlike the MAttr/+hard ladders above, 0.01 IS listed: that LR
-    # has its own dir here (softlog_sgd_lr_0.01) evaluated with the rest of the sweep, rather
-    # than being the old lr=0.01 main run whose acc_auc covers only 3/11 cells.
-    # 0.05 is excluded for the usual reason -- it is the headline point from M.OUR_METHODS and
-    # is stitched back into this path by LR_ANCHOR below.
-    # 1.0 is excluded here for the SAME reason 0.05 is excluded from the Adam ladder above: it
-    # is SGD's own best LR, so it comes in from M.OUR_METHODS as the plotted "MAttr (SGD)"
-    # point, and LR_ANCHOR stitches it back onto this path. 0.05 IS listed, because repointing
-    # the OUR_METHODS row from 0.05 to 1.0 left that rung with no other source.
-    (G_MLOG, "MAttr (SGD)", [("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
-                             ("0.05", "softlog_sgd_lr_0.05"),
-                             ("0.1", "softlog_sgd_lr_0.1"), ("0.3", "softlog_sgd_lr_0.3"),
-                             ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0")]),
+    # 0.01 IS listed here (softlog_sgd_lr_0.01), unlike the Adam ladder below: that LR has its
+    # own dir evaluated with the rest of this sweep, rather than being the old lr=0.01 Adam run
+    # whose acc_auc covers only 3/11 cells.
+    # 1.0 is excluded here for the usual reason -- it is SGD's own best LR, so it comes in from
+    # M.OUR_METHODS as the plotted bare "MAttr" point, and LR_ANCHOR stitches it back onto this
+    # path.
+    (G_MLOG, "MAttr", [("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
+                       ("0.05", "softlog_sgd_lr_0.05"),
+                       ("0.1", "softlog_sgd_lr_0.1"), ("0.3", "softlog_sgd_lr_0.3"),
+                       ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0")]),
     # The uniform-k twin. G_MUNI carried no LR path at all until now, so its SGD point
     # (softuni_sgd_lr_3.0, the OUR_METHODS row) floated with nothing to read its LR against.
-    (G_MUNI, "unif $k$, MAttr (SGD)",
+    (G_MUNI, "unif $k$, MAttr",
      [("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
       ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
       ("10.0", "softuni_sgd_lr_10.0")]),
+    # MAttr's optimizer ablation (Adam). 0.05 is excluded for the usual reason -- it is the
+    # "+ Adam" ablation point from M.OUR_METHODS and is stitched back into this path by
+    # LR_ANCHOR below.
+    (G_MLOG, "MAttr (Adam)", [("0.005", "topklog_lr_0.005"), ("0.1", "topklog_lr_0.1"),
+                              ("0.3", "topklog_lr_0.3")]),
     (G_MLOG, "+hard", [("0.005", "htklog_lr_0.005"), ("0.1", "htklog_lr_0.1"),
                        ("0.3", "htklog_lr_0.3")]),
     (G_DBM, "DBM", [("0.001", "eprun_eval_ld_sig"), ("0.3", "eprun_eval_ld_sig_lr0.3")]),
@@ -223,14 +228,17 @@ L1_SERIES = [
 # the figure cannot show whether the penalty helped relative to no penalty.
 DBM_L1_ANCHOR = {"eprun_eval_ld_sig_lr0.3": ("l1:DBM", 0.0)}
 
-# The lr=0.05 headline points come from M.OUR_METHODS (see above), so to draw one unbroken
-# path per method they have to be tagged into the same series as the swept points -- otherwise
-# the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
-LR_ANCHOR = {"topklog_lr_0.05": ("MAttr", 0.05), "htklog_lr_0.05": ("+hard", 0.05),
-             # each SGD arm's anchor is its OWN optimum, not a shared 0.05 -- that is the whole
-             # point of make_mib_table's repoint (log-k peaks at 1.0, uniform-k at 3.0)
-             "softlog_sgd_lr_1.0": ("MAttr (SGD)", 1.0),
-             "softuni_sgd_lr_3.0": ("unif $k$, MAttr (SGD)", 3.0)}
+# The lr=0.05 / lr=1.0 / lr=3.0 headline points come from M.OUR_METHODS (see above), so to draw
+# one unbroken path per method they have to be tagged into the same series as the swept points
+# -- otherwise the MAttr line jumps 0.005 -> 0.1 straight past its own best-performing setting.
+LR_ANCHOR = {"htklog_lr_0.05": ("+hard", 0.05),
+             # SGD is the default (see LR_SERIES above): its anchor is the bare "MAttr" path, at
+             # its OWN optimum, not a shared 0.05 -- that is the whole point of
+             # make_mib_table's repoint (log-k peaks at 1.0, uniform-k at 3.0).
+             "softlog_sgd_lr_1.0": ("MAttr", 1.0),
+             "softuni_sgd_lr_3.0": ("unif $k$, MAttr", 3.0),
+             # Adam's anchor is now the "(Adam)" ablation path.
+             "topklog_lr_0.05": ("MAttr (Adam)", 0.05)}
 # Same trick for Node Pruning, except the anchor is a point that ALREADY sits on another path:
 # eprun_eval_s0.5_ld is the s=0.5 node of the sparsity path AND the lr=0.8 node of its own LR
 # path. That is why rows carry a list of (path, sort-key) pairs rather than one of each.
@@ -611,11 +619,13 @@ def node_rows(test_only=False):
         # optimizer rows were repointed to their own best LRs (softlog_sgd_lr_1.0,
         # softuni_sgd_lr_3.0), "\ourmethod{}" names FOUR dirs -- {log, unif} x {Adam, SGD} --
         # and the table again tells them apart by a block header (emit_ours files on opt_of).
-        # Without this suffix the log-k pair plotted as two points both labelled "MAttr" at
-        # (0.499, 1.879) and (0.504, 1.886), i.e. the SGD point was on the main-text figure
-        # already, unnamed and indistinguishable from the Adam one.
-        if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
-            label += " (SGD)"
+        # SGD is the default as of 2026-08-24 (see make_mib_table.py's OUR_METHODS comments), so
+        # it is the bare "MAttr" point here and Adam gets the suffix instead -- mirroring
+        # emit_ours(), which now files the SGD block first and unmarked. Without this suffix the
+        # log-k pair plotted as two points both labelled "MAttr" at (0.499, 1.879) and
+        # (0.504, 1.886), i.e. the Adam point would be indistinguishable from the SGD one.
+        if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
+            label += " (Adam)"
         rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
                          label=label,
                          paths=[(f"lr:{base}", lr)] if base else []))
@@ -690,12 +700,12 @@ def edge_rows():
         if level != "edge":
             continue
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
-        # Same disambiguation the node loop above needs: the edge block gained soft-fwd SGD rows
-        # (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}" names four edge dirs as well as
-        # four node ones. Without the suffix the SGD point plots as a second unnamed "MAttr" on
-        # top of the Adam one, which is exactly how the node collision hid.
-        if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
-            label += " (SGD)"
+        # Same disambiguation the node loop above needs, same SGD-default convention: the edge
+        # block gained soft-fwd SGD rows (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}"
+        # names four edge dirs as well as four node ones, and SGD is the bare default -- Adam
+        # gets the suffix, so it doesn't plot as a second unnamed "MAttr" on top of the SGD one.
+        if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
+            label += " (Adam)"
         cand.append((label, d, G_MLOG if g == "ours" else G_MUNI))
 
     data = {d: cells(d) for _, d, _ in cand}
@@ -997,7 +1007,8 @@ def main_lr():
 # so it is re-derivable rather than taste: one point per METHOD FAMILY at that family's best
 # setting, plus the endpoints of the gradient spread.
 #
-#   MAttr / +hard          the headline and its one forward-pass ablation (lr=0.05, log k)
+#   MAttr / +hard           the headline (SGD, lr=1.0, log k) and its one forward-pass
+#                           ablation ("+hard" is Adam-only, lr=0.05, log k)
 #   Node Pruning s=0.5     best mask baseline by CPR (1.67), and the one the tables report
 #   DBM (L1=6.0)           best DBM setting on both sweeps (lr 0.3, lambda 6.0)
 #   GIM, AttnLRP,          the strongest gradient baselines by CPR. GIM and AttnLRP are a tie
@@ -1018,25 +1029,23 @@ def main_lr():
 # remaining ablations) is exactly what the appendix --full version is for.
 COMPACT = {
     (G_MLOG, "MAttr"): None, (G_MLOG, "+hard"): None,
-    # The optimizer ablation at ITS own best LR (softlog_sgd_lr_1.0), which the tables report as
-    # a second \ourmethod{} row. It was already being drawn -- the label collision above meant
-    # this point rendered on top of the Adam one under the same name -- so naming it does not
-    # add ink, it stops two different circuits reading as one.
+    # The optimizer ablation, Adam at ITS own LR (topklog_lr_0.05), which the tables report as
+    # the "+ Adam" row. It was already being drawn -- the label collision above meant this point
+    # rendered on top of the SGD one under the same name -- so naming it does not add ink, it
+    # stops two different circuits reading as one.
     #
-    # LOG-k ONLY, deliberately. The uniform-k SGD point (0.482 / 2.031) is the better-CPR half
-    # of the SGD pair, but its Adam twin (0.475 / 2.092) is the highest-CPR point on the whole
-    # node figure and is NOT in this cut -- so putting unif-k SGD in alone would place the
-    # weaker of the two uniform points on the frontier with nothing to read it against. Both
-    # uniform points are in --full, where the pair is legible.
+    # LOG-k ONLY, deliberately. The uniform-k Adam point (0.475 / 2.092) is the highest-CPR
+    # point on the whole node figure, but is NOT in this cut -- so putting it in alone would put
+    # a uniform-k point on the frontier with nothing to read it against. Both uniform points are
+    # in --full, where the pair is legible.
     #
-    # Shortened to "+SGD" for the same reason "IG (10 steps)" is shortened to "IG-10": at 5.5pt
-    # on a 1.65in panel, "MAttr (SGD)" is the widest label on the figure AND sits at the largest
-    # x (acc-AUC 0.504), so it runs 16% past the right frame and only XPAD_C 0.70 clears it --
-    # which spends a third of the panel on empty axis. "+SGD" clears at the existing 0.28. It
-    # also reads as what it is: MAttr with one knob changed, exactly like the "+hard" beside it.
-    # Caveat that the label cannot carry: this point is at SGD's own best LR (1.0), not the
-    # headline's 0.05, per the OUR_METHODS repoint -- prose or caption has to say so.
-    (G_MLOG, "MAttr (SGD)"): "+SGD",
+    # Shortened to "+Adam" for the same reason "IG (10 steps)" is shortened to "IG-10": at
+    # 5.5pt on a 1.65in panel a bare "(Adam)" suffix runs the label wide. "+Adam" keeps it
+    # inside XPAD_C's budget. It also reads as what it is: MAttr with one knob changed, exactly
+    # like the "+hard" beside it. Caveat the label cannot carry: this point is at Adam's own LR
+    # (0.05), the SAME lr as the pre-2026-08-24 headline used -- only the default optimizer
+    # changed, not the LR ladder either method was tuned on.
+    (G_MLOG, "MAttr (Adam)"): "+Adam",
     # M.EPRUN_BEST_SPARSITY; drop the bare "s=" (and the objective) for the main text
     (G_NPLD, "s=0.5"): "Node Pruning",
     (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
@@ -1096,9 +1105,13 @@ LAB_PT_C, MSIZE_C = 5.5, 18
 # 0.922, 0.50 -> 0.846, none past. Re-tune only if the diagnostic reports "labels past the
 # right frame"; do not raise it on suspicion.
 #
-# 0.34 rather than 0.28 since "+SGD" joined the cut: it lands at the panel's largest x, and at
-# 0.28 its label ends at 0.966 of the frame -- inside, but with no slack for the point moving
-# under re-evaluation. 0.34 puts it at 0.933.
+# 0.34 rather than 0.28 was tuned for "+SGD" landing at the panel's largest x (acc-AUC 0.504).
+# 2026-08-24: SGD became the default, so that same point (softlog_sgd_lr_1.0) now plots as the
+# bare, short "MAttr" and it is "+Adam" (topklog_lr_0.05, acc-AUC 0.499) that carries the long
+# suffix instead -- one rung to the left of the panel's rightmost point, not sitting at it. Left
+# at 0.34 rather than re-tightened: the diagnostic ("x headroom" / "labels past the right
+# frame") is what decides this, not inspection, and 0.34 is known-safe. Re-tune only if the
+# diagnostic complains.
 XPAD_C = 0.34
 
 

@@ -87,11 +87,14 @@ EDGE_BASELINES = {
 # from the LR sweep. Forcing both to a single LR would compare one tuned row against one
 # detuned one; see the edge LR sweep, where reading SGD at the node table's LR made a
 # competitive optimiser look broken.
+# SGD is the default as of 2026-08-24 (LR-invariant by construction, matches/beats Adam at its
+# own optimum -- see make_mib_table.py's OUR_METHODS comments), so the SGD dirs are now the bare
+# "\ourmethod{}" / "+ unif k" rows and the Adam dirs are the "+ Adam" ablation.
 OUR_NODE_METHODS = [
-    ("\\ourmethod{}",          "test_node_topk_log_lr05"),
-    ("$+$ unif $k$",           "test_node_topk_uniform_lr05"),
-    ("$+$ SGD",                "test_node_softlog_sgd_lr_1.0"),
-    ("$+$ SGD, unif $k$",      "test_node_softuni_sgd_lr_3.0"),
+    ("\\ourmethod{}",          "test_node_softlog_sgd_lr_1.0"),
+    ("$+$ unif $k$",           "test_node_softuni_sgd_lr_3.0"),
+    ("$+$ Adam",               "test_node_topk_log_lr05"),
+    ("$+$ Adam, unif $k$",     "test_node_topk_uniform_lr05"),
 ]
 # Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
 # the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which
@@ -109,6 +112,12 @@ OUR_NODE_METHODS = [
 # argmax -- submit_mib_edge_soft_sgd.sh:10-11 did the same for the two validation dirs these
 # mirror. Re-tuning here and not there would mean the two tables report different
 # hyperparameters under one row label, which is worse than untuned-but-consistent.
+# NOT YET FLIPPED to SGD-default, unlike OUR_NODE_METHODS above: the two edge SGD dirs below are
+# still training (submitted 2026-08-24, scripts/submit_test_edge_sgd.sh) and complete_or_skip()
+# omits a row until all 11 cells land, so an edge-level SGD default would render as a missing
+# headline row rather than a filled one. Flip this block to match the node one -- same
+# ("\ourmethod{}", SGD-log) / ("$+$ unif $k$", SGD-uniform) / ("$+$ Adam", ...) / ("$+$ Adam,
+# unif $k$", ...) shape -- once that wave finishes.
 OUR_EDGE_METHODS = [
     ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
     ("$+$ unif $k$",           "test_edge_topk_uniform_lr05"),

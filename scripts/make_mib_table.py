@@ -74,9 +74,9 @@ OUR_METHODS = [
     # which it is tuned does". Do NOT re-pin these to a shared LR to recover a bigger gap.
     # The matched-LR numbers are not lost -- the whole grid is in tabs/lr_sweep.tex.
     #
-    # Labelled "\ourmethod{}" rather than "+ SGD" because emit_ours() files it under the
-    # \ourmethod{}-SGD header (opt_of matches _sgd), where it IS the plain method -- the
-    # optimizer is already named by the header, so "+ SGD" there would read as a second one.
+    # Labelled "\ourmethod{}" because emit_ours() files it under the (now-default) SGD header
+    # (opt_of matches _sgd), where it IS the plain method -- the optimizer is already named by
+    # the header, so "+ SGD" there would read as a second one.
     ("\\ourmethod{}", "softlog_sgd_lr_1.0", "node", "ours"),
     ("$+$ hard", "htklog_lr_0.05", "node", "ours"),
     ("$-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
@@ -104,7 +104,7 @@ OUR_METHODS = [
     # Edge level (log k-schedule = default). Swept methods -> lr=0.05.
     ("\\ourmethod{}", "mib_edge_topk_log_lr05", "edge", "ours"),
     # Edge twin of the node SGD row, submit_mib_edge_soft_sgd.sh. SAME LABEL POLICY as node
-    # (filed under the \ourmethod{}-SGD header, so "+ SGD" would name the optimizer twice), but
+    # (filed under the now-default SGD header, so "+ SGD" would name the optimizer twice), but
     # NOT the same LR policy, and the difference matters:
     #
     #   node rows  = SGD at its OWN swept optimum (1.0 log / 3.0 uniform, both bracketed)
@@ -652,9 +652,12 @@ def main():
         return COST_UGS if name == "UGS" else COST_EPRUN
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
-        # Split the "Ours" rows into two optimizer sets, each with a header.
+        # Split the "Ours" rows into two optimizer sets, each with a header. SGD is the default
+        # (2026-08-24: MAttr+SGD is LR-invariant by construction and matches or beats Adam at
+        # its own optimum -- see the OUR_METHODS comments above -- so it is now the unmarked
+        # "\ourmethod{}" block, listed first; Adam is the ablation, "\ourmethod{}$+$Adam".
         # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
-        for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
+        for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
             rows_u = [(n, r, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
             rows_o = [(n, r, g) for n, r, _, g in ours_list if opt_of(r) == opt]
             if not rows_u and not rows_o:

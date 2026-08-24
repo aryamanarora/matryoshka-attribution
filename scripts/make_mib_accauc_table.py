@@ -275,7 +275,8 @@ def main():
             L.append(emit(disp, data, llama_cells))   # llama3 eval is --head 200, as above
 
     llama_ioi = {("ioi", "llama3")}
-    for opt, label in [("adam", "\\ourmethod{}-Adam"), ("sgd", "\\ourmethod{}-SGD")]:
+    # SGD is the default (see make_mib_table.emit_ours); same header/order flip mirrored here.
+    for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
         ours = [(n, d) for n, d, g in NODE_METHODS if g == "ours" and opt_of(d) == opt]
         unif = [(n, d) for n, d, g in NODE_METHODS if g == "uniform" and opt_of(d) == opt]
         if not ours and not unif:

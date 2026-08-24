@@ -236,10 +236,14 @@ SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups).
 # The two IG rows keep their step count in the tick label -- dropping it and relying on the
 # clustering to imply the pairing does not work, because they do NOT always land adjacent.
-DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
+# SGD is the default as of 2026-08-24 (see make_mib_table.py's OUR_METHODS comments), so the
+# SGD identity label now displays as bare "MAttr" and the Adam identity label as "+Adam" -- the
+# swap of make_mib_test_table.py's OUR_NODE_METHODS and make_mib_table.py's emit_ours, applied
+# to this figure's DISPLAY mapping instead of a results-dir list.
+DISPLAY = {"MAttr (log)*": "+Adam", "+hard (log)*": "+hard",
            # matches the label the companion scatter uses for the same dir (softlog_sgd_lr_1.0),
            # so the two subfigures of fig:mib-combined name one method one way
-           "MAttr SGD (log)": "+SGD",
+           "MAttr SGD (log)": "MAttr",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune"}
 
@@ -251,13 +255,19 @@ DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
 #     land in once it does (validation area_under 1.35, between IG-5's 0.85 and RelP+QK's 0.90 --
 #     see IG-10 val vs IG-5/IG-30 in stepless-ig-mc-alpha memory), i.e. right after IG-5.
 #   "+hard (log)*" -- a MAttr ablation the test table deliberately drops (see the SOFT FORWARD
-#     ONLY comment above OUR_NODE_METHODS in make_mib_test_table.py); it never got a test row to
-#     match, so it sits beside its parent MAttr row rather than floating with no table anchor.
+#     ONLY comment above OUR_NODE_METHODS in make_mib_test_table.py); it is an ablation of the
+#     Adam dir specifically (htklog_lr_0.05 is topklog_lr_0.05 with the forward swapped, both
+#     Adam), so it sits beside "MAttr (log)*" (now displayed "+Adam") rather than floating with
+#     no table anchor.
+#
+# Within the Ours triplet, SGD-default ("MAttr SGD (log)") now leads (2026-08-24 flip, see
+# DISPLAY above), then its two Adam-optimizer variants (log, log+hard) which pair with each
+# other regardless of which optimizer is headline.
 # If the table's row order changes, this list has to be updated by hand to match.
 ORDER_MAIN = [
     "I$\\times$G", "NAP-IG (5 steps)", "NAP-IG (10 steps)", "RelP+QK", "GIM", "AttnLRP",
     "DBM", "Node Pruning",
-    "MAttr (log)*", "+hard (log)*", "MAttr SGD (log)",
+    "MAttr SGD (log)", "MAttr (log)*", "+hard (log)*",
 ]
 assert set(ORDER_MAIN) == set(MAIN_LABELS), "ORDER_MAIN must be a permutation of MAIN_LABELS"
 print("main-text order (matches mib_test_results.tex):", ORDER_MAIN)
