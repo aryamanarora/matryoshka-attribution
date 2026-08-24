@@ -562,13 +562,47 @@ def main():
     GRAD_H, MASK_H = "\\textbf{Gradient-based}", "\\textbf{Mask-based}"
     OURS_H = "\\textbf{\\ourmethod{} (ours)}"
 
+    # Rows are ordered WORST-TO-BEST by their Avg column inside every group (requested
+    # 2026-08-24), so each family builds toward its own leader and the table as a whole builds
+    # toward the \ourmethod{} block at the bottom. Flip SORT_DESC to put the leader first.
+    #
+    # A row whose Avg is suppressed or undefined has nothing to sort on, so it sinks to the
+    # bottom of its group rather than being silently assigned 0.0 and ranked below Random --
+    # "incomplete" is not "worst", and the two must not look alike. UGS is the standing case at
+    # edge level (3/11 cells, Avg shown because that group passes suppress_partial=False), and
+    # the partial gradient rows are the case at node level.
+    #
+    # *** THIS DESTROYS TWO ORDERINGS THAT USED TO CARRY MEANING. Both were deliberate. ***
+    #  1. The gradient family's I×G / IG m=5 / IG m=30 / Stepless IG rows were in COST order
+    #     (1x, 5x, 30x, 1x), and the paragraph above GRAD_NODE_BASELINES still says "Do NOT
+    #     reorder them by score; the ordering is the cost ordering and that is the point."
+    #     Sorted by Avg they interleave with AttnLRP, GIM and RelP, and the ladder is no longer
+    #     readable off the table -- in particular the one fact it existed to show, that Stepless
+    #     IG matches IG m=30 at 1/30 the cost, now has to come from the prose.
+    #  2. The \ourmethod{} block was a 2x2 over {Adam, SGD} x {log k, unif k} with the headline
+    #     row first and its ablations under it. By Avg the headline lands third of four, so the
+    #     "+" rows now read as siblings of whatever precedes them rather than ablations OF the
+    #     headline.
+    # Neither is a correctness problem and both are recoverable from the prose; they are noted
+    # here so that whoever reads this next knows the old order was information, not an accident.
+    SORT_DESC = False
+
+    def by_avg(rows, suppress_partial):
+        def key(item):
+            _, data = item
+            a = None if (suppress_partial and len(data) < len(COLUMNS)) else row_avg(data)
+            # (has_avg, value): missing sorts last in BOTH directions, which is why the flag is
+            # inverted for the descending case rather than relying on the value alone.
+            return (0, 0.0) if a is None else (1, -a if SORT_DESC else a)
+        return sorted(rows, key=lambda it: (key(it)[0] == 0, key(it)[1]))
+
     def emit(group, rows, best, second, avb, avs, dagger=None, suppress_partial=True):
-        """One group heading + its rows, indented one level under the heading."""
+        """One group heading + its rows, ordered by Avg, indented one level under the heading."""
         if not rows:
             return
         if group:
             lines.append(group_header(group))
-        for name, data in rows:
+        for name, data in by_avg(rows, suppress_partial):
             lines.append(make_row(name, data, best, second, dagger=dagger,
                                   avg_best=avb, avg_second=avs, indent=bool(group),
                                   suppress_avg=suppress_partial and len(data) < len(COLUMNS)))
