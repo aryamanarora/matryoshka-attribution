@@ -102,22 +102,30 @@ OUR_NODE_METHODS = [
 # while; the test table carrying only the two Adam rows was the same table-disagreement defect
 # that the node SGD rows above were added to fix, one granularity down.
 #
-# The two dirs do not exist yet -- the runs are submitted by scripts/submit_test_edge_sgd.sh
-# (2 configs x 11 cells). Declaring them here before they land is safe and self-filling:
-# complete_or_skip() prints a SKIP and omits the row until all 11 cells are present, so this
-# table stays correct in the meantime and gains the rows the moment the wave finishes.
-#
 # SAME OWN-BEST-LR POLICY as the node rows above (1.0 for log k, 3.0 for uniform k). One caveat
 # specific to edge level: these two LRs are the NODE optima carried over, not an edge-level
 # argmax -- submit_mib_edge_soft_sgd.sh:10-11 did the same for the two validation dirs these
 # mirror. Re-tuning here and not there would mean the two tables report different
 # hyperparameters under one row label, which is worse than untuned-but-consistent.
-# NOT YET FLIPPED to SGD-default, unlike OUR_NODE_METHODS above: the two edge SGD dirs below are
-# still training (submitted 2026-08-24, scripts/submit_test_edge_sgd.sh) and complete_or_skip()
-# omits a row until all 11 cells land, so an edge-level SGD default would render as a missing
-# headline row rather than a filled one. Flip this block to match the node one -- same
-# ("\ourmethod{}", SGD-log) / ("$+$ unif $k$", SGD-uniform) / ("$+$ Adam", ...) / ("$+$ Adam,
-# unif $k$", ...) shape -- once that wave finishes.
+#
+# EDGE STAYS ADAM-DEFAULT while the node block above is SGD-default. That asymmetry is
+# deliberate and measured -- see make_mib_table.emit_ours(), which encodes the same split for
+# the validation table. Short version (2026-08-24): submit_mib_edge_lr_sweep.sh brackets BOTH
+# optimizers at edge scale (4/11 cells, paired) and Adam wins TUNED-vs-TUNED, peaking at
+# lr=0.1 -> 7.65 (lr=0.05 -> 7.59) against SGD's lr=3.0 -> 6.89. The node-level tie that makes
+# SGD the better default there simply does not transfer.
+#
+# This block was briefly flipped to SGD-default when submit_test_edge_sgd.sh's 22 jobs landed,
+# then reverted on reading that sweep. The flip would have put lr=1.0 -- the IMPORTED node
+# optimum, measured at 4.72 at edge scale against its own optimum's 6.89 -- in the headline row,
+# i.e. understated our own method by ~1.3 CPR on a knob already known to be detuned.
+#
+# The "$+$ SGD" rows below are therefore at a detuned LR and are labelled as an ablation, which
+# is honest but not ideal: the own-best-LR policy used everywhere else would want lr=3.0 here.
+# Only 4/11 validation cells exist at lr=3.0 and 0 test cells, so completing that is a
+# prerequisite to repointing these two rows. Until then they say "the node LR does not
+# transfer", NOT "SGD is worse at edge level" -- the sweep says the latter too, but these rows
+# are not the evidence for it.
 OUR_EDGE_METHODS = [
     ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
     ("$+$ unif $k$",           "test_edge_topk_uniform_lr05"),

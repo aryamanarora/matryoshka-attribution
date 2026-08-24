@@ -652,12 +652,27 @@ def main():
         return COST_UGS if name == "UGS" else COST_EPRUN
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
-        # Split the "Ours" rows into two optimizer sets, each with a header. SGD is the default
-        # (2026-08-24: MAttr+SGD is LR-invariant by construction and matches or beats Adam at
-        # its own optimum -- see the OUR_METHODS comments above -- so it is now the unmarked
-        # "\ourmethod{}" block, listed first; Adam is the ablation, "\ourmethod{}$+$Adam".
+        # Split the "Ours" rows into two optimizer sets, each with a header. WHICH OPTIMIZER IS
+        # THE UNMARKED DEFAULT IS LEVEL-DEPENDENT, and that asymmetry is measured, not a
+        # bookkeeping accident (2026-08-24):
+        #
+        #   node  SGD is default. Both arms bracketed on their own grids; at their own optima
+        #         they TIE (SGD lr=1.0 -> 1.886, Adam lr=0.05 -> 1.879). Once it's a tie, SGD is
+        #         the better default: it is LR-invariant by construction (zero init, no
+        #         momentum), so the row is the more reproducible one.
+        #   edge  ADAM is default. submit_mib_edge_lr_sweep.sh brackets BOTH arms at edge scale
+        #         (4/11 cells, paired): Adam peaks lr=0.1 -> 7.65 (lr=0.05 -> 7.59), SGD peaks
+        #         lr=3.0 -> 6.89. Both curves rise then fall, so both are genuinely bracketed --
+        #         this is tuned-vs-tuned, and Adam wins by ~0.76 CPR. The node tie does NOT
+        #         transfer, so neither should the node default.
+        #
+        # Do NOT "fix" this into one uniform order. Making edge SGD-default would put the
+        # imported node LR (1.0, measured 4.72 at edge scale against its own optimum's 6.89) in
+        # the headline row -- detuned by ~2.2 CPR on a knob we have already measured.
         # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
-        for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
+        order = ([("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")] if level == "node"
+                 else [("adam", "\\ourmethod{}"), ("sgd", "\\ourmethod{}$+$SGD")])
+        for opt, label in order:
             rows_u = [(n, r, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
             rows_o = [(n, r, g) for n, r, _, g in ours_list if opt_of(r) == opt]
             if not rows_u and not rows_o:

@@ -700,12 +700,14 @@ def edge_rows():
         if level != "edge":
             continue
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
-        # Same disambiguation the node loop above needs, same SGD-default convention: the edge
-        # block gained soft-fwd SGD rows (mib_edge_soft{log,uni}_sgd_lr_*), so "\ourmethod{}"
-        # names four edge dirs as well as four node ones, and SGD is the bare default -- Adam
-        # gets the suffix, so it doesn't plot as a second unnamed "MAttr" on top of the SGD one.
-        if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
-            label += " (Adam)"
+        # Same disambiguation the node loop above needs, but the OPPOSITE default: at edge level
+        # Adam is the unmarked method and SGD carries the suffix. Not an inconsistency -- the
+        # edge LR sweep (submit_mib_edge_lr_sweep.sh, 4/11 cells, both arms bracketed) has Adam
+        # winning tuned-vs-tuned at edge scale (7.65 vs 6.89) where the two TIE at node scale,
+        # so the tables split the default by level and this panel follows them. See
+        # make_mib_table.emit_ours() for the full argument.
+        if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
+            label += " (SGD)"
         cand.append((label, d, G_MLOG if g == "ours" else G_MUNI))
 
     data = {d: cells(d) for _, d, _ in cand}
