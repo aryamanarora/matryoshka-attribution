@@ -398,16 +398,20 @@ def render(methods, output, stub, key="area_under"):
     # these two tables fits on one page -- adjustbox typesets into a single box, and a box
     # cannot break across pages, which is why the combined 12-block version had to be a
     # longtable and could not be scaled at all.
+    # Avg is the RIGHTMOST column, matching mib_results.tex / mib_test_results.tex /
+    # mib_accauc_results.tex, so a reader moving between tables finds the summary in the same
+    # place. Task columns therefore start at 2, not 3; the cmidrule indices below are the one
+    # place that offset is hardcoded (the edge table has the same offset in header_lines()).
     header = ["\\toprule",
-              "& & \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
-              "\\multicolumn{2}{c}{ARC (E)} & ARC (C) \\\\",
-              "\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} "
-              "\\cmidrule(lr){11-12} \\cmidrule(lr){13-13}",
-              f"\\textbf{{{stub}}} & \\textbf{{Avg}} & "
-              + " & ".join(h for _, _, h in COLUMNS) + " \\\\",
+              "& \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
+              "\\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\",
+              "\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} "
+              "\\cmidrule(lr){10-11} \\cmidrule(lr){12-12}",
+              f"\\textbf{{{stub}}} & "
+              + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\",
               "\\midrule"]
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
-             "\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "}"]
+             "\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}"]
     lines += header
 
     emitted = 0
@@ -477,7 +481,7 @@ def render(methods, output, stub, key="area_under"):
                       f"circuit is EMPTY; those scores are the pruning-order tie-break")
                 if avg != "---" and n_empty == len(present):
                     avg = "$^{\\varnothing}$" + avg
-            lines.append(f"\\quad {prefix}{lr} & {avg} & " + " & ".join(cells) + " \\\\")
+            lines.append(f"\\quad {prefix}{lr} & " + " & ".join(cells) + f" & {avg} \\\\")
 
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
     table = "\n".join(lines) + "\n"

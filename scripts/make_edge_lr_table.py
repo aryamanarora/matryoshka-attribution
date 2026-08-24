@@ -143,17 +143,19 @@ def header_lines(cols, stub):
             groups[-1][1].append(h)
         else:
             groups.append((t, [h]))
-    span, rules, at = [], [], 3  # cols 1-2 are the stub and Avg
+    # Avg is the RIGHTMOST column (as in make_lr_table.py and the mib_*_results tables), so the
+    # task columns start at 2 -- col 1 is the stub and the trailing empty cell is Avg's.
+    span, rules, at = [], [], 2
     for t, hs in groups:
         lab = TASK_LABEL.get(t, t)
         span.append(f"\\multicolumn{{{len(hs)}}}{{c}}{{{lab}}}" if len(hs) > 1 else lab)
         rules.append(f"\\cmidrule(lr){{{at}-{at + len(hs) - 1}}}")
         at += len(hs)
     return ["\\toprule",
-            "& & " + " & ".join(span) + " \\\\",
+            "& " + " & ".join(span) + " & \\\\",
             " ".join(rules),
-            f"\\textbf{{{stub}}} & \\textbf{{Avg}} & "
-            + " & ".join(h for _, _, h in cols) + " \\\\",
+            f"\\textbf{{{stub}}} & "
+            + " & ".join(h for _, _, h in cols) + " & \\textbf{Avg} \\\\",
             "\\midrule"]
 
 
@@ -179,7 +181,7 @@ def render(methods, output, stub, key="area_under"):
 
     ncols = len(cols)
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
-             "\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "}"]
+             "\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}"]
     lines += header_lines(cols, stub)
 
     emitted = 0
@@ -217,7 +219,7 @@ def render(methods, output, stub, key="area_under"):
                          bold=(d_m[lr][(t, mo)] is not None and d_m[lr][(t, mo)] == best[(t, mo)]),
                          dagger=(mo in DAGGER_MODELS and d_m[lr][(t, mo)] is not None))
                      for t, mo, _ in cols]
-            lines.append(f"\\quad LR$=${lr} & {avg} & " + " & ".join(cells) + " \\\\")
+            lines.append(f"\\quad LR$=${lr} & " + " & ".join(cells) + f" & {avg} \\\\")
 
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
     table = "\n".join(lines) + "\n"
