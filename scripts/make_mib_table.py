@@ -9,6 +9,8 @@ import pickle
 import math
 from pathlib import Path
 
+import torch
+
 RESULTS_BASE = Path("results")
 OUTPUT = Path("paper/tabs/mib_results.tex")
 
@@ -398,6 +400,89 @@ COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
 COST_EPRUN = "3k"            # 3000 steps x batch 1
 COST_UGS = "7--114k"         # the 12 mask samples per step are what make this so large
 COST_OURS = {"node": "0.5k", "edge": "5k"}
+
+
+# === Learning-rate column ====================================================================
+#
+# Every trained row in this table carries an LR, and until 2026-08-24 none of them showed it --
+# which stopped being survivable once the \ourmethod{} rows were repointed to their own swept
+# optima (OUR_METHODS, above): the table then had rows at 0.05, 1.0 and 3.0 stacked on top of
+# each other, all reading as if they shared a setting, and the whole argument of that repoint
+# ("the optimizer does not matter once tuned, the LR it is tuned at does") was invisible.
+# tabs/lr_sweep.tex and figs/lr_sweep_summary.pdf are where the sweeps live; this column is the
+# pointer from a headline number back into them.
+#
+# NOTHING HERE IS HARDCODED PER ROW. Our rows read the `lr` out of the saved `args` in
+# results/<dir>/<task>_<model>_scores.pt -- the run's own record of what it did -- and the mask
+# baselines read the `_lr<x>` suffix that run_edge_pruning.sbatch:118 puts in the dir name
+# ("Different lr = different circuit, so it must not share a dir"), falling back to the gate's
+# documented default when there is no suffix. A hand-maintained {dir: lr} dict would go stale on
+# the next repoint in exactly the silent way this column exists to prevent.
+LR_GATE_DEFAULT = {           # eval_mib_edge_pruning.py:160, when --lr is not passed
+    "hard_concrete": 0.8, "sigmoid": 1e-3, "dcm": 1e-1,
+}
+# UGS is not ours and not run_edge_pruning's: ~/optimalablation/edge_pruning_unif_mib.py:149-159
+# derives its LR from reg_lamb and the ablation type rather than taking a flag, and
+# scripts/run_ugs.sbatch fixes both (LAMB=0.001, `-e cf`) -> 5e-2 for lamb > 5e-4, then /5 for
+# cf. Recompute from those two lines if either is ever changed; it cannot be read off disk.
+LR_UGS = 5e-2 / 5
+
+
+def fmt_lr(v):
+    return "---" if v is None else f"{v:g}"
+
+
+_ours_lr_cache = {}
+
+
+def ours_lr(results_dir):
+    """The LR the cells of results/<dir> were actually trained at, from their saved args.
+
+    Returns the shared value when all cells agree. When they DO NOT, returns every value
+    present, sorted -- e.g. "0.01/0.1". That is not a formatting flourish: the node REINFORCE
+    dirs really do hold one cell (ioi/llama3, the capped-eval one) trained 10x below the other
+    ten, and a column that printed the mode would launder a mixed row into a clean one.
+    """
+    if results_dir in _ours_lr_cache:
+        return _ours_lr_cache[results_dir]
+    seen = {}
+    for task, model, _ in COLUMNS:
+        p = RESULTS_BASE / results_dir / f"{task}_{model}_scores.pt"
+        if not p.exists():
+            continue
+        try:
+            args = torch.load(p, map_location="cpu", weights_only=False).get("args")
+        except Exception:
+            continue
+        args = args if isinstance(args, dict) else vars(args)
+        lr = args.get("lr")
+        if lr is not None:
+            seen.setdefault(lr, []).append(f"{task}/{model}")
+    if not seen:
+        out = None
+    elif len(seen) == 1:
+        out = fmt_lr(next(iter(seen)))
+    else:
+        odd = {k: v for k, v in seen.items() if len(v) < max(len(x) for x in seen.values())}
+        print(f"  MIXED LR in results/{results_dir}: "
+              + ", ".join(f"{fmt_lr(k)} on {len(v)} cell(s)" for k, v in sorted(seen.items()))
+              + f" -- off-mode cells: {sorted(c for v in odd.values() for c in v)}")
+        out = "/".join(fmt_lr(k) for k in sorted(seen))
+    _ours_lr_cache[results_dir] = out
+    return out
+
+
+def eprun_lr(results_dir):
+    """The mask LR of a run_edge_pruning.sbatch dir, from its `_lr<x>` suffix or the gate default."""
+    for part in results_dir.split("_"):
+        if part.startswith("lr") and part[2:]:
+            try:
+                return fmt_lr(float(part[2:]))
+            except ValueError:
+                pass
+    gate = ("sigmoid" if "_sig" in results_dir else
+            "dcm" if "_dcm" in results_dir else "hard_concrete")
+    return fmt_lr(LR_GATE_DEFAULT[gate])
 # The ig-steps 10 / 30 rows carry their own cost, declared with the rows in NAPIG_STEP_ROWS
 # (defined above, since it needs them) and looked up via grad_cost's STEP_COST.
 # ig_steps=5 rows; every other gradient row is a single backward per example.
@@ -448,7 +533,11 @@ EPRUN_NAME = {"node": "Node Pruning", "edge": "Edge Pruning"}
 
 
 def eprun_rows(level):
-    """[(display, {(task, model): AUC})], one row per variant that has any results.
+    """[(display, {(task, model): AUC}, results_dir)], one row per variant that has any results.
+
+    The dir is returned alongside the data because the caller needs it for the LR column and
+    the display name it keys rows by ("Node Pruning ($s{=}0.5$, logit-diff)") does not encode
+    the LR -- eprun_label() drops everything but the sparsity and objective.
 
     Partial variants ARE shown -- a half-finished sweep is visible progress. But note the
     dashes mean something different here than for UGS: UGS is in PARTIAL_COVERAGE because it
@@ -466,7 +555,7 @@ def eprun_rows(level):
         label = eprun_label(level, suffix)
         if len(data) < len(COLUMNS):
             print(f"  NOTE {label}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
-        rows.append((label, data))
+        rows.append((label, data, dirn))
     return rows
 
 
@@ -620,8 +709,14 @@ def main():
         avs = sorted({a for a in (row_avg(d) for d in full) if a is not None}, reverse=True)
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
+    # display name -> LR string, populated where each row's RESULTS DIR is in scope. Same shape
+    # as DAGGER, and for the same reason: the baseline dicts are keyed by display name, so by
+    # the time the render loop sees a row the dir it came from is gone. emit_ours passes lr=
+    # directly instead (it has the dir, and its labels are rewritten by unifk()).
+    ROW_LR = {}
+
     def make_row(name, data, best_col, second_col, indent=False, dagger=None,
-                 avg_best=None, avg_second=None, suppress_avg=False, cost=None):
+                 avg_best=None, avg_second=None, suppress_avg=False, cost=None, lr=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
         vals = []
         for task, model, _ in COLUMNS:
@@ -638,7 +733,10 @@ def main():
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
                         underline=(a is not None and a != avg_best and a == avg_second)))
         prefix = f"\\quad {name}" if indent else name
-        return f"{prefix} & {cost or '---'} & " + " & ".join(vals) + " \\\\"
+        # The gradient rows are UNTRAINED, so their LR cell is "---" in the same sense as a
+        # missing result: there is no such number, not one we failed to look up.
+        lr = lr if lr is not None else ROW_LR.get(name)
+        return f"{prefix} & {lr or '---'} & {cost or '---'} & " + " & ".join(vals) + " \\\\"
 
     # Rows whose IG grid is neither 5 nor 1 declare their own cost in NAPIG_STEP_ROWS.
     STEP_COST = {disp: cost for disp, _, cost in NAPIG_STEP_ROWS}
@@ -698,25 +796,26 @@ def main():
                 lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level]))
+                                      cost=COST_OURS[level], lr=ours_lr(r)))
             for n, r, g in rows_u:
                 dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
                 lines.append(make_row(unifk(n), d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level]))
+                                      cost=COST_OURS[level], lr=ours_lr(r)))
 
     # Generate LaTeX
     ncols = len(COLUMNS)
     lines = []
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
-    # Column 2 is the training-cost column, so every cmidrule below is shifted by one.
-    lines.append("\\begin{tabular}{lr@{\\quad}" + "r" * ncols + "@{\\quad}r}")
+    # Columns 2-3 are the two config columns (LR, then training cost), so every cmidrule below
+    # is shifted by two: the first task column is 4, not 2.
+    lines.append("\\begin{tabular}{lrr@{\\quad}" + "r" * ncols + "@{\\quad}r}")
     lines.append("\\toprule")
-    lines.append("& & \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
-    lines.append("\\cmidrule(lr){3-6} \\cmidrule(lr){7-7} \\cmidrule(lr){8-10} \\cmidrule(lr){11-12} \\cmidrule(lr){13-13}")
-    header = ("\\textbf{Method} & \\textbf{Bwd.} & "
+    lines.append("& & & \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
+    lines.append("\\cmidrule(lr){4-7} \\cmidrule(lr){8-8} \\cmidrule(lr){9-11} \\cmidrule(lr){12-13} \\cmidrule(lr){14-14}")
+    header = ("\\textbf{Method} & \\textbf{LR} & \\textbf{Bwd.} & "
               + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\")
     lines.append(header)
 
@@ -727,7 +826,7 @@ def main():
     # too; it used to be defined further down, next to its first use.
     TILDE_LLAMA3_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 3}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 4}}}{{l}}{{\\textit{{Node-level}}}} \\\\")
     # Load NAP-IG repro results
     napig_repro = {}
     for task, model, _ in COLUMNS:
@@ -797,9 +896,10 @@ def main():
 
     # Mask learning at node level: Edge Pruning (all four models), one row per sparsity budget.
     # Its llama3 cells use the same --head 200 subset as the gradient baselines -> same dagger.
-    for name, data in eprun_rows("node"):
+    for name, data, dirn in eprun_rows("node"):
         MASK_NODE_BASELINES[name] = data
         DAGGER[name] = TILDE_LLAMA3_DAGGER
+        ROW_LR[name] = eprun_lr(dirn)
     # pyvene sigmoid mask -- same runner, so same --head 200 llama3 subset and same dagger.
     for name, dirn in SIGMOID_MASK_ROWS:
         data = load_run_eval(dirn, "EdgePruning_patching_node")
@@ -809,6 +909,7 @@ def main():
             print(f"  NOTE {name}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
         MASK_NODE_BASELINES[name] = data
         DAGGER[name] = TILDE_LLAMA3_DAGGER
+        ROW_LR[name] = eprun_lr(dirn)
 
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
@@ -839,7 +940,7 @@ def main():
 
     # === Edge-level section ===
     lines.append("\\midrule")
-    lines.append(f"\\multicolumn{{{ncols + 3}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
+    lines.append(f"\\multicolumn{{{ncols + 4}}}{{l}}{{\\textit{{Edge-level}}}} \\\\")
 
     # Load EAP-IG repro results
     eapig_repro = {}
@@ -877,9 +978,11 @@ def main():
     ugs = load_run_eval(UGS_DIR, "UGS_patching_edge")
     if ugs:
         MASK_EDGE_BASELINES["UGS"] = ugs
-    for name, data in eprun_rows("edge"):
+        ROW_LR["UGS"] = fmt_lr(LR_UGS)
+    for name, data, dirn in eprun_rows("edge"):
         MASK_EDGE_BASELINES[name] = data
         DAGGER[name] = TILDE_LLAMA3_DAGGER
+        ROW_LR[name] = eprun_lr(dirn)
 
     best_edge, second_edge = best_in_col("edge")
     edge_dicts = list(EDGE_BASELINES.values()) + list(MASK_EDGE_BASELINES.values()) \
