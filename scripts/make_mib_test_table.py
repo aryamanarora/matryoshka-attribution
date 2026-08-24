@@ -207,8 +207,11 @@ NODE_PRUNING = (_M.EPRUN_NAME["node"],
 #                 methods, and do not quietly drop one: the gap is a reproduction finding.
 #   m=5 grid   -- Hanna et al.'s defended default (COLM'24 App. C), 5x cost.
 #   m=30 grid  -- converged reference, 30x cost.
-#   MC alpha   -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral at every m,
-#                 here at m=1. Same cost as the I x G row.
+#   "Stepless" -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral at every m,
+#                 here at m=1. Same cost as the I x G row. Was labelled "MC alpha" until
+#                 2026-08-24; "stepless" says the useful thing (there is no step count to pick)
+#                 where "MC alpha" only named the mechanism, and only to a reader who already
+#                 knew alpha was the interpolation coefficient.
 #
 # So the honest reading of these four rows is a cost-vs-quality ladder in which the first and
 # last are free and the middle two are not. Do NOT reorder them by score; the ordering is the
@@ -220,14 +223,29 @@ NODE_PRUNING = (_M.EPRUN_NAME["node"],
 #
 # These are distinct from the "NAP-IG (CF)" literal above, which is transcribed from MIB's
 # Table 1 and uses a counterfactual ablation; everything here is patching, our own runs.
+#
+# ROW LABELS FOR OUR FOUR RUNS DROPPED THE "NAP" PREFIX ON 2026-08-24 (was "NAP $=$ I$\times$G
+# (ours)", "NAP-IG ($m{=}5$)", "NAP-IG ($m{=}30$)", "NAP-IG (MC $\alpha$)"). The prefix was
+# MIB's name for the estimator and it was doing harm here: the two rows ABOVE these, "NAP (CF)"
+# and "NAP-IG (CF)", are MIB's own published numbers, so four more rows starting "NAP" read as
+# six runs of one method rather than two transcribed baselines plus our own quadrature ladder.
+# The methods are unchanged and the dirs are untouched -- only the display strings moved.
+# "NAP $=$ I$\times$G (ours)" in particular said three things at once; the identity it asserted
+# is still recorded, at length, in the m=1 paragraph above, which is where it belongs.
 GRAD_NODE_BASELINES = [
     ("AttnLRP",  "attnlrp_eval",     "AttnLRP_patching_node"),
     ("GIM",      "gim_eval",         "GIM_patching_node"),
+    # RelP: plain RelP, requested 2026-08-24 in place of the +QK variant. It has all 12
+    # train-split circuits (MIB-circuit-track/results/relp/RelP_patching_node) but ZERO test
+    # pkls, so the row is empty until the eval-only wave lands and baseline_or_skip() holds it
+    # out until then. RelP$+$QK stays listed directly below so the table does not silently lose
+    # a gradient baseline in the meantime; drop that line once RelP fills in.
+    ("RelP",      "relp_eval",        "RelP_patching_node"),
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
-    ("NAP $=$ I$\\times$G (ours)", "ig1_test",        "EAP-IG-inputs_patching_node"),
-    ("NAP-IG ($m{=}5$)",          "napig_ref_test",  "EAP-IG-inputs_patching_node"),
-    ("NAP-IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
-    ("NAP-IG (MC $\\alpha$)",     "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
+    ("I$\\times$G",           "ig1_test",        "EAP-IG-inputs_patching_node"),
+    ("IG ($m{=}5$)",          "napig_ref_test",  "EAP-IG-inputs_patching_node"),
+    ("IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
+    ("Stepless IG",           "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
 ]
 
 # DBM, the other mask-learning baseline (pyvene's SigmoidMaskIntervention). Same loader and
