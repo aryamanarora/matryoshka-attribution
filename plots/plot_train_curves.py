@@ -82,10 +82,11 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 # the MIB learning-rate panels. Point sizes are absolute, so the small panel needs its own.
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
 # Per-row height of the --overlay layout, which is as tall as it has rows. 1.55in puts a
-# full-width 2-row version at 5.4 x 3.7. KEEP THIS NAME AT THE WIDE VALUE: plot_train_curves_20k
-# imports ROW_H (with FIG_GRID, FS_GRID and panel) to build its own full-width figure at the same
-# row height, so redefining it as the narrow value silently squashes that figure instead of this
-# one. The half-width overlay reads ROW_H_NARROW below.
+# full-width 2-row version at 5.4 x 3.7; the half-width overlay reads ROW_H_NARROW below.
+# This module is imported for its constants (plot_train_curves_20k takes the OVERLAY set,
+# plot_rank_stability_20k takes ARM_COLOR/FS_GRID), so repointing a name here reshapes a figure
+# in another file -- ROW_H was briefly redefined to the narrow value and silently squashed
+# train_curves_20k.pdf from 4.25in to 3.25in tall. Add a new name, do not repoint an old one.
 ROW_H = 1.55
 FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/annotation)
 # The --overlay layout is drawn HALF-WIDTH (2.7in, i.e. ~0.48\linewidth) so it can sit in a
