@@ -73,6 +73,7 @@ RANDOM_METRICS = {"acc_auc", "faith_auc"}
 # integrated-gradient score update (--mattr-ig-steps>1), swept on log-k only.
 METHOD_ORDER = ["IG", "IxG", "AttnLRP", "Cond",
                 "stopk-log", "stopk-unif", "stopk-fixed",       # soft top-k fwd = headline
+                "softsgd-log", "softsgd-unif",                  # same, Adam -> SGD (lr=1.0)
                 "soft-log", "soft-unif", "soft-fixed", "idSTE-log", "idSTE-unif", "idSTE-fixed",
                 "stopk-log-IG", "soft-log-IG", "idSTE-log-IG"]  # -fixed = fixed k=10%, no sched
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
@@ -120,7 +121,9 @@ def parse_method(fname: str, d: dict) -> str | None:
     if "sufficient_topk_" in tag:   # soft top-k forward, no STE -- the headline since 2026-07-21
         ks = "fixed" if "fixedk" in tag else ("unif" if "uniformk" in tag else "log")
         ig = "-IG" if re.search(r"_ig\d+", tag) else ""
-        return f"stopk-{ks}{ig}"
+        # Optimizer in the key, same reason the catch-all above is strict: the 2026-08-21
+        # `topk:sgd` arm otherwise pools into the headline stopk-* bars.
+        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}{ig}"
     # Node Pruning (eval_sva.py --method edge_pruning) matches none of the tests above.
     # This figure has no Node Pruning entry in its METHOD_ORDER, so exclude rather than
     # mislabel; see plot_accauc_vs_faithauc.py, which does plot the series.

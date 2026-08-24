@@ -94,6 +94,13 @@ BASELINES = [
     # (Confirmed, not assumed: the 10-step pkls have non-null acc_auc for every finished cell.)
     ("$+$ 10 IG steps", ["napig10_eval"], "EAP-IG-inputs_patching_node"),
     ("$+$ 30 IG steps", ["napig30_eval"], "EAP-IG-inputs_patching_node"),
+    # Stepless IG: alpha ~ U(0,1) drawn per example at m=1 instead of a fixed grid. Same
+    # integral, unbiased at every m, and at m=1 it costs exactly what I x G costs -- so it is a
+    # rung of the ladder above in QUALITY while sitting at the bottom of it in COST, which is
+    # the whole reason it is worth a row. Dir is MIB-side only (napig_mc_eval, 12/12 validation
+    # cells); the subfolder is EAP-IG-inputs-mc_patching_node, NOT the grid arms' folder --
+    # run_napig_mc.sh passes --method EAP-IG-inputs-mc precisely so it cannot overwrite them.
+    ("Stepless IG", ["napig_mc_eval"], "EAP-IG-inputs-mc_patching_node"),
     ("Conductance", ["napig_local_eval", "napig_local_accauc"], "EAP-IG-inputs-local_patching_node"),
     ("I$\\times$G", ["ig1_eval", "ig1_accauc"], "EAP-IG-inputs_patching_node"),
     ("RelP", ["relp_eval", "relp_accauc"], "RelP_patching_node"),

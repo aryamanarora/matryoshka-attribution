@@ -244,6 +244,12 @@ GRAD_NODE_BASELINES = [
     ("RelP$+$QK", "relp_qkgrad_eval", "RelP-qkgrad_patching_node"),
     ("I$\\times$G",           "ig1_test",        "EAP-IG-inputs_patching_node"),
     ("IG ($m{=}5$)",          "napig_ref_test",  "EAP-IG-inputs_patching_node"),
+    # m=10 was missing from this table until 2026-08-24 for no reason anyone had written down --
+    # run_stepless_test.sh simply never had an m10 arm, though the circuits existed. It is the
+    # rung plot_mib_accauc_cpr_scatter uses as "converged" (rho 0.994 with m=30 on validation),
+    # so without it the figure's ladder read 5 -> 10 and this table's read 5 -> 30. Eval-only
+    # wave submitted as ARMS=m10; the row fills itself when the 11 cells land.
+    ("IG ($m{=}10$)",         "napig10_test",    "EAP-IG-inputs_patching_node"),
     ("IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
     ("Stepless IG",           "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
 ]

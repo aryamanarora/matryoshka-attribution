@@ -44,6 +44,8 @@ TASKS = ["nounpp", "rc", "simple", "within_rc",
          "addition", "months", "weekdays", "hours",   # arithmetic-wild, all three substrates
          "arc_easy"]                                  # arc_easy: MIB, node substrate only
 METHOD_ORDER = ["IG", "IxG", "Cond",
+                "stopk-log", "stopk-unif", "stopk-fixed",   # soft top-k fwd + Adam = headline
+                "softsgd-log", "softsgd-unif",              # same, Adam -> SGD (lr=1.0)
                 "soft-log", "soft-unif", "soft-fixed", "idSTE-log", "idSTE-unif", "idSTE-fixed",
                 "soft-log-IG", "idSTE-log-IG"]   # Cond = conductance; -fixed = fixed k=10%
 LOSS_ORDER = ["logit_diff", "ce", "acc"]
@@ -86,7 +88,22 @@ def parse_method(fname: str, d: dict) -> str:
     # which does plot the series.
     if tag.startswith("eprun_"):
         return None
-    return "IxG" if tag.startswith("ixg") else "IG"
+    # Same hazard, same fix: the DBM (sigmoid-mask) runs also match nothing above.
+    if tag.startswith("sig_"):
+        return None
+    # Soft top-k forward (no STE): the headline variant since 2026-07-21 and the `topk:sgd` arm
+    # since 2026-08-21. This branch was MISSING, so the catch-all below relabelled every one of
+    # those runs "IG" -- the plotted IG curve was mostly MAttr.
+    if "sufficient_topk_" in tag:
+        ks = "fixed" if "fixedk" in tag else ("unif" if "uniformk" in tag else "log")
+        ig = "-IG" if re.search(r"_ig\d+", tag) else ""
+        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}{ig}"
+    if tag.startswith("attnlrp"):
+        return None            # no METHOD_ORDER entry here; exclude rather than mislabel
+    if tag.startswith("ixg"):
+        return "IxG"
+    # Strict: unknown tags drop out instead of becoming IG points.
+    return "IG" if tag.startswith("ig") else None
 
 
 def load() -> pd.DataFrame:

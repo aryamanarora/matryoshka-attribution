@@ -87,6 +87,9 @@ BASE_CPR = {
     # dual-root cpr_base above.
     "$+$ 10 IG steps": ("napig10_eval", "EAP-IG-inputs_patching_node"),
     "$+$ 30 IG steps": ("napig30_eval", "EAP-IG-inputs_patching_node"),
+    # Stepless IG -- keyed by the acc table's display name, like every entry here. MIB-side only
+    # (12/12 validation), so it relies on cpr_base's dual root exactly as the step rungs do.
+    "Stepless IG": ("napig_mc_eval", "EAP-IG-inputs-mc_patching_node"),
     "Conductance": ("napig_local_eval", "EAP-IG-inputs-local_patching_node"),
     "I$\\times$G": ("ig1_eval", "EAP-IG-inputs_patching_node"),
     "RelP": ("relp_eval", "RelP_patching_node"),
@@ -1050,9 +1053,20 @@ COMPACT = {
     # Labels are "(5)" / "(10)" rather than "(5 steps)" -- the long form is ~1/3 of the panel
     # width at 5.5pt. The dashed segment carries the "same method" reading; the appendix
     # --full figure spells the budgets out.
-    (G_GRAD, "RelP+QK"): None,
+    # RelP, not RelP+QK: aligned 2026-08-24 with make_mib_test_table.GRAD_NODE_BASELINES, which
+    # was switched to plain RelP on request. This figure and the test table should name the same
+    # methods, since a reader meets them together. Note the two differ in SPLIT -- everything
+    # here is validation -- so the numbers are not the table's; only the method set is shared.
+    # On validation RelP averages 0.76 CPR against +QK's 0.90, so this point moves down-left.
+    (G_GRAD, "RelP"): None,
     (G_GRAD, "IG (5 steps)"): "IG-5",
     (G_GRAD, "IG (10 steps)"): "IG-10",
+    # Stepless IG, added with the RelP swap. It is the one gradient point whose POSITION is the
+    # claim: same x-cost as I x G at the bottom-left of this cloud, but landing with IG-10 at the
+    # top. Shortened to "IG-free" -- "Stepless IG" is wider than any label this 1.65in panel
+    # currently carries, and the hyphenated form reads against IG-5/IG-10 as the same family at
+    # a different budget, which is exactly what it is.
+    (G_GRAD, "Stepless IG"): "IG-free",
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 
