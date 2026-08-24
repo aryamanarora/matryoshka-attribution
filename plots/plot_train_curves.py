@@ -81,8 +81,12 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 # size plot_optimizer_lr.py uses, so an SVA+ training curve can sit in a subfigure row beside
 # the MIB learning-rate panels. Point sizes are absolute, so the small panel needs its own.
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
-# Per-row height of the --overlay layout, which is as tall as it has rows.
-ROW_H = 1.05
+# Per-row height of the --overlay layout, which is as tall as it has rows. 1.55in puts a
+# full-width 2-row version at 5.4 x 3.7. KEEP THIS NAME AT THE WIDE VALUE: plot_train_curves_20k
+# imports ROW_H (with FIG_GRID, FS_GRID and panel) to build its own full-width figure at the same
+# row height, so redefining it as the narrow value silently squashes that figure instead of this
+# one. The half-width overlay reads ROW_H_NARROW below.
+ROW_H = 1.55
 FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/annotation)
 # The --overlay layout is drawn HALF-WIDTH (2.7in, i.e. ~0.48\linewidth) so it can sit in a
 # subfigure beside neuron_recall.pdf. That is a re-LAYOUT, not a scale: \includegraphics is
@@ -90,12 +94,15 @@ FS_GRID, FS_ONE = (7.5, 7, 6.5), (8, 7, 5.8)      # (axis label, tick, legend/an
 # Shrinking the old 5.4in figure with a width= key instead would have put 7.5pt labels on the
 # page at 3.7pt. If it ever goes back to a full-width float, pass --wide; the two sets of
 # constants are kept side by side so neither is a magic number.
-FIG_OVERLAY_W, FS_OVERLAY = 2.7, (6.5, 5.5, 5.5)
-FIG_OVERLAY_WIDE_W, ROW_H_WIDE = 5.4, 1.55
-# Legend strip reserved above the axes. 2 rows of 3 handles at 5.5pt needs less than the
-# single 6-handle row the wide layout used, but not much less once the column titles (drawn
-# ABOVE the axes rectangle, into the same band) are counted.
-LEG_H, LEG_H_WIDE = 0.52, 0.6
+FIG_OVERLAY_W, FS_OVERLAY, ROW_H_NARROW = 2.7, (6.5, 5.5, 5.5), 1.05
+FIG_OVERLAY_WIDE_W = 5.4
+# Header strip reserved above the axes, split the way plot_neuron_recall splits it: LEG_H for
+# the handles themselves and TITLE_H for the column titles, which set_title draws ABOVE the
+# axes rectangle and therefore INTO the same band. Sizing the strip for the handles alone is
+# what put the legend on top of "Node"/"MLP"/"MLP+Attn" -- the arithmetic looks right and the
+# two still collide, because the titles are not inside the axes the fraction is measured from.
+# The legend is anchored above the title band rather than above the axes for the same reason.
+LEG_H, LEG_H_WIDE, TITLE_H = 0.52, 0.6, 0.22
 # `--overlay` puts all three losses in one panel, so the loss needs its own channel. It gets
 # LINETYPE and the arm keeps ARM_COLOR, so the two layouts are colour-identical: a reader moving
 # between them does not have to relearn which line is Adam. The earlier version of this view did
@@ -207,8 +214,8 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
         # different scales and forcing them onto one axis flattens whichever has less range.
         fs = FS_GRID if a.wide else FS_OVERLAY
         w = FIG_OVERLAY_WIDE_W if a.wide else FIG_OVERLAY_W
-        row_h = ROW_H_WIDE if a.wide else ROW_H
-        leg_h = LEG_H_WIDE if a.wide else LEG_H
+        row_h = ROW_H if a.wide else ROW_H_NARROW
+        leg_h = (LEG_H_WIDE if a.wide else LEG_H) + TITLE_H
         nr = len(mrows)
         fig, axes = plt.subplots(nr, len(subs), figsize=(w, row_h * nr + leg_h),
                                  sharex=True, sharey="row", squeeze=False)
@@ -236,13 +243,14 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
         # to separate. The gap that survives is the x tick labels' overhang ("2000" sits on the
         # right spine), which tight_layout reserves regardless of the pad.
         fig.tight_layout(w_pad=0.0)
-        top = 1.0 - leg_h / (row_h * nr + leg_h)
+        fh = row_h * nr + leg_h
+        top = 1.0 - leg_h / fh
         fig.subplots_adjust(top=top)
         # 6 handles fit one row across 5.4in and need two across 2.7in. Wrapping is not automatic
         # -- ncol=6 at half width silently overruns the figure and the outer handles are clipped
         # by bbox_inches, so the arm the reader most needs to identify goes missing.
         fig.legend(handles=handles(True), fontsize=fs[2], ncol=6 if a.wide else 3,
-                   loc="lower center", bbox_to_anchor=(0.5, top + 0.012), frameon=False,
+                   loc="lower center", bbox_to_anchor=(0.5, top + TITLE_H / fh), frameon=False,
                    handletextpad=0.4, handlelength=2.0, columnspacing=1.2)
     else:
         fs = FS_GRID
