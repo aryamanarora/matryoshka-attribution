@@ -121,7 +121,22 @@ def parse_method(fname, d):
     # run would be averaged into the IG rows.
     if tag.startswith("attnlrp"):
         return "AttnLRP"
-    return "IxG" if tag.startswith("ixg") else "IG"
+    # `mc_ig_m{draws}_s{seed}` -- the stepless / MC-alpha IG arm (2026-08-23). It is a DIFFERENT
+    # estimator with no row in SECTIONS, and it does not start with "ixg", so the old lenient
+    # catch-all below relabelled it "IG"; since `load` keys on (method, loss, task) with no tag
+    # in it, glob order then decided whether the IG cell of every SVA column showed 10-step IG or
+    # this. It did: the tables regenerated on 2026-08-25 moved the IG SVA cells by up to 0.02
+    # acc-AUC against the 2026-08-21 ones for this reason alone. Dropped, like `random`.
+    if tag.startswith("mc_ig"):
+        return None
+    # BE STRICT. Everything unrecognised must DROP OUT rather than masquerade as IG -- this
+    # catch-all used to be `else "IG"`, which is the bug the three "placement rule" comments
+    # above are each a local patch for, and which mc_ig then walked straight through. The
+    # sibling copy of this function (plot_accauc_vs_faithauc.parse_method) was made strict on
+    # the same grounds; keep the two in step.
+    if tag.startswith("ixg"):
+        return "IxG"
+    return "IG" if tag.startswith("ig") else None
 
 
 def load(nodes, res=RES):
