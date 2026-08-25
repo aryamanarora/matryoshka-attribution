@@ -10,7 +10,7 @@ WHAT IT SHOWS, and it is not what the CPR table alone suggests: THE TWO METRICS 
 THE KNOB, in the same direction for every series.
 
     Node Pruning (logit-diff)  CPR AUC  peaks at s=0.5 (1.67), falls to 1.24 by s=0.99
-                               acc-AUC  climbs 0.09 -> 0.38 at s=0.99, then TURNS OVER (0.36)
+                               acc-AUC  climbs 0.09 -> 0.38 at s=0.99, then falls (0.36, 0.30)
     Node Pruning (KL)          CPR AUC  strictly lower (~0.91--1.00) at every shared setting
                                acc-AUC  strictly HIGHER (~0.40--0.46), above logit-diff's best
     DBM                        CPR AUC  peaks at lambda=6 (1.50), falls at 20
@@ -50,14 +50,25 @@ acc-AUC curve was still climbing at the sparsest setting we ran; s=1.25 changed 
 logit-diff series, which now rings s=0.99. An unringed maximum is still a statement that the grid
 does not bracket the optimum -- KL's and DBM's remain unringed.
 
-READ THAT ONE RING WEAKLY. It is a ring on the MEAN, and the ring rule tests shape, not
-significance. Per cell, 0.99 -> 1.25 on acc-AUC is 5 down / 4 up / 2 tied (mean -0.018, Wilcoxon
-p=0.65): the drop is carried by mcqa/gemma2 (-0.22) and ioi/gpt2 (-0.20) against mcqa/qwen2.5
-(+0.12) and arithmetic_subtraction/llama3 (+0.11). The honest reading of this panel is a curve
-that stops rising around s=0.95--1.25, not one with a located optimum at 0.99. The CPR fall over
-the same step IS decisive by contrast -- 10/11 cells down, mean -0.227, p=0.010 -- so the two
-metrics disagree about the knob at BOTH ends of the grid, which is the point the figure exists to
-make. Do not caption s=0.99 as "the best sparsity" on the strength of that ring.
+READ THAT ONE RING WEAKLY -- s=2.0 LANDING DID NOT FIX IT. It is a ring on the MEAN, and the ring
+rule tests shape, not significance. The mean does fall monotonically off the peak now that both
+s>1 points are complete (0.380 -> 0.362 -> 0.304), which is a two-point right shoulder rather
+than the single point it had on 2026-08-25 -- but per cell the sign stays split and no step is
+significant:
+
+    acc-AUC   0.99 -> 1.25   mean -0.018   5 down / 4 up / 2 tied   p=0.65
+              0.99 -> 2.0    mean -0.076   6 down / 5 up            p=0.23
+    CPR AUC   0.99 -> 1.25   mean -0.226  10 down / 1 up            p=0.010
+              0.99 -> 2.0    mean -0.545  10 down / 1 up            p=0.002
+              1.25 -> 2.0    mean -0.319  11 down / 0 up            p=0.001
+
+So the honest reading of the acc-AUC panel is still a curve that STOPS RISING above s~0.95, not
+one with a located optimum at 0.99; adding a grid point moved the mean but not the per-cell
+evidence, and it will not, because the spread is the ~0.7-CPR per-cell noise that
+node-pruning-l0-anneal-steps documents on the llama3 cells. The CPR fall is decisive at every
+step by contrast, so the two metrics disagree about the knob at BOTH ends of the grid, which is
+the point the figure exists to make. Do not caption s=0.99 as "the best sparsity" on the strength
+of that ring.
 
 NO SHARED X AXIS, which is the deliberate difference from plot_lr_sweep_summary.py. There both
 columns were learning rates and sharex was the whole point (the optima sit at different LRs on

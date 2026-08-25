@@ -12,18 +12,23 @@ THE KNOB COMPRESSES, AND IT IS NOT A CEILING (revised 2026-08-25, when s=1.25 la
 logit-diff series (MAttr's objective, the one tabs/sparsity_sweep.tex reports) achieved sparsity
 runs
 
-    target      0.1    0.25   0.5    0.8    0.9    0.95   0.99   1.25
-    achieved    0.111  0.230  0.466  0.748  0.798  0.829  0.855  0.920
+    target      0.1    0.25   0.5    0.8    0.9    0.95   0.99   1.25   2.0
+    achieved    0.111  0.230  0.466  0.748  0.798  0.829  0.855  0.920  0.968
 
 Everything up to s=0.99 flattens -- 0.798--0.855 across the top three, very nearly the same
 circuit -- and until 1.25 existed that read as SATURATION, a hard ceiling near 0.86 that this
-docstring asserted. It is not one. Pushing the target past 1 buys another +0.065, more than the
-0.9->0.99 span of the whole visible plateau, so what looked like the anneal's limit was the grid
-running out below the point where an unreachable target starts applying real pressure. The
-compression is still real and still the reason the x axis says "target": any trend across
-0.9/0.95/0.99 is a trend across nearly identical circuits, and "s=0.99" is an ~0.86-sparse
-circuit (145 of 1056 nodes kept, not 11). But do not repeat the ceiling claim -- s=2.0 (9/11
-cells, still training) will test where the real one is.
+docstring asserted. It is not one. Pushing the target past 1 buys +0.065 at 1.25 and +0.113 by
+2.0, so what looked like the anneal's limit was the grid running out below the point where an
+unreachable target starts applying real pressure. NO CEILING IS VISIBLE YET even at s=2.0; the
+curve is still climbing where the grid stops. The compression is still real and still the reason
+the x axis says "target": any trend across 0.9/0.95/0.99 is a trend across nearly identical
+circuits, and "s=0.99" is an ~0.86-sparse circuit (145 of 1056 nodes kept, not 11).
+
+AND THAT MAKES A CLEAN TEST AVAILABLE THAT WAS NOT BEFORE. logit-diff at s=2.0 reaches 0.968,
+just past KL at s=0.99 (0.962) -- so the two objectives can now be compared AT MATCHED ACHIEVED
+DENSITY instead of at matched target. The "KL's worse CPR / better acc-AUC is density, not
+objective" claim below is currently an inference from a confound; that pair of cells would
+measure it directly. Nobody has run that comparison yet.
 
 THE TWO LOSSES SATURATE IN DIFFERENT PLACES, which is the interesting part. KL (Edge Pruning's
 own objective) tracks the request much further, reaching ~0.96 where logit-diff reaches ~0.86.
