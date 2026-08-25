@@ -14,10 +14,19 @@ here automatically -- and if it has no entry in STYLE below, this script RAISES 
 silently dropping it, because a block missing from a figure captioned "all of them" is the one
 failure mode that looks like a result.
 
-FACETS ARE OURS vs THE MASK-LEARNING BASELINES (columns), METRIC (rows). Note this is NOT
-plot_mib_accauc_cpr_scatter's GRADIENT/MASK split: MAttr is itself a mask-learning method, so
-by that taxonomy all nine blocks are one family. The split here is the one the table's own
-ordering implies -- the six MAttr variants, then the three published baselines we swept.
+ONE PANEL PER METRIC, ALL NINE BLOCKS OVERLAID. An earlier version faceted ours-vs-baselines
+into columns (2x2), which spent half the width restating a split the colours already encode and
+made the one comparison the figure exists for -- where MAttr's optimum sits against where the
+baselines' do -- a cross-panel one. Overlaid, it is a within-panel one. The cost is nine series
+in a panel; they stay separable because colour is the optimizer/forward family and only three
+colours carry more than one series, each split by linetype (see ENCODING below). If a tenth block
+lands and the panels turn to spaghetti, split by METRIC-major columns, not by family -- the
+family split is the one that hides the result.
+
+Note the ours/baselines line the legend still implies is NOT plot_mib_accauc_cpr_scatter's
+GRADIENT/MASK split: MAttr is itself a mask-learning method, so by that taxonomy all nine blocks
+are one family. It is the split the table's own ordering implies -- the six MAttr variants, then
+the three published baselines we swept -- and the legend preserves it by keeping STYLE's order.
 
 COMPLETENESS IS PER-METRIC, which deliberately DIFFERS from build_lr_rows' rule. That function
 demands 11/11 cells on acc AND CPR because it feeds a scatter of one against the other, where a
@@ -63,8 +72,10 @@ import palette as P                                     # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                 # _pair, COLS, RC   # noqa: E402
 import make_lr_table as M                               # LR_METHODS -- the table's own list  # noqa: E402
 
-OURS, BASE = "\\ourmethod{} and ablations", "Mask-learning baselines"
-# block name (verbatim from make_lr_table.LR_METHODS) -> (facet, legend label, colour, linestyle).
+# block name (verbatim from make_lr_table.LR_METHODS) -> (legend label, colour, linestyle).
+# ORDER IS LOAD-BEARING: it is the legend's order, and it is the only thing left carrying the
+# ours-then-baselines grouping now that the facet columns are gone. Keep the six MAttr variants
+# ahead of the three baselines.
 # Legend labels are the TABLE's row labels, flattened -- the figure is a view of lr_sweep.tex and
 # a reader holding both should not have to translate. That is also why the first block reads
 # "MAttr" and not "MAttr (Adam)" even though the topklog_* dirs are Adam: the table names its
@@ -77,25 +88,24 @@ OURS, BASE = "\\ourmethod{} and ablations", "Mask-learning baselines"
 # the short handle; check the LEGEND, not the axes, when changing them.
 DASH, DOTDASH = (0, (3.2, 1.4)), (0, (4.5, 1.2, 0.9, 1.2))
 STYLE = {
-    "\\ourmethod{}":            (OURS, "MAttr",              P.METHOD["MAttr"],        "solid"),
-    "$+$ SGD":                  (OURS, "$+$ SGD",            P.METHOD["MAttr (SGD)"],  "solid"),
-    "$+$ SGD, $+$ unif $k$":    (OURS, "$+$ SGD, unif. $k$", P.METHOD["MAttr (SGD)"],  DASH),
-    "$+$ hard":                 (OURS, "$+$ hard",           P.METHOD["+hard"],        "solid"),
-    "$+$ unif $k$, $+$ hard":   (OURS, "$+$ hard, unif. $k$", P.METHOD["+hard"],       DASH),
-    "$+$ hard bwd (REINFORCE)": (OURS, "$+$ hard bwd",       P.METHOD["+hard"],        DOTDASH),
-    "DBM":                                 (BASE, "DBM",              P.METHOD["DBM"], "solid"),
-    "Node Pruning ($s{=}0.5$, logit-diff)": (BASE, "Node Pruning, $s{=}0.5$",
+    "\\ourmethod{}":            ("MAttr",              P.METHOD["MAttr"],        "solid"),
+    "$+$ SGD":                  ("$+$ SGD",            P.METHOD["MAttr (SGD)"],  "solid"),
+    "$+$ SGD, $+$ unif $k$":    ("$+$ SGD, unif. $k$", P.METHOD["MAttr (SGD)"],  DASH),
+    "$+$ hard":                 ("$+$ hard",           P.METHOD["+hard"],        "solid"),
+    "$+$ unif $k$, $+$ hard":   ("$+$ hard, unif. $k$", P.METHOD["+hard"],       DASH),
+    "$+$ hard bwd (REINFORCE)": ("$+$ hard bwd",       P.METHOD["+hard"],        DOTDASH),
+    "DBM":                                 ("DBM",              P.METHOD["DBM"], "solid"),
+    "Node Pruning ($s{=}0.5$, logit-diff)": ("Node Pruning, $s{=}0.5$",
                                             P.METHOD["Node Pruning"], "solid"),
-    "Node Pruning ($s{=}0.8$, logit-diff)": (BASE, "Node Pruning, $s{=}0.8$",
+    "Node Pruning ($s{=}0.8$, logit-diff)": ("Node Pruning, $s{=}0.8$",
                                             P.METHOD["Node Pruning"], DASH),
 }
-FACETS = [OURS, BASE]
 METRICS = [("cpr", "CPR AUC (↑)"), ("acc", "IIA log-AUC (↑)")]
-FIG_W, ROW_H = 5.4, 1.55
+FIG_W, ROW_H = 5.4, 1.75
 FS_LABEL, FS_TICK, FS_LEGEND = 7.5, 7, 6
-# Header strip, split as in plot_train_curves: handles plus the column titles, which set_title
-# draws ABOVE the axes rectangle and so into the same band.
-LEG_H, TITLE_H = 0.50, 0.20
+# Header strip for the one shared legend. Nine entries at ncol=5 is two rows of handles; there are
+# no per-panel titles any more (the ylabel names the metric), so nothing else lives up here.
+LEG_H = 0.42
 
 
 def lr_of(label):
@@ -144,12 +154,15 @@ def load():
     return out, skipped
 
 
-def draw(ax, data, facet, metric):
-    """One panel. Returns the legend handles for this facet, in STYLE order."""
+def draw(ax, data, metric):
+    """One panel: all nine blocks. Returns the legend handles, in STYLE order.
+
+    A handle is appended for every block whether or not it has a plottable point, so the legend
+    is a statement about the TABLE (nine blocks) and not about this metric's coverage -- a block
+    that fell out of one panel on completeness still reads as a block that exists.
+    """
     handles = []
-    for name, (fct, leg, colr, ls) in STYLE.items():
-        if fct != facet:
-            continue
+    for name, (leg, colr, ls) in STYLE.items():
         pts = [(lr, r[metric]) for lr, r in data[name] if r[metric] is not None]
         handles.append(Line2D([0], [0], color=colr, ls=ls, lw=0.9, marker="s", ms=2.6,
                               mec="#000000", mew=0.35, label=leg))
@@ -179,38 +192,26 @@ def main():
 
     data, skipped = load()
     plt.rcParams.update(S.RC)
-    nr, nc = len(METRICS), len(FACETS)
-    head = LEG_H + TITLE_H
-    fh = ROW_H * nr + head
-    # sharex across BOTH columns on purpose: the whole point is that the optima sit at different
-    # learning rates, which is only legible if 0.3 is the same place in every panel.
-    fig, axes = plt.subplots(nr, nc, figsize=(FIG_W, fh), sharex=True, sharey="row",
-                             squeeze=False)
-    legs = {}
-    for r, (metric, ylab) in enumerate(METRICS):
-        for c, facet in enumerate(FACETS):
-            ax = axes[r][c]
-            legs[facet] = draw(ax, data, facet, metric)
-            if c == 0:
-                ax.set_ylabel(ylab, fontsize=FS_LABEL)
-            if r == 0:
-                ax.set_title(facet.replace("\\ourmethod{}", "MAttr"), fontsize=FS_LABEL, pad=3)
-            if r == nr - 1:
-                ax.set_xlabel("learning rate", fontsize=FS_LABEL)
+    fh = ROW_H + LEG_H
+    # One row, one panel per metric. sharex on purpose: the whole point is that the optima sit at
+    # different learning rates, which is only legible if 0.3 is the same place in both panels.
+    # sharey would be wrong -- the two panels are different metrics on different scales.
+    fig, axes = plt.subplots(1, len(METRICS), figsize=(FIG_W, fh), sharex=True, squeeze=False)
+    axes = list(axes[0])
+    handles = []
+    for ax, (metric, ylab) in zip(axes, METRICS):
+        handles = draw(ax, data, metric)
+        ax.set_ylabel(ylab, fontsize=FS_LABEL)
+        ax.set_xlabel("learning rate", fontsize=FS_LABEL)
 
-    fig.tight_layout()
-    top = 1.0 - head / fh
+    fig.tight_layout(pad=0.35, w_pad=1.2)
+    top = 1.0 - LEG_H / fh
     fig.subplots_adjust(top=top)
-    # One legend per COLUMN, over that column, because the two facets share no series. Anchored
-    # a title's height above `top` -- the titles live above the axes box, so an anchor at top+0
-    # lands on them even though subplots_adjust reserved the strip.
-    for c, facet in enumerate(FACETS):
-        box = axes[0][c].get_position()
-        fig.legend(handles=legs[facet], fontsize=FS_LEGEND, ncol=2 if c == 0 else 1,
-                   loc="lower center", bbox_to_anchor=(box.x0 + box.width / 2,
-                                                       top + TITLE_H / fh),
-                   frameon=False, handletextpad=0.4, handlelength=2.6, columnspacing=1.0,
-                   labelspacing=0.25)
+    # ONE legend for the whole figure now that both panels carry all nine blocks. ncol=5 gives
+    # 5 + 4, which keeps the six MAttr variants ahead of the three baselines reading across.
+    fig.legend(handles=handles, fontsize=FS_LEGEND, ncol=5, loc="lower center",
+               bbox_to_anchor=(0.5, top), frameon=False, handletextpad=0.4, handlelength=2.2,
+               columnspacing=1.0, labelspacing=0.25)
     fig.savefig(a.out, dpi=300)
     fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
     print("wrote", a.out)
@@ -219,7 +220,7 @@ def main():
         print(f"\nexcluded ({len(S.COLS)} MIB validation cells required per metric):")
         print("\n".join(skipped))
     print("\nbest lr per block (n = lr values plotted):")
-    for name, (fct, leg, _, _) in STYLE.items():
+    for name, (leg, _, _) in STYLE.items():
         for metric, _ in METRICS:
             pts = [(lr, r[metric]) for lr, r in data[name] if r[metric] is not None]
             if not pts:

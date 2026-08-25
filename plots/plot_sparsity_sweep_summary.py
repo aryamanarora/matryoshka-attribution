@@ -1,10 +1,10 @@
 """tabs/sparsity_sweep.tex as one figure: both metrics against each baseline's sparsity knob.
 
-The sibling of plot_lr_sweep_summary.py, over the OTHER sweep table -- rows are the two metrics,
-columns are the two blocks of make_lr_table.SPARSITY_METHODS (Node Pruning's target sparsity s,
-DBM's L1 coefficient). Same import-the-table discipline: the blocks come from that module, so
-"the blocks of the table" and "the columns of this figure" are one list and an unstyled block
-RAISES rather than quietly vanishing.
+The sibling of plot_lr_sweep_summary.py, over the OTHER sweep table -- ONE ROW OF FOUR PANELS,
+the cross of the two metrics with the two blocks of make_lr_table.SPARSITY_METHODS (Node Pruning's
+target sparsity s, DBM's L1 coefficient). Same import-the-table discipline: the blocks come from
+that module, so "the blocks of the table" and "the panels of this figure" are one list and an
+unstyled block RAISES rather than quietly vanishing.
 
 WHAT IT SHOWS, and it is not what the CPR table alone suggests: THE TWO METRICS DISAGREE ABOUT
 THE KNOB, in the same direction for every series.
@@ -70,15 +70,24 @@ step by contrast, so the two metrics disagree about the knob at BOTH ends of the
 the point the figure exists to make. Do not caption s=0.99 as "the best sparsity" on the strength
 of that ring.
 
-NO SHARED X AXIS, which is the deliberate difference from plot_lr_sweep_summary.py. There both
-columns were learning rates and sharex was the whole point (the optima sit at different LRs on
-one scale). Here the columns sweep different quantities in different units -- a target sparsity
-against an unbounded L1 coefficient -- and putting them on one axis would invite reading "s=0.5"
-against "lambda=0.5" as the same setting. The y axes ARE shared per row, so the vertical
-comparison across columns stays honest: Node Pruning's knob moves CPR over a ~1.3 range and DBM's
-over ~0.19, and that difference in leverage is real, not a scaling choice.
+PANEL ORDER IS METRIC-MAJOR, and that is what makes a single row work. PANELS lists
+(CPR, Node Pruning), (CPR, DBM), (acc-AUC, Node Pruning), (acc-AUC, DBM) -- so the two panels
+that share a y axis are ADJACENT, and the shared scale is a comparison the eye can actually make
+across a 1.3in gap. Sharing is done by hand (axes[1].sharey(axes[0]) and axes[3].sharey(axes[2]))
+because subplots' sharey="row" degenerates to "share nothing" when there is one row; the second
+panel of each pair then has its y ticklabels suppressed, which is where the horizontal room for
+four panels comes from. Reordering PANELS block-major would put the shared pairs at the two ends
+of the figure and quietly break that.
 
-X SCALES DIFFER PER COLUMN for the same reason. s is plotted LINEARLY: it is a fraction, its
+NO SHARED X AXIS, which is the deliberate difference from plot_lr_sweep_summary.py. There every
+panel is learning rates and sharex is the whole point (the optima sit at different LRs on one
+scale). Here neighbouring panels sweep different quantities in different units -- a target
+sparsity against an unbounded L1 coefficient -- and putting them on one axis would invite reading
+"s=0.5" against "lambda=0.5" as the same setting. The y axes ARE shared within a metric, so the
+comparison between the two blocks stays honest: Node Pruning's knob moves CPR over a ~1.3 range
+and DBM's over ~0.19, and that difference in leverage is real, not a scaling choice.
+
+X SCALES DIFFER PER BLOCK for the same reason. s is plotted LINEARLY: it is a fraction, its
 grid is not geometric, and the CPR turnover at 0.5 sits mid-axis where it reads. lambda is
 plotted on a SYMLOG axis with linthresh below the smallest nonzero point, because its grid IS
 geometric (0.2/0.6/2/6/20, x3 apart) and because lambda=0 is a real swept point -- the
@@ -132,8 +141,10 @@ STYLE = {
         colour=P.METHOD["DBM"], xscale="symlog", label="logit-diff loss", dash="solid", extra=[]),
 }
 METRICS = [("area_under", "CPR AUC (↑)"), ("acc_auc", "IIA log-AUC (↑)")]
-FIG_W, ROW_H = 5.4, 1.55
-FS_LABEL, FS_TICK, FS_ANNOT = 7.5, 7, 6
+FIG_W, ROW_H = 5.4, 1.62
+# 6pt ticks, not the 7 the two-column layout used: at 1.3in per panel DBM's symlog axis has to
+# print six explicit swept-value labels (0/0.2/0.6/2/6/20) and they collide at 7.
+FS_LABEL, FS_TICK, FS_ANNOT = 7, 6, 5.5
 TITLE_H = 0.20          # set_title draws ABOVE the axes rect, so the header strip must hold it
 SYMLOG_LINTHRESH = 0.15  # below the smallest nonzero lambda (0.2), so only 0 sits in the linear leg
 
@@ -225,43 +236,57 @@ def main():
     data, skipped = load()
     blocks = [n for n, *_ in M.SPARSITY_METHODS]
     plt.rcParams.update(S.RC)
-    nr, nc = len(METRICS), len(blocks)
-    fh = ROW_H * nr + TITLE_H
-    # sharey per ROW only. sharex is deliberately OFF -- see the docstring; the two columns are
-    # different quantities and squeeze=False keeps the indexing uniform either way.
-    fig, axes = plt.subplots(nr, nc, figsize=(FIG_W, fh), sharey="row", squeeze=False)
-    for c, name in enumerate(blocks):
+    # ONE ROW, metric-major -- see the docstring. The pairs (0,1) and (2,3) share a y axis and are
+    # adjacent by construction; do not reorder this to block-major.
+    panels = [(mi, b) for mi in range(len(METRICS)) for b in blocks]
+    fh = ROW_H + TITLE_H
+    # DBM panels get 15% more width: their symlog axis prints six explicit swept-value labels
+    # (0/0.2/0.6/2/6/20) where s prints three, and 0.2 vs 0.6 is the pair that collides first.
+    fig, axes = plt.subplots(1, len(panels), figsize=(FIG_W, fh), squeeze=False,
+                             gridspec_kw=dict(width_ratios=[1.0 if STYLE[b]["xscale"] == "linear"
+                                                            else 1.15 for _, b in panels]))
+    axes = list(axes[0])
+    # sharey="row" is a no-op in a single row, so the metric pairs are tied by hand. sharex stays
+    # OFF -- neighbouring panels are different quantities in different units.
+    for lead in range(0, len(panels), len(blocks)):
+        for k in range(lead + 1, lead + len(blocks)):
+            axes[k].sharey(axes[lead])
+    for i, (mi, name) in enumerate(panels):
+        metric, ylab = METRICS[mi]
         st = STYLE[name]
         ser = data[name]
         ticks = sorted({k for _, _, pts in ser for k, _ in pts})
-        for r, (metric, ylab) in enumerate(METRICS):
-            ax = axes[r][c]
-            for label, dash, pts in ser:
-                xy = [(k, rec[metric]) for k, rec in pts if rec[metric] is not None]
-                if not xy:
-                    continue
-                x, y = [p[0] for p in xy], [p[1] for p in xy]
-                ax.plot(x, y, ls=dash, lw=0.9, color=st["colour"], zorder=2, label=label)
-                ax.plot(x, y, "s", ms=2.6, color=st["colour"], mec="#000000", mew=0.35,
-                        ls="none", zorder=3)
-                bi = ringed(y)
-                if bi is not None:
-                    ax.plot([x[bi]], [y[bi]], "o", ms=6.5, mfc="none", mec=st["colour"],
-                            mew=0.8, zorder=4)
-            style_axis(ax, st["xscale"], ticks)
-            if c == 0:
-                ax.set_ylabel(ylab, fontsize=FS_LABEL)
-            if r == 0:
-                ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
-                if len(ser) > 1:
-                    ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
-                              framealpha=0.9, borderpad=0.3, handlelength=2.4,
-                              handletextpad=0.5, labelspacing=0.25).get_frame().set_linewidth(0.4)
-            if r == nr - 1:
-                ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
+        ax = axes[i]
+        for label, dash, pts in ser:
+            xy = [(k, rec[metric]) for k, rec in pts if rec[metric] is not None]
+            if not xy:
+                continue
+            x, y = [p[0] for p in xy], [p[1] for p in xy]
+            ax.plot(x, y, ls=dash, lw=0.9, color=st["colour"], zorder=2, label=label)
+            ax.plot(x, y, "s", ms=2.6, color=st["colour"], mec="#000000", mew=0.35,
+                    ls="none", zorder=3)
+            bi = ringed(y)
+            if bi is not None:
+                ax.plot([x[bi]], [y[bi]], "o", ms=6.5, mfc="none", mec=st["colour"],
+                        mew=0.8, zorder=4)
+        style_axis(ax, st["xscale"], ticks)
+        ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
+        ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
+        if i % len(blocks) == 0:
+            ax.set_ylabel(ylab, fontsize=FS_LABEL)
+        else:
+            # AFTER style_axis, which resets labelsize but not visibility.
+            ax.tick_params(labelleft=False)
+        # The logit-diff/KL legend is the same in every Node Pruning panel; drawn once, in the
+        # first, where the curves leave the bottom-right corner free.
+        if i == 0 and len(ser) > 1:
+            ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
+                      framealpha=0.9, borderpad=0.3, handlelength=2.0,
+                      handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
 
-    fig.tight_layout()
-    fig.subplots_adjust(top=1.0 - TITLE_H / fh)
+    # No subplots_adjust(top=...) any more: in the 2-row layout that reserved the header strip,
+    # but tight_layout already fits the titles, and in one row the reserve only shrinks the axes.
+    fig.tight_layout(pad=0.35, w_pad=0.6)
     fig.savefig(a.out, dpi=300)
     fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
     print("wrote", a.out)
