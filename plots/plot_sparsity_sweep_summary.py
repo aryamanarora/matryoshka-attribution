@@ -10,7 +10,7 @@ WHAT IT SHOWS, and it is not what the CPR table alone suggests: THE TWO METRICS 
 THE KNOB, in the same direction for every series.
 
     Node Pruning (logit-diff)  CPR AUC  peaks at s=0.5 (1.67), falls to 1.24 by s=0.99
-                               acc-AUC  rises MONOTONICALLY across the whole grid, 0.09 -> 0.38
+                               acc-AUC  climbs 0.09 -> 0.38 at s=0.99, then TURNS OVER (0.36)
     Node Pruning (KL)          CPR AUC  strictly lower (~0.91--1.00) at every shared setting
                                acc-AUC  strictly HIGHER (~0.40--0.46), above logit-diff's best
     DBM                        CPR AUC  peaks at lambda=6 (1.50), falls at 20
@@ -31,19 +31,33 @@ these two metrics; DENSITY is, and the objective matters here only because it ch
 the Lagrangian gets to its target.
 
 THE X AXIS IS A REQUEST, NOT AN OUTCOME. s is the L0 anneal's TARGET and the anneal does not
-reach it -- it saturates around 0.86 on the logit-diff series, so the three sparsest settings in
-this grid are very nearly the same circuit. That is a separate figure
-(plots/plot_achieved_sparsity.py, which is also where the log-mining lives); read it before
-reading anything into the right-hand end of these panels, and do not caption this axis as
-achieved sparsity. See node-pruning-l0-anneal-steps.
+reach it: 0.9/0.95/0.99 all land at 0.80--0.86 achieved, so those three settings are very nearly
+the same circuit and the visible flattening of both metrics across them is partly just that. s>1
+is legal (an unreachable target is unbounded, correctly-signed pressure, see
+make_lr_table.SPARSITY_METHODS) and s=1.25 does reach 0.92 -- so the right-hand end of these
+panels is the first genuinely sparser circuit since 0.8, which is what makes the acc-AUC turnover
+there worth anything at all. That mapping is a separate figure (plots/plot_achieved_sparsity.py,
+which is also where the log-mining lives); read it before reading anything into the right-hand
+end of these panels, and do not caption this axis as achieved sparsity. See
+node-pruning-l0-anneal-steps.
 
 THE RING RULE CARRIES THE POINT BY ITSELF. As in the LR figure, an argmax is ringed only when it
 is INTERIOR to the swept grid -- and, added here, only when it is the STRICT unique maximum. A
 tie between two settings does not identify an operating point either, and KL's acc-AUC ties its
 top two to 3dp, which a bare argmax would have silently ringed as the first of them. Both CPR
-panels ring the logit-diff series; NO acc-AUC panel rings anything, because every acc-AUC curve
-is still climbing at the sparsest setting we ran. An unringed maximum is a statement that the
-grid does not bracket the optimum.
+panels ring the logit-diff series. Until 2026-08-25 NO acc-AUC panel rang anything, because every
+acc-AUC curve was still climbing at the sparsest setting we ran; s=1.25 changed that for the
+logit-diff series, which now rings s=0.99. An unringed maximum is still a statement that the grid
+does not bracket the optimum -- KL's and DBM's remain unringed.
+
+READ THAT ONE RING WEAKLY. It is a ring on the MEAN, and the ring rule tests shape, not
+significance. Per cell, 0.99 -> 1.25 on acc-AUC is 5 down / 4 up / 2 tied (mean -0.018, Wilcoxon
+p=0.65): the drop is carried by mcqa/gemma2 (-0.22) and ioi/gpt2 (-0.20) against mcqa/qwen2.5
+(+0.12) and arithmetic_subtraction/llama3 (+0.11). The honest reading of this panel is a curve
+that stops rising around s=0.95--1.25, not one with a located optimum at 0.99. The CPR fall over
+the same step IS decisive by contrast -- 10/11 cells down, mean -0.227, p=0.010 -- so the two
+metrics disagree about the knob at BOTH ends of the grid, which is the point the figure exists to
+make. Do not caption s=0.99 as "the best sparsity" on the strength of that ring.
 
 NO SHARED X AXIS, which is the deliberate difference from plot_lr_sweep_summary.py. There both
 columns were learning rates and sharex was the whole point (the optima sit at different LRs on

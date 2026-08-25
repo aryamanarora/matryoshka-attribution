@@ -173,6 +173,14 @@ SPARSITY_METHODS = [
     # The KL sparsity sweep (eprun_eval_s0.5 / _s0.8 / _s0.95 / _s0.99 and the s=0.9 default
     # `eprun_eval`) is deliberately NOT here: two of its dirs are 6/11 and 9/11, so it would
     # render with suppressed Avgs, and the LR blocks are all logit-diff anyway.
+    #
+    # s > 1 IS A LEGAL SETTING, NOT A TYPO (added 2026-08-25). `s` is the L0 anneal's Lagrangian
+    # TARGET, not a sparsity: edge_pruning.py:149-151 ascends both multipliers, so s>1 makes the
+    # density constraint permanently violated and the sparsity pressure unbounded and still
+    # correctly signed. It is how the grid probes past the ~0.86 achieved-sparsity saturation
+    # that node-pruning-l0-anneal-steps documents. These two rows are what BRACKET the sweep --
+    # without them every acc-AUC curve was still climbing at the right-hand edge and the figure
+    # could only say "the grid does not contain the optimum".
     ("Node Pruning (logit-diff, LR $=$ 0.8)", [
         ("0.1", "eprun_eval_s0.1_ld"),
         ("0.25", "eprun_eval_s0.25_ld"),
@@ -181,6 +189,12 @@ SPARSITY_METHODS = [
         ("0.9", "eprun_eval_s0.9_ld"),
         ("0.95", "eprun_eval_s0.95_ld"),
         ("0.99", "eprun_eval_s0.99_ld"),
+        ("1.25", "eprun_eval_s1.25_ld"),
+        # 8/11 as of 2026-08-25 (ioi/gemma2, arc_easy/llama3, arc_challenge/llama3 still
+        # training), so its Avg renders suppressed here and the point is DROPPED entirely from
+        # plot_sparsity_sweep_summary.py, which requires 11/11 per metric. Listed anyway so the
+        # row appears the moment the cells land; do not read its per-cell numbers as a mean.
+        ("2.0", "eprun_eval_s2.0_ld"),
     ], "$s{=}$"),
     # DBM with the sparsity penalty it is normally trained with (submit_dbm_l1.sh). The DBM
     # rows in the LR table have none, which is faithful to the pyvene *library* but not to how

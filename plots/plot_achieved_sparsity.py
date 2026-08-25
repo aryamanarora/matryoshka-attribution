@@ -8,16 +8,22 @@ with both multipliers ASCENDED -- so the trained circuit lands wherever that con
 task loss balance, and it lands short. This figure is the measurement, and it is the reason the
 x axes of plot_sparsity_sweep_summary.py are captioned "target sparsity" and not "sparsity".
 
-THE KNOB SATURATES. On the logit-diff series (MAttr's objective, the one tabs/sparsity_sweep.tex
-reports) achieved sparsity runs
+THE KNOB COMPRESSES, AND IT IS NOT A CEILING (revised 2026-08-25, when s=1.25 landed). On the
+logit-diff series (MAttr's objective, the one tabs/sparsity_sweep.tex reports) achieved sparsity
+runs
 
-    target      0.1    0.25   0.5    0.8    0.9    0.95   0.99
-    achieved    0.111  0.230  0.466  0.748  0.798  0.829  0.855
+    target      0.1    0.25   0.5    0.8    0.9    0.95   0.99   1.25
+    achieved    0.111  0.230  0.466  0.748  0.798  0.829  0.855  0.920
 
-so the three sparsest budgets in the swept grid span 0.798--0.855: they are very nearly the same
-circuit. Any monotone trend across the top of that grid -- and acc-AUC has one -- is therefore
-NOT a trend across genuinely sparser circuits, and reporting "s=0.99" as a 99% sparse circuit
-would overstate it by an order of magnitude in kept units (145 of 1056 nodes, not 11).
+Everything up to s=0.99 flattens -- 0.798--0.855 across the top three, very nearly the same
+circuit -- and until 1.25 existed that read as SATURATION, a hard ceiling near 0.86 that this
+docstring asserted. It is not one. Pushing the target past 1 buys another +0.065, more than the
+0.9->0.99 span of the whole visible plateau, so what looked like the anneal's limit was the grid
+running out below the point where an unreachable target starts applying real pressure. The
+compression is still real and still the reason the x axis says "target": any trend across
+0.9/0.95/0.99 is a trend across nearly identical circuits, and "s=0.99" is an ~0.86-sparse
+circuit (145 of 1056 nodes kept, not 11). But do not repeat the ceiling claim -- s=2.0 (9/11
+cells, still training) will test where the real one is.
 
 THE TWO LOSSES SATURATE IN DIFFERENT PLACES, which is the interesting part. KL (Edge Pruning's
 own objective) tracks the request much further, reaching ~0.96 where logit-diff reaches ~0.86.
@@ -29,9 +35,10 @@ steps ANNEALING the target and leaves ~510 at the final value, so the multiplier
 converging (node-pruning-l0-anneal-steps). Two levers, and only one of them is honest to use in a
 table whose rows must be step-matched: raise the steps (changes the budget, breaks the match), or
 raise s past 1. s>1 is not an error -- an unreachable target just makes the constraint permanently
-violated, which is unbounded, correctly-signed sparsity pressure -- and it is why the grid here
-extends above 1.0 once those runs land. The y=x line is drawn for exactly this reason: a point on
-it got what it asked for, and nothing above s~0.5 does.
+violated, which is unbounded, correctly-signed sparsity pressure -- and the s=1.25 point above is
+that lever working: same 3000 steps, same LR, so it stays step-matched with every other row while
+reaching a sparsity no in-range target got to. The y=x line is drawn for exactly this reason: a
+point on it got what it asked for, and nothing above s~0.5 does.
 
 SOURCE. Achieved sparsity is NOT in results/ at all. The graph JSONs hold unthresholded
 log-alphas because MIB's run_evaluation.py re-thresholds them at every k of its own sparsity
