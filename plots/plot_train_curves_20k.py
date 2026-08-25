@@ -23,11 +23,15 @@ figures. The shaded strip is what carries it: it marks step 0-2000, the ENTIRE w
 fig:optimiser-curves, so the part of this curve that the paper's numbers actually cover is
 visually separated from the part they do not. Do not remove the band without replacing that cue.
 
-`addition` IS NOT IN fig:optimiser-curves' left-panel population as of this writing -- its Adam
-runs predate `train_eval_log`, so the pairing rule drops it (plot_train_curves.py's docstring:
-"`addition` has no paired cell in any (substrate, loss)"). If the re-run wave lands and addition
-becomes paired, this figure's cell and that figure's mean stop being disjoint and the two can be
-cross-read; check before claiming they can.
+`addition` IS NOW IN fig:optimiser-curves' population (2026-08-25). Its Adam runs predated
+`train_eval_log` and the pairing rule dropped them until `submit_addition_adam_relog.sh` re-ran
+the nine cells, so that figure went from 3 tasks to 4 and every panel is now n=4. The two figures
+are therefore NO LONGER DISJOINT -- this cell is one of the four averaged there -- which cuts both
+ways: the 20k curve can now be read as "the addition line of fig:optimiser-curves, continued", but
+"an independent cell" is no longer an available defence of it. The 20k runs are a SEPARATE wave
+(results/sva_mlp_steps20k, 64-example probe) and were not themselves re-run, so the @2k endpoints
+quoted above are still the pre-re-run numbers for the 20k arm and are not expected to equal the
+sweep's `addition` cell.
 
 THE PROBE IS NOT THE SWEEP'S PROBE. The sweep uses --train-eval-examples 20; these runs use 64,
 raised because the 20-example probe SATURATES (eval_sva.py:773 -- flat at steps 2000 and 6250 on

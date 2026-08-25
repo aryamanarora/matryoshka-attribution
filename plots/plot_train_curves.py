@@ -20,16 +20,21 @@ the yardstick any small Adam/SGD/IG gap in this figure has to clear. Do not read
 as IG responding to the loss, and do not report a difference under it.
 
 COVERAGE IS THE BINDING CONSTRAINT HERE, and it is not the same constraint as the other
-figures'. `train_eval_log` was added partway through the sweep, so it exists in 71/71 of the
-softsgd runs but only 27/81 of the Adam ones. Pairing on it leaves:
+figures'. `train_eval_log` was added partway through the sweep, so it exists in 81/81 of the
+softsgd runs but only 39/81 of the Adam ones. Pairing on it leaves:
 
-    ARITH   18 cells with BOTH arms logged
-    SVA      0 cells                          <- the Adam SVA runs all predate the logging
+    ARITH   36 cells with BOTH arms logged     <- all 4 tasks x 3 substrates x 3 losses
+    SVA      0 cells                           <- the Adam SVA runs all predate the logging
 
-so arithmetic is the only place this comparison can be drawn at all, and even there the paired
-Adam runs are a NON-RANDOM subset (the re-run ones). `addition` has no paired cell in any
-(substrate, loss). Per-task curves are drawn thin underneath the mean so a 2-task panel cannot
-pass for a converged average, and the task list per panel is printed.
+so arithmetic is the only place this comparison can be drawn at all. As of 2026-08-25 ARITH is
+COMPLETE there: `submit_addition_adam_relog.sh` re-ran the nine `addition` Adam cells (the last
+ones that predated the logging), so every panel is n=4 and the old "Node/logit-diff has no paired
+cell" hole is closed. Those re-runs are fresh training, not a rescoring, and their endpoints moved
+-- the MLP cells by +0.04 to +0.06 acc-AUC in Adam's favour, the node cells by <0.005 (the
+pre-re-run values are kept in results/_backup_addition_adam_prelog_20260824). That is run-to-run
+variance on one task, so it does not overturn the figure's ordering, but a number quoted off an
+`addition`/Adam/MLP cell before that date is stale. Per-task curves are drawn thin underneath the
+mean so a thin panel cannot pass for a converged average, and the task list per panel is printed.
 
 ADAM IS BLUE AND SGD IS BLACK, matching plot_optimizer_lr.py's MIB panels. This REVERSES what
 this figure used to do -- both arms took MAttr's blue and separated by linetype, on palette.py's
@@ -157,10 +162,10 @@ def dash(arm, loss, overlay):
 def panel(ax, mean, per, overlay, fs, note=None):
     """One cell: thin per-task curves under the bold arm means.
 
-    The per-task lines are not decoration. Every panel here averages 2-3 tasks, so the mean is
+    The per-task lines are not decoration. Every panel here averages 4 tasks, so the mean is
     not a converged average and must not be able to look like one -- if the thin lines disagree
     about the sign of the Adam/SGD gap, the panel is not evidence. They are drawn fainter in the
-    overlay layout, which stacks three losses into the space the grid gives one: 18 thin lines
+    overlay layout, which stacks three losses into the space the grid gives one: 24 thin lines
     at the grid's weight is a wash the 9 means cannot be read out of.
     """
     lw, al = (0.3, 0.14) if overlay else (0.35, 0.28)
@@ -385,7 +390,8 @@ def main():
     if overlay:
         # One label per panel, spelling out every loss's n -- including the zeroes, since a loss
         # with no paired cell is simply ABSENT from an overlay panel and would otherwise be
-        # invisible (Node/logit-diff is exactly this case).
+        # invisible. (Node/logit-diff was exactly this case until the addition re-runs landed on
+        # 2026-08-25; no panel is short now, but the branch stays -- an SVA overlay would hit it.)
         agg = {}
         for s, l, n, _ in notes:
             agg.setdefault(s, []).append(f"{l} {n}")
@@ -410,7 +416,8 @@ def main():
 
     if one and not len(mean[(mean.substrate == a.substrate) & (mean.loss == a.loss)]):
         raise SystemExit(f"--substrate {a.substrate} --loss {a.loss}: no paired cell "
-                         f"(Node/logit-diff is the known-empty one)")
+                         f"(every ARITH combination has one since 2026-08-25; --tasks sva has "
+                         f"none at all)")
     render(a, out, mean, per, nlab, mrows, overlay, one)
     print("wrote", out)
     print("\npaired cells per panel (substrate x loss) -- both arms must have train_eval_log:")
