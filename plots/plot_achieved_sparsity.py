@@ -74,6 +74,14 @@ import make_lr_table as M                               # COLUMNS  # noqa: E402
 # results/eprun_eval, since run_edge_pruning.sbatch only appends _s<S> when a sparsity is passed
 # and 0.9 is its node default. Deriving "eprun_eval_s0.9" reads an empty dir and drops the point.
 # (Same trap is documented in submit_node_pruning_sparsity.sh.)
+#
+# THE KL SERIES IS PERMANENTLY 3 POINTS, BY DECISION (2026-08-25). s=0.5 sits at 6/11 cells and
+# s=0.8 at 9/11, so the 11-cell completeness gate drops both from every panel here and in
+# plot_sparsity_sweep_summary.py. The seven jobs that would have filled them were CANCELLED --
+# this is a closed gap, not a pending wave, so do NOT resubmit submit_node_pruning_sparsity.sh's
+# KL arm on seeing "6/11, dropped" in the exclusion log. The three complete points (0.9/0.95/0.99
+# -> 0.857/0.925/0.962) already carry the only claim the series is used for: KL tracks the target
+# much further than logit-diff, so its worse-CPR/better-acc-AUC split is DENSITY, not objective.
 KL_ROWS = [("0.5", "eprun_eval_s0.5"), ("0.8", "eprun_eval_s0.8"), ("0.9", "eprun_eval"),
            ("0.95", "eprun_eval_s0.95"), ("0.99", "eprun_eval_s0.99")]
 
