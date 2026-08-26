@@ -5,7 +5,7 @@ metrics on the validation set. This shows how the two agree across methods (Spea
 printed, not drawn — the caption quotes it) — a companion to the MLP/Attn Spearman heatmap.
 
 Three variants of one plot, all raw matplotlib with direct point labels:
-  (no flag)  main text, 0.30\textwidth, eight curated points   -> mib_accauc_cpr_scatter.pdf
+  (no flag)  main text, 0.30\textwidth, 13 curated points   -> mib_accauc_cpr_scatter.pdf
   --full     appendix, full page, every node point             -> ..._full.pdf
   --edge     appendix, full page, every edge point             -> ..._edge_full.pdf
   --both     appendix, full page, node over edge in one float  -> ..._both.pdf
@@ -118,7 +118,7 @@ FULL_COLORS = {
     G_NPLD: P.METHOD["Node Pruning"], G_NPKL: "#9d95d1",   # tint of the same indigo
     # Wong reddish purple. It was a warm #d98d3a, which is a near-twin of the gradient
     # baselines' Wong orange (#e69f00) -- survivable at 50 labelled points, not in the
-    # eight-point main-text cut, where DBM sits four points from RelP+QK in the same hue and
+    # 13-point main-text cut, where DBM sits three points from RelP+QK in the same hue and
     # only the marker SHAPE says they are different families. Purple keeps it in the
     # mask-learning family with Node Pruning's indigo while staying well clear of it in
     # lightness (L* ~60 vs ~24).
@@ -700,14 +700,20 @@ def edge_rows():
         if level != "edge":
             continue
         label = delatex(name) if g == "ours" else "unif $k$, " + delatex(name)
-        # Same disambiguation the node loop above needs, but the OPPOSITE default: at edge level
-        # Adam is the unmarked method and SGD carries the suffix. Not an inconsistency -- the
-        # edge LR sweep (submit_mib_edge_lr_sweep.sh, 4/11 cells, both arms bracketed) has Adam
-        # winning tuned-vs-tuned at edge scale (7.65 vs 6.89) where the two TIE at node scale,
-        # so the tables split the default by level and this panel follows them. See
+        # Same disambiguation the node loop above needs, and as of 2026-08-26 the same default:
+        # SGD is unmarked at BOTH levels and Adam carries the suffix. This branch used to be the
+        # mirror image (SGD suffixed at edge), which was correct while the tables split the
+        # default by level; the edge flip in make_mib_test_table.OUR_EDGE_METHODS made it a lie,
+        # and this panel follows the tables, not the sweep.
+        #
+        # Worth knowing while reading these edge points: the sweep does NOT say SGD is the better
+        # edge optimizer. submit_mib_edge_lr_sweep.sh brackets both arms on 4/11 cells and Adam
+        # wins tuned-vs-tuned at edge scale (7.65 vs 6.89) where the two TIE at node scale, and
+        # the SGD dir that ships is at lr=1.0, the imported node optimum, worth 4.72 there. The
+        # unmarked edge point is therefore below its own arm's best. See
         # make_mib_table.emit_ours() for the full argument.
-        if M.opt_of(d) == "sgd" and name == "\\ourmethod{}":
-            label += " (SGD)"
+        if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
+            label += " (Adam)"
         cand.append((label, d, G_MLOG if g == "ours" else G_MUNI))
 
     data = {d: cells(d) for _, d, _ in cand}
@@ -756,9 +762,22 @@ def edge_rows():
     return rows
 
 
+def pareto_front(rows):
+    """Labels of the points no other point beats on BOTH axes (maximise acc-AUC and CPR AUC).
+
+    Weak dominance: a point is dropped when some other point is >= on both metrics and > on at
+    least one, so an exact duplicate keeps both. Nothing here rounds -- the frontier is computed
+    off the same floats that get plotted, which is the only way it cannot disagree with what the
+    reader sees.
+    """
+    pts = [(r["acc"], r["cpr"], r["label"]) for r in rows]
+    return {lab for (a, c, lab) in pts
+            if not any((a2 >= a and c2 >= c) and (a2 > a or c2 > c) for (a2, c2, _) in pts)}
+
+
 def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
                 fs=(9, 8, 7.5), msize=46, colors=None, order=None, maskset=None,
-                path_style=None):
+                path_style=None, pareto=None):
     """Markers, dashed series, axes furniture. Returns the frame; labels come later.
 
     Split from place_labels() because label geometry is measured in axes-fraction units, so it
@@ -800,14 +819,32 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
             ax.plot([p[1] for p in pts], [p[2] for p in pts],
                     ls=path_style.get(key, "dashed"), lw=0.7,
                     alpha=0.55, zorder=1, color=colors[pts[0][3]])
+    # Pareto-optimal points get a star INSTEAD OF their family shape. That is a real cost -- the
+    # circle/square split is how this figure encodes gradient-vs-mask, and a starred point stops
+    # carrying it -- but the frontier is a property of position, which colour cannot show and a
+    # third shape channel would only muddy. It is affordable because on the current numbers the
+    # frontier is {MAttr, +unif k}, both ours, both blue: the family they belong to is already
+    # unambiguous from the colour and the label. Re-check that if a baseline ever reaches it.
+    # s is scaled up because matplotlib sizes markers by bounding-box area and a star's ink fills
+    # far less of its box than a circle's, so an equal `s` reads as the smaller marker.
+    pareto = pareto or set()
     for grp in order:
         sub = df[df.grp == grp]
         if not len(sub):
             continue
-        ax.scatter(sub.acc, sub.cpr, s=msize,
-                   marker=FAMILY_SHAPE[MASK if grp in maskset else GRADIENT],
-                   c=colors[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
-                   label=grp)
+        shape = FAMILY_SHAPE[MASK if grp in maskset else GRADIENT]
+        star = sub[sub.label.isin(pareto)]
+        rest = sub[~sub.label.isin(pareto)]
+        # The legend label rides on whichever scatter is non-empty, and only one of them, or a
+        # group with a frontier point would get two identical legend entries.
+        if len(rest):
+            ax.scatter(rest.acc, rest.cpr, s=msize, marker=shape,
+                       c=colors[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
+                       label=grp)
+        if len(star):
+            ax.scatter(star.acc, star.cpr, s=msize * 2.4, marker="*",
+                       c=colors[grp], edgecolors="#000000", linewidths=0.5, zorder=3,
+                       label=None if len(rest) else grp)
 
     xr, yr = ax.get_xlim(), ax.get_ylim()
     # Room for labels on the right. 0.22 was enough at 32 points; the "unif k, " prefix and the
@@ -1005,7 +1042,7 @@ def main_lr():
 
 
 # === compact figure: which points survive ===
-# The main-text scatter is the same plot as --full, cut to eight named points. Selection rule,
+# The main-text scatter is the same plot as --full, cut to 13 named points. Selection rule,
 # so it is re-derivable rather than taste: one point per METHOD FAMILY at that family's best
 # setting, plus the endpoints of the gradient spread.
 #
@@ -1030,24 +1067,32 @@ def main_lr():
 # alone silently plotted both. Everything else (the other 11 budgets, the lr and L1 paths, the
 # remaining ablations) is exactly what the appendix --full version is for.
 COMPACT = {
-    (G_MLOG, "MAttr"): None, (G_MLOG, "+hard"): None,
-    # The optimizer ablation, Adam at ITS own LR (topklog_lr_0.05), which the tables report as
-    # the "+ Adam" row. It was already being drawn -- the label collision above meant this point
-    # rendered on top of the SGD one under the same name -- so naming it does not add ink, it
-    # stops two different circuits reading as one.
+    # THIS SET IS THE NODE PANEL OF plots/plot_mib_test_avg.py, MINUS THE ADAM ROWS (2026-08-26).
+    # The two figures are met together and a reader comparing them should not have to work out
+    # which methods are in one and not the other. Two unavoidable differences, both structural:
     #
-    # LOG-k ONLY, deliberately. The uniform-k Adam point (0.475 / 2.092) is the highest-CPR
-    # point on the whole node figure, but is NOT in this cut -- so putting it in alone would put
-    # a uniform-k point on the frontier with nothing to read it against. Both uniform points are
-    # in --full, where the pair is legible.
+    #   Random     the bar chart's control is a literal transcribed from MIB's Table 1 and has
+    #              no IIA number anywhere on disk, so it has no x coordinate and cannot be
+    #              plotted here. It is not "dropped" -- it does not exist on this axis.
+    #   split      everything here is VALIDATION; the bar chart is the test table. So the CPR
+    #              values differ (e.g. RelP 0.76 here vs the test 0.76-ish, IG-5 0.85). Only the
+    #              method SET is shared, not the numbers.
     #
-    # Shortened to "+Adam" for the same reason "IG (10 steps)" is shortened to "IG-10": at
-    # 5.5pt on a 1.65in panel a bare "(Adam)" suffix runs the label wide. "+Adam" keeps it
-    # inside XPAD_C's budget. It also reads as what it is: MAttr with one knob changed, exactly
-    # like the "+hard" beside it. Caveat the label cannot carry: this point is at Adam's own LR
-    # (0.05), the SAME lr as the pre-2026-08-24 headline used -- only the default optimizer
-    # changed, not the LR ladder either method was tuned on.
-    (G_MLOG, "MAttr (Adam)"): "+Adam",
+    # Adam rows dropped on request: "+Adam" (0.499/1.879) sits ~one marker from the SGD "MAttr"
+    # (0.504/1.886) and "+Adam, unif k" (0.475/2.092) ~one from "+unif k" (0.482/2.031), so at
+    # 1.65in each pair was two labels fighting over one location to say "the optimizers tie".
+    # The tie is the heatmap's job (rho .94 on MLPs) and the table's; it does not need this
+    # panel. Both Adam points are still in --full.
+    #
+    # "+hard" went with them: it is a MAttr ablation with no bar in the test-table figure.
+    (G_MLOG, "MAttr"): None,
+    # Uniform k, SGD -- the bar chart's "+ unif k". An earlier version of this comment said
+    # log-k ONLY, on the grounds that a lone uniform-k point would sit on the frontier with
+    # nothing to read it against. That no longer applies: the pairing it wanted is now supplied
+    # by the bar chart, which carries the same two rows side by side, and this point IS half the
+    # Pareto frontier (see PARETO below) -- the trade it makes against log-k, +0.145 CPR for
+    # -0.022 IIA, is exactly what this panel exists to show.
+    (G_MUNI, "unif $k$, MAttr"): "$+$unif $k$",
     # M.EPRUN_BEST_SPARSITY; drop the bare "s=" (and the objective) for the main text
     (G_NPLD, "s=0.5"): "Node Pruning",
     (G_DBM, "DBM L1=6.0"): "DBM",       # the sweep value is an appendix detail
@@ -1059,19 +1104,26 @@ COMPACT = {
     # of them, past GIM and AttnLRP. Plotting only the 5-step point (what this figure did until
     # now) puts a baseline on the frontier at a setting we know is unconverged, which flatters
     # us; plotting only the 10-step point hides that the converged number is not the one MIB
-    # reports. 30 steps stays out: it lands on top of 10 (rho 0.994, zero sign flips) and would
-    # be a third label in a 1.65in panel for no visible movement.
+    # reports.
     # Labels are "(5)" / "(10)" rather than "(5 steps)" -- the long form is ~1/3 of the panel
     # width at 5.5pt. The dashed segment carries the "same method" reading; the appendix
     # --full figure spells the budgets out.
-    # RelP, not RelP+QK: aligned 2026-08-24 with make_mib_test_table.GRAD_NODE_BASELINES, which
-    # was switched to plain RelP on request. This figure and the test table should name the same
-    # methods, since a reader meets them together. Note the two differ in SPLIT -- everything
-    # here is validation -- so the numbers are not the table's; only the method set is shared.
-    # On validation RelP averages 0.76 CPR against +QK's 0.90, so this point moves down-left.
+    # 30 steps used to be excluded here on the grounds that it lands on top of 10 (rho 0.994,
+    # zero sign flips: 0.455/1.299 against 0.465/1.306) and buys a third label for no visible
+    # movement. That is still TRUE as a plotting fact -- the two markers overlap and repel() has
+    # to fan their labels -- but parity with the bar chart won: a reader meeting the two figures
+    # together should not have to work out which IG budgets are in one and not the other, and
+    # "the 10- and 30-step points are indistinguishable" is a legible thing for the panel to say
+    # in its own right. If the overlap ever hurts, drop this row, not IG-10.
     (G_GRAD, "RelP"): None,
+    # RelP+QK as well as plain RelP: the bar chart carries both (0.76 vs 0.90 validation CPR),
+    # and they are far enough apart on both axes to read as two points. An earlier revision kept
+    # only RelP, matching make_mib_test_table.GRAD_NODE_BASELINES; the bar chart is the closer
+    # neighbour on the page, so it is the set this now follows.
+    (G_GRAD, "RelP+QK"): None,
     (G_GRAD, "IG (5 steps)"): "IG-5",
     (G_GRAD, "IG (10 steps)"): "IG-10",
+    (G_GRAD, "IG (30 steps)"): "IG-30",
     # Stepless IG, added with the RelP swap. It is the one gradient point whose POSITION is the
     # claim: same x-cost as I x G at the bottom-left of this cloud, but landing with IG-10 at the
     # top. Shortened to "IG-free" -- "Stepless IG" is wider than any label this 1.65in panel
@@ -1118,7 +1170,7 @@ XPAD_C = 0.34
 
 
 def main():
-    """The main-text figure: --full's plot, eight named points, no legend."""
+    """The main-text figure: --full's plot, 13 named points, no legend."""
     import matplotlib.pyplot as plt
     rows = [r for r in node_rows() if (r["grp"], r["label"]) in COMPACT]
     missing = set(COMPACT) - {(r["grp"], r["label"]) for r in rows}
@@ -1134,15 +1186,20 @@ def main():
 
     plt.rcParams.update(RC)
     fig, ax = plt.subplots(figsize=(FIG_W_C, FIG_H_C))
-    # No legend: with eight points every one is named, so a group legend would spend a third of
+    # No legend: every point is named, so a group legend would spend a third of
     # a 1.65in panel restating what the labels already say. Colour still encodes the group and
     # shape the gradient/mask split, both consistent with the appendix figure.
-    df = draw_points(ax, rows, xpad=XPAD_C, legend=False, fs=(7, 6, 6), msize=MSIZE_C)
+    # Computed, never hardcoded: the frontier is whatever the current pkls say it is, and both
+    # axes move under re-evaluation. Printed below so a reader of the log can check the caption.
+    front = pareto_front(rows)
+    df = draw_points(ax, rows, xpad=XPAD_C, legend=False, fs=(7, 6, 6), msize=MSIZE_C,
+                     pareto=front)
     fig.tight_layout(pad=0.4)
     place_labels(fig, ax, df, pt=LAB_PT_C, msize=MSIZE_C)
     out = "plots/mib_accauc_cpr_scatter.pdf"
     fig.savefig(out, dpi=300)
     print(f"wrote {out} ({len(df)} points)")
+    print(f"Pareto frontier (starred): {sorted(front)}")
     # The figure's caption quotes this rho, so print it rather than leaving it hand-maintained
     # -- it drifts with every re-eval, and the mask baselines pull it down (they buy CPR at
     # markedly lower IIA than any gradient method, so the two metrics rank them differently).
