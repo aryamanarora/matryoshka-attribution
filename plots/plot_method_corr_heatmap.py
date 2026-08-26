@@ -219,20 +219,24 @@ p.save(OUT / "method_corr_heatmap.pdf", dpi=300); p.save(OUT / "method_corr_heat
 print("Saved method_corr_heatmap")
 
 # ---- (1b) MAIN-TEXT figure: curated subset, Attn vs MLP facets only ----
-# SEVEN methods, one per mechanism, cut down from eleven on 2026-08-26. The appendix heatmaps
+# EIGHT methods, one per mechanism, cut down from eleven on 2026-08-26. The appendix heatmaps
 # above keep the full set, so nothing is lost -- this cut is about what a 3.69in-wide main-text
 # panel can be read at, and eleven columns put the numbers at 3.6pt against a 6-7pt house style.
 #
-# What went and why. RelP+QK / GIM / AttnLRP are three more gradient baselines that all land in
-# the same block as I$\times$G and IG-5 and so restated one fact three times. NAP-IG (10 steps)
-# went with them: Stepless IG now carries the "does the integration budget change the RANKING"
-# question on its own, and it is the sharper version of it (one random draw vs a 5-point grid,
-# rather than 5 vs 10). "+hard (log)*" is a MAttr ablation whose row said the learned family
-# agrees with itself. All four are still above.
+# What went and why. RelP+QK and GIM are two more gradient baselines that land in the same block
+# as I$\times$G and IG-5, so between them and AttnLRP the panel restated one fact three times;
+# AttnLRP is kept as the non-IG gradient method (a propagation rule, not a path integral), which
+# is the one that could in principle rank differently. NAP-IG (10 steps) went too: Stepless IG
+# now carries the "does the integration budget change the RANKING" question on its own, and it
+# is the sharper version of it (one random draw vs a 5-point grid, rather than 5 vs 10).
+# "+hard (log)*" is a MAttr ablation whose row said the learned family agrees with itself.
+# All three are still above.
 #
-# What each of the seven is here to answer:
+# What each of the eight is here to answer:
 #   I$\times$G, IG-5    the gradient family, at the two budgets the test table leads with
 #   Stepless IG         same integral, one MC draw -- ties IG-30 on CPR, so: same ranking or not?
+#   AttnLRP             gradient attribution that is NOT a path integral, so the gradient block
+#                       is not just one estimator seen at three budgets
 #   DBM, NodePrune      outside mask learners: is "learned" the axis, or is it our parameterization?
 #   MAttr, +Adam        the optimizer ablation. Adam and SGD tie on every eval metric (CPR 1.879
 #                       vs 1.886, IIA .499 vs .504); only a rank correlation distinguishes "the
@@ -242,7 +246,7 @@ print("Saved method_corr_heatmap")
 MAIN_LABELS = [
     "MAttr SGD (log)", "MAttr (log)*",                           # learned, ours (2); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
-    "NAP-IG (5 steps)", "Stepless IG", "I$\\times$G",            # gradient (3)
+    "NAP-IG (5 steps)", "Stepless IG", "AttnLRP", "I$\\times$G", # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups).
@@ -264,10 +268,12 @@ DISPLAY = {"MAttr (log)*": "+Adam", "+hard (log)*": "+hard",
 # table finds these seven methods in the same sequence, with the four the table lists between
 # them (RelP, RelP+QK, IG m=30, GIM, AttnLRP) simply absent rather than reshuffled.
 # Every row now has a table counterpart, which was not true of the eleven-method version.
+# Stepless IG and AttnLRP are adjacent because the table has them at 1.31 and 1.32 -- that near
+# tie is the table's own, not a clustering result, and the order between them is the table's.
 # Within the Ours pair, SGD-default ("MAttr SGD (log)") leads (2026-08-24 flip, see DISPLAY).
 # If the table's row order changes, this list has to be updated by hand to match.
 ORDER_MAIN = [
-    "I$\\times$G", "NAP-IG (5 steps)", "Stepless IG",
+    "I$\\times$G", "NAP-IG (5 steps)", "Stepless IG", "AttnLRP",
     "DBM", "Node Pruning",
     "MAttr SGD (log)", "MAttr (log)*",
 ]
@@ -294,16 +300,16 @@ sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
 # always 0 and carries nothing.
 # TEXT SIZE IS A FUNCTION OF THE COLUMN COUNT, and the figure width is NOT available to trade
 # against it -- 3.69in is set by the 0.67*textwidth slot this shares with the scatter, and
-# changing it misaligns the two subfigures. Tile width is ~93pt/n_methods: at the old 11 columns
-# that was ~8.5pt and forced size 3.6 (right at the limit -- "-.22" was ~8.6pt of glyphs and only
-# just cleared its gutters). At 7 it is ~13.3pt, so size 5 fits with room and finally lands in
-# the 6-7pt-in-the-compiled-PDF band the rest of the paper's figures use. If methods are ever
-# added back here, scale this down rather than widening the panel.
+# changing it misaligns the two subfigures. Tile width is ~93pt/n_methods, and the widest string
+# is "-.22": at the old 11 columns the tile was ~8.5pt and forced size 3.6, right at the limit
+# (~8.6pt of glyphs, only just clearing its gutters). At 8 the tile is ~11.6pt, so size 4.5
+# (~10.8pt) fits and lands near the 6-7pt-in-the-compiled-PDF band the rest of the figures use.
+# The rule if the method count changes again: size ~= 3.6 * 11 / n_methods, then LOOK at it.
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
 # sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
 # companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=5)
+       + geom_text(aes(label="lab"), size=4.5)
        + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
                               midpoint=0, limits=[-1, 1], na_value="#eeeeee")
