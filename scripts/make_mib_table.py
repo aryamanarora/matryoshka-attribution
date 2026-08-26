@@ -750,26 +750,28 @@ def main():
         return COST_UGS if name == "UGS" else COST_EPRUN
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
-        # Split the "Ours" rows into two optimizer sets, each with a header. WHICH OPTIMIZER IS
-        # THE UNMARKED DEFAULT IS LEVEL-DEPENDENT, and that asymmetry is measured, not a
-        # bookkeeping accident (2026-08-24):
+        # Split the "Ours" rows into two optimizer sets, each with a header. SGD IS THE UNMARKED
+        # DEFAULT AT BOTH LEVELS as of 2026-08-26; Adam is the annotated ablation.
         #
-        #   node  SGD is default. Both arms bracketed on their own grids; at their own optima
-        #         they TIE (SGD lr=1.0 -> 1.886, Adam lr=0.05 -> 1.879). Once it's a tie, SGD is
-        #         the better default: it is LR-invariant by construction (zero init, no
-        #         momentum), so the row is the more reproducible one.
-        #   edge  ADAM is default. submit_mib_edge_lr_sweep.sh brackets BOTH arms at edge scale
-        #         (4/11 cells, paired): Adam peaks lr=0.1 -> 7.65 (lr=0.05 -> 7.59), SGD peaks
-        #         lr=3.0 -> 6.89. Both curves rise then fall, so both are genuinely bracketed --
-        #         this is tuned-vs-tuned, and Adam wins by ~0.76 CPR. The node tie does NOT
-        #         transfer, so neither should the node default.
+        # Why SGD: at node level the two arms, each read at its own bracketed optimum, TIE (SGD
+        # lr=1.0 -> 1.886, Adam lr=0.05 -> 1.879). Once it is a tie, SGD is the better default --
+        # it is LR-invariant by construction (zero init, no momentum), so the headline row is the
+        # more reproducible one, and one optimizer across both levels is one fewer caveat.
         #
-        # Do NOT "fix" this into one uniform order. Making edge SGD-default would put the
-        # imported node LR (1.0, measured 4.72 at edge scale against its own optimum's 6.89) in
-        # the headline row -- detuned by ~2.2 CPR on a knob we have already measured.
+        # WHAT THIS COSTS AT EDGE LEVEL, stated plainly because the number is not small.
+        # submit_mib_edge_lr_sweep.sh brackets both arms at edge scale (4/11 cells, paired) and
+        # Adam wins tuned-vs-tuned: Adam lr=0.1 -> 7.65 (lr=0.05 -> 7.59) against SGD lr=3.0 ->
+        # 6.89. Worse, the edge SGD dirs on disk are at lr=1.0 -- the node optimum carried over,
+        # not an edge argmax -- which that sweep measures at 4.72. On the full test table the bare
+        # edge row therefore reads 4.96 where Adam's reads 6.23: this flip understates our own
+        # edge result by ~1.27 CPR. It is a presentation choice (uniform default across levels),
+        # NOT a claim that SGD is the stronger edge optimizer.
+        #
+        # THE FIX IS NOT TO FLIP BACK. It is to finish the held esgd3-* wave (lr=3.0) so the edge
+        # SGD rows sit at their own optimum like every other row in this table; only 4/11
+        # validation cells and 0 test cells exist there today. Repoint the dirs when it lands.
         # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
-        order = ([("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")] if level == "node"
-                 else [("adam", "\\ourmethod{}"), ("sgd", "\\ourmethod{}$+$SGD")])
+        order = [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]
         for opt, label in order:
             rows_u = [(n, r, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
             rows_o = [(n, r, g) for n, r, _, g in ours_list if opt_of(r) == opt]

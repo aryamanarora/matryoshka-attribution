@@ -85,9 +85,18 @@ FAMILY = {
 DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
 LEVELS = [("node", "Node-level", ()), ("edge", "Edge-level", ("ours",))]
 
-FIG_W = 5.4
-PANEL_H = 1.30         # the plotting rect itself; the rotated tick labels get FOOT below it
-HEAD, FOOT = 0.24, 0.80
+# 5.5in is iclr2026_conference.sty's \textwidth verbatim (line 49), so at width=\linewidth the
+# figure is placed 1:1 and the sizes below are the sizes that reach the compiled PDF. Most other
+# figures in paper/figs are drawn at 5.5 or 5.4 for the same reason; do not draw this one smaller
+# and let LaTeX upscale it, which would push the tick labels past 7pt.
+FIG_W = 5.5
+# The plotting rect itself. Kept SHORT on purpose: this figure carries one number per method, so
+# the y extent is doing no work beyond ordering the bars -- height here is spent on nothing and
+# costs a column inch on a 9-page limit. FOOT is what the 45-degree tick labels need below the
+# axis ("EAP-IG-inp (CF)" is the longest); tight_layout will steal it back from PANEL_H if it is
+# short, shrinking the bars rather than clipping, so check the ink bbox after changing either.
+PANEL_H = 1.05
+HEAD, FOOT = 0.22, 0.62
 FS_AXIS, FS_TICK, FS_ANNOT = 7, 6.5, 6
 BAR_W = 0.72           # in category units, so bars are the same thickness in both panels
 

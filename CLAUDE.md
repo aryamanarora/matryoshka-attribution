@@ -41,40 +41,38 @@ were re-run or re-pointed, `topklog_lr_0.05` is unchanged Adam data, still on di
 | `softlog_sgd_lr_1.0`                       | soft fwd, log k, SGD (node, val)  | **MAttr headline** |
 | `test_node_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (node, test) | **MAttr headline** |
 | `mib_edge_softlog_sgd_lr_1.0`              | soft fwd, log k, SGD (edge, val)  | **MAttr headline** |
-| `test_edge_topk_log_lr05`                  | soft fwd, log k, Adam (edge, test)| **MAttr headline** (edge is Adam-default *by measurement* — see below) |
+| `test_edge_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (edge, test) | **MAttr headline** (at a detuned LR — see below) |
 | `topklog_lr_0.05`                          | soft fwd, log k, Adam        | "$+$ Adam" ablation |
 | `test_node_topk_log_lr05`                  | soft fwd, log k, Adam (test) | "$+$ Adam" ablation |
-| `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam (edge) | "$+$ Adam" ablation (edge val); **headline** (edge test, until SGD lands) |
+| `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam (edge) | "$+$ Adam" ablation |
 | `htklog_lr_0.05` (+test/edge twins)        | hard STE fwd, log k, Adam    | "$+$ hard" ablation |
 | `htk_lr_0.05`                              | hard STE fwd, uniform k      | "+ unif k, + hard"  |
 | `softuni_sgd_lr_3.0`                       | soft fwd, uniform k, SGD     | "+ unif k"          |
 | `final_node` / `topk_uniform_lr05`         | soft fwd, uniform k, Adam    | "+ unif k, + Adam"  |
 
-**Edge stays Adam-default. This is settled — do NOT "flip it now that the wave landed."**
-`scripts/submit_test_edge_sgd.sh` (22 jobs) COMPLETED on 2026-08-24 (`test_edge_softlog_sgd_lr_1.0`,
-11/11 test cells). An earlier version of this note said to point the bare `\ourmethod{}` edge row
-at SGD once that happened. **That instruction was wrong and is withdrawn** — it predated
-`submit_mib_edge_lr_sweep.sh`, which brackets BOTH optimizers at edge scale and settled the
-question the same day. Paired over its 4 cells (ioi/gpt2, ioi/llama3, mcqa/llama3,
+**Bare `\ourmethod{}` means SGD at BOTH levels as of 2026-08-26** (user decision, flipping the
+Adam-default edge convention this note previously defended). One optimizer across both levels,
+Adam as the annotated ablation, in `make_mib_test_table.OUR_EDGE_METHODS`, `make_mib_table
+.emit_ours()`, and `plots/plot_mib_test_avg.py` (which reads `collect()`, so it follows).
+
+**Know what this costs before you quote it.** `submit_mib_edge_lr_sweep.sh` brackets BOTH
+optimizers at edge scale; paired over its 4 cells (ioi/gpt2, ioi/llama3, mcqa/llama3,
 arithmetic_subtraction/llama3), CPR AUC:
 
-| Adam lr=0.1 | Adam lr=0.05 | SGD lr=3.0 (SGD's own edge optimum) | SGD lr=1.0 |
+| Adam lr=0.1 | Adam lr=0.05 | SGD lr=3.0 (SGD's own edge optimum) | SGD lr=1.0 (the dir we ship) |
 |---|---|---|---|
 | **7.65** | 7.58 | 6.89 | **4.72** |
 
-Adam wins TUNED-vs-TUNED at edge scale; the node-level tie that makes SGD the better default
-there does not transfer. Worse, the dir that landed is at **lr=1.0 — the imported NODE optimum**,
-which measures 4.72 at edge scale. Flipping would put a knob detuned by ~2.2 CPR against its own
-optimum into the headline row and understate our own method by ~1.3 against Adam.
+Adam wins TUNED-vs-TUNED at edge scale — the node-level tie does not transfer — and the SGD dir
+that landed is at **lr=1.0, the imported NODE optimum**. Net effect on the test table: the bare
+edge row reads **4.96** where the Adam row reads **6.23**, i.e. this convention understates our
+own edge result by ~1.27 CPR. That is a presentation choice, not a finding. **Never write prose
+saying SGD is the better edge optimizer** — the sweep says the opposite.
 
-So `make_mib_test_table.py`'s `OUR_EDGE_METHODS` keeps `\ourmethod{}` → `test_edge_topk_log_lr05`
-(Adam), and the edge rows of both MIB tables are the one place a bare `\ourmethod{}` does NOT
-mean SGD — deliberately, and mirrored in `make_mib_table.emit_ours()` for validation. The
-`$+$ SGD` rows sit at that detuned lr=1.0 and are labelled as an ablation; they say "the node LR
-does not transfer", NOT "SGD is worse at edge level". **The only thing that would reopen this**
-is completing SGD at lr=3.0 at edge level (today: 4/11 validation cells, 0 test), which would let
-those rows follow the own-best-LR policy used everywhere else. Full reasoning, including the
-brief flip-and-revert, is in that file's comments at `OUR_EDGE_METHODS`.
+**The fix is not to flip back**, it is to repoint the edge SGD rows at lr=3.0 so they sit at
+their own block-argmax like every other row. Today: 4/11 validation cells, 0 test. The
+`esgd3-*` jobs that fill it are submitted and HELD (`scripts/submit_edge_sgd_lr3.sh`); release
+them and repoint `OUR_EDGE_METHODS` when they land.
 
 Do NOT use uniform-k dirs as the headline — their CPR averages look strong (esp. edge)
 but acc-AUC is the worst of the three and they collapse on IOI/Qwen test; using them

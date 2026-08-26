@@ -108,29 +108,27 @@ OUR_NODE_METHODS = [
 # mirror. Re-tuning here and not there would mean the two tables report different
 # hyperparameters under one row label, which is worse than untuned-but-consistent.
 #
-# EDGE STAYS ADAM-DEFAULT while the node block above is SGD-default. That asymmetry is
-# deliberate and measured -- see make_mib_table.emit_ours(), which encodes the same split for
-# the validation table. Short version (2026-08-24): submit_mib_edge_lr_sweep.sh brackets BOTH
+# SGD IS THE UNMARKED DEFAULT HERE TOO as of 2026-08-26, matching the node block above and
+# make_mib_table.emit_ours() (which encodes the same order for the validation table). One
+# optimizer across both levels; Adam becomes the annotated ablation.
+#
+# WHAT THAT COSTS, because the number is not small. submit_mib_edge_lr_sweep.sh brackets BOTH
 # optimizers at edge scale (4/11 cells, paired) and Adam wins TUNED-vs-TUNED, peaking at
-# lr=0.1 -> 7.65 (lr=0.05 -> 7.59) against SGD's lr=3.0 -> 6.89. The node-level tie that makes
-# SGD the better default there simply does not transfer.
+# lr=0.1 -> 7.65 (lr=0.05 -> 7.59) against SGD's lr=3.0 -> 6.89 -- the node-level tie that
+# motivates SGD there does not transfer. And the SGD dirs below are at lr=1.0, the imported node
+# optimum, which that same sweep measures at 4.72. So the bare edge row reads 4.96 against the
+# Adam row's 6.23: this ordering understates our own edge result by ~1.27 CPR. It is a
+# presentation choice, NOT a finding that SGD is the better edge optimizer -- do not let prose
+# read it as one.
 #
-# This block was briefly flipped to SGD-default when submit_test_edge_sgd.sh's 22 jobs landed,
-# then reverted on reading that sweep. The flip would have put lr=1.0 -- the IMPORTED node
-# optimum, measured at 4.72 at edge scale against its own optimum's 6.89 -- in the headline row,
-# i.e. understated our own method by ~1.3 CPR on a knob already known to be detuned.
-#
-# The "$+$ SGD" rows below are therefore at a detuned LR and are labelled as an ablation, which
-# is honest but not ideal: the own-best-LR policy used everywhere else would want lr=3.0 here.
-# Only 4/11 validation cells exist at lr=3.0 and 0 test cells, so completing that is a
-# prerequisite to repointing these two rows. Until then they say "the node LR does not
-# transfer", NOT "SGD is worse at edge level" -- the sweep says the latter too, but these rows
-# are not the evidence for it.
+# THE FIX IS NOT TO FLIP BACK, it is to repoint these two rows at lr=3.0 so they sit at their own
+# block-argmax like every other row here. Only 4/11 validation cells and 0 test cells exist at
+# lr=3.0 today; the esgd3-* jobs that would fill them are submitted and held.
 OUR_EDGE_METHODS = [
-    ("\\ourmethod{}",          "test_edge_topk_log_lr05"),
-    ("$+$ unif $k$",           "test_edge_topk_uniform_lr05"),
-    ("$+$ SGD",                "test_edge_softlog_sgd_lr_1.0"),
-    ("$+$ SGD, unif $k$",      "test_edge_softuni_sgd_lr_3.0"),
+    ("\\ourmethod{}",          "test_edge_softlog_sgd_lr_1.0"),
+    ("$+$ unif $k$",           "test_edge_softuni_sgd_lr_3.0"),
+    ("$+$ Adam",               "test_edge_topk_log_lr05"),
+    ("$+$ Adam, unif $k$",     "test_edge_topk_uniform_lr05"),
 ]
 
 
