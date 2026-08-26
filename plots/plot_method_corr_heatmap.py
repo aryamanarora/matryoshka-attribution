@@ -88,6 +88,13 @@ METHODS = [
     # with zero sign flips vs 10, so its row would be a visual duplicate of the 10-step one.
     ("NAP-IG (5 steps)",  "napig_ref/EAP-IG-inputs_patching_node",         "nested"),
     ("NAP-IG (10 steps)", "napig10/EAP-IG-inputs_patching_node",           "nested"),
+    # Same path integral as the two rows above, estimated by ONE draw of alpha ~ U(0,1) per
+    # example instead of an m-point grid (run_napig_mc.sh, seed 0 -- the headline dir; _s1/_s2 are
+    # replicates and belong in an error bar, not a row here). Its interest is exactly a rank
+    # question: on CPR AUC it ties the 30-step grid at a thirtieth of the cost, and only a
+    # correlation says whether that is the same ranking recovered cheaply or a different one that
+    # scores alike. This is "Stepless IG" in mib_test_results.tex.
+    ("Stepless IG",       "napig_mc/EAP-IG-inputs-mc_patching_node",       "nested"),
     ("Conductance",       "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
     ("I$\\times$G",       "ig1/EAP-IG-inputs_patching_node",               "nested"),
     ("RelP",              "relp/RelP_patching_node",                       "nested"),
@@ -212,30 +219,35 @@ p.save(OUT / "method_corr_heatmap.pdf", dpi=300); p.save(OUT / "method_corr_heat
 print("Saved method_corr_heatmap")
 
 # ---- (1b) MAIN-TEXT figure: curated subset, Attn vs MLP facets only ----
-# ~half the methods, one per mechanism (headline + Pareto learned methods, recognizable
-# gradient baselines + the conductance pair). Rest go to the appendix (full-set figures above).
-# +Gumbel and +id-STE (log) are dropped: they are MAttr *ablations*, so their rows only restated
-# that the learned family agrees with itself, and the row they displace now buys an outside
-# mask learner. Both are still in the full-set appendix heatmaps above.
+# SEVEN methods, one per mechanism, cut down from eleven on 2026-08-26. The appendix heatmaps
+# above keep the full set, so nothing is lost -- this cut is about what a 3.69in-wide main-text
+# panel can be read at, and eleven columns put the numbers at 3.6pt against a 6-7pt house style.
+#
+# What went and why. RelP+QK / GIM / AttnLRP are three more gradient baselines that all land in
+# the same block as I$\times$G and IG-5 and so restated one fact three times. NAP-IG (10 steps)
+# went with them: Stepless IG now carries the "does the integration budget change the RANKING"
+# question on its own, and it is the sharper version of it (one random draw vs a 5-point grid,
+# rather than 5 vs 10). "+hard (log)*" is a MAttr ablation whose row said the learned family
+# agrees with itself. All four are still above.
+#
+# What each of the seven is here to answer:
+#   I$\times$G, IG-5    the gradient family, at the two budgets the test table leads with
+#   Stepless IG         same integral, one MC draw -- ties IG-30 on CPR, so: same ranking or not?
+#   DBM, NodePrune      outside mask learners: is "learned" the axis, or is it our parameterization?
+#   MAttr, +Adam        the optimizer ablation. Adam and SGD tie on every eval metric (CPR 1.879
+#                       vs 1.886, IIA .499 vs .504); only a rank correlation distinguishes "the
+#                       same circuit found twice" from "two circuits that score alike".
+# LOG-k ONLY throughout: "MAttr SGD (unif)" is in METHODS and in the appendix figures, but a lone
+# uniform-k row here would be read against log-k rows and confound the two knobs.
 MAIN_LABELS = [
-    "MAttr (log)*", "+hard (log)*",                              # learned, ours (2); * = lr 0.05
-    # The optimizer ablation. It earns a main-text row on the same grounds as the two IG budgets
-    # beside it: the eval metrics say Adam and SGD tie (CPR 1.879 vs 1.886, IIA .499 vs .504),
-    # and only a rank correlation can say whether that is the SAME circuit found twice or two
-    # different circuits scoring alike -- which is precisely what this panel is for.
-    # LOG-k ONLY. "MAttr SGD (unif)" is in METHODS and so in the appendix heatmaps, but its
-    # Adam twin is not in this cut, so a lone uniform-k row would be read against log-k rows and
-    # confound the two knobs. Adding both would also take the panel to 12 columns; see the
-    # tile-width note under sd["lab"] below.
-    "MAttr SGD (log)",
+    "MAttr SGD (log)", "MAttr (log)*",                           # learned, ours (2); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
-    "NAP-IG (5 steps)", "NAP-IG (10 steps)",                     # gradient, one method two budgets
-    "RelP+QK", "GIM", "AttnLRP", "I$\\times$G",                  # gradient (4)
+    "NAP-IG (5 steps)", "Stepless IG", "I$\\times$G",            # gradient (3)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups).
-# The two IG rows keep their step count in the tick label -- dropping it and relying on the
-# clustering to imply the pairing does not work, because they do NOT always land adjacent.
+# The IG row keeps its step count in the tick label: the test table carries m=5/10/30 rows and
+# a bare "IG" here would not say which of them this is.
 # SGD is the default as of 2026-08-24 (see make_mib_table.py's OUR_METHODS comments), so the
 # SGD identity label now displays as bare "MAttr" and the Adam identity label as "+Adam" -- the
 # swap of make_mib_test_table.py's OUR_NODE_METHODS and make_mib_table.py's emit_ours, applied
@@ -248,26 +260,16 @@ DISPLAY = {"MAttr (log)*": "+Adam", "+hard (log)*": "+hard",
            "Node Pruning": "NodePrune"}
 
 # ORDER matches paper/tabs/mib_test_results.tex's node-level row order exactly (ascending avg
-# CPR AUC within Gradient-based / Mask-based / Ours), NOT a re-cluster. Two of these 11 rows
-# have no table counterpart, since MAIN_LABELS pulls from the appendix's fuller method set:
-#   "NAP-IG (10 steps)" (IG m=10) -- the table doesn't have this rung yet (t-m10-* wave pending,
-#     see GRAD_NODE_BASELINES in make_mib_test_table.py); placed at the avg-CPR slot it should
-#     land in once it does (validation area_under 1.35, between IG-5's 0.85 and RelP+QK's 0.90 --
-#     see IG-10 val vs IG-5/IG-30 in stepless-ig-mc-alpha memory), i.e. right after IG-5.
-#   "+hard (log)*" -- a MAttr ablation the test table deliberately drops (see the SOFT FORWARD
-#     ONLY comment above OUR_NODE_METHODS in make_mib_test_table.py); it is an ablation of the
-#     Adam dir specifically (htklog_lr_0.05 is topklog_lr_0.05 with the forward swapped, both
-#     Adam), so it sits beside "MAttr (log)*" (now displayed "+Adam") rather than floating with
-#     no table anchor.
-#
-# Within the Ours triplet, SGD-default ("MAttr SGD (log)") now leads (2026-08-24 flip, see
-# DISPLAY above), then its two Adam-optimizer variants (log, log+hard) which pair with each
-# other regardless of which optimizer is headline.
+# CPR AUC within Gradient-based / Mask-based / Ours), NOT a re-cluster -- so a reader holding the
+# table finds these seven methods in the same sequence, with the four the table lists between
+# them (RelP, RelP+QK, IG m=30, GIM, AttnLRP) simply absent rather than reshuffled.
+# Every row now has a table counterpart, which was not true of the eleven-method version.
+# Within the Ours pair, SGD-default ("MAttr SGD (log)") leads (2026-08-24 flip, see DISPLAY).
 # If the table's row order changes, this list has to be updated by hand to match.
 ORDER_MAIN = [
-    "I$\\times$G", "NAP-IG (5 steps)", "NAP-IG (10 steps)", "RelP+QK", "GIM", "AttnLRP",
+    "I$\\times$G", "NAP-IG (5 steps)", "Stepless IG",
     "DBM", "Node Pruning",
-    "MAttr SGD (log)", "MAttr (log)*", "+hard (log)*",
+    "MAttr SGD (log)", "MAttr (log)*",
 ]
 assert set(ORDER_MAIN) == set(MAIN_LABELS), "ORDER_MAIN must be a permutation of MAIN_LABELS"
 print("main-text order (matches mib_test_results.tex):", ORDER_MAIN)
@@ -288,21 +290,20 @@ ORDER_MAIN_D = [DISPLAY.get(x, x) for x in ORDER_MAIN]
 sd["subset"] = pd.Categorical(sd["subset"], categories=SUBSETS, ordered=True)
 sd["a"] = pd.Categorical(sd["a"], categories=ORDER_MAIN_D, ordered=True)
 sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
-# leading zero dropped (".69" / "-.22") and text one point smaller than the appendix figures.
-# At 10 methods each tile is ~9.7pt wide, and a 5-character "-0.22" at size 4.5 is ~10.4pt --
-# i.e. the 9-method version was already at the limit and the tenth column made neighbouring
-# numbers overlap. Every value here is a correlation, so the units digit is always 0 and
-# carries nothing. Do not widen the figure to buy the space back: its 3.69in is set by the
-# 0.67*textwidth slot it shares with the scatter, and breaking that misaligns the subfigures.
-# At 11 (the +SGD row) the tile is ~8.5pt and the widest string here, "-.22" at size 3.6, is
-# ~8.6pt of glyphs but renders inside its tile -- checked at 600dpi, gutters still visible. That
-# is the ceiling: a 12th column needs geom_text size ~3.2, so if another method is added here,
-# drop one or shrink the text rather than assuming it still fits.
+# Leading zero dropped (".69" / "-.22"): every value here is a correlation, so the units digit is
+# always 0 and carries nothing.
+# TEXT SIZE IS A FUNCTION OF THE COLUMN COUNT, and the figure width is NOT available to trade
+# against it -- 3.69in is set by the 0.67*textwidth slot this shares with the scatter, and
+# changing it misaligns the two subfigures. Tile width is ~93pt/n_methods: at the old 11 columns
+# that was ~8.5pt and forced size 3.6 (right at the limit -- "-.22" was ~8.6pt of glyphs and only
+# just cleared its gutters). At 7 it is ~13.3pt, so size 5 fits with room and finally lands in
+# the 6-7pt-in-the-compiled-PDF band the rest of the paper's figures use. If methods are ever
+# added back here, scale this down rather than widening the panel.
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
 # sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
 # companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=3.6)
+       + geom_text(aes(label="lab"), size=5)
        + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
                               midpoint=0, limits=[-1, 1], na_value="#eeeeee")
