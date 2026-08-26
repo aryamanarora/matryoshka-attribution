@@ -82,6 +82,16 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
         "${common[@]}" --method "$gm" --loss "$loss" "${ge[@]}"; done
     want conductance && sub "${PFX}_${task}_cond_${loss}" "conductance${ls}" \
         "${common[@]}" --method conductance --loss "$loss" --ig-steps 10 "${ge[@]}"
+    # "Stepless IG": alpha ~ U(0,1) per example instead of IG's fixed grid. Not folded into the
+    # `gm` loop above because its identity carries the draw count and seed -- eval_sva.run_tag
+    # writes `mc_ig_m${draws}_s${seed}`, so the predicted filename (and hence the skip-if-exists
+    # check) needs both. --ig-steps IS ALWAYS PASSED: eval_sva.py defaults it to 10, which for
+    # this method silently buys a 10x run. Same MC_DRAWS/MC_SEED defaults as
+    # submit_sva_sweep.sh, so the +input cells pair 1:1 with the -input ones by filename.
+    MC_DRAWS=${MC_DRAWS:-1}; MC_SEED=${MC_SEED:-42}
+    want mc_ig && sub "${PFX}_${task}_mcig_${loss}" "mc_ig_m${MC_DRAWS}_s${MC_SEED}${ls}" \
+        "${common[@]}" --method mc_ig --loss "$loss" --ig-steps "$MC_DRAWS" --seed "$MC_SEED" \
+        "${ge[@]}"
     # MAttr: soft/idste x {log, uniform, fixed-10%, IG5}
     for cfg in "${MATTR_CFG[@]}"; do
       variant=${cfg%%:*}; opt=${cfg#*:}; opt=${opt%%:*}; ab=${cfg##*:}
