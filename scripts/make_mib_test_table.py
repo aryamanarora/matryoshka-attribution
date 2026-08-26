@@ -427,7 +427,18 @@ def baseline_or_skip(name, where, data):
     return True
 
 
-def main():
+def collect():
+    """The four LOADED row-groups: (ours_nodes, mask_nodes, grad_nodes, ours_edges).
+
+    Split out of main() so plots/plot_mib_test_avg.py draws the same numbers this table prints
+    -- same loaders, same skip guards, same dirs -- instead of parsing the .tex or restating the
+    dir lists. That is the same import-the-table discipline plot_lr_sweep_summary.py applies to
+    make_lr_table.LR_METHODS, one table over.
+
+    The LITERAL baseline dicts (NODE_BASELINES / EDGE_BASELINES, transcribed from MIB's Table 1)
+    are module-level constants and are NOT returned -- import them directly and pass them through
+    classify() for the family split, exactly as main() does.
+    """
     # Load our test results: 3 node variants (name -> {cell: cpr}) + 1 edge.
     ours_nodes = {}
     for name, d in OUR_NODE_METHODS:
@@ -482,6 +493,12 @@ def main():
         if not complete_or_skip(name, "edge", d, data):
             continue
         ours_edges[name] = data
+
+    return ours_nodes, mask_nodes, grad_nodes, ours_edges
+
+
+def main():
+    ours_nodes, mask_nodes, grad_nodes, ours_edges = collect()
 
     # Best per column
     def find_best(baselines, ours_list):
