@@ -73,17 +73,34 @@ import palette as P                                     # noqa: E402
 import make_mib_test_table as T                         # collect() + the literal baselines  # noqa: E402
 
 # family key -> (legend label, colour). Keys are internal; the labels are what the reader sees.
+#
+# "ours_uni" is not a fifth FAMILY in the taxonomic sense -- the uniform-k rows are ours, and by
+# every other reading of this figure they belong with the log-k ones. It is a separate key for
+# ONE reason: plots/plot_mib_accauc_cpr_scatter.py, which sits on the same page, gives uniform-k
+# its own hue (G_MUNI = P.METHOD["+hard"], Wong bluish green) because there it is a distinct
+# point on the frontier. A method cannot be blue in one figure and green in its neighbour, so
+# this follows the scatter. The green is a shade OF ours, not a rival family -- hence "(ours)"
+# in both legend labels and adjacent entries in the legend order.
 FAMILY = {
     "control":  ("Random control", P.METHOD["Random"]),
     "gradient": ("Gradient-based", P.METHOD["IG"]),
     "mask":     ("Mask-based", P.METHOD["Node Pruning"]),
     "ours":     ("\\ourmethod{} (ours)", P.METHOD["MAttr"]),
+    "ours_uni": ("\\ourmethod{}, unif. $k$ (ours)", P.METHOD["+hard"]),
 }
+# Substring that marks a uniform-k row in make_mib_test_table's OUR_* name strings ("$+$ unif
+# $k$", "$+$ Adam, unif $k$"). Matched rather than hardcoded per name so an Adam/SGD relabel
+# does not silently drop the recolour; UNI_PER_LEVEL then asserts the match still finds them,
+# so a rename to something without "unif" raises instead of quietly turning the bars blue.
+UNI_MARK, UNI_PER_LEVEL = "unif", 2
 # Baseline rows the table keeps and this figure does not -- see the docstring for each. Matched
 # against NODE_BASELINES / EDGE_BASELINES keys, and a name here that matches nothing raises
 # rather than silently doing nothing, so a rename in the table cannot quietly un-drop a row.
 DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
-LEVELS = [("node", "Node-level", ()), ("edge", "Edge-level", ("ours",))]
+# Third element = families whose rows carry the llama3 dagger at that level. "ours_uni" is listed
+# alongside "ours" because it is a colour split, not a scoring one -- the uniform-k edge rows are
+# scored exactly like the log-k ones and must not lose their footnote by changing hue.
+LEVELS = [("node", "Node-level", ()), ("edge", "Edge-level", ("ours", "ours_uni"))]
 
 # 5.5in is iclr2026_conference.sty's \textwidth verbatim (line 49), so at width=\linewidth the
 # figure is placed 1:1 and the sizes below are the sizes that reach the compiled PDF. Most other
@@ -158,7 +175,15 @@ def panel_rows(level, loaded):
     out = []
     for fam, rows, sup in groups:
         for name, data in ordered([r for r in rows if r[0] not in DROP], sup):
-            out.append((fam, name, data))
+            # Recoloured AFTER ordering, not sorted into their own group: the bars stay in the
+            # table's worst-to-best order within "ours", so the green ones interleave with the
+            # blue exactly where their Avg puts them. Splitting the group would reorder the
+            # panel to serve the colour, which is backwards.
+            out.append((f"{fam}_uni" if fam == "ours" and UNI_MARK in name else fam, name, data))
+    n_uni = sum(1 for f, _, _ in out if f == "ours_uni")
+    if n_uni != UNI_PER_LEVEL:
+        raise SystemExit(f"{level}: {n_uni} rows matched {UNI_MARK!r}, expected {UNI_PER_LEVEL} "
+                         "-- renamed in make_mib_test_table.OUR_*_METHODS? update UNI_MARK")
     return out
 
 
