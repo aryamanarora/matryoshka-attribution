@@ -93,8 +93,10 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", default="results/vit_teaser_pixelate")
     ap.add_argument("--out", default="paper/figs/vit_teaser.pdf")
-    ap.add_argument("--granularity", default="native", choices=["native", "patch"],
-                    help="'native' shows pixel maps where a method produces them")
+    ap.add_argument("--granularity", default="patch", choices=["native", "patch"],
+                    help="'patch' (default) pools every pixel-level map into the 14x14 grid "
+                         "the mask-based methods score, so all panels are compared on one "
+                         "unit set; 'native' shows pixel maps where a method produces them")
     ap.add_argument("--smoothgrad-variant", default="plain", choices=["plain", "xinput"])
     ap.add_argument("--clip", type=float, default=0.995,
                     help="quantile of |relevance| mapped to full saturation")
