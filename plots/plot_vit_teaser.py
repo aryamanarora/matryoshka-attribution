@@ -79,10 +79,32 @@ def load_map(data, key, granularity, smoothgrad_variant):
     raise KeyError(key)
 
 
-def draw_heatmap(ax, r, clip, overlay_rgb=None):
-    """Symmetric blue-white-red heatmap, scaled by a high quantile of |r| so that a couple
-    of extreme patches cannot wash the rest of the map out."""
-    v = np.quantile(np.abs(r), clip)
+def signed_percentile(r, gamma):
+    """Rank transform: each unit's percentile within its own map, centred at the median and
+    mapped to [-1, 1], then |p|^gamma with the sign kept.
+
+    Rank-based so that every method is drawn on the same footing whatever its score scale
+    (a raw-score map is dominated by the method's own distribution: MAttr's logits skew
+    negative and the whole panel reads blue). The power keeps the middle of the ranking white
+    and colours only the tails -- at gamma 5 the central 60% of units sit below 0.03 of full
+    saturation and the top/bottom 10% above 0.6 -- which is the reading the top-k sweep uses.
+    (Gamma 3 still tinted ~half the cells; 8 loses the second tier of the ranking.)
+    """
+    flat = np.asarray(r, dtype=np.float64).ravel()
+    ranks = np.empty_like(flat)
+    ranks[np.argsort(flat, kind="stable")] = np.arange(flat.size)
+    p = 2.0 * ranks / (flat.size - 1) - 1.0
+    return (np.sign(p) * np.abs(p) ** gamma).reshape(np.shape(r))
+
+
+def draw_heatmap(ax, r, norm, clip, gamma, overlay_rgb=None):
+    """Symmetric blue-white-red heatmap. `norm="percentile"` draws the signed-percentile
+    transform above on a fixed [-1, 1] scale; `norm="score"` draws the raw scores scaled by
+    a high quantile of |r| so that a couple of extreme patches cannot wash the map out."""
+    if norm == "percentile":
+        r, v = signed_percentile(r, gamma), 1.0
+    else:
+        v = np.quantile(np.abs(r), clip)
     if overlay_rgb is not None:
         ax.imshow(overlay_rgb.mean(-1), cmap="gray", vmin=-0.2, vmax=1.6,
                   extent=(0, 1, 1, 0))
@@ -100,8 +122,14 @@ def main():
                          "the mask-based methods score, so all panels are compared on one "
                          "unit set; 'native' shows pixel maps where a method produces them")
     ap.add_argument("--smoothgrad-variant", default="plain", choices=["plain", "xinput"])
+    ap.add_argument("--norm", default="percentile", choices=["percentile", "score"],
+                    help="colour by each unit's signed percentile rank within its method "
+                         "(default; see signed_percentile) or by the raw score")
+    ap.add_argument("--gamma", type=float, default=5.0,
+                    help="power applied to the signed percentile: larger keeps more of the "
+                         "middle of the ranking white")
     ap.add_argument("--clip", type=float, default=0.995,
-                    help="quantile of |relevance| mapped to full saturation")
+                    help="--norm score only: quantile of |relevance| mapped to full saturation")
     ap.add_argument("--overlay", action="store_true",
                     help="draw the photo faintly under each heatmap")
     ap.add_argument("--width", type=float, default=5.5, help="figure width (inches)")
@@ -140,7 +168,7 @@ def main():
             ax.imshow(rgb, extent=(0, 1, 1, 0))
         else:
             draw_heatmap(ax, load_map(data, key, args.granularity, args.smoothgrad_variant),
-                         args.clip, rgb if args.overlay else None)
+                         args.norm, args.clip, args.gamma, rgb if args.overlay else None)
         ax.set_xticks([]), ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_linewidth(0.5)
