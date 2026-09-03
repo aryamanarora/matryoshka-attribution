@@ -155,3 +155,27 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
 - `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/`; task
   names in configs must use underscores (`arc_easy`, not `arc-easy`).
 - `mib-path` defaults to `./MIB-circuit-track` (gitignored symlink to the cloned repo).
+
+## ViT teaser: optimizer / LR / Adam-eps grid (2026-09-02)
+
+`scripts/vit_teaser_optim.py` + `vit_optim.sbatch` -> `results/vit_optim/seed{42,43,44}`,
+figure `plots/plot_vit_optim.py` -> `paper/figs/vit_optim.pdf`. Same substrate as the teaser
+(ViT-B/16, 196 patch tokens, resampled pixelate corruption, basenji-vs-Siamese logit diff, 2000
+steps); metric is the held-out sufficiency AUC (`vit_teaser_faith.py` protocol), mean of 3 seeds.
+Adam 7 LRs x 6 eps, SGD 9 LRs, Stepless IG (patch-embedding path, alpha ~ U(0,1), 2000 draws).
+
+- **Tuned Adam and tuned SGD tie within seed spread**: Adam lr 0.3 / eps 1e-2 = 5.62 [5.34, 5.84],
+  SGD lr 1 = 5.42 [5.27, 5.64]. The teaser's shipped cell (Adam lr 0.05, eps 1e-8) re-measures
+  at 4.95-5.05 -- not the optimum, but the same ranking beats every baseline either way.
+- **eps does NOT decide the ranking at 196 units, unlike at 2.3M neurons.** At every LR the six eps
+  values sit within ~0.5 AUC (default 1e-8 vs best 1e-2 at lr 0.3: 5.10 vs 5.62, against a seed
+  range of ~0.5). The only structure is the expected diagonal: at eps >= 1e-1 the optimum shifts
+  to larger LRs (Adam ~ SGD at lr/eps). The |s| p99/p50 ratio is 3-7 at every eps, i.e. no
+  sign(g) collapse -- with 196 logits the per-step gradients are well above 1e-8.
+- **Stepless IG is far behind (3.55 [3.45, 3.70]), below AttnLRP (3.98) and KernelSHAP (4.51)**,
+  and its probe trace plateaus by ~300 draws, so it is not under-sampled -- the gradient-path
+  ranking is simply a worse sufficiency ranking on this image. Top-20 overlap of Adam's ranking
+  with IG's is 0.27-0.37 at every eps, i.e. raising eps does not pull MAttr toward IG here.
+- SGD collapses above lr 10 (100: 3.66); Adam above lr 1 at small eps. Both optimizers' curves
+  are unimodal in LR with the peak one decade apart (0.3 vs 1), so "the optimizer doesn't
+  matter once tuned" holds on this substrate too.
