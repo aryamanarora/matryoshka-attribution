@@ -2,7 +2,9 @@
 with MAttr (soft top-k forward, log-k schedule, lr 0.05 -- the headline variant) as "ours".
 
 A row of attribution heatmaps for one image containing a dog and a cat, explained for
-"dog", followed by a method x property table of qualitative suitability marks (+ / o / -).
+"dog". AttnLRP's Figure 1 follows the strip with a method x property table of qualitative
+suitability marks (+ / o / -); that table is kept behind `--table` and off by default, since
+on a single image the marks are opinion rather than measurement.
 
 Data comes from `scripts/vit_teaser_attr.py` (see that file for the substrate and the
 explained scalar). Regenerate end to end with:
@@ -103,6 +105,8 @@ def main():
     ap.add_argument("--overlay", action="store_true",
                     help="draw the photo faintly under each heatmap")
     ap.add_argument("--width", type=float, default=5.5, help="figure width (inches)")
+    ap.add_argument("--table", action="store_true",
+                    help="draw AttnLRP's qualitative suitability table under the strip")
     ap.add_argument("--header", default=None,
                     help="text above the strip; default names both classes of the explained "
                          "logit difference")
@@ -118,7 +122,7 @@ def main():
     pad, gap = 0.02, 0.05
     panel = (args.width - 2 * pad - (n - 1) * gap) / n
     head, label_h, row_h = 0.15, 0.15, 0.24
-    n_rows = len(RATINGS)
+    n_rows = len(RATINGS) if args.table else 0
     height = pad + n_rows * row_h + label_h + panel + head + pad
     fig = plt.figure(figsize=(args.width, height))
 
@@ -154,16 +158,17 @@ def main():
              ha="left", va="bottom", size=7)
 
     # --- suitability table: row labels sit under the input column, marks under the methods
-    tab = add_axes(pad, pad, args.width - 2 * pad, n_rows * row_h)
-    tab.set_axis_off()
-    tab.set_xlim(0, args.width - 2 * pad)
-    tab.set_ylim(0, n_rows * row_h)
-    for r, (prop, marks) in enumerate(RATINGS.items()):
-        y = (n_rows - r - 0.5) * row_h
-        tab.text(0, y, prop, ha="left", va="center", size=6.5, linespacing=1.15)
-        for i, m in enumerate(marks):
-            tab.plot(col_x(i + 1) - pad + panel / 2, y, color=RATING[m],
-                     clip_on=False, **MARKER[m])
+    if args.table:
+        tab = add_axes(pad, pad, args.width - 2 * pad, n_rows * row_h)
+        tab.set_axis_off()
+        tab.set_xlim(0, args.width - 2 * pad)
+        tab.set_ylim(0, n_rows * row_h)
+        for r, (prop, marks) in enumerate(RATINGS.items()):
+            y = (n_rows - r - 0.5) * row_h
+            tab.text(0, y, prop, ha="left", va="center", size=6.5, linespacing=1.15)
+            for i, m in enumerate(marks):
+                tab.plot(col_x(i + 1) - pad + panel / 2, y, color=RATING[m],
+                         clip_on=False, **MARKER[m])
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
