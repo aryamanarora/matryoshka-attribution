@@ -32,6 +32,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 from matplotlib.patches import Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -149,7 +151,7 @@ def main():
     n = len(COLUMNS)
     pad, gap = 0.02, 0.05
     panel = (args.width - 2 * pad - (n - 1) * gap) / n
-    head, label_h, row_h = 0.15, 0.15, 0.24
+    head, label_h, row_h = 0.24, 0.15, 0.24
     n_rows = len(RATINGS) if args.table else 0
     height = pad + n_rows * row_h + label_h + panel + head + pad
     fig = plt.figure(figsize=(args.width, height))
@@ -184,6 +186,23 @@ def main():
             header += f" vs. “{meta['neg']['label']}”"
     fig.text(pad / args.width, (y_panel + panel + 0.035) / height, header,
              ha="left", va="bottom", size=7)
+
+    # colour scale, right-aligned in the header row. Only meaningful under the percentile
+    # transform, where one scale serves every panel; raw scores have a scale per method.
+    if args.norm == "percentile":
+        cw, ch = 1.15, 0.055
+        cax = add_axes(args.width - pad - cw, y_panel + panel + 0.145, cw, ch)
+        cb = fig.colorbar(ScalarMappable(norm=Normalize(-1, 1), cmap="bwr"), cax=cax,
+                          orientation="horizontal")
+        pct = [1, 10, 50, 90, 99]
+        ticks = [np.sign(2 * q / 100 - 1) * abs(2 * q / 100 - 1) ** args.gamma for q in pct]
+        cb.set_ticks(ticks)
+        cb.set_ticklabels([f"{q}" for q in pct])
+        cax.tick_params(labelsize=5, length=1.5, pad=1)
+        cb.outline.set_linewidth(0.4)
+        fig.text((args.width - pad - cw - 0.04) / args.width,
+                 (y_panel + panel + 0.145 + ch / 2) / height, "score percentile",
+                 ha="right", va="center", size=5.5)
 
     # --- suitability table: row labels sit under the input column, marks under the methods
     if args.table:
