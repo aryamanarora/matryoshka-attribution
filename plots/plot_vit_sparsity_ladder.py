@@ -4,8 +4,10 @@ Top strip: the actual model input at each sparsity -- the top-k units of the met
 ranking keep their clean content, every other unit is corrupted. Bottom panel: the class
 posterior over the same axis, with the sparsity at which the top-1 prediction flips marked.
 
-Pass one `--ladder` for a single method (both classes of the contrast are drawn), or
-several to compare methods on one axis (one image strip each, and the probability of the
+Pass one `--ladder` for a single method (both classes of the contrast are drawn in colour,
+and the other classes that reach the top of the posterior at some budget -- the rug the dog
+lies on, at the smallest k -- as thin grey lines behind them), or several to compare methods
+on one axis (one image strip each, and the probability of the
 *explained* class only -- the contrast class sits at ~0 for every method until the last
 rung, so plotting it N times only adds ink).
 
@@ -62,6 +64,12 @@ def main():
                          "ground; the model still sees the corruption, so this is a picture "
                          "of the mask, not of the input. Much more legible at pixel "
                          "granularity, where a 1%% selection vanishes into the mosaic.")
+    ap.add_argument("--extra-top", type=int, default=2,
+                    help="single-ladder mode: also draw every class that is in the top-N of "
+                         "the posterior at some budget (0 = only the contrast pair)")
+    ap.add_argument("--extra-min", type=float, default=0.03,
+                    help="...and whose posterior reaches at least this somewhere; below it a "
+                         "line is indistinguishable from the axis and its label is clutter")
     ap.add_argument("--blank", default="#eceff3",
                     help="ground colour for --display selected; deliberately a cool grey, so "
                          "it does not read as the cat's cream-white fur")
@@ -137,8 +145,29 @@ def main():
     else:
         series = [(d0["p_pos"], CLASS["pos"], str(d0["pos_label"])),
                   (d0["p_neg"], CLASS["neg"], str(d0["neg_label"]))]
+    # the competing classes: whatever else reaches the top-N at some budget, drawn thin and
+    # grey so the contrast pair stays the figure and these are its context. Labelled at
+    # their own peak, since most of them matter only at one end of the ladder.
+    if not multi and args.extra_top > 0 and "probs" in d0.files:
+        P, cats = d0["probs"], d0["categories"]
+        cat_names = [str(c) for c in cats]
+        pos_i, neg_i = cat_names.index(str(d0["pos_label"])), cat_names.index(str(d0["neg_label"]))
+        extra = sorted({int(j) for row in P for j in np.argsort(-row)[:args.extra_top]}
+                       - {pos_i, neg_i}, key=lambda j: -P[:, j].max())
+        for j in extra:
+            y = P[:, j]
+            if y.max() < args.extra_min:
+                continue
+            ax.plot(x, y, color="#999999", lw=0.7, marker="o", ms=1.8, mew=0, clip_on=False,
+                    zorder=2)
+            # label at the highest INTERIOR rung: the right margin belongs to the contrast
+            # pair's labels, and a class that peaks at the full image (dingo) has a second,
+            # clearer bump earlier in the ladder
+            i = int(np.argmax(y[:-1]))
+            ax.text(i + 0.12, y[i] + 0.025, str(cats[j]), color="#666666", size=5.5,
+                    ha="left", va="bottom", clip_on=False)
     for y, c, name in series:
-        ax.plot(x, y, color=c, lw=1.1, marker="o", ms=2.6, mew=0, clip_on=False, zorder=3)
+        ax.plot(x, y, color=c, lw=1.3, marker="o", ms=2.8, mew=0, clip_on=False, zorder=3)
         if not multi:
             ax.text(n - 1 + 0.15, y[-1], f" {name}", color=c, size=6.5,
                     va="center", ha="left", clip_on=False)

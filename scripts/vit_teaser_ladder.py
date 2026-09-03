@@ -147,6 +147,9 @@ def main():
         clean=clean_rgb.astype(np.float32),
         p_pos=probs[:, pos], p_neg=probs[:, neg], p_top1=probs[np.arange(len(ks)), top1],
         top1=top1, labels=np.array([categories[i] for i in top1]),
+        # the whole posterior per rung (9 x 1000 floats), so a figure can show the classes
+        # that compete with the contrast pair at small k without re-running this script
+        probs=probs.astype(np.float32), categories=np.array(categories),
         pos_label=meta["pos"]["label"], neg_label=meta["neg"]["label"], method=args.method)
 
     print(f"{'k':>6} {'frac':>7}  {'p(pos)':>7} {'p(neg)':>7}   top-{args.topk_print}")
