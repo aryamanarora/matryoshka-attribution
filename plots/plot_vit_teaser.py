@@ -2,7 +2,8 @@
 with MAttr (soft top-k forward, log-k schedule, lr 0.05 -- the headline variant) as "ours".
 
 A row of attribution heatmaps for one image containing a dog and a cat, explained for
-"dog". AttnLRP's Figure 1 follows the strip with a method x property table of qualitative
+"dog", and a second row below it explaining the same image for "cat" (the reversed
+contrast, results/vit_teaser_cat). AttnLRP's Figure 1 follows the strip with a method x property table of qualitative
 suitability marks (+ / o / -); that table is kept behind `--table` and off by default, since
 on a single image the marks are opinion rather than measurement.
 
@@ -10,6 +11,7 @@ Data comes from `scripts/vit_teaser_attr.py` (see that file for the substrate an
 explained scalar). Regenerate end to end with:
 
     sbatch -J teaser vit_teaser.sbatch --baseline pixelate --out results/vit_teaser_pixelate
+    sbatch -J teaser vit_teaser.sbatch --baseline pixelate --explain cat --out results/vit_teaser_cat
     uv run python plots/plot_vit_teaser.py
 
 (Only the attribution step needs `.venv-vit`; plotting reads the npz and runs in the
@@ -117,7 +119,10 @@ def draw_heatmap(ax, r, norm, clip, gamma, overlay_rgb=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--results", default="results/vit_teaser_pixelate")
+    ap.add_argument("--results", nargs="+",
+                    default=["results/vit_teaser_pixelate", "results/vit_teaser_cat"],
+                    help="one strip per run, top to bottom; the default pair is the same "
+                         "image explained for the dog and then for the cat")
     ap.add_argument("--out", default="paper/figs/vit_teaser.pdf")
     ap.add_argument("--granularity", default="patch", choices=["native", "patch"],
                     help="'patch' (default) pools every pixel-level map into the 14x14 grid "
@@ -142,18 +147,21 @@ def main():
                          "logit difference")
     args = ap.parse_args()
 
-    res = Path(args.results)
-    data = np.load(res / "attributions.npz")
-    meta = json.loads((res / "meta.json").read_text())
+    runs = [(np.load(Path(r) / "attributions.npz"), json.loads((Path(r) / "meta.json").read_text()))
+            for r in args.results]
+    data, meta = runs[0]
     rgb = data["input/rgb"]
 
-    # --- layout, in inches, so the image strip and the table share one column grid
+    # --- layout, in inches, so the image strip(s) and the table share one column grid. One
+    # strip per results dir, top to bottom, each under its own header line; the colour scale
+    # sits in the top header band, the method names under the bottom strip.
     n = len(COLUMNS)
     pad, gap = 0.02, 0.05
     panel = (args.width - 2 * pad - (n - 1) * gap) / n
-    head, label_h, row_h = 0.24, 0.15, 0.24
+    head, head_top, label_h, row_h = 0.17, 0.24, 0.15, 0.24
     n_rows = len(RATINGS) if args.table else 0
-    height = pad + n_rows * row_h + label_h + panel + head + pad
+    m = len(runs)
+    height = pad + n_rows * row_h + label_h + m * panel + (m - 1) * head + head_top + pad
     fig = plt.figure(figsize=(args.width, height))
 
     def col_x(i):
@@ -162,36 +170,39 @@ def main():
     def add_axes(x, y, w, h):
         return fig.add_axes([x / args.width, y / height, w / args.width, h / height])
 
-    y_panel = pad + n_rows * row_h + label_h
+    y_bottom = pad + n_rows * row_h + label_h
+    for r, (d, mt) in enumerate(runs):
+        y_panel = y_bottom + (m - 1 - r) * (panel + head)      # first results dir on top
+        for i, (name, key) in enumerate(COLUMNS):
+            ax = add_axes(col_x(i), y_panel, panel, panel)
+            if key == "input":
+                ax.imshow(d["input/rgb"], extent=(0, 1, 1, 0))
+            else:
+                draw_heatmap(ax, load_map(d, key, args.granularity, args.smoothgrad_variant),
+                             args.norm, args.clip, args.gamma, rgb if args.overlay else None)
+            ax.set_xticks([]), ax.set_yticks([])
+            for sp in ax.spines.values():
+                sp.set_linewidth(0.5)
+                sp.set_color("#000000")
+            if r == m - 1:
+                fig.text((col_x(i) + panel / 2) / args.width, (y_panel - 0.035) / height, name,
+                         ha="center", va="top", size=7,
+                         weight="bold" if key == "mattr" else "normal")
 
-    for i, (name, key) in enumerate(COLUMNS):
-        ax = add_axes(col_x(i), y_panel, panel, panel)
-        if key == "input":
-            ax.imshow(rgb, extent=(0, 1, 1, 0))
-        else:
-            draw_heatmap(ax, load_map(data, key, args.granularity, args.smoothgrad_variant),
-                         args.norm, args.clip, args.gamma, rgb if args.overlay else None)
-        ax.set_xticks([]), ax.set_yticks([])
-        for sp in ax.spines.values():
-            sp.set_linewidth(0.5)
-            sp.set_color("#000000")
-        fig.text((col_x(i) + panel / 2) / args.width, (y_panel - 0.035) / height, name,
-                 ha="center", va="top", size=7,
-                 weight="bold" if key == "mattr" else "normal")
+        header = args.header if (args.header is not None and m == 1) else None
+        if header is None:
+            header = f"explanation for “{mt['pos']['label']}”"
+            if mt["target"] == "logit_diff":       # the explained scalar is a class contrast
+                header += f" vs. “{mt['neg']['label']}”"
+        fig.text(pad / args.width, (y_panel + panel + 0.035) / height, header,
+                 ha="left", va="bottom", size=7)
 
-    header = args.header
-    if header is None:
-        header = f"explanation for “{meta['pos']['label']}”"
-        if meta["target"] == "logit_diff":       # the explained scalar is a class contrast
-            header += f" vs. “{meta['neg']['label']}”"
-    fig.text(pad / args.width, (y_panel + panel + 0.035) / height, header,
-             ha="left", va="bottom", size=7)
-
-    # colour scale, right-aligned in the header row. Only meaningful under the percentile
+    y_top = y_bottom + (m - 1) * (panel + head) + panel        # top of the top strip
+    # colour scale, right-aligned in the top header band. Only meaningful under the percentile
     # transform, where one scale serves every panel; raw scores have a scale per method.
     if args.norm == "percentile":
         cw, ch = 1.15, 0.055
-        cax = add_axes(args.width - pad - cw, y_panel + panel + 0.145, cw, ch)
+        cax = add_axes(args.width - pad - cw, y_top + 0.145, cw, ch)
         cb = fig.colorbar(ScalarMappable(norm=Normalize(-1, 1), cmap="bwr"), cax=cax,
                           orientation="horizontal")
         pct = [1, 10, 50, 90, 99]
@@ -201,7 +212,7 @@ def main():
         cax.tick_params(labelsize=5, length=1.5, pad=1)
         cb.outline.set_linewidth(0.4)
         fig.text((args.width - pad - cw - 0.04) / args.width,
-                 (y_panel + panel + 0.145 + ch / 2) / height, "score percentile",
+                 (y_top + 0.145 + ch / 2) / height, "score percentile",
                  ha="right", va="center", size=5.5)
 
     # --- suitability table: row labels sit under the input column, marks under the methods
