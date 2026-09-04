@@ -28,6 +28,7 @@ from matplotlib.colors import LinearSegmentedColormap, to_rgb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from palette import METHOD, RC, furnish  # noqa: E402
+from plot_vit_teaser import signed_percentile  # noqa: E402  (one colouring for both figures)
 
 plt.rcParams.update(RC)
 
@@ -80,7 +81,8 @@ def main():
     ap.add_argument("--runs", nargs="+", default=sorted(glob.glob("results/vit_optim/seed*")))
     ap.add_argument("--out", default="paper/figs/vit_optim.pdf")
     ap.add_argument("--width", type=float, default=5.5)
-    ap.add_argument("--clip", type=float, default=0.995)
+    ap.add_argument("--gamma", type=float, default=5.0,
+                    help="power on the signed percentile rank in panel (d); the teaser's")
     args = ap.parse_args()
 
     arms, meta = load(args.runs)
@@ -114,7 +116,7 @@ def main():
     n_s = len(strip)
     sgap, spad = 0.05, 0.02
     sp = (W - 2 * spad - (n_s - 1) * sgap) / n_s
-    H = 0.02 + 0.40 + sp + 0.30 + 0.34 + top_h + 0.20
+    H = 0.02 + 0.40 + sp + 0.36 + 0.34 + top_h + 0.20
     fig = plt.figure(figsize=(W, H))
     add = lambda x, y, w, h: fig.add_axes([x / W, y / H, w / W, h / H])   # noqa: E731
     y_top = H - 0.20 - top_h
@@ -218,9 +220,8 @@ def main():
     y_s = 0.02 + 0.40
     for i, (k, lab) in enumerate(strip):
         ax = add(spad + i * (sp + sgap), y_s, sp, sp)
-        r = arms[k]["scores"][0]
-        v = np.quantile(np.abs(r), args.clip)
-        ax.imshow(r, cmap="bwr", vmin=-v, vmax=v, interpolation="nearest")
+        r = signed_percentile(arms[k]["scores"][0], args.gamma)
+        ax.imshow(r, cmap="bwr", vmin=-1, vmax=1, interpolation="nearest")
         ax.set_xticks([]), ax.set_yticks([])
         for s in ax.spines.values():
             s.set_linewidth(0.5)
@@ -238,6 +239,20 @@ def main():
              f"(d) the rankings (seed {json.loads((Path(args.runs[0]) / 'grid.json').read_text())['args']['seed']}), "
              f"explaining “{meta['pos']['label']}” vs. “{meta['neg']['label']}”",
              ha="left", va="bottom", size=7)
+    # the teaser's colour scale: signed percentile rank within each map, |p|^gamma
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+    cw, ch = 1.15, 0.055
+    cax = add(W - spad - cw, y_s + sp + 0.17, cw, ch)
+    cb = fig.colorbar(ScalarMappable(norm=Normalize(-1, 1), cmap="bwr"), cax=cax,
+                      orientation="horizontal")
+    pct = [1, 10, 50, 90, 99]
+    cb.set_ticks([np.sign(2 * q / 100 - 1) * abs(2 * q / 100 - 1) ** args.gamma for q in pct])
+    cb.set_ticklabels([str(q) for q in pct])
+    cax.tick_params(labelsize=5, length=1.5, pad=1)
+    cb.outline.set_linewidth(0.4)
+    fig.text((W - spad - cw - 0.04) / W, (y_s + sp + 0.17 + ch / 2) / H, "score percentile",
+             ha="right", va="center", size=5.5)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
