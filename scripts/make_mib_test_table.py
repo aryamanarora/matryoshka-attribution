@@ -125,7 +125,7 @@ OUR_NODE_METHODS = [
 # block-argmax like every other row here. Only 4/11 validation cells and 0 test cells exist at
 # lr=3.0 today; the esgd3-* jobs that would fill them are submitted and held.
 OUR_EDGE_METHODS = [
-    ("\\ourmethod{}",          "test_edge_softlog_sgd_lr_1.0"),
+    ("\\ourmethod{}",          "test_edge_softlog_sgd_lr_3.0"),
     ("$+$ unif $k$",           "test_edge_softuni_sgd_lr_3.0"),
     ("$+$ Adam",               "test_edge_topk_log_lr05"),
     ("$+$ Adam, unif $k$",     "test_edge_topk_uniform_lr05"),

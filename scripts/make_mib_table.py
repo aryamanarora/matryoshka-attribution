@@ -107,20 +107,20 @@ OUR_METHODS = [
     ("\\ourmethod{}", "mib_edge_topk_log_lr05", "edge", "ours"),
     # Edge twin of the node SGD row, submit_mib_edge_soft_sgd.sh. SAME LABEL POLICY as node
     # (filed under the now-default SGD header, so "+ SGD" would name the optimizer twice), but
-    # NOT the same LR policy, and the difference matters:
+    # the SAME LR policy: SGD at its own block-argmax. lr=3.0 is SGD's EDGE optimum, bracketed by
+    # submit_mib_edge_lr_sweep.sh over its 4 cells (0.3 -> 3.55, 1.0 -> 4.72, *3.0 -> 6.89*,
+    # 10 -> 6.53), so this row is tuned-vs-tuned against the Adam edge row like every other row.
     #
-    #   node rows  = SGD at its OWN swept optimum (1.0 log / 3.0 uniform, both bracketed)
-    #   edge rows  = those same two LRs IMPORTED, never swept at edge scale
+    # HISTORY: until 2026-09-04 this pointed at mib_edge_softlog_sgd_lr_1.0, the NODE optimum
+    # imported without an edge sweep. Edge n is 207-1507x node n and soft-fwd SGD is
+    # LR-sensitive, and the sweep confirmed the import cost ~2.2 CPR on the shared cells. That
+    # dir is still on disk and is a "wrong LR" artefact, not an optimizer result -- if a number
+    # here looks worse than Adam by ~3, check you're not reading it.
     #
-    # Edge n is 207-1507x node n (gpt2 157 -> 32,491; llama3 1057 -> 1,592,881) and soft-fwd SGD
-    # is LR-sensitive, so the import is not justified by the node bracket. It also demonstrably
-    # did not land: over the 9 cells shared with the headline edge row, log-k reads -1.221 mean
-    # area_under, llama3-concentrated (arith_sub -3.45, ioi -3.74, mcqa -2.42) while gemma2 gains;
-    # uniform-k is at parity (+0.154) and loses only on llama3. So these rows say "the node LR
-    # does not transfer", NOT "SGD is worse than Adam at edge level" -- the second claim needs an
-    # edge LR sweep (LR= override in submit_mib_edge_soft_sgd.sh). Do not caption them as an
-    # optimiser result until that exists.
-    ("\\ourmethod{}", "mib_edge_softlog_sgd_lr_1.0", "edge", "ours"),
+    # WHAT THIS ROW DOES NOT SAY: even tuned, Adam still leads SGD at edge scale on the sweep
+    # cells (7.65 vs 6.89) -- the node-level tie does not transfer. Never caption this as "SGD
+    # is the better edge optimizer".
+    ("\\ourmethod{}", "mib_edge_softlog_sgd_lr_3.0", "edge", "ours"),
     ("$+$ hard", "mib_edge_hard_topk_log_lr05", "edge", "ours"),
     ("$-$ $c_k$", "mib_edge_detached_tau", "edge", "ours"),
     ("$+$ hard bwd", "mib_edge_bernoulli_reinforce", "edge", "ours"),

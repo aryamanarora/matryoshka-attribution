@@ -40,8 +40,9 @@ were re-run or re-pointed, `topklog_lr_0.05` is unchanged Adam data, still on di
 |-------------------------------------------|------------------------------|---------------------|
 | `softlog_sgd_lr_1.0`                       | soft fwd, log k, SGD (node, val)  | **MAttr headline** |
 | `test_node_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (node, test) | **MAttr headline** |
-| `mib_edge_softlog_sgd_lr_1.0`              | soft fwd, log k, SGD (edge, val)  | **MAttr headline** |
-| `test_edge_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (edge, test) | **MAttr headline** (at a detuned LR — see below) |
+| `mib_edge_softlog_sgd_lr_3.0`              | soft fwd, log k, SGD (edge, val)  | **MAttr headline** (since 2026-09-04) |
+| `test_edge_softlog_sgd_lr_3.0`             | soft fwd, log k, SGD (edge, test) | **MAttr headline** (since 2026-09-04) |
+| `mib_edge_softlog_sgd_lr_1.0` / `test_edge_softlog_sgd_lr_1.0` | soft fwd, log k, SGD (edge) at the imported NODE lr | superseded, still on disk — do not quote |
 | `topklog_lr_0.05`                          | soft fwd, log k, Adam        | "$+$ Adam" ablation |
 | `test_node_topk_log_lr05`                  | soft fwd, log k, Adam (test) | "$+$ Adam" ablation |
 | `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam (edge) | "$+$ Adam" ablation |
@@ -59,20 +60,25 @@ Adam as the annotated ablation, in `make_mib_test_table.OUR_EDGE_METHODS`, `make
 optimizers at edge scale; paired over its 4 cells (ioi/gpt2, ioi/llama3, mcqa/llama3,
 arithmetic_subtraction/llama3), CPR AUC:
 
-| Adam lr=0.1 | Adam lr=0.05 | SGD lr=3.0 (SGD's own edge optimum) | SGD lr=1.0 (the dir we ship) |
+| Adam lr=0.1 | Adam lr=0.05 | SGD lr=3.0 (SGD's own edge optimum; the dir we ship) | SGD lr=1.0 (the old dir) |
 |---|---|---|---|
-| **7.65** | 7.58 | 6.89 | **4.72** |
+| **7.65** | 7.58 | **6.89** | 4.72 |
 
-Adam wins TUNED-vs-TUNED at edge scale — the node-level tie does not transfer — and the SGD dir
-that landed is at **lr=1.0, the imported NODE optimum**. Net effect on the test table: the bare
-edge row reads **4.96** where the Adam row reads **6.23**, i.e. this convention understates our
-own edge result by ~1.27 CPR. That is a presentation choice, not a finding. **Never write prose
-saying SGD is the better edge optimizer** — the sweep says the opposite.
+Adam wins TUNED-vs-TUNED at edge scale — the node-level tie does not transfer. **Never write
+prose saying SGD is the better edge optimizer** — the sweep says the opposite. Until 2026-09-04
+the shipped SGD edge dir was `*_lr_1.0`, the imported NODE optimum, which made the bare edge
+row read **4.96** against the Adam row's **6.23** — a wrong-LR artefact, not a finding.
 
-**The fix is not to flip back**, it is to repoint the edge SGD rows at lr=3.0 so they sit at
-their own block-argmax like every other row. Today: 4/11 validation cells, 0 test. The
-`esgd3-*` jobs that fill it are submitted and HELD (`scripts/submit_edge_sgd_lr3.sh`); release
-them and repoint `OUR_EDGE_METHODS` when they land.
+**Fixed 2026-09-04 by repointing, not by flipping back**: `make_mib_test_table.OUR_EDGE_METHODS`
+and `make_mib_table.OUR_METHODS` now name `mib_edge_softlog_sgd_lr_3.0` /
+`test_edge_softlog_sgd_lr_3.0` (all 22 cells landed 2026-09-04 via
+`scripts/submit_edge_sgd_lr3.sh`; gemma2 trained in the MIB venv, so no reeval stamp). Full-row
+effect, 11 cells: validation avg 4.99 -> 6.04 (Adam 6.37), test avg 4.96 -> 5.93 (Adam 6.23).
+10/11 cells improve (ioi/gemma2 is saturated for every method); SGD now beats Adam on the three
+gemma2 cells and arith_sub/llama3, Adam wins every other llama3 cell by 1-2. So the bare edge row
+trails the `$+$ Adam` row by ~0.3, not ~1.3, and that residual IS an optimizer result. The
+4-cell `mib_edge_lrsweep_sgd_log_lr_3.0` is NOT a substitute (gpt2 there is scored on 200
+examples, not the full split).
 
 Do NOT use uniform-k dirs as the headline — their CPR averages look strong (esp. edge)
 but acc-AUC is the worst of the three and they collapse on IOI/Qwen test; using them
