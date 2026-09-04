@@ -24,7 +24,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # run from the repo root
 from vit_teaser_attr import (FRACS, N_PATCH, forward_from_patches,   # noqa: E402
-                             load_model, make_corrupt_image_sampler, make_target_fn)
+                             load_model, make_corrupt_image_sampler, make_eval_fn)
 
 METHODS = ["mattr", "mattr_pixel", "attnlrp", "smoothgrad", "gradattnroll",
            "kernelshap"]
@@ -56,7 +56,8 @@ def main():
     image = Image.open(a["image"]).convert("RGB")
     x = tf(image).unsqueeze(0).to(device)
     E_clean = model._process_input(x).detach()
-    target_fn = make_target_fn(meta["target"], meta["pos"]["index"], meta["neg"]["index"])
+    # the scalar the sweep reads: p(pos) under a softmax target, the logit scalar otherwise
+    target_fn = make_eval_fn(meta["target"], meta["pos"]["index"], meta["neg"]["index"])
     # same corruption distribution the scores were produced against; averaging the sweep over
     # draws keeps one unlucky draw from deciding the ranking
     resample = (meta["baseline"] in ("shuffle", "pixelate", "solid")

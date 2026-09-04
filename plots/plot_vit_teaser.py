@@ -194,6 +194,10 @@ def main():
             header = f"explanation for “{mt['pos']['label']}”"
             if mt["target"] == "logit_diff":       # the explained scalar is a class contrast
                 header += f" vs. “{mt['neg']['label']}”"
+            elif mt["target"] == "prob":
+                header += f": p(“{mt['pos']['label']}”)"
+            elif mt["target"] == "ce":
+                header += f": cross-entropy of “{mt['pos']['label']}”"
         fig.text(pad / args.width, (y_panel + panel + 0.035) / height, header,
                  ha="left", va="bottom", size=7)
 

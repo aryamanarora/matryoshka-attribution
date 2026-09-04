@@ -23,7 +23,14 @@ are additionally pooled to the same 14x14 patch grid so every panel can be shown
 Explained scalar (`--target`), shared by all methods so the panels are comparable:
   logit_diff (default) = logit[pos] - logit[neg]  -- class-contrastive, the thing that makes
                          "explanation for dog" mean dog *rather than* cat;
-  single               = logit[pos] alone.
+  single               = logit[pos] alone;
+  prob                 = softmax(logits)[pos], the class probability;
+  ce                   = the same probability, but MAttr minimises the cross-entropy -log p
+                         and the gradient methods differentiate log p. Both softmax targets
+                         are EVALUATED on p (bounded, comparable across targets); they differ
+                         in what the optimiser / the backward pass sees. A softmax target is
+                         where a gradient baseline has to go through the 1000-way normaliser,
+                         which the mask-based methods never differentiate.
 `--explain {dog,cat}` chooses which animal is the positive class, so the same machinery
 produces the explanation for either one.
 
@@ -224,7 +231,7 @@ def make_auc_probe(forward_masked, total, n_draw=4):
 
 
 def make_target_fn(kind, pos, neg):
-    """logits [B, 1000] -> [B] scalar being explained.
+    """logits [B, 1000] -> [B] scalar the GRADIENT methods differentiate (and KernelSHAP fits).
 
     `pos` is the class the figure explains, `neg` the class it is explained *against*.
     Which animal plays which role is set by `--explain`, so nothing downstream assumes the
@@ -232,7 +239,23 @@ def make_target_fn(kind, pos, neg):
     """
     if kind == "single":
         return lambda y: y[:, pos]
+    if kind == "prob":
+        return lambda y: y.softmax(-1)[:, pos]
+    if kind == "ce":
+        return lambda y: y.log_softmax(-1)[:, pos]
     return lambda y: y[:, pos] - y[:, neg]
+
+
+def make_eval_fn(kind, pos, neg):
+    """logits -> the scalar the sufficiency sweep and the training probe READ. Equal to
+    `make_target_fn` for the logit targets; for both softmax targets it is p(pos), so that
+    `prob` and `ce` curves are on one bounded scale and differ only in what was optimised."""
+    if kind in ("prob", "ce"):
+        return lambda y: y.softmax(-1)[:, pos]
+    return make_target_fn(kind, pos, neg)
+
+
+MATTR_LOSS = {"logit_diff": "logit_diff", "single": "logit", "prob": "prob", "ce": "ce"}
 
 
 def pool_to_patches(pix):
@@ -242,7 +265,7 @@ def pool_to_patches(pix):
 
 
 # --------------------------------------------------------------------------- methods
-def run_mattr(model, x, E_clean, sample_image, target_fn, pos, neg, args, device, *,
+def run_mattr(model, x, E_clean, sample_image, eval_fn, pos, neg, args, device, *,
               units="patch"):
     """MAttr headline variant: soft top-k forward, log-k schedule, Adam, lr 0.05.
 
@@ -255,7 +278,7 @@ def run_mattr(model, x, E_clean, sample_image, target_fn, pos, neg, args, device
     """
     base_id = torch.tensor([pos], device=device)
     source_id = torch.tensor([neg], device=device)
-    loss_name = "logit" if args.target == "single" else "logit_diff"
+    loss_name = MATTR_LOSS[args.target]
     pixel = units == "pixel"
     h, w = x.shape[-2:]
     total = h * w if pixel else N_PATCH
@@ -275,7 +298,7 @@ def run_mattr(model, x, E_clean, sample_image, target_fn, pos, neg, args, device
         return attribution_loss(loss_name, apply_mask(mask.unsqueeze(0)),
                                 base_id, source_id, corrupt_topk=False)
 
-    probe = make_auc_probe(lambda masks: target_fn(apply_mask(masks)), total, args.probe_draws)
+    probe = make_auc_probe(lambda masks: eval_fn(apply_mask(masks)), total, args.probe_draws)
     trace = []
 
     def on_step(step, k, loss, scores):
@@ -448,9 +471,12 @@ def main():
     ap.add_argument("--out", default="results/vit_teaser")
     ap.add_argument("--methods", default="all",
                     help=f"comma-separated subset of {METHOD_ORDER}, or 'all'")
-    ap.add_argument("--target", default="logit_diff", choices=["logit_diff", "single"],
+    ap.add_argument("--target", default="logit_diff",
+                    choices=["logit_diff", "single", "prob", "ce"],
                     help="scalar every method explains: the contrast between the two classes "
-                         "(default) or the explained class's logit alone")
+                         "(default), the explained class's logit alone, its softmax "
+                         "probability, or the same probability trained as cross-entropy "
+                         "(see the module docstring)")
     ap.add_argument("--explain", default="dog", choices=["dog", "cat"],
                     help="which animal is the POSITIVE class of the explained contrast; "
                          "'cat' explains the cat against the dog instead")
@@ -525,6 +551,7 @@ def main():
     print(f"explaining {categories[pos]} ({logits[pos]:.3f}) against "
           f"{categories[neg]} ({logits[neg]:.3f})", flush=True)
     target_fn = make_target_fn(args.target, pos, neg)
+    eval_fn = make_eval_fn(args.target, pos, neg)
 
     E_clean = model._process_input(x).detach()
     E_corr = model._process_input(x_corr).detach()
@@ -549,14 +576,15 @@ def main():
         t0 = time.time()
         print(f"[{name}] ...", flush=True)
         if name in ("mattr", "mattr_pixel"):
-            res = run_mattr(model, x, E_clean, sample_image, target_fn, pos, neg, args, device,
+            res = run_mattr(model, x, E_clean, sample_image, eval_fn, pos, neg, args, device,
                             units="pixel" if name == "mattr_pixel" else "patch")
         elif name == "smoothgrad":
             res = run_smoothgrad(model, x, target_fn, args, device)
         elif name == "gradattnroll":
             res = run_gradattnroll(model, x, target_fn, device)
         elif name == "kernelshap":
-            res = run_kernelshap(model, E_clean, sample_corrupt, target_fn, args, device)
+            # SHAP values of the scalar the sweep reads (p under a softmax target)
+            res = run_kernelshap(model, E_clean, sample_corrupt, eval_fn, args, device)
         else:
             res = run_attnlrp(load_model, x, target_fn, args, device)
         timings[name] = time.time() - t0
