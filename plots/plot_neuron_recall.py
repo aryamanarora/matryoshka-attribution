@@ -86,7 +86,7 @@ TASKS = [("hours", "Hours"), ("months", "Months"), ("weekdays", "Weekdays"),
 # (label, tag template, palette key, linetype). The %s takes the loss fragment. Same runs and
 # the same order as make_sva_neuron_table.METHODS, so the table and this figure describe one
 # experiment. Colour is the METHOD and linetype the hyperparameter, per palette.py's rule --
-# which is why "+ unif k" is MAttr's blue dashed rather than a seventh hue, and why the SGD arm
+# (that rule is why the dropped "+ unif k" arm was MAttr's blue dashed), and why the SGD arm
 # gets its own (black) hex: an optimizer swap that beats every other series here is not
 # readable as a linetype variant of the series it beats.
 METHODS = [
@@ -94,8 +94,27 @@ METHODS = [
     ("I×G", "ixg%s", "I×G", "solid"),
     ("Node Pruning", "eprun_s090%s", "Node Pruning", "solid"),
     ("DBM", "sig_lr0.3_l16.0%s", "DBM", "solid"),
-    ("MAttr", "sufficient_topk_adam%s_bs1", "MAttr", "solid"),
-    ("MAttr + unif $k$", "sufficient_topk_adam%s_uniformk_bs1", "MAttr", "dashed"),
+    # HIGH-EPS ADAM (eps=1e-2) as of 2026-08-30. At 2.29M mask logits the default eps=1e-8 makes
+    # Adam's update ~sign(g)*lr, so every neuron takes the same size step regardless of effect
+    # size and the score becomes a signed COUNT of steps -- `sufficient_topk_adam%s_bs1` was
+    # measuring that degeneracy. BOTH Adam arms are switched together: leaving "+ unif k" at the
+    # old eps would make that ablation differ in TWO things (schedule AND eps) and stop being an
+    # ablation. run_tag order is base, then _eps, then _loss, which is why %s sits after eps.
+    # BOTH Adam eps arms (2026-09-01). They are not the same optimiser at this width: at 2.29M
+    # mask logits the default eps=1e-8 makes the update ~sign(g)*lr, so the score becomes a
+    # signed COUNT of steps. Colour is the arm and linetype the eps, per palette.py's rule --
+    # the default-eps one gets the palette's existing purple rather than a dashed blue, because
+    # on this figure the two behave like different methods (0/4 vs 4/4 in the top-200), not like
+    # a hyperparameter variant of one.
+    ("MAttr ($\\epsilon{=}10^{-2}$)", "sufficient_topk_adam_eps1e-2%s_bs1", "MAttr", "solid"),
+    ("MAttr ($\\epsilon{=}10^{-8}$)", "sufficient_topk_adam%s_bs1",
+     "MAttr (Adam, default eps)", "solid"),
+    # "+ unif k" DROPPED from this figure 2026-08-30 (requested). It is still a column of
+    # scripts/make_sva_neuron_table.py (`stopk-unif`), so the figure and the table no longer
+    # describe the same method set -- the docstring's "same runs and the same order as
+    # make_sva_neuron_table.METHODS" no longer holds, and re-adding it here needs
+    # sufficient_topk_adam_eps1e-2%s_uniformk_bs1 runs, which do not exist (the eps arm was only
+    # ever run at log k).
     ("MAttr + SGD", "sufficient_topk_sgd%s_bs1", "MAttr (SGD)", "solid"),
 ]
 LOSSES = [("logit-diff", ""), ("CE", "_ce"), ("Accuracy", "_acc")]
@@ -115,6 +134,12 @@ FS, FS_WIDE = (6.5, 5.0, 5.5), (7.5, 6.5, 6.5)        # (axis label, tick, legen
 # sizes; matching them is what keeps the fonts in the two panels of that row identical.
 PANEL_W, ROW_H = 0.69, 1.0
 PANEL_W_WIDE, ROW_H_WIDE = 1.35, 1.45
+# --twothirds: 0.66\textwidth (~3.63in), for sitting beside adamsgd_epsgrid_recall.pdf at 0.33.
+# Its own constants rather than a scale factor on the wide ones, because the fonts are absolute:
+# rendering the 5.29in wide build into 3.63in would print its 7.5/6.5pt text at 5.1/4.5pt, which
+# is the mistake --wide exists to prevent in the other direction.
+PANEL_W_23, ROW_H_23 = 0.90, 1.18
+FS_23 = (7.0, 5.8, 6.0)
 # Four decades of k in a 0.55in panel: matplotlib's default log locator offers 10^0..10^5 and
 # draws every other one, which still collides. Pinned to three so the spacing is a decision
 # rather than whatever the locator picks for the axis limits of the day.
@@ -201,6 +226,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all-losses", action="store_true", help="3 loss rows instead of logit-diff")
     ap.add_argument("--layer-control", action="store_true", help="print the control, no figure")
+    ap.add_argument("--twothirds", action="store_true",
+                    help="0.66\\textwidth build, to pair with the 0.33 recall heatmap")
     ap.add_argument("--wide", action="store_true",
                     help="full-\\linewidth layout (the pre-2026-08-24 size); use with --all-losses")
     ap.add_argument("--out")
@@ -219,12 +246,12 @@ def main():
     rows = [(abl, res, zfrag, lname, lfrag)
             for abl, res, zfrag in ABLATIONS for lname, lfrag in losses]
     plt.rcParams.update(P.RC)
-    fs = FS_WIDE if a.wide else FS
-    panel_w = PANEL_W_WIDE if a.wide else PANEL_W
-    row_h = ROW_H_WIDE if a.wide else ROW_H
+    fs = FS_23 if a.twothirds else (FS_WIDE if a.wide else FS)
+    panel_w = PANEL_W_23 if a.twothirds else (PANEL_W_WIDE if a.wide else PANEL_W)
+    row_h = ROW_H_23 if a.twothirds else (ROW_H_WIDE if a.wide else ROW_H)
     # 8 handles across 2.7in is 3 columns (so 3 rows); ncol=4 overruns the figure and
     # bbox_inches clips the outermost entry, which is the one series the figure is about.
-    leg_ncol = LEG_NCOL if a.wide else 3
+    leg_ncol = LEG_NCOL if (a.wide or a.twothirds) else 3
     nr, nc = len(rows), len(TASKS)
     nleg = LEG_ROW_H * -(-(len(METHODS) + 1) // leg_ncol) + LEG_PAD     # +1 = the chance entry
     leg_h = nleg + TITLE_H
@@ -248,7 +275,7 @@ def main():
                         ls=ls, lw=1.0, solid_joinstyle="round")
             ax.set_xscale("log")
             ax.set_ylim(-0.03, 1.03)
-            if not a.wide:
+            if not (a.wide or a.twothirds):
                 ax.set_xticks(XTICKS)
             P.furnish(ax)
             ax.tick_params(labelsize=fs[1], length=2, width=0.5)
@@ -295,7 +322,12 @@ def main():
                handletextpad=0.5, borderpad=0)
     out = a.out or (f"plots/neuron_recall{'_losses' if a.all_losses else ''}.pdf")
     fig.savefig(out, bbox_inches="tight")
-    print(f"wrote {out}")
+    # PNG sibling, as every other plot script here writes. Not cosmetic: without it a stale PNG
+    # from an earlier run sits beside a fresh PDF with no sign that the two disagree, and on
+    # 2026-08-30 that is exactly what happened -- a 14-hour-old PNG was read as the current
+    # figure and the switch to eps=1e-2 was reported as having no effect when it had a large one.
+    fig.savefig(out.replace(".pdf", ".png"), dpi=200, bbox_inches="tight")
+    print(f"wrote {out} (+ .png)")
 
     # Hit counts at two budgets, so the numbers quoted in prose come from this script and not
     # from a probe that is not in the repo.

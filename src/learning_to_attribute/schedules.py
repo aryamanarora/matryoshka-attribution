@@ -140,7 +140,7 @@ class AdaptiveLogK:
 def natural_k(scores: torch.Tensor) -> float:
     """``k`` implied by the current threshold: number of non-negative scores (min 1).
 
-    Matches ``attribute.py``'s ``natural_k_frac`` selection. Distinct from ``eval_mib.py``'s
-    bias-step feature (which trains a global bias); this just reads off ``k`` from the scores.
+    Library helper with no internal callers since the natural-k / bias-step trainer
+    features were dropped (2026-08-26); kept exported for external consumers.
     """
     return float(max(1, int((scores.detach() >= 0).sum().item())))

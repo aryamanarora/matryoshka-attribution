@@ -2,8 +2,8 @@
 
 These reproduce, bit-for-bit (including RNG-draw order), the inline ``if/elif`` block in
 ``scripts/eval_mib.py`` (lines ~271-339). The trainer (``trainer.learn_scores``) calls
-``build_mask`` / ``build_bias_mask`` each step and dispatches the optimizer step on the
-returned :class:`MaskResult` aux fields (REINFORCE manual gradient, L0 penalty).
+``build_mask`` each step and dispatches the optimizer step on the returned
+:class:`MaskResult` aux fields (REINFORCE manual gradient, L0 penalty).
 
 All variants build on the frozen primitives in :mod:`learning_to_attribute.sigmoid_topk`
 (``sigmoid_topk``, ``sigmoid_topk_detached_tau``); their numerics must not change.
@@ -16,11 +16,10 @@ import torch
 
 from .sigmoid_topk import sigmoid_topk, sigmoid_topk_detached_tau
 
-# Variants that need a sampled ``k`` (everything except the bias-step, which is separate).
+# Variants that need a sampled ``k``.
 VARIANTS = (
     "topk", "topk_detached", "hard_topk", "hard_topk_identity",
-    "hard_topk_identity_gumbel",
-    "hard_topk_gumbel", "hard_topk_reinforce", "bernoulli_reinforce",
+    "hard_topk_identity_gumbel", "bernoulli_reinforce",
     "hard_concrete", "topk_kth_threshold", "topk_kth_threshold_hard",
 )
 
@@ -77,25 +76,6 @@ def build_mask(scores: torch.Tensor, k: float, variant: str = "topk",
         hard = _hard_topk_indices(perturbed, k)
         return MaskResult(hard.detach() + (scores - scores.detach()))
 
-    if variant == "hard_topk_gumbel":
-        # Gumbel(0,1) per score, then hard top-k on the perturbed scores; ST via clean soft.
-        gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1 - 1e-8)))
-        perturbed = scores + gumbel
-        hard = _hard_topk_indices(perturbed, k)
-        soft = sigmoid_topk(scores, k=k, T=T, n_iters=n_iters)
-        return MaskResult(hard - soft.detach() + soft)
-
-    if variant == "hard_topk_reinforce":
-        gumbel = -torch.log(-torch.log(torch.rand_like(scores).clamp(1e-8, 1 - 1e-8)))
-        perturbed = scores + gumbel
-        ki = max(1, int(k))
-        _, top_idx = perturbed.topk(ki)
-        hard = torch.zeros_like(scores)
-        hard[top_idx] = 1.0
-        threshold = perturbed.topk(ki).values[-1]
-        proxy = torch.sigmoid((scores - threshold.detach()) / T)
-        return MaskResult(hard - proxy.detach() + proxy)
-
     if variant == "bernoulli_reinforce":
         # Bernoulli with a k-adjusted threshold (bisection tau, same as sigmoid_topk) so
         # E[active] ~ k. Gradient handled by the trainer via the REINFORCE estimator.
@@ -137,15 +117,3 @@ def build_mask(scores: torch.Tensor, k: float, variant: str = "topk",
         return MaskResult(soft)
 
     raise ValueError(f"Unknown mask variant: {variant!r}. Known: {VARIANTS}")
-
-
-def build_bias_mask(scores: torch.Tensor, bias: torch.Tensor, T: float = 0.5) -> MaskResult:
-    """Bias-step mask (``eval_mib.py:271-277``): threshold ``scores.detach() + bias`` at 0.
-
-    Scores are detached so the ranking is untouched and only ``bias`` receives gradient
-    (via the soft sigmoid). Used on ``natural_k_frac`` fraction of steps.
-    """
-    x = scores.detach() + bias
-    soft = torch.sigmoid(x / T)
-    hard = (x >= 0).float()
-    return MaskResult(hard - soft.detach() + soft)

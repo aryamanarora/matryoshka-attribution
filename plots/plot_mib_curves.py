@@ -1,36 +1,48 @@
-"""Appendix full-width per-task curves over the MIB denoising sparsity sweep, for the 9
-key node methods (MAttr, +hard, IG at 5/10/30 integration steps, I×G, GIM, Node Pruning,
-DBM), faceted by task/model.
+"""Appendix full-width per-cell curves over the MIB denoising sparsity sweep, four methods.
 
 Two figures, same layout:
   - mib_accuracy_curves.pdf : decision accuracy (fraction of examples with metric>0) vs sparsity
-  - mib_cpr_curves.pdf      : CPR / faithfulness (ablated normalised to [corrupted, clean]) vs sparsity
+  - mib_cpr_curves.pdf      : CPR / faithfulness (ablated normalised to [corrupted, clean])
 x-axis = fraction of nodes kept, log scale (matches acc-AUC's log weighting). acc-AUC is the
-log-x-weighted mean of the accuracy curve; CPR AUC is the linear-x area under the faithfulness curve.
+log-x-weighted mean of the accuracy curve; CPR AUC is the linear-x area under the CPR curve.
+
+STYLED TO MATCH plots/plot_sva_curves.py (figs/sva_curves_iia.pdf), which is the other
+full-width per-cell curve appendix in this paper: raw matplotlib rather than plotnine, legend
+on TOP, hairline curves with NO point markers, palette.furnish grid, and shared super-axis
+labels. The two figures sit a few pages apart and answer the same question on different
+benchmarks, so a reader should not have to re-learn the visual language between them.
+
+*** THE POINT MARKERS AND THE X-JITTER ARE BOTH GONE, AND THEY WENT TOGETHER. *** The old
+plotnine version drew a marker at each of the 10 sweep points and then multiplied x by a
+per-method factor (+-0.12 decade at 9 series) so the markers would not stack. That jitter put
+every series on a SLIGHTLY WRONG x -- tolerable when the marker was the thing being read,
+indefensible once the marker is gone. Curves are now drawn at the true sweep fractions.
+
+Y. Accuracy is a bounded fraction, so it shares one 0--1 axis across every panel and the
+panels are directly comparable. CPR is unbounded and its ceiling is set by the cell (MCQA/Llama
+reaches ~5 where IOI/Qwen reaches ~2), so it gets a per-panel y -- read shape, not height.
 
 Each curve reads BOTH arrays from one self-consistent eval pkl:
-  MAttr/+hard -> results/{topklog,htklog}_lr_0.05/{task}_{model}_validation.pkl
-  gradient    -> MIB-circuit-track/results/<dir>/<sub>/{stask}_{model}_validation_abs-False.pkl
-                 (dir is *_accauc for the older runs, *_eval for ones evaluated after the
-                  `accuracies` array became standard -- see the METHODS comment)
-  mask-learn  -> results/eprun_eval_*/EdgePruning_patching_node/{stask}_{model}_validation_abs-False.pkl
+  MAttr    -> results/<dir>/{task}_{model}_validation.pkl
+  gradient -> MIB-circuit-track/results/<dir>/<sub>/{stask}_{model}_validation_abs-False.pkl
+              (dir is *_accauc for the older runs, *_eval for ones evaluated after the
+               `accuracies` array became standard -- see the METHODS comment)
+The `eprun` loader branch is kept though no series uses it, so a mask-learning baseline can be
+put back by adding one tuple to METHODS.
 
-The two mask-learning baselines sweep sparsity the same way everything else does: their
-learned per-node mask logits are a ranking, and MIB's eval thresholds that ranking at each
-sweep point. The mask's own converged density is one point on that x-axis, not the curve.
 Run:  uv run python plots/plot_mib_curves.py
 """
+import os
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
-import palette as P
-from plotnine import (
-    ggplot, aes, geom_line, geom_point, geom_hline, facet_wrap, labs, theme,
-    theme_set, theme_bw, element_text, element_line, element_blank,
-    scale_color_manual, scale_linetype_manual, scale_x_log10,
-)
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import palette as P                                   # noqa: E402
 
 R = Path("results")
 MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
@@ -52,62 +64,57 @@ FACET_ORDER = [c[2] for c in COLUMNS]
 # method -> (colour, linetype, loader-kind, dir/sub). Colours from plots/palette.py, the single
 # source of truth shared with every other figure -- do not write hex codes here.
 #
-# The three IG rows are ONE method at three integration budgets (MIB ships --ig-steps 5; 10 and
-# 30 are ours, from MIB-circuit-track/run_napig{10,30}.sh, which differ from run_variants.sh in
-# that flag ONLY). They therefore share IG's orange and separate by linetype -- see the rejected
-# colour-ramp note in palette.ALIASES. Expect the 10- and 30-step curves to sit on top of each
-# other in nearly every panel: that overlap IS the result (rho 0.994 / zero sign flips between
-# those two rungs), and it is what makes the gap down to the 5-step curve worth showing.
+# FOUR SERIES, cut to these four on 2026-09-02 (requested). What was dropped and why it is not
+# missing: the IG step ladder (5/10/30) made a point about integration budget that this figure
+# is no longer about; "+hard" is a forward-pass ablation of MAttr; GIM, Node Pruning and DBM are
+# baselines the tables and figs/mib_accauc_cpr_scatter.pdf still carry. Every one of them is
+# still in tabs/mib_results.tex, so nothing is only visible here. Re-add by restoring a tuple.
 #
-# The 5-step series reads napig_ref_accauc rather than napig_ref_eval because only the former
-# carries the `accuracies` array the top figure needs; the two dirs are the same run, verified
-# by identical area_under (1.294409255584171 on ioi/gpt2). The 10/30 dirs were evaluated after
-# accuracies became standard, so their _eval dirs already have both arrays and need no twin.
+# DASHES SURVIVE ON ONE SERIES ONLY, and for a different reason than before. They used to
+# separate the three same-orange IG rungs and the two same-blue MAttr arms; both of those hue
+# collisions are gone. But at their own optima the two MAttr arms score 1.879 (Adam) and 1.886
+# (SGD) and their curves lie on top of each other in most panels, so solid-over-solid simply
+# hides whichever is drawn first. SGD is dashed so the overlap reads AS overlap -- which is the
+# result -- instead of as a missing series.
+#
+# *** MAttr+SGD IS NOW lr=1.0, ITS OWN SWEPT OPTIMUM, NOT Adam's 0.05. *** This series used to
+# read softlog_sgd_lr_0.05 -- SGD pinned to Adam's LR as a single-knob contrast. That was
+# defensible in a nine-series figure where the optimizer was one comparison among many; in a
+# four-series figure whose whole content is Adam vs SGD it is not, because SGD at 20x off its
+# optimum scores 1.413 against 1.886 at lr=1.0, and the curve would read as an optimizer result
+# when it is an LR result. tabs/mib_results.tex has used the own-optimum dirs since 2026-08-24
+# for exactly this reason (see make_mib_table.OUR_METHODS: "do NOT re-pin these to a shared
+# LR"), so this also stops the figure and the table describing different runs of the same row.
 METHODS = [
-    ("MAttr", P.color("MAttr"), "solid", "mattr", "topklog_lr_0.05"),
-    # Same forward, same backward, Adam -> SGD, same lr=0.05. Shares MAttr's blue and separates
-    # by linetype (palette.py ALIASES documents why it gets no hex of its own): colour encodes
-    # "different method" everywhere else in this paper, and this is one method at two optimizers.
-    ("MAttr (SGD)", P.color("MAttr (SGD)"), "dashed", "mattr", "softlog_sgd_lr_0.05"),
-    ("+hard", P.color("+hard"), "solid", "mattr", "htklog_lr_0.05"),
-    ("IG (5 steps)",  P.color("IG"), "solid",  "base", ("napig_ref_accauc", "EAP-IG-inputs_patching_node")),
-    ("IG (10 steps)", P.color("IG"), "dashed", "base", ("napig10_eval",     "EAP-IG-inputs_patching_node")),
-    ("IG (30 steps)", P.color("IG"), "dotted", "base", ("napig30_eval",     "EAP-IG-inputs_patching_node")),
-    ("I×G",   P.color("I×G"), "solid", "base",  ("ig1_accauc",       "EAP-IG-inputs_patching_node")),
-    # gim_eval, NOT gim_accauc: the latter has never existed in either tree, so this series was
-    # silently absent from the figure (load() returns None on a missing path and the method just
-    # drops out). gim_eval is the corrected post-scale_mlp_gate run -- ioi/gpt2 area_under
-    # 1.4168 matches the 1.42 in tabs/mib_results.tex -- and is what every other consumer reads.
-    ("GIM",   P.color("GIM"), "solid", "base",  ("gim_eval",         "GIM_patching_node")),
-    # The two mask-learning baselines at their best swept setting -- Node Pruning s=0.5 with
-    # the logit-diff objective, DBM at lr 0.3 with lambda_L1 6.0. Both are the same dirs the
-    # test table and the correlation heatmap read, so a reader comparing figures is looking
-    # at one run per method rather than three different budgets of it.
-    ("Node Pruning", P.color("Node Pruning"), "solid", "eprun", "eprun_eval_s0.5_ld"),
-    ("DBM",          P.color("DBM"),          "solid", "eprun", "eprun_eval_ld_sig_lr0.3_l16.0"),
+    ("MAttr (Adam)", P.color("MAttr"), "solid", "mattr", "topklog_lr_0.05"),
+    ("MAttr (SGD)", P.color("MAttr (SGD)"), "dashed", "mattr", "softlog_sgd_lr_1.0"),
+    # alpha ~ U(0,1) drawn per example instead of an m-point grid, at the same one-backward cost
+    # as I x G. Seed 0, the headline dir every other consumer reads (make_mib_accauc_table,
+    # make_mib_test_table, plot_mib_accauc_cpr_scatter); _s1/_s2 are 5/11 seed replicates.
+    # Its own MIB subfolder name -- run_napig_mc.sh passes --method EAP-IG-inputs-mc precisely
+    # so it cannot overwrite the fixed-grid NAP-IG pkls.
+    ("Stepless IG", P.color("Stepless IG"), "solid", "base",
+     ("napig_mc_eval", "EAP-IG-inputs-mc_patching_node")),
+    # ig1_accauc, NOT ig1_eval: same run (area_under 0.478 vs 0.477 over 11 cells) but only the
+    # _accauc dir carries the `accuracies` array the top figure needs.
+    ("I×G", P.color("I×G"), "solid", "base", ("ig1_accauc", "EAP-IG-inputs_patching_node")),
 ]
 METHOD_ORDER = [m[0] for m in METHODS]
 
-theme_set(
-    theme_bw(base_size=8)
-    + theme(
-        text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 3.6),
-        axis_title=element_text(size=8),
-        axis_text=element_text(size=6),
-        panel_grid_major=element_line(size=0.25, color="#dddddd"),
-        panel_grid_minor=element_blank(),
-        panel_spacing_x=0.03,
-        panel_spacing_y=0.04,
-        strip_background=element_blank(),
-        strip_text=element_text(size=7),
-        legend_title=element_text(size=7),
-        legend_text=element_text(size=7),
-        legend_key_size=10,
-        legend_position="bottom",
-        legend_direction="horizontal",
-    )
-)
+# Typography and geometry lifted from plot_sva_curves.py so the two appendices match. 5.5in is
+# iclr2027_conference.sty's \textwidth, so at width=\linewidth this is placed 1:1 and these are
+# the sizes that reach the compiled PDF. ROW_H matches sva's 0.78in/row; HEAD is the legend band.
+NCOL = 4
+FIG_W, ROW_H, HEAD = 5.5, 0.86, 0.48
+FS_TITLE, FS_TICK, FS_LAB, FS_LEG = 6.5, 5, 6.5, 5.5
+LW = 1.3          # 4 series, not 9 -- thin hairlines were a density fix this cut removed
+# plotnine linetype names -> matplotlib dash tuples. Kept as names in METHODS because that is
+# what the three IG rungs are documented by; translated once, here.
+# Dash lengths are in LINEWIDTHS, so they scale with LW: at 1.3pt the old (2.5, 1.5)
+# reads as a dotted line rather than a dashed one.
+DASH = {"solid": "solid", "dashed": (0, (3.2, 1.5)), "dotted": (0, (1, 1.3))}
+XTICKS = [1e-3, 1e-2, 1e-1, 1e0]
+XLAB = ["0.1%", "1%", "10%", "100%"]
 
 
 def load(kind, loc, task, model):
@@ -127,21 +134,9 @@ def load(kind, loc, task, model):
         return None
 
 
-# small per-method multiplicative x-offset (evenly spread in log space) so the curves' markers
-# at each sweep point don't sit exactly on top of each other. The rule is a fixed SPACING of
-# 0.03 decade between adjacent series -- about one marker width -- so the half-width is derived
-# from the series count rather than hardcoded (it was ±0.06 for 5 series, ±0.09 for 7, and is
-# ±0.12 for the 9 here). Hardcoding it is what let it go stale last time a series was added;
-# deriving it means the next addition re-spaces itself. At 9 series the total spread is 8% of a
-# 3-decade axis, still well inside one sweep step.
-JIT_SPACING = 0.03
-_half = JIT_SPACING * (len(METHOD_ORDER) - 1) / 2
-JIT = {m: 10 ** off for m, off in
-       zip(METHOD_ORDER, np.linspace(-_half, _half, len(METHOD_ORDER)))}
-
-
 def build():
-    rows = []
+    """{(method, facet label): (x, acc, cpr)} plus the coverage report."""
+    out = {}
     for mname, _, _, kind, loc in METHODS:
         n_found = 0
         for task, model, flabel in COLUMNS:
@@ -150,11 +145,9 @@ def build():
                 continue
             n_found += 1
             acc, faith = d.get("accuracies"), d.get("faithfulnesses")
-            for i, pct in enumerate(PCT):
-                rows.append(dict(method=mname, facet=flabel,
-                                 pct=pct, x=pct * JIT[mname],
-                                 acc=acc[i] if acc else None,
-                                 cpr=faith[i] if faith else None))
+            out[(mname, flabel)] = (np.asarray(PCT, float),
+                                    np.asarray(acc, float) if acc else None,
+                                    np.asarray(faith, float) if faith else None)
         # load() returns None for a path that does not exist, so a mistyped or not-yet-populated
         # dir makes the series vanish from the figure with no error -- which is exactly how GIM
         # was silently absent until the gim_accauc/gim_eval mixup was caught (see METHODS above).
@@ -162,45 +155,80 @@ def build():
         if n_found < len(COLUMNS):
             print(f"{'MISSING' if not n_found else 'partial'}: {mname} ({loc}) "
                   f"{n_found}/{len(COLUMNS)} cells")
-    df = pd.DataFrame(rows)
-    df["method"] = pd.Categorical(df["method"], METHOD_ORDER)
-    df["facet"] = pd.Categorical(df["facet"], FACET_ORDER)
-    return df
+    return out
 
 
-def make(df, ycol, ylab, out, hline=None, free_y=False):
-    colors = {m[0]: m[1] for m in METHODS}
-    ltypes = {m[0]: m[2] for m in METHODS}
-    sub = df[df[ycol].notna()]
-    # colour AND linetype both map to `method` with the same scale `name`, so plotnine merges
-    # them into ONE legend whose keys show the pairing -- three orange keys differing only in
-    # dash pattern read as "one method, three budgets", which is the point. Splitting them into
-    # two legends (linetype keyed on a separate `steps` column) was the alternative and is worse
-    # here: it spends a second legend block on an aesthetic that is constant for 6 of 9 series.
-    p = (
-        ggplot(sub, aes("x", ycol, color="method", linetype="method"))
-        + (geom_hline(yintercept=hline, linetype="dashed", color="#999999", size=0.3)
-           if hline is not None else geom_blank())
-        + geom_line(size=0.5)
-        + geom_point(size=1.0)
-        + facet_wrap("facet", ncol=4, scales="free_y" if free_y else "fixed")
-        + scale_x_log10(breaks=[.001, .01, .1, 1], labels=["0.1%", "1%", "10%", "100%"])
-        + scale_color_manual(values=colors, name="Method", limits=METHOD_ORDER)
-        + scale_linetype_manual(values=ltypes, name="Method", limits=METHOD_ORDER)
-        + labs(x="fraction of nodes kept (denoised)", y=ylab)
-    )
-    p.save(OUT / out, dpi=300, verbose=False)
-    print(f"wrote {OUT/out} ({len(sub)} pts, {sub['method'].nunique()} methods)")
+def make(data, idx, ylab, out, hline=None, free_y=False):
+    """One figure. `idx` is 1 for accuracy and 2 for CPR in build()'s value tuple."""
+    style = {m[0]: (m[1], DASH[m[2]]) for m in METHODS}
+    nrow = -(-len(COLUMNS) // NCOL)
+    fh = ROW_H * nrow + HEAD
+    plt.rcParams.update(P.RC)
+    fig, axes = plt.subplots(nrow, NCOL, figsize=(FIG_W, fh), sharex=True,
+                             sharey=not free_y, squeeze=False)
 
+    drawn, npts = set(), 0
+    for i, (_, _, flabel) in enumerate(COLUMNS):
+        ax = axes[i // NCOL][i % NCOL]
+        lo, hi = np.inf, -np.inf
+        if hline is not None:
+            ax.axhline(hline, color="#999999", lw=0.4, ls=(0, (2, 2)), zorder=1)
+        for mname in METHOD_ORDER:
+            v = data.get((mname, flabel))
+            if v is None or v[idx] is None:
+                continue
+            x, y = v[0], v[idx]
+            col, ls = style[mname]
+            ax.plot(x, y, lw=LW, color=col, ls=ls, zorder=2, solid_capstyle="round")
+            drawn.add(mname)
+            npts += len(y)
+            lo, hi = min(lo, y.min()), max(hi, y.max())
+        ax.set_xscale("log")
+        ax.set_xticks(XTICKS)
+        ax.set_xticklabels(XLAB)
+        ax.set_title(flabel, fontsize=FS_TITLE, pad=2.5)
+        ax.tick_params(labelsize=FS_TICK, length=1.5, pad=1.5)
+        P.furnish(ax)
+        if free_y and np.isfinite(lo):
+            # CPR: per PANEL, not per row -- the ceiling is set by the cell, and a shared axis
+            # flattens IOI/Qwen (max ~2) against MCQA/Llama (max ~5).
+            pad = 0.08 * (hi - lo or 1)
+            ax.set_ylim(lo - pad, hi + pad)
+    if not free_y:
+        axes[0][0].set_ylim(0, 1)
+    # 11 cells in a 3x4 grid leaves one empty slot. Hide it rather than letting an empty framed
+    # panel read as a cell whose runs all failed.
+    for j in range(len(COLUMNS), nrow * NCOL):
+        axes[j // NCOL][j % NCOL].set_visible(False)
+    # sharex suppresses tick labels on every panel that is not in the bottom ROW, but with 11
+    # cells in a 3x4 grid the last column's bottom panel is in row 1 -- so that column ended up
+    # with no x axis at all, its labels hidden by a neighbour that is not drawn. Re-enable them
+    # on the lowest VISIBLE panel of each column.
+    for c in range(NCOL):
+        last = max((i for i in range(len(COLUMNS)) if i % NCOL == c), default=None)
+        if last is not None:
+            axes[last // NCOL][c].tick_params(labelbottom=True)
 
-# geom_blank shim (plotnine has it, import lazily to keep the top clean)
-from plotnine import geom_blank  # noqa: E402
+    fig.supxlabel("fraction of nodes kept (denoised)", fontsize=FS_LAB, y=0.012)
+    fig.supylabel(ylab, fontsize=FS_LAB, x=0.005)
+    # Legend band, as a LENGTH not a fraction: this figure is half plot_sva_curves.py's height,
+    # so copying its rect top of 0.955 would reserve half as much ink-space for the same legend.
+    # 0.20in is one row of 5.5pt keys; the four series fit on one row at ncol=5.
+    fig.tight_layout(pad=0.3, w_pad=0.6, h_pad=0.45, rect=(0.012, 0.022, 1, 1 - 0.20 / fh))
+    handles = [Line2D([], [], color=style[m][0], lw=LW + 0.2, ls=style[m][1], label=m)
+               for m in METHOD_ORDER if m in drawn]
+    fig.legend(handles=handles, fontsize=FS_LEG, ncol=5, loc="upper center",
+               bbox_to_anchor=(0.5, 1.0), frameon=False, handlelength=2.0,
+               handletextpad=0.5, columnspacing=1.4)
+    fig.savefig(OUT / out)
+    fig.savefig(OUT / out.replace(".pdf", ".png"), dpi=200)
+    print(f"wrote {OUT/out} ({npts} pts, {len(drawn)} methods)")
 
 
 def main():
-    df = build()
-    make(df, "acc", "decision accuracy (metric > 0)", "mib_accuracy_curves.pdf")
-    make(df, "cpr", "CPR (faithfulness)", "mib_cpr_curves.pdf", hline=1.0, free_y=True)
+    data = build()
+    make(data, 1, "decision accuracy (metric $>$ 0)", "mib_accuracy_curves.pdf")
+    make(data, 2, "CPR (faithfulness)", "mib_cpr_curves.pdf", hline=1.0, free_y=True)
 
 
 if __name__ == "__main__":

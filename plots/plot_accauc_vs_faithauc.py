@@ -1,37 +1,45 @@
-"""Scatter of accuracy-AUC (x) vs faithfulness-AUC (y), one point per (method, loss).
+"""Scatter of IIA-AUC (x) vs faithfulness-AUC (y), one point per (method, loss).
 
-The exception is `Random`, the random-ranking floor, which has no training loss and so draws ONE
-point per panel under its own shape -- see LOSSLESS. It is the reference the ordering of every
-other series should be read against; without it a panel shows which method wins but not whether
-any of them beat chance, which on the zero-ablation row (where x carries a ~0.5 baseline) is the
-whole question.
+THE DEFAULT CUT IS THE PAPER FIGURE and was narrowed on 2026-08-29: PATCHED ablation only,
+LOGIT-DIFF loss only, six methods (two gradient baselines, both Adam arms, SGD, Random). That
+makes it six panels (3x2) of 5-7 points -- the two SAE columns carry 5, since Node Pruning and
+DBM have no SAE runs. The other flags (--adam / --all / --stepless) keep the old
+4-source x 3-loss grid and are exploration; see FIGURE_METHODS for what was dropped and why,
+which is worth reading before widening it back.
+
+`Random`, the random-ranking floor, has no training loss and draws ONE point per panel under its
+own star -- see LOSSLESS. It is the reference the ordering of every other series should be read
+against; without it a panel shows which method wins but not whether any of them beat chance.
+In the patched half that floor is ~0.03, so the margins here are real; in the zero-ablation half
+it is ~0.51, which is the main reason those panels are no longer in the default cut.
 
 Each point is averaged over TASK-GROUPS: SVA (mean of its 4 subtasks) + Arith (mean of its 4)
 + the 2 MIB tasks (ARC-E, IOI) when present. A panel is (ablation setting) x (substrate x
 whether the input node is included in scoring/ablation); only the `node` substrate has the MIB
 tasks and the +input variant, so mlp / mlp+attn_head carry SVA and Arith only, no-input.
 
-The layout is a WRAP, ncol=4, ordered so the `Patched` panels fill the first row and the
-`Zero-abl.` ones the second -- it reads as a grid but is not one, because facet_grid can
-only free scales per row/column and every panel here needs its OWN y (faith-AUC spans 0.6 in
-the patched Node panel and 3.0 in the zeroed MLP one). `facet_order` fixes the sequence; the
-ablation is the first line of each strip rather than a row label.
+The layout is a WRAP (LAB_NCOL) -- it reads as a grid but is not one, because facet_grid can only
+free scales per row/column and every panel here needs its OWN y (faith-AUC spans 0.9 in the Node
+panels and 2.4 on MLP+Attn). `facet_order` fixes the sequence. The ablation is the first line of
+each strip only when more than one is drawn, so the default cut does not print "Patched" four
+times.
 
-`Patched` sets every non-top-k unit to its counterfactual source activation, `Zero-abl.` sets
-it to 0. Read the ordering WITHIN a setting and never a point's position across settings --
-they are different experiments, not two scorings of one. MAttr is retrained through whichever
-intervention it is scored under, and the gradient baselines change estimator outright (I×G ->
-Gradient×Input, IG -> textbook zero-baseline IG). The settings agree at only Spearman ~0.44 on
-matched cells, which is the reason the zero panels are worth drawing at all. Both axes of the
-zero panels are on their own scale: x carries a ~0.5 baseline (a destroyed model still wins the
-binary base-vs-source comparison about half the time, and `load` explains why correcting for
-that per-run is worse than living with it), and y is inflated ~1.9x because faith-AUC's
-(F_clean - F_patch) denominator shrinks when the ablated model is destroyed rather than
-flipped. Neither is comparable across settings.
+READ THE ORDERING WITHIN A PANEL, never a point's position across panels. The substrates are
+different experiments with different unit counts, and under --all/--adam the two ablation
+settings are different experiments too: MAttr is retrained through whichever intervention it is
+scored under, and the gradient baselines change estimator outright (I×G -> Gradient×Input, IG ->
+textbook zero-baseline IG).
+
+MARKERS ARE UNIFORM CIRCLES in the default cut and the series are named by direct labels rather
+than a legend, matching plots/plot_mib_accauc_cpr_scatter.py, whose label machinery this file
+imports. Where two points coincide -- the MAttr arms do, at the node substrate -- they draw as
+one circle with two leader lines out of it, which is the honest picture.
 
 Data: one dir per (ablation x input) cell -- results/sva_sweep, sva_sweep_input, sva_zeroabl,
 sva_zeroabl_input. See SOURCES for which methods each carries.
 Run:  uv run python plots/plot_accauc_vs_faithauc.py        -> plots/accauc_vs_faithauc.pdf
+      uv run python plots/plot_accauc_vs_faithauc.py --adam -> ..._adam.pdf   (all 4 settings,
+                                                               all 3 losses, both Adam arms)
       uv run python plots/plot_accauc_vs_faithauc.py --all  -> plots/accauc_vs_faithauc_all.pdf
 """
 import argparse
@@ -39,6 +47,7 @@ import glob
 import json
 import os
 import re
+import sys
 
 import numpy as np
 import pandas as pd
@@ -122,7 +131,16 @@ def on_model(d):
 
 REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
             "mlp": ["SVA", "Arith"],
-            "mlp+attn_head": ["SVA", "Arith"]}
+            "mlp+attn_head": ["SVA", "Arith"],
+            # Llama-Scope residual SAE latents, one score per (layer, position, latent). SVA and
+            # Arith only, for the same structural reason the per-position substrates are: it is a
+            # span layout, so eval_sva filters to the modal prompt length and the two
+            # variable-length MIB tasks are not run there.
+            "resid_sae_span": ["SVA", "Arith"],
+            # Llama-Scope MLP-OUTPUT SAE (LXM). Same span layout and therefore the same task
+            # coverage as the residual one -- keep the two lists identical, since the whole point
+            # of having both columns is that they differ ONLY in the site.
+            "mlp_sae_span": ["SVA", "Arith"]}
 # (results dir, input-included label, ablation label). The ablation is the first strip line of
 # each panel: `Patched` ablates non-top-k units to the counterfactual source activation,
 # `Zero-abl.` sets them to 0. That is a different SETTING, not a rescoring -- MAttr trains
@@ -142,6 +160,75 @@ SOURCES = [("results/sva_sweep", "−input", "Patched"),
            ("results/sva_zeroabl", "−input", "Zero-abl."),
            ("results/sva_zeroabl_input", "+input", "Zero-abl.")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
+# The SAE column is added to the DEFAULT cut only, not to the module-level SUBSTRATES, because
+# that list is iterated by plot_accauc_vs_faithauc_cause.py and scripts/method_winrate.py --
+# widening it there would silently add an SAE column to two other artifacts.
+#
+# NOT EVERY METHOD IS ON IT. Node Pruning and DBM have no SAE runs at all, so group_avg drops
+# them from this panel and main()'s MISSING column names them every run. That is the documented
+# behaviour for a method with no data in a cell, and it is why the panel shows 5 series where
+# its neighbours show 7 -- do not read the absence as a score.
+FIGURE_SUBSTRATES = SUBSTRATES + [("mlp_sae_span", "SAE (MLP out)")]
+# THE SAE COLUMN READS A DIFFERENT RESULTS TREE, keyed by substrate. results/sva_sweep's SAE runs
+# use the LEGACY `absorb` error intervention, under which keeping one reconstruction-error node
+# restores its whole (layer, position) site regardless of the latents -- a master switch, and
+# MAttr found it (100% of its top 10 were error nodes; acc-AUC 0.771 on addition against 0.445
+# under `frozen`). So that column was scoring a shortcut, not an attribution.
+#
+# results/sva_sweep_ferr is the same 8 tasks and the same 5 series re-run with --sae-error frozen,
+# where each error term is measured against its OWN reconstruction and the node is an ordinary
+# scored unit. `frozen` shares `absorb`'s endpoints exactly (F_clean 6.672 / F_patch -6.651 on
+# addition), so the column stays comparable to its neighbours -- which the `none` setting would
+# NOT have been, since dropping the node moves F_patch and inflates every score (Random alone
+# goes 0.023 -> 0.142 acc-AUC on nothing but an easier k=0 state).
+#
+# The override applies to EVERY source dir. The zero-ablation and +input sweeps have no frozen
+# SAE arm, so the SAE column is simply absent from those panels rather than silently falling back
+# to absorb data -- which is the behaviour we want: a missing panel is readable, a mixed one is
+# not.
+# 5,000 TRAINING STEPS, NOT THE SWEEP'S 2,000 (2026-09-03, requested). Measured on this basis,
+# 2k undertrains MAttr on the ARITHMETIC half: acc-AUC 0.563 -> 0.580 (Adam) and 0.574 -> 0.584
+# (SGD), with the gain concentrated in months (+0.047/+0.044), weekdays and hours while the four
+# SVA tasks move within single-seed noise.
+#
+# *** THE COST IS ON THE FAITH AXIS AND IT IS NOT SYMMETRIC BETWEEN THE ARMS. *** Adam pays
+# faith-AUC 1.49 -> 2.06 for its +0.017 (rc reaches 3.66, i.e. recovering 3.7x the clean logit
+# difference); SGD pays 0.76 -> 0.84 for +0.011 and stays under 1. Read the extra Adam accuracy
+# with that in mind -- it is bought partly with over-recovery.
+#
+# The tree holds the 5k MAttr runs plus SYMLINKS to the untrained baselines, which have no step
+# count and so are the same runs as the 2k tree's. One budget per method per tree is what makes
+# parse_method's `_s\d+` strip safe.
+SUBSTRATE_RES = {"mlp_sae_span": "results/sva_sweep_ferr5k",
+                 # MLP and MLP+Attn bumped to 5k too (2026-09-03), so the three TRAINED-substrate
+                 # columns share a budget. Same finding as the SAE basis and now confirmed three
+                 # times: 2k undertrains MAttr on the ARITHMETIC tasks only. Per-arm means over 8
+                 # tasks, 2k -> 5k: mlp Adam 0.602 -> 0.614, mlp SGD 0.596 -> 0.612, mlp+attn Adam
+                 # 0.606 -> 0.617, mlp+attn SGD 0.610 -> 0.615 -- with all 16 SVA cells inside
+                 # +-0.008 and 13 of 16 arithmetic cells gaining (weekdays +0.067, hours +0.040).
+                 #
+                 # ADAM PAYS FOR IT ON THE FAITH AXIS AND SGD LARGELY DOES NOT: mlp Adam faith
+                 # 1.25 -> 2.33 and mlp+attn Adam 1.72 -> 2.83 (one cell at 4.16), against SGD's
+                 # 0.91 -> 1.04 and 0.86 -> 1.29. Above 1 is over-recovery, so read Adam's extra
+                 # accuracy as partly bought with gap padding.
+                 #
+                 # *** THE TREE MIXES BUDGETS ACROSS METHODS, WHICH THE CAPTION MUST SAY. *** Only
+                 # the two MAttr arms were bumped; IG / IxG / Stepless IG / Random do not train at
+                 # all, and Node Pruning and DBM still train at their own 3000 steps. They are
+                 # symlinked in unchanged. `node` also stays at 2k -- its eps x lr grid is flat
+                 # (0.477-0.526 over 24 cells), so it is not budget-limited.
+                 "mlp": "results/sva_sweep_5k",
+                 "mlp+attn_head": "results/sva_sweep_5k"}
+# SAE (resid) WAS THE SECOND COLUMN HERE AND WAS DROPPED (2026-09-03, requested). It is still in
+# REQUIRED and in --all; only the default cut lost it. The old note read:
+#
+# The two SAE columns are NOT interchangeable and the figure is worth reading for their contrast.
+# Same Llama-Scope 8x dictionary, same 5,243,040 units, same tasks -- only the site differs, and
+# MAttr's verdict flips with it: on addition it scores 0.111 vs IG's 0.302 on the residual stream
+# and 0.774 vs IG's 0.506 on MLP outputs. The residual cell is depressed by a heavy-tail gradient
+# outlier that freezes the mask (one 17,000x spike at a single k-draw); the MLP-output cell has no
+# such spike and MAttr wins there on plain defaults. So do not average the two into one "SAE"
+# facet -- that would hide the single largest substrate effect in this figure.
 
 # method key -> (display label, colour); order = legend order.
 # Colours come from plots/palette.py -- the single source of truth for every figure. Do not
@@ -162,7 +249,23 @@ METHODS = {
     # Spearman 0.96 of GIM (MIB-circuit-track/gim_attnlrp_decomp.py), so this series stands in
     # for the whole LRP family here.
     "AttnLRP":    ("AttnLRP",      P.color("AttnLRP")),
-    "stopk-log":  ("MAttr (log)",  P.color("MAttr")),   # headline = soft top-k fwd, log k
+    "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
+    # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
+    # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
+    # which is what makes the gap between the two attributable to eps and nothing else.
+    #
+    # It is an identity change, not a numerical one. At the neuron substrates nearly every
+    # per-step |grad| exceeds the default eps, so Adam's update collapses to ~sign(g)*lr: every
+    # unit takes the same size step whatever its effect size, and the score degenerates into a
+    # signed count of steps. Above the typical |g| magnitude weighting comes back. Measured on
+    # addition/llama3/mlp that is acc-AUC 0.388 -> 0.490, with the top-k overlap against IG
+    # going 0.08 -> 0.73 (scripts/submit_adam_eps_followup.sh). The prediction this figure
+    # tests is that it is NEUTRAL at the node substrate, where per-unit gradients are far
+    # larger -- the node control already on disk reads 0.525 either way.
+    #
+    # LOGIT-DIFF ONLY: one point per panel, not the three-loss trajectory the other MAttr
+    # series draw, so it carries the logit-diff square and no dashed guide (see `pathable`).
+    "stopk-log-eps1e-2": ("MAttr (Adam, ε=10⁻²)", P.color("stopk-log-eps1e-2")),
     # Same forward and same backward as the headline; Adam -> SGD is the only change. Has its
     # own hex in palette.py (black) rather than sharing MAttr's blue, so it is an ordinary
     # series here; drawn under --sgd only, to keep the default panels legible -- see
@@ -198,6 +301,15 @@ LOSSES = {"acc": "acc", "ce": "CE", "logit_diff": "logit-diff"}
 # was trained with logit-diff and would put it on the loss trajectory the dashed guide traces, so
 # it gets its own shape and is excluded from the guide. One extra legend key, no caption change.
 LOSSLESS = {"Random"}
+# Methods run at ONE loss (logit_diff) rather than the full three. Unlike LOSSLESS this is a
+# COVERAGE fact, not a fact about the method: these runs have a real training loss and carry its
+# square, there simply is no ce/acc wave for them. The distinction matters in exactly one place
+# -- main()'s per-panel completeness count, which must expect 1 point from them and 3 from a
+# three-loss method, or every complete panel reports as short forever. That is the same trap the
+# count already sidesteps for LOSSLESS; it is spelled out as its own set because the reasons
+# differ and because "run it at the other two losses" would empty this one, whereas nothing will
+# ever give Random a loss.
+SINGLE_LOSS = {"stopk-log-eps1e-2"}
 NO_LOSS = "n/a"
 # All FILLABLE, and that has to be checked rather than assumed: method is carried by fill, so a
 # shape plotnine will not fill silently drops the method encoding. matplotlib lists "X" and "P"
@@ -216,17 +328,120 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # method set/colour map that plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py
 # iterate, so deleting a key there would silently drop the series from those figures too.
 #
-# The default is now the THREE-method cut: our headline arm (MAttr under SGD, the optimiser the
-# SVA+ story is about) against the two gradient baselines it is claimed to Pareto-dominate.
-# Everything else the registry knows -- MAttr (log) under Adam, +hard, Node Pruning, DBM -- is
-# still drawn by `--all`, and is still what the tables report; it is dropped HERE because at
-# seven series the facets carried 21 markers each, the legend overflowed \textwidth (the
-# logit-diff shape entry clipped), and the mask baselines sat on top of each other.
+# *** THE DEFAULT CUT WAS NARROWED ON 2026-08-29 (requested) TO: patched only, logit-diff only,
+# six methods. *** It is the figure that ships as fig:acc-faith; every other cut below is an
+# exploration and keeps the full 4-source / 3-loss grid.
 #
-# COVERAGE HAZARD in this cut: "softsgd-log" has no results/sva_sweep_input runs, so the
-# `Node, +input` panel draws IG and I×G only. group_avg cannot catch that (it guards missing
-# TASKS within a method, not a missing method), so main() checks it explicitly and warns.
-FIGURE_METHODS = ["IG", "IxG", "softsgd-log", "Random"]
+# What went and why:
+#
+#  ZERO-ABLATION PANELS, dropped outright. Its IIA AUC does not measure much: the Random floor
+#  there is 0.513, against 0.027 in the patched half, because zeroing every non-top-k unit drives
+#  the model to near-constant logits and the binary base-vs-source comparison the metric
+#  integrates becomes a coin flip. Over its 78 cells per method the BEST method clears that floor
+#  by +0.09 on average and I x G by +0.00-0.03, with 22-34 cells per method AT OR BELOW their own
+#  floor. Those points sat on the same axes as the patched ones with nothing marking the
+#  difference in floor, so the row read as a second result when it was mostly headroom. It is
+#  still drawn by --all / --adam, where the strip names the ablation.
+#
+#  THE OTHER TWO LOSSES, dropped. With one loss each method is ONE point per panel, so the four
+#  panels carry 6 markers instead of 18 and the loss-robustness story moves to the figure that
+#  can actually show it (plots/plot_sva_robustness_grid.py, which has a column per loss). This
+#  also retires the dashed guide and the Loss legend from this figure -- see `losses` in main().
+#
+# ONE ADAM POINT, and it is the eps=1e-2 one. The default-eps arm (`stopk-log`) was drawn here
+# briefly so the eps gap sat on the main axes, and was dropped again on 2026-08-29: this figure
+# compares METHODS, and default-eps Adam is a broken configuration of one of them rather than a
+# method in its own right, so a point for it invites the reader to rank it. The gap it shows is
+# a claim about our own optimiser setting, which belongs in the optimiser section -- `--adam`
+# draws both arms side by side and is the cut for it.
+#
+# WHICH MEANS THE ADAM POINT HERE IS AT eps=1e-2, NOT THE LIBRARY DEFAULT. That is a real
+# hyperparameter choice and it is invisible on the figure (the label is just MAttr^A), so the
+# caption has to say it. At the neuron substrates it is worth +0.10 IIA AUC over the default.
+# 2026-08-29: AttnLRP, Node Pruning and DBM added (requested). All three already had 36/36 of
+# this cut's cells, so nothing had to be run -- they were absent because the cut had been
+# narrowed for legibility back when it carried three losses and every method cost three
+# markers per panel. At one loss they cost one each, so the mask-learning family and the
+# LRP baseline fit. Stepless IG is the one registry method still missing (12/36; the backfill
+# is scripts/submit_stepless_backfill.sh) -- add it here once those land.
+# AttnLRP dropped again 2026-08-29 (requested). It has full coverage and is still in the
+# registry, so `--all` keeps drawing it; it is out of THIS cut only.
+# Stepless IG is deliberately OUT of this cut (2026-08-29, requested) even though its backfill
+# landed and it now has 36/36 patched logit-diff cells. It tracks IG to within 0.009-0.018 IIA
+# AUC in every panel, so it costs an eighth marker and 0.25in of height to draw a point that
+# sits on top of one already there. The numbers belong in the prose. `--all` still draws it.
+FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
+                  "stopk-log-eps1e-2", "softsgd-log", "Random"]
+# Sources and losses for the default cut. The other cuts fall back to the module-level SOURCES
+# and LOSSES, so widening this one is a two-line change and cannot silently widen those.
+# DEFAULT CUT IS -input ONLY (2026-08-30, requested). The +input arm was dropped rather than
+# kept as extra panels because for the GRADIENT baselines it is not a different attribution at
+# all -- verified bit-identical on node / resid_sae_span / mlp_sae_span, it only appends one more
+# scored unit -- so those panels duplicated their -input twins. It still exists on disk
+# (results/sva_sweep_input) and --all / --adam still draw it.
+FIGURE_SOURCES = [s for s in SOURCES if s[2] == "Patched" and "_input" not in s[0]]
+FIGURE_LOSSES = {"logit_diff": LOSSES["logit_diff"]}
+# Point labels for the directly-labelled default cut. SHORT on purpose: the labels sit inside
+# the panel and four panels share \textwidth, so "MAttr (Adam, ε=10⁻²)" at 6.5pt is ~0.75in
+# against a ~2.2in panel -- a third of the axis spent on one word. The legend spelled the
+# optimiser out because it had a whole strip; a label has to earn its width, and colour still
+# carries the identity. Keys not listed fall back to the legend label.
+# The eps arm WRAPS. In a 1x4 full-width layout each panel gets ~1.1in of axis, and
+# "MAttr+Adam, ε=10⁻²" at 6pt Inter is ~0.79in of it -- anchored at a point that already sits
+# 60% across, it runs off the frame at any padding worth spending.
+#
+# TWO lines, never three. repel() separates labels by the TALLEST one in the panel (lab_h is a
+# single max, not per-label), so a 3-line label inflates the required vertical gap for all six
+# and drags them off their own markers on long leader lines -- measured, it put "MAttr+Adam"
+# 0.55 of the axis below its point. Do not "tidy" the wrap back to one line either, without
+# re-reading the `labels past the right frame` count place_labels prints every run.
+# Mathtext, not Unicode superscripts: palette.RC points every mathtext family at Inter, so
+# "$^\\mathrm{S}$" sets in the same face as the surrounding label, whereas U+02E2/U+1D2C are
+# absent from many faces and would silently fall back. Short single-line labels are also what
+# make the 1x4 layout work at all -- see LAB_XPAD.
+POINT_LABEL = {
+    "eprun-s090": "NP",          # point label only; the registry name stays "Node Pruning"
+    # Kept for when Stepless IG is drawn (it is out of FIGURE_METHODS, in --all only).
+    # "IG-free", not "Stepless IG": the same abbreviation plot_mib_accauc_cpr_scatter.py
+    # uses in its compact cut, and for the same reason -- the full name is wider than any
+    # other label on a ~1.1in panel. One abbreviation across both figures, not two.
+    "mc_ig": "IG-free",
+    "stopk-log": "MAttr$^\\mathrm{A}$ (def. ε)",
+    "stopk-log-eps1e-2": "MAttr$^\\mathrm{A}$",
+    "softsgd-log": "MAttr$^\\mathrm{S}$",
+}
+# Panel grid for the labelled cut: ONE ROW of 5 at full \textwidth, ~1.1in per panel.
+#
+# WAS one row of 5 until the second SAE column landed (2026-08-30). Six in a row does NOT fit:
+# the renderer reports `x headroom 1.091`, i.e. the rightmost labels run 9% PAST the panel frame
+# and clip -- and the overlap counter stays 0 throughout, so it gives no warning. 5 leaves the
+# sixth panel alone on its own row with 4/5 of it empty. 3x2 costs ~3.5in of page height and
+# brings headroom back to 0.66-0.78, with the two SAE panels adjacent so their reversal reads
+# directly. Check BOTH diagnostics after changing this, not just the overlap count.
+LAB_NCOL = 5
+# 2.0in of height is TUNED, not chosen: vertical crowding is what binds label placement (the
+# same finding plot_mib_accauc_cpr_scatter records), so shrinking this does not shrink the
+# figure gracefully -- at 1.85 repel starts pushing labels off their own markers onto long
+# leader lines in the two Node panels, while the overlap count stays 0 and gives no warning.
+# Check the rendered PNG, not just the diagnostics, after changing it.
+# 1.95in is the FLOOR AT SEVEN SERIES, found by bisection and by looking at the render -- not by
+# the diagnostics. Each added series costs vertical room: at eight (with Stepless IG) 1.95 was
+# too tight and 2.2 was the floor, so re-check this after adding anything.
+# Found by bisection and by looking at the render -- not by the
+# diagnostics, which report 0 overlaps at every height tried and give no warning at all.
+# Vertical crowding is what binds label placement, and below 1.95 repel starts pushing labels
+# off their own markers onto long leader lines in the two Node panels (where NP/DBM/I×G
+# cluster): at 1.85 MAttr^S lands ~0.43 against its point at 0.90, at 1.7 ~0.37. Cut further
+# only if you also drop a series or shorten a label, and check the PNG when you do.
+LAB_FIG = (5.5, 1.70)
+# Right-hand padding as a fraction of the x range, for labels that hang off the last point.
+# NOT the scatter's 0.34: these labels are longer relative to a 2.4in panel, and at 0.34
+# place_labels reported the rightmost label ending at 1.13 of the frame in three of the four
+# panels. Tuned against that diagnostic, which prints the number every run -- if it ever
+# reports >1.0 again, raise this rather than shortening a label to fit.
+LAB_XPAD = 0.74
+LAB_PT = 5.6            # four panels across \textwidth, not the scatter's single one
+LAB_MSIZE = 15          # marker AREA in pt^2, uniform across methods -- see draw_labelled
 # `--adam`: the default cut plus MAttr under Adam, i.e. the optimiser contrast on the same axes
 # the SVA+ claim is made on. Five series still fits the one-row legend; the full registry does
 # not (that is what --all is for, and why it is documented as overflowing).
@@ -235,7 +450,13 @@ FIGURE_METHODS = ["IG", "IxG", "softsgd-log", "Random"]
 # submitted with ONLY="ig ixg softsgd" (see SOURCES), so `Zero-abl. / Node, +input` draws no
 # MAttr-Adam point. main()'s MISSING column names it every run -- do not read that panel's
 # absence as Adam failing there.
-ADAM_METHODS = ["IG", "IxG", "stopk-log", "softsgd-log", "Random"]
+#
+# The eps arm is in this cut too, and this is the cut where it MEANS something: `stopk-log` and
+# `stopk-log-eps1e-2` are the same run with one number changed, so the two sit here as a matched
+# pair and the distance between them IS the eps effect. Six series, one more than the comment
+# above says fits on one legend row, which is why the fill guide wraps to two rows when the cut
+# is this wide (see `legend_rows`).
+ADAM_METHODS = ["IG", "IxG", "stopk-log", "stopk-log-eps1e-2", "softsgd-log", "Random"]
 ALL_METHODS = [k for k in METHODS if k not in ("soft-log", "mc_ig")]
 # `--stepless`: the default cut plus Stepless IG. It is a SEPARATE cut, and a narrowed one, for a
 # coverage reason that cannot be fixed by adding a key to FIGURE_METHODS.
@@ -264,6 +485,24 @@ def parse_method(fname, d):
     """Method label from filename tag (mirrors make_fingerprint_tables.parse_method)."""
     tag = fname.split("_" + d["nodes"].replace("+", "-") + "_", 1)[1].rsplit(".json", 1)[0]
     tag = tag.replace("_zeroabl", "")   # ablation is a facet ROW, not a method
+    # `_ferr` marks the frozen SAE error intervention. It is a property of the SUBSTRATE COLUMN
+    # (SUBSTRATE_RES routes those runs to their own tree), not of the method, so it is stripped
+    # here -- otherwise every frozen run would parse as an unknown method and vanish.
+    tag = tag.replace("_ferr", "")
+    # `_s<steps>` is run_tag's marker for a non-default training budget. Stripped for the same
+    # reason as `_ferr`: the budget is a property of the results TREE, which SUBSTRATE_RES routes,
+    # not of the method. Each tree holds exactly ONE budget per method, so nothing collides --
+    # mixing a 2k and a 5k run of the same method in one tree WOULD silently average them.
+    #
+    # *** APPLIED TO MAttr TAGS ONLY, because `_s<n>` is not a step count anywhere else. ***
+    # Two other families end in it and both broke when the strip was unconditional:
+    #   eprun_s090      `_s090` is a SPARSITY budget; stripping gave `eprun`, which matches no
+    #                   branch, and Node Pruning vanished from all four panels (26 -> 23 points)
+    #   mc_ig_m1_s42    `_s42` is a SEED; stripping cost Stepless IG its series (8 -> 7)
+    # `random_s42` happens to survive on its prefix branch, but the rule is the same: only a
+    # trained MAttr run carries a step suffix, so only those are stripped.
+    if "sufficient_" in tag or "hard_topk" in tag:
+        tag = re.sub(r"_s\d+$", "", tag)
     if tag.startswith("conductance") or "fixedk" in tag:
         return None
     # `random_s42` / `random_s43` / `random_s44` -- the seed lives in the TAG and not in the key,
@@ -291,7 +530,17 @@ def parse_method(fname, d):
         # series by group_avg -- 36 SGD runs silently pooled with 78 Adam ones per key, in this
         # figure and in every consumer that imports parse_method. Same failure mode the strict
         # catch-all below was written to prevent, one branch up.
-        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}"
+        opt = "softsgd" if "_topk_sgd" in tag else "stopk"
+        # ADAM'S EPS TOO, and for the identical reason. `_eps1e-2` is an Adam run like the
+        # default-eps one, shares the whole `sufficient_topk_adam` prefix, and at neuron scale is
+        # a DIFFERENT ranking (acc-AUC 0.388 vs 0.490 on addition/mlp) -- so without this the
+        # 2026-08-28 eps wave would pool into `stopk-log` exactly as the SGD wave did.
+        # eval_sva.run_tag writes the value in normalised sci notation (eval_sva.eps_tag), so the
+        # spelling here is one-to-one with the value; the key keeps it rather than collapsing to
+        # a boolean, so a future eps=1e-1 arm gets its own key and, being absent from METHODS,
+        # DROPS instead of joining this one.
+        eps = re.search(r"_eps([0-9.]+e[+-]?[0-9]+)", tag)
+        return f"{opt}-{ks}" + (f"-eps{eps.group(1)}" if eps else "")
     # Be STRICT here. This used to fall through to "IG" for anything unrecognised, which meant a
     # cause-trained MAttr run (tag `necessary_topk_adam_bs1`, from --mode necessary) would be
     # silently relabelled "IG" and averaged into the IG points. Unknown tags must drop out, not
@@ -404,141 +653,114 @@ def group_avg(raw, m, loss, sub, required=None):
     return float(np.mean(gx)), float(np.mean(gy)), tuple(required[sub])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--all", action="store_true", dest="draw_all",
-                    help="draw the full registry (MAttr-Adam, Node Pruning, DBM) instead of the "
-                         "three-method cut; legend overflows \\textwidth at this width")
-    ap.add_argument("--adam", action="store_true",
-                    help="default cut plus MAttr (Adam), for the optimiser contrast")
-    ap.add_argument("--stepless", action="store_true",
-                    help="default cut plus Stepless IG; NARROWS the figure to patched/−input and "
-                         "to the SVA task-group, which is all that arm has been run on")
-    a = ap.parse_args()
-    figure_methods = (ALL_METHODS if a.draw_all
-                      else STEPLESS_METHODS if a.stepless
-                      else ADAM_METHODS if a.adam else FIGURE_METHODS)
-    suffix = "_all" if a.draw_all else "_stepless" if a.stepless else "_adam" if a.adam else ""
-    sources = STEPLESS_SOURCES if a.stepless else SOURCES
-    required = STEPLESS_REQUIRED if a.stepless else REQUIRED
+def draw_labelled(df, figure_methods, out):
+    """The default cut, raw matplotlib: uniform circles + direct point labels, no legend.
 
-    rows, dropped = [], []
-    for res, inp_label, abl in sources:
-        raw = load(res)
-        for m in figure_methods:
-            mlabel = METHODS[m][0]
-            for lkey, llabel in LOSSES.items():
-                # A lossless method (Random) has one point per cell, not three. It is stored
-                # under eval_sva's default logit_diff, so ride that pass and relabel; the other
-                # two passes would emit the same point three times under three shapes.
-                if m in LOSSLESS:
-                    if lkey != "logit_diff":
-                        continue
-                    llabel = NO_LOSS
-                for sub, slabel in SUBSTRATES:
-                    # Second strip line names the task-groups the panel averages. It differs by
-                    # substrate (node has ARC-E/IOI, the per-position ones structurally cannot),
-                    # so putting it in the strip is what stops the two column families from
-                    # being read as the same average. Abbreviated to fit the panel width.
-                    # The ablation is IN the strip, not a facet_grid row label, because the
-                    # grid is now a wrap -- see the facet_wrap comment in the plot spec. THREE
-                    # lines, not two with the ablation prefixed: "Patched   MLP+Attn, -input"
-                    # is 26 characters and clipped past the right edge of the last panel at
-                    # \textwidth/4. Stacked, the longest line is the group list (19), which
-                    # already fit.
-                    facet = f"{abl}\n{slabel}, {inp_label}\n{'·'.join(required[sub])}"
-                    r = group_avg(raw, m, lkey, sub, required)
-                    if r is None:
-                        have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
-                        miss = [g for g, ts in GROUPS
-                                if g in required[sub] and not set(ts) <= have]
-                        if have:   # nothing at all on disk = not submitted; only flag partials
-                            dropped.append((abl, facet, mlabel, llabel, "+".join(miss)))
-                        continue
-                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel,
-                                     loss=llabel, facet=facet, ablation=abl,
-                                     groups="+".join(r[2])))
-    df = pd.DataFrame(rows)
+    WHY NOT PLOTNINE, which every other cut here uses. Direct labelling needs the rendered
+    geometry of each string -- its width in axes fractions, measured through the renderer after
+    layout -- so labels can be pushed off each other and off the markers. That is per-annotation
+    control the grammar does not expose, and it is exactly why plot_mib_accauc_cpr_scatter.py
+    (the node+edge CPR-vs-IIA summary this figure is being matched to) is raw matplotlib too.
+    Its label machinery is IMPORTED rather than reimplemented, so the two figures place labels
+    by the same rules and a fix to the repel pass reaches both.
 
-    # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
-    df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
-    df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()) + [NO_LOSS])
-    node_g, mlp_g = "·".join(required["node"]), "·".join(required["mlp"])
-    # Wrap order, read left-to-right: all four Patched panels, then the three Zero-abl. ones
-    # (the zero sweep has no +input arm). ncol=4 below therefore reproduces the old grid's
-    # rows without reserving a framed empty cell for the combination that does not exist.
-    facet_order = [f"{abl}\n{sub_in}\n{g}"
-                   for abl in ("Patched", "Zero-abl.")
-                   for sub_in, g in (("Node, −input", node_g), ("Node, +input", node_g),
-                                     ("MLP, −input", mlp_g), ("MLP+Attn, −input", mlp_g))]
-    df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
-    df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
-    # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
-    # a plotnine setting. Sorting by facet/method too keeps each method's three rows contiguous.
-    # `ablation` leads the sort so a method's path never runs between the two settings.
-    # NO_LOSS is appended rather than left out: pandas warns (and will raise) on values outside
-    # the category list, and a lossless method sorts last within its method block -- which costs
-    # nothing, since it is one row and the path layer never sees it.
-    df["_path"] = pd.Categorical(df["loss"], LOSS_PATH + [NO_LOSS]).codes
-    df = df.sort_values(["ablation", "facet", "method", "_path"])
+    UNIFORM CIRCLES. An earlier version varied marker size so that the MAttr arms, which
+    coincide at the node substrate, did not hide each other. Direct labels make that
+    unnecessary and the sizing actively misleading -- a big marker reads as emphasis. Coincident
+    points now draw as one circle with a leader line per label, which is a truer picture: the
+    figure says "these are the same point here" instead of implying a resolvable ordering.
+    """
+    import matplotlib.pyplot as plt                       # local: the other cuts never need it
+    import plot_mib_accauc_cpr_scatter as S               # label_boxes / repel / place_labels
 
+    facets = list(df["facet"].cat.categories)
+    # LAB_NCOL is a CEILING, not a fixed column count. It was fixed at 5 when the default cut had
+    # five substrate panels; dropping SAE (resid) left the grid still reserving a fifth slot, so
+    # 20% of the canvas was blank on the right and every panel was drawn 4/5 as wide as it needed
+    # to be. Panels get wider as a result, which is the direction that HELPS label placement --
+    # but the docstring's rule still applies: check the printed overlap count AND the x-headroom
+    # diagnostic after changing this, not just one of them.
+    ncol = min(LAB_NCOL, len(facets))
+    nrow = int(np.ceil(len(facets) / ncol))
+    plt.rcParams.update(P.RC)
+    # Height scales with the row count: LAB_FIG is sized for one row, and a second row of
+    # panels needs its own height rather than half of the first row's.
+    figsize = LAB_FIG if nrow == 1 else (LAB_FIG[0], LAB_FIG[1] * nrow * 0.92)
+    fig, axes = plt.subplots(nrow, ncol, figsize=figsize)
+    axes = np.atleast_1d(axes).ravel()
+    # A trailing slot can still exist when the facet count is not a multiple of ncol (e.g. 6
+    # facets at ncol=5). Hide it rather than leaving an empty framed panel, which reads as a
+    # cell whose runs all failed.
+    for ax in axes[len(facets):]:
+        ax.set_visible(False)
     colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
-    lossless = df["method"].isin([METHODS[m][0] for m in LOSSLESS])
-    p = (
-        ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
-        # Dashed guide joining a method's three losses, drawn BEFORE the points so markers sit
-        # on top. It carries no information the markers do not -- it groups them, so it is thin,
-        # dashed and semi-transparent, and adds no legend entry (the colour scale has guide=None;
-        # method is already keyed by fill).
-        # Lossless methods are excluded from the frame this layer sees: the guide traces a
-        # method's path ACROSS losses, and a one-point group has no path to trace (plotnine would
-        # emit a zero-length segment, and ggplot2 the "each group consists of only one
-        # observation" warning). Passing filtered data is what keeps the guide's meaning exact.
-        + geom_path(aes(color="method", group="method"), data=df[~lossless],
-                    linetype="dashed", size=0.3, alpha=0.55, show_legend=False)
-        # Black edge on every marker: method is carried by FILL, not colour, so points stay
-        # legible where two methods land on top of each other and against the grid lines.
-        # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
-        # wherever markers overlap, which is exactly where the distinction has to hold.
-        + geom_point(data=df[~lossless], size=1.9, color="#000000", stroke=0.3)
-        # Random gets its OWN layer purely for marker geometry. A star packs less fill area into
-        # its bounding box than o/s/^, so at the shared 1.9pt its #cccccc would read darker than
-        # the other series rather than lighter -- backwards for a marker that is meant to read as
-        # hollow. Size is not an aesthetic here (nothing is mapped to it), so a second layer is
-        # the only way to vary it per series; both layers keep show_legend on so the Method and
-        # Loss keys are still assembled from the shared scales.
-        + geom_point(data=df[lossless], size=3.6, color="#000000", stroke=0.2)
-        # WRAP, not grid, and that is the whole point of the layout. Under facet_grid,
-        # `scales="free"` frees x per COLUMN and y per ROW -- it is never per panel -- so all
-        # four Patched panels shared one y axis, and the single largest point in the row
-        # (MAttr's ~2.2 on MLP) set the scale for the Node panels where nothing exceeds 0.9.
-        # facet_wrap's free scales ARE per panel. The cost is losing the row/column strips;
-        # `facet` now carries the ablation in its own label and `facet_order` fixes the
-        # left-to-right sequence so the wrap still reads as the old 4+3 grid.
-        + facet_wrap("~facet", ncol=min(4, df["facet"].nunique()), scales="free")
-        + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
-        + scale_fill_manual(values=colors, name="Method")
-        + scale_color_manual(values=colors, guide=None)   # line colour only; no second legend
-        + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
-        + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
-        + guides(fill=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
-    )
-    # The global figure_size is sized for the default TWO rows of panels. `--stepless` draws one
-    # row (patched/−input only), so keeping 3.3in would stretch three panels to twice the height
-    # of every other version of this figure and make the same points look like a different result.
-    if df["facet"].nunique() <= 4:
-        p += theme(figure_size=(5.5, 2.1))
-    out = f"plots/accauc_vs_faithauc{suffix}.pdf"
-    p.save(out, dpi=300, verbose=False)
-    # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
-    # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
-    p.save(out.replace(".pdf", ".png"), dpi=200, verbose=False)
-    print("wrote", out, f"({len(df)} points)")
+
+    for ax, facet in zip(axes, facets):
+        sub = df[df["facet"] == facet]
+        # The MAttr arms draw as STARS, everything else as the uniform circles the docstring
+        # argues for -- "ours" carries a shape as well as its colours, matching the starred
+        # Pareto frontier of plot_mib_accauc_cpr_scatter's compact cut. A star packs less fill
+        # area into its bounding box than a circle (same fact the plotnine cuts handle for
+        # Random), so it gets ~2x the marker area to read at the same visual weight.
+        star = sub["_key"].isin(["stopk-log-eps1e-2", "softsgd-log"])
+        ax.scatter(sub["acc_auc"][~star], sub["faith_auc"][~star], s=LAB_MSIZE,
+                   c=[colors[m] for m in sub["method"][~star]],
+                   edgecolor="#000000", linewidth=0.3, zorder=3)
+        ax.scatter(sub["acc_auc"][star], sub["faith_auc"][star], s=LAB_MSIZE * 2.2,
+                   marker="*", c=[colors[m] for m in sub["method"][star]],
+                   edgecolor="#000000", linewidth=0.3, zorder=4)
+        # Anchor at 0 on both axes, as the plotnine version does via expand_limits: the Random
+        # point is the floor and a panel that crops it loses the only absolute reference.
+        # XPAD then adds room on the right for labels that hang off the last point.
+        xs, ys = sub["acc_auc"], sub["faith_auc"]
+        ax.set_xlim(0, max(xs) * (1 + LAB_XPAD))
+        ax.set_ylim(0, max(ys) * 1.12)
+        # Title DROPS the strip's last line, which is the task-group list. The faceted cuts
+        # keep it because there it stops the node and per-position column families being read
+        # as the same average; here the panels are named on the figure and the datasets belong
+        # in the caption, not on four repeated sub-headings. Dropping it also takes the title
+        # to one short line, which is what stops four titles overrunning each other at ~1.1in
+        # of panel.
+        ax.set_title("\n".join(facet.split("\n")[:-1]), fontsize=6.2, pad=2.5)
+        # Full rectangle, matching theme_bw and therefore the faceted cuts of this same figure
+        # -- P.furnish already sets every spine to SPINE_LW, so the border comes for free and
+        # the L-shape the first cut of this renderer drew was the deviation, not this.
+        P.furnish(ax)
+        ax.tick_params(labelsize=5.5)
+
+    for ax in axes[len(facets):]:
+        ax.set_visible(False)
+    fig.supxlabel("IIA AUC (↑)", fontsize=7, y=0.015)
+    fig.supylabel("Faith AUC (↑)", fontsize=7, x=0.012)
+    fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1, 1))
+    # AFTER tight_layout: place_labels measures the marker half-extent and the label widths off
+    # the laid-out panel, so calling it earlier would size every offset against a panel geometry
+    # that is about to change.
+    for ax, facet in zip(axes, facets):
+        sub = df[df["facet"] == facet]
+        lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub["faith_auc"].values,
+                                label=[POINT_LABEL.get(m, METHODS[m][0])
+                                       for m in sub["_key"]],
+                                grp=sub["method"].astype(str).values))
+        print(f"  {facet.splitlines()[0]}:", file=sys.stderr)
+        S.place_labels(fig, ax, lab, pt=LAB_PT, msize=LAB_MSIZE, colors=colors)
+    fig.savefig(out)
+    fig.savefig(out.replace(".pdf", ".png"), dpi=200)
+
+
+def report(df, figure_methods, losses, dropped):
+    """Per-panel coverage, printed by every cut. Factored out so the raw-matplotlib
+    default and the plotnine cuts cannot end up reporting different things."""
     # Every panel must show ONE group set (group_avg enforces it) and the full method x loss
     # grid. A short count is a coverage hole, not a styling choice, so print both.
-    # Per-method, not len(methods) x len(LOSSES): a lossless method contributes ONE point, so a
-    # flat product would report every complete panel as permanently one short.
-    n_full = sum(1 if m in LOSSLESS else len(LOSSES) for m in figure_methods)
+    # Per-method, not len(methods) x len(LOSSES): a method that contributes ONE point -- because
+    # it has no loss (LOSSLESS) or was run at only one (SINGLE_LOSS) -- would make a flat product
+    # report every complete panel as permanently short, and a report that is never green is a
+    # report nobody reads.
+    # `losses`, not the module-level LOSSES: the single-loss default cut expects one point from
+    # EVERY method, so counting against all three would report every complete panel as short.
+    n_full = sum(1 if m in LOSSLESS or m in SINGLE_LOSS else len(losses)
+                 for m in figure_methods)
     cov = df.groupby(["ablation", "facet"], observed=True).agg(
         n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
     cov["of"] = n_full
@@ -564,6 +786,250 @@ def main():
             print(f"  {abl:10s} {facet.split(chr(10))[1]:18s} {m:14s} {loss:11s} missing {miss}")
     else:
         print("\nno partial cells: every panel is complete.")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true", dest="draw_all",
+                    help="draw the full registry (MAttr-Adam, Node Pruning, DBM) instead of the "
+                         "three-method cut; legend overflows \\textwidth at this width")
+    ap.add_argument("--adam", action="store_true",
+                    help="default cut plus MAttr (Adam), for the optimiser contrast")
+    ap.add_argument("--zero", action="store_true",
+                    help="the default cut PLUS the zero-ablation panels, same labelled style. "
+                         "Exploratory, not the paper figure: the zero half's IIA AUC sits on a "
+                         "~0.51 random floor against the patched half's ~0.03, so the two rows "
+                         "are not on a comparable scale -- read each against its own Random "
+                         "point, which is labelled in every panel for exactly that reason.")
+    ap.add_argument("--stepless", action="store_true",
+                    help="default cut plus Stepless IG; NARROWS the figure to patched/−input and "
+                         "to the SVA task-group, which is all that arm has been run on")
+    a = ap.parse_args()
+    figure_methods = (ALL_METHODS if a.draw_all
+                      else STEPLESS_METHODS if a.stepless
+                      else ADAM_METHODS if a.adam else FIGURE_METHODS)
+    suffix = ("_all" if a.draw_all else "_stepless" if a.stepless
+              else "_adam" if a.adam else "_zero" if a.zero else "")
+    other_cut = a.draw_all or a.stepless or a.adam
+    # --zero is a DEFAULT-cut variant, not an `other_cut`: same five methods, same one loss, same
+    # labelled renderer -- only the source list grows. So it must not flip other_cut, which is
+    # what routes a run to the plotnine path.
+    sources = (STEPLESS_SOURCES if a.stepless
+               else SOURCES if (other_cut or a.zero) else FIGURE_SOURCES)
+    losses = LOSSES if other_cut else FIGURE_LOSSES
+    substrates = SUBSTRATES if other_cut else FIGURE_SUBSTRATES
+    required = STEPLESS_REQUIRED if a.stepless else REQUIRED
+    # With one loss and one ablation the shape aesthetic and the ablation strip line each carry
+    # a constant, so both are dropped rather than drawn as a legend/label with one value in it.
+    # Derived from the cut rather than hardcoded to the default, so a widened FIGURE_LOSSES
+    # brings the Loss legend back on its own.
+    show_loss = len([k for k in losses if k != "logit_diff"]) > 0
+    show_abl = len({abl for _, _, abl in sources}) > 1
+    # Same rule as show_abl: with a single source the input label carries no information, so it
+    # would print "−input" identically on every panel and spend a line of strip height on it.
+    show_inp = len({inp for _, inp, _ in sources}) > 1
+
+    rows, dropped = [], []
+    # Cache per (source dir, substrate-override) so a dir is globbed once even when several
+    # substrates share it -- load() reads every json in the tree.
+    cache = {}
+
+    def raw_for(res, sub):
+        """load() of the tree this (source, substrate) draws from.
+
+        SUBSTRATE_RES overrides the source dir for substrates whose runs live elsewhere -- see
+        that dict for why the SAE column does. A substrate with an override reads ONLY from the
+        override; it never falls back to `res`, because a silent fallback is exactly how the
+        column would end up mixing two error interventions.
+        """
+        d = SUBSTRATE_RES.get(sub, res)
+        if d not in cache:
+            cache[d] = load(d)
+        return cache[d]
+
+    for res, inp_label, abl in sources:
+        for m in figure_methods:
+            mlabel = METHODS[m][0]
+            for lkey, llabel in losses.items():
+                # A lossless method (Random) has one point per cell, not three. It is stored
+                # under eval_sva's default logit_diff, so ride that pass and relabel; the other
+                # two passes would emit the same point three times under three shapes.
+                if m in LOSSLESS:
+                    if lkey != "logit_diff":
+                        continue
+                    llabel = NO_LOSS
+                for sub, slabel in substrates:
+                    # Second strip line names the task-groups the panel averages. It differs by
+                    # substrate (node has ARC-E/IOI, the per-position ones structurally cannot),
+                    # so putting it in the strip is what stops the two column families from
+                    # being read as the same average. Abbreviated to fit the panel width.
+                    # The ablation is IN the strip, not a facet_grid row label, because the
+                    # grid is now a wrap -- see the facet_wrap comment in the plot spec. THREE
+                    # lines, not two with the ablation prefixed: "Patched   MLP+Attn, -input"
+                    # is 26 characters and clipped past the right edge of the last panel at
+                    # \textwidth/4. Stacked, the longest line is the group list (19), which
+                    # already fit.
+                    facet = ((f"{abl}\n" if show_abl else "")
+                             + (f"{slabel}, {inp_label}" if show_inp else slabel)
+                             + f"\n{'·'.join(required[sub])}")
+                    raw = raw_for(res, sub)
+                    r = group_avg(raw, m, lkey, sub, required)
+                    if r is None:
+                        have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
+                        miss = [g for g, ts in GROUPS
+                                if g in required[sub] and not set(ts) <= have]
+                        if have:   # nothing at all on disk = not submitted; only flag partials
+                            dropped.append((abl, facet, mlabel, llabel, "+".join(miss)))
+                        continue
+                    # `_key` is the registry key, kept alongside the display label so
+                    # draw_labelled can look up POINT_LABEL without reverse-mapping a label
+                    # string back to its method.
+                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel, _key=m,
+                                     loss=llabel, facet=facet, ablation=abl,
+                                     groups="+".join(r[2])))
+    df = pd.DataFrame(rows)
+
+    # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
+    df["method"] = pd.Categorical(df["method"], [METHODS[m][0] for m in figure_methods])
+    df["loss"] = pd.Categorical(df["loss"], list(LOSSES.values()) + [NO_LOSS])
+    node_g, mlp_g = "·".join(required["node"]), "·".join(required["mlp"])
+    sae_g = "·".join(required.get("resid_sae_span", required["mlp"]))
+    # Wrap order, read left-to-right: all four Patched panels, then the three Zero-abl. ones
+    # (the zero sweep has no +input arm). ncol=4 below therefore reproduces the old grid's
+    # rows without reserving a framed empty cell for the combination that does not exist.
+    # Iterate only the ablations this cut actually draws. With show_abl False the prefix is
+    # dropped, so looping both would emit each panel label TWICE and pd.Categorical rejects
+    # duplicate categories -- the failure is loud, but the fix belongs here rather than in a
+    # dedupe downstream, because the order is the thing being defined.
+    abls = ["Patched", "Zero-abl."] if show_abl else [None]
+    SUB_IN = [("Node", node_g), ("MLP", mlp_g), ("MLP+Attn", mlp_g),
+              ("SAE (resid)", sae_g), ("SAE (MLP out)", sae_g)]
+    facet_order = [(f"{abl}\n" if show_abl else "")
+                   + (f"{sub}, {inp}" if show_inp else sub) + f"\n{g}"
+                   for abl in abls
+                   for inp in (["−input", "+input"] if show_inp else [None])
+                   for sub, g in SUB_IN]
+    # This list is the RENDER WHITELIST, not just a sort key: pd.Categorical maps anything absent
+    # from it to NaN, and the panel then vanishes with no warning -- the point count in the
+    # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
+    # FIGURE_SUBSTRATES and REQUIRED is therefore NOT enough; it must be added here too.
+    df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
+    df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
+    # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
+    # a plotnine setting. Sorting by facet/method too keeps each method's three rows contiguous.
+    # `ablation` leads the sort so a method's path never runs between the two settings.
+    # NO_LOSS is appended rather than left out: pandas warns (and will raise) on values outside
+    # the category list, and a lossless method sorts last within its method block -- which costs
+    # nothing, since it is one row and the path layer never sees it.
+    df["_path"] = pd.Categorical(df["loss"], LOSS_PATH + [NO_LOSS]).codes
+    df = df.sort_values(["ablation", "facet", "method", "_path"])
+
+    colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
+    # Method keys per row. The Method and Loss guides sit SIDE BY SIDE across one \textwidth, so
+    # what has to fit is (widest method row) + (the 3-or-4 loss keys); wrapping the method guide
+    # is the only lever, since the loss keys are one row by construction. 5 fits, 6-7 needs two
+    # rows, and the full registry needs three -- and even then --all stays tight, which is why
+    # its docstring calls it a debug cut rather than a paper figure.
+    # Method keys per legend row. The budget depends on whether the Loss guide is beside it:
+    # with it, the two share one \textwidth and 5 method keys is the limit; without it the
+    # method guide has the strip to itself and 6 fit, which is what the single-loss default cut
+    # needs so its legend does not wrap for no reason.
+    _cap = 5 if show_loss else 6
+    legend_rows = 1 if len(figure_methods) <= _cap else 2 if len(figure_methods) <= 7 else 3
+    lossless = df["method"].isin([METHODS[m][0] for m in LOSSLESS])
+    # Which rows the dashed guide may connect. The rule is geom_path's own precondition -- a
+    # group needs at least two points to have a path -- evaluated per (facet, method) rather
+    # than assumed from the method's name.
+    #
+    # It used to be `~lossless`, i.e. "Random is the one series with a single point". That was
+    # true only while Random was the only method not run at all three losses, and it stopped
+    # being true when the eps arm landed: `stopk-log-eps1e-2` is logit-diff-only, has a real
+    # loss (so it is not LOSSLESS and must keep its square), and would have handed geom_path a
+    # one-row group -- a zero-length segment plus ggplot2's "each group consists of only one
+    # observation" warning. Testing the precondition directly also covers the case a partial
+    # sweep produces, where a normally-three-loss method is down to one landed cell in a panel.
+    out = f"plots/accauc_vs_faithauc{suffix}.pdf"
+    # The default cut leaves here: it is drawn by raw matplotlib (direct labels need measured
+    # per-annotation geometry) and never touches the plotnine spec below. Returning BEFORE that
+    # spec is built, rather than building and discarding it, keeps a plotnine change from being
+    # able to break the paper figure -- and everything shared between the two renderers (the
+    # frame, the categories, the facet order, the coverage report) has already happened above.
+    if not other_cut:
+        draw_labelled(df, figure_methods, out)
+        print("wrote", out, f"({len(df)} points)")
+        report(df, figure_methods, losses, dropped)
+        return
+
+    pathable = df.groupby(["facet", "method"], observed=True)["loss"].transform("size") >= 2
+    p = ggplot(df, aes("acc_auc", "faith_auc", fill="method", shape="loss"))
+    # The dashed guide joins a method's points ACROSS losses, so a single-loss cut has nothing
+    # for it to join and the layer is omitted entirely rather than handed an empty frame
+    # (plotnine builds the layer either way and an all-empty one is a needless failure mode).
+    if pathable.any():
+        p += geom_path(aes(color="method", group="method"), data=df[pathable],
+                       linetype="dashed", size=0.3, alpha=0.55, show_legend=False)
+    p = (
+        p
+        # Black edge on every marker: method is carried by FILL, not colour, so points stay
+        # legible where two methods land on top of each other and against the grid lines.
+        # alpha=1 -- a translucent fill under a black edge reads as a different, muddier colour
+        # wherever markers overlap, which is exactly where the distinction has to hold.
+        #
+        # (An earlier single-loss cut varied size here so coincident points did not hide each
+        # other; the labelled renderer handles that, so sizes are flat.) At the node substrate
+        # arms agree to 0.0024 on x and 0.005 on y -- inside the measured reproducibility floor,
+        # i.e. genuinely the same point -- so at one size the last one drawn hides the other two
+        # and three of the six legend entries simply do not appear. Jitter would be a lie about
+        # a quantitative axis; drawing them large-to-small makes a coincident cluster read as
+        # concentric rings, which is what "these are indistinguishable here" should look like.
+        # The multi-loss cuts keep the single flat layer, where the dashed guide already tells
+        # the reader which markers belong together.
+        + geom_point(data=df[~lossless], size=1.9, color="#000000", stroke=0.3)
+        # Random gets its OWN layer purely for marker geometry. A star packs less fill area into
+        # its bounding box than o/s/^, so at the shared 1.9pt its #cccccc would read darker than
+        # the other series rather than lighter -- backwards for a marker that is meant to read as
+        # hollow. Size is not an aesthetic here (nothing is mapped to it), so a second layer is
+        # the only way to vary it per series; both layers keep show_legend on so the Method and
+        # Loss keys are still assembled from the shared scales.
+        + geom_point(data=df[lossless], size=3.6, color="#000000", stroke=0.2)
+        # WRAP, not grid, and that is the whole point of the layout. Under facet_grid,
+        # `scales="free"` frees x per COLUMN and y per ROW -- it is never per panel -- so all
+        # four Patched panels shared one y axis, and the single largest point in the row
+        # (MAttr's ~2.2 on MLP) set the scale for the Node panels where nothing exceeds 0.9.
+        # facet_wrap's free scales ARE per panel. The cost is losing the row/column strips;
+        # `facet` now carries the ablation in its own label and `facet_order` fixes the
+        # left-to-right sequence so the wrap still reads as the old 4+3 grid.
+        + facet_wrap("~facet", ncol=min(4, df["facet"].nunique()), scales="free")
+        + expand_limits(x=0, y=0)  # anchor each free axis at 0 (upper stays per-facet)
+        + scale_fill_manual(values=colors, name="Method")
+        + scale_color_manual(values=colors, guide=None)   # line colour only; no second legend
+        # Shape still MAPS to loss in a single-loss cut -- Random keeps its star and the trained
+        # methods keep the logit-diff square, so a marker means the same thing in every version
+        # of this figure -- but the guide is suppressed, because a "Loss" key listing one loss
+        # and "n/a" explains nothing and costs a third of the legend strip.
+        + scale_shape_manual(values=LOSS_SHAPE, name="Loss",
+                             guide=(True if show_loss else None))
+        + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
+        # Method keys wrap to a second row once the cut is wide enough that one row would run
+        # past \textwidth -- which is the failure the --all cut is documented as having, with
+        # the Loss key's shape entries clipping off the right edge. Five 5.5in-wide keys fit;
+        # the six-series --adam cut does not, and its longest label ("MAttr (Adam, ε=10⁻²)") is
+        # the one that would be cut. Two rows costs ~7pt of height off panels that have it to
+        # spare, which is cheaper than an unreadable key.
+        + guides(fill=guide_legend(order=1, nrow=legend_rows),
+                 **({"shape": guide_legend(order=2, nrow=1)} if show_loss else {}))
+    )
+    # The global figure_size is sized for the default TWO rows of panels. `--stepless` draws one
+    # row (patched/−input only), so keeping 3.3in would stretch three panels to twice the height
+    # of every other version of this figure and make the same points look like a different result.
+    if df["facet"].nunique() <= 4:
+        p += theme(figure_size=(5.5, 2.1))
+    p.save(out, dpi=300, verbose=False)
+    # PNG sibling for eyeballing the result without a PDF viewer, as the cause figure and the
+    # iso-vs-cause curves already do. Only the PDF is copied into paper/figs.
+    p.save(out.replace(".pdf", ".png"), dpi=200, verbose=False)
+    print("wrote", out, f"({len(df)} points)")
+    report(df, figure_methods, losses, dropped)
 
 
 if __name__ == "__main__":

@@ -102,7 +102,7 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
 # scored exactly like the log-k ones and must not lose their footnote by changing hue.
 LEVELS = [("node", "Node-level", ()), ("edge", "Edge-level", ("ours", "ours_uni"))]
 
-# 5.5in is iclr2026_conference.sty's \textwidth verbatim (line 49), so at width=\linewidth the
+# 5.5in is iclr2027_conference.sty's \textwidth verbatim (line 49), so at width=\linewidth the
 # figure is placed 1:1 and the sizes below are the sizes that reach the compiled PDF. Most other
 # figures in paper/figs are drawn at 5.5 or 5.4 for the same reason; do not draw this one smaller
 # and let LaTeX upscale it, which would push the tick labels past 7pt.

@@ -1,4 +1,14 @@
-"""The 20,000-step MAttr runs: does Adam's deficit at the neuron substrates survive a longer budget?
+"""DEFAULT CUT CHANGED 2026-09-01: this figure is now the Adam EPS comparison -- default eps=1e-8
+against eps=1e-2, at two learning rates, with the SGD lr=1.0 control and the IG constant. It
+previously showed the eps=1e-2 pair plus SGD only, which is still available as --legacy.
+
+Why the change: at 2.29M mask logits torch's default eps=1e-8 makes Adam's update ~sign(g)*lr,
+so "Adam" at the default is a materially different optimiser from "Adam" at 1e-2 -- and the 20k
+budget is exactly where that difference resolves. The acc-AUC gap is a CONVERGENCE-SPEED effect,
+not a ceiling: 0.35 vs 0.49 at the reported 2k budget, but 0.443 vs 0.510 by 20k. Faith-AUC does
+not agree with acc-AUC about which arm is best, so no single configuration wins both.
+
+The 20,000-step MAttr runs: does Adam's deficit at the neuron substrates survive a longer budget?
 
 fig:optimiser-curves (plot_train_curves.py --overlay) stops at step 1999 because that is where
 the sweep stops: `submit_sva_sweep.sh`'s MATTR_COMMON is 2000 steps, so every Adam-vs-SGD number
@@ -73,15 +83,45 @@ from plot_train_curves import (ARM_COLOR, FIG_OVERLAY_W, FS_OVERLAY,   # noqa: E
 # The SGD arm is the CONTROL and is not optional: a 20k Adam run that gains 0.1 proves nothing if
 # SGD gains as much over the same span, since the claim is about the GAP
 # (submit_sva_mlp_lr.sh's "SUBMIT THE SGD CONTROL TOO").
+# Adam arm is eps=1e-2 as of 2026-08-31 (the SGD control has no eps and is unchanged).
 RES20K = "results/sva_mlp_steps20k"
-RUNS = [
+RUNS_EPS2ONLY = [   # legacy: the eps=1e-2 pair + SGD, without the default-eps arms
     ("MAttr (Adam)", "lr 0.05",  "solid",
-     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
     ("MAttr (Adam)", "lr 0.005", "dashed",
-     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
     ("MAttr (SGD)",  "lr 1.0",   "solid",
      f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1_s20000.json"),
 ]
+# --eps: the SAME four 20k runs recut as an EPS comparison. Colour is the eps arm (the palette
+# already separates them: high-eps blue, default-eps purple) and linestyle is the lr, so the two
+# aesthetics carry the two variables and nothing is doubled up. The SGD control is kept because
+# the question "does raising eps help" is only meaningful against the optimiser it is trying to
+# catch -- an eps gain that still trails SGD is a different claim from one that passes it.
+#
+# eps=1e-8 is torch's DEFAULT, not a low outlier chosen for contrast: at 2.29M mask logits it
+# makes Adam's update ~sign(g)*lr, so this pair is "the shipped optimiser vs the fixed one".
+# The shared ARM_COLOR (plot_train_curves.py) has no default-eps entry; extended HERE rather
+# than there, because that dict is imported by every train-curve figure and a new key would
+# silently become available to all of them. Purple is the palette's existing default-eps Adam.
+ARM_COLOR = dict(ARM_COLOR, **{
+    "Adam $\\epsilon{=}10^{-8}$": P.color("MAttr (Adam, default eps)"),
+    "Adam $\\epsilon{=}10^{-2}$": P.METHOD["MAttr"],
+    "SGD": P.METHOD["MAttr (SGD)"]})
+
+RUNS = [
+    ("Adam $\\epsilon{=}10^{-8}$", "lr 0.05", "solid",
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+    ("Adam $\\epsilon{=}10^{-8}$", "lr 0.005", "dashed",
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+    ("Adam $\\epsilon{=}10^{-2}$", "lr 0.05", "solid",
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+    ("Adam $\\epsilon{=}10^{-2}$", "lr 0.005", "dashed",
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+    ("SGD", "lr 1.0", "solid",
+     f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1_s20000.json"),
+]
+
 # IG on the SAME cell (addition / llama3 / mlp / logit_diff), from the sweep dir the paper reads.
 # It is a single-pass attribution with no trajectory, so it is a horizontal constant that the
 # trained curves either do or do not cross -- not "IG at step 0".
@@ -92,10 +132,10 @@ BAND = "#dcdcdc"
 XTICKS = [0, 5000, 10000, 15000, 20000]
 
 
-def load_20k():
+def load_20k(runs=None):
     """(arm, lr label, linestyle, [(step, {metric: v})], final) per run, plus the IG constants."""
     out = []
-    for arm, lrlab, ls, f in RUNS:
+    for arm, lrlab, ls, f in (runs or RUNS):
         d = json.load(open(f))
         log = d.get("train_eval_log") or []
         if not log:
@@ -110,9 +150,13 @@ def load_20k():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="plots/train_curves_20k.pdf")
+    ap.add_argument("--legacy", action="store_true",
+                    help="the pre-2026-09-01 cut: eps=1e-2 pair + SGD only, no default-eps arms")
     a = ap.parse_args()
+    R = RUNS_EPS2ONLY if a.legacy else RUNS
+    out_path = a.out
 
-    runs, ig = load_20k()
+    runs, ig = load_20k(R)
 
     plt.rcParams.update(P.RC)
     fs = FS_OVERLAY
@@ -162,13 +206,13 @@ def main():
     # groups would be ambiguous anyway -- "lr 0.05" and "lr 1.0" are both solid and only the
     # colour tells them apart, so a linetype-only handle for either would be a lie.
     hs = [Line2D([0], [0], color=ARM_COLOR[arm], lw=1.1, ls=ls, label=f"{arm}, {lrlab}")
-          for arm, lrlab, ls, _ in RUNS]
+          for arm, lrlab, ls, _ in R]
     hs.append(Line2D([0], [0], color=ARM_COLOR[REF[1]], lw=1.0, ls="dotted", label=REF[1]))
     fig.legend(handles=hs, fontsize=fs[2], ncol=2, loc="lower center",
                bbox_to_anchor=(0.5, top + TITLE_H / fh), frameon=False,
                handletextpad=0.4, handlelength=2.0, columnspacing=1.2, labelspacing=0.25)
-    fig.savefig(a.out, dpi=300)
-    fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
+    fig.savefig(out_path, dpi=300)
+    fig.savefig(out_path.replace(".pdf", ".png"), dpi=200)
     print("wrote", a.out)
 
     print("\n(addition/llama3/mlp/logit-diff), probe@2000 -> probe@20k -> test:")

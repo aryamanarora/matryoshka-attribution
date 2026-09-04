@@ -66,6 +66,13 @@ def parse_method(fname, nodes):
         # 2026-08-21 `topk:sgd` arm shares this tag prefix and would otherwise be averaged into
         # the headline MAttr rows -- the same silent-folding failure this docstring warns about.
         fam = "MAttr-SGD" if "_topk_sgd" in tag else "MAttr"
+        # Adam's eps is part of the family for the same reason: `sufficient_topk_adam_eps1e-2`
+        # is an Adam run sharing the whole prefix, and at neuron scale it is a different circuit.
+        # This script pairs patch against zero BY FILENAME, so the eps arm pairs with its own
+        # zero twin and never with the default-eps one.
+        eps = re.search(r"_eps([0-9.]+e[+-]?[0-9]+)", tag)
+        if eps:
+            fam += f"-eps{eps.group(1)}"
     elif tag.startswith("ixg"):
         return "IxG"
     elif tag.startswith("attnlrp"):

@@ -110,6 +110,33 @@ BASELINES = [
     ("GIM", ["gim_eval"], "GIM_patching_node"),
 ]
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
+EDGE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "edge"]
+
+# EDGE-LEVEL BASELINES, added 2026-09-02. There was no edge section here until then and the
+# reason was never that the numbers did not exist -- run_evaluation.py has stored acc_auc in
+# every pkl it writes for years, so all ten of our edge dirs and all three gradient baselines
+# were sitting at 11/11 coverage while this table showed node only. The CPR table has always
+# had both levels; this one silently did not, which reads as "acc-AUC has nothing to say about
+# edges" rather than "nobody wrote the section".
+#
+# ROW SET follows make_mib_table's EDGE section, plus Stepless IG. The extra row is this
+# table's own precedent, not an invention: the node section here already carries a Stepless IG
+# row that the node CPR table does not, on the argument that at m=1 it costs what I x G costs
+# while scoring like the grid arms -- and eapig_mc_eval is 11/11 at edge too. Edge Pruning has
+# no edge-level results at all (eprun_eval_*/EdgePruning_patching_edge is empty), so UGS is the
+# only mask learner here, at the 3 cells it can run (docs/ugs_baseline.md).
+EDGE_BASELINES_ACC = [
+    ("EAP-IG-inp (CF, repro)", ["eapig_clean_eval"], "EAP-IG-inputs_patching_edge"),
+    ("$+$ 10 IG steps", ["eapig_clean10_eval"], "EAP-IG-inputs_patching_edge"),
+    ("Stepless IG", ["eapig_mc_eval"], "EAP-IG-inputs-mc_patching_edge"),
+]
+UGS_ACC = (M.UGS_DIR, "UGS_patching_edge")
+# EVERY EDGE DIR READS acc_auc STRAIGHT OUT OF ITS eval_mib PKL, like the EVALMIB_ACC node dirs
+# and unlike the older node dirs that need a MATTR_ACC re-eval folder. Membership rather than a
+# hand-listed set: the edge sweep postdates evaluation.py returning acc_auc, so every dir in
+# OUR_METHODS at edge level qualifies by construction and a new one cannot be forgotten -- which
+# is exactly how the SGD rows fell out of this table once before (see EVALMIB_ACC's note).
+EDGE_DIRS = {r for _, r, _ in EDGE_METHODS}
 
 # Mask-learning baselines (own header). UGS is edge-only so it cannot appear in this
 # node-level table at all; Node Pruning runs at node level on every model. The budget, not the
@@ -117,26 +144,21 @@ NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (n
 # hidden default -- but the full M.EPRUN_SPARSITIES sweep is twelve near-identical rows, so as
 # in the CPR table (M.EPRUN_SHOW) we show the best budget per objective and no more.
 #
-# *** The pick is NOT M.EPRUN_SHOW's, and that is the point, not an oversight. ***
-# CPR and acc-AUC rank the budgets in essentially opposite orders (validation row means, 11
-# cells; higher s = sparser = smaller circuit):
+# *** THE PICK IS M.EPRUN_SHOW's, READ FROM THERE RATHER THAN RESTATED. *** This module used to
+# keep its own ({s=0.99, s=0.99_ld}, the acc-AUC argmax) on the argument that each table should
+# name the budget best under the metric it reports. Each half of that was defensible; together
+# they put two identically-named "Node Pruning" rows one page apart that were different runs,
+# and once make_mib_table dropped s= from the label (it now prints "(KL)" / "(LD)") the reader
+# had no way to tell. Both tables are s=0.95 as of 2026-09-02 -- see M.EPRUN_SHOW for why that
+# budget and not either metric's argmax. Importing the dict means they cannot drift again.
 #
-#   logit-diff   s=0.5   s=0.8   s=0.9   s=0.95  s=0.99
-#     CPR AUC     1.67    1.46    1.28    1.36    1.24     <- densest wins
-#     acc-AUC     0.23    0.31    0.34    0.36    0.38     <- sparsest wins, monotone the other way
-#   KL           s=0.9 1.00 / 0.40   s=0.95 0.96 / 0.46   s=0.99 0.91 / 0.46
-#
-# That is CPR rewarding a bigger circuit, which is the same gap-padding sensitivity that
-# motivated reporting acc-AUC in the first place. So each table names the budget that is best
-# under the metric that table reports; carrying the CPR pick over here would show Node Pruning
-# at its WORST acc-AUC budget (0.23 vs 0.38) and read as the baseline collapsing on acc-AUC
-# when it is the budget selection, not the method.
-#
-# KL s=0.95 and s=0.99 are a tie at 2dp (0.4582 vs 0.4592); s=0.99 is the argmax but the
-# margin is noise, so do not report a preference between them.
-EPRUN_SHOW = {"eprun_eval_s0.99", "eprun_eval_s0.99_ld"}
-MASK_BASELINES = [(M.eprun_label("node", suf), L2A / d, "EdgePruning_patching_node")
-                  for suf, d in M.EPRUN_SPARSITIES if d in EPRUN_SHOW]
+# WHAT THIS COSTS HERE, since the number moved in the baseline's favour and should not be
+# quoted as a method result: Node Pruning's acc-AUC row goes 0.46 -> 0.46 (KL, a 2dp tie with
+# s=0.99) and 0.38 -> 0.36 (LD). CPR and acc-AUC rank the budgets in near-opposite orders --
+# CPR rewards a bigger circuit, the same gap-padding sensitivity that motivated reporting
+# acc-AUC in the first place -- so a shared budget is necessarily off-argmax under one of them.
+MASK_BASELINES = [(M.eprun_label("node", M.EPRUN_SHOW[d]), L2A / d, "EdgePruning_patching_node")
+                  for _, d in M.EPRUN_SPARSITIES if d in M.EPRUN_SHOW]
 # DBM (pyvene sigmoid mask) is in the CPR table's mask block via M.SIGMOID_MASK_ROWS but was
 # missing here, even though its eval pkls carry acc_auc like every other run -- so the acc-AUC
 # table was silently comparing MAttr against a smaller set of mask learners than the CPR table.
@@ -189,17 +211,27 @@ def acc_base(dirs, sub, t, m):
 
 
 def acc_mattr(dir_, t, m):
-    if dir_ in EVALMIB_ACC:                            # acc_auc straight from the eval_mib pkl
+    if dir_ in EVALMIB_ACC or dir_ in EDGE_DIRS:       # acc_auc straight from the eval_mib pkl
         return _acc(L2A / dir_ / f"{t}_{m}_validation.pkl")
     base = MATTR_REEVAL if dir_ in REEVAL_DIRS else MATTR_ACC
     return _acc(base / f"{dir_}_patching_node" / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
 
 
-def fmt(v, bold=False, dagger=False):
+def fmt(v, bold=False, underline=False, dagger=False, color=None):
+    """One table cell, matching make_mib_table.fmt -- MATH mode, dagger inside the same group,
+    \\cellcolor leading. The heat ramp itself is M.cell_color, imported rather than restated so
+    the two tables cannot end up on different scales."""
     if v is None:
         return "---"
-    s = f"\\textbf{{{v:.2f}}}" if bold else f"{v:.2f}"
-    return ("$^{\\dagger}$" + s) if dagger else s
+    s = f"{v:.2f}"
+    if bold:
+        s = f"\\mathbf{{{s}}}"
+    elif underline:
+        s = f"\\underline{{{s}}}"
+    if dagger:
+        s = "^{\\dagger}" + s
+    s = f"${s}$"
+    return f"\\cellcolor[HTML]{{{color}}}{s}" if color else s
 
 
 def row_avg(data):
@@ -207,100 +239,148 @@ def row_avg(data):
     return round(sum(vs) / len(vs), 2) if vs else None
 
 
+def unifk(name):
+    """log k is the default (unmarked); uniform k is the marked ablation, exactly as in
+    make_mib_table.main()'s nested unifk."""
+    return "$+$ unif $k$" if name.startswith("\\ourmethod") else "$+$ unif $k$, " + name
+
+
+def collect(level):
+    """[(header, [(display, data, dagger_cells)])] for one level, in render order."""
+    llama = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    if level == "node":
+        grad = []
+        for disp, d, sub in BASELINES:
+            data = {(t, m): acc_base(d, sub, t, m) for t, m, _ in COLUMNS}
+            # Same warning make_mib_table prints. A partial row shows no Avg (see `full`), so it
+            # cannot masquerade as a finished one -- but silence at the terminal is how a row
+            # stays half-empty for a week without anyone noticing.
+            n = sum(v is not None for v in data.values())
+            if 0 < n < len(COLUMNS):
+                print(f"  NOTE {disp} ({level}): {n}/{len(COLUMNS)} cells ({'/'.join(d)})"
+                      " -- still running")
+            grad.append((disp, data, llama))
+        mask = []
+        for disp, base, sub in MASK_BASELINES:
+            data = {(t, m): _acc(base / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+                    for t, m, _ in COLUMNS}
+            if any(v is not None for v in data.values()):
+                mask.append((disp, data, llama))
+    else:
+        grad = []
+        for disp, dirs, sub in EDGE_BASELINES_ACC:
+            data = {(t, m): acc_base(dirs, sub, t, m) for t, m, _ in COLUMNS}
+            n = sum(v is not None for v in data.values())
+            if 0 < n < len(COLUMNS):
+                print(f"  NOTE {disp} ({level}): {n}/{len(COLUMNS)} cells -- still running")
+            grad.append((disp, data, llama))
+        d, sub = UGS_ACC
+        ugs = {(t, m): _acc(L2A / d / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+               for t, m, _ in COLUMNS}
+        mask = [("UGS", ugs, llama)] if any(v is not None for v in ugs.values()) else []
+    return grad, mask
+
+
 def main():
-    rows = []   # (display, data, dagger_cells)
-    for disp, d, sub in BASELINES:
-        data = {(t, m): acc_base(d, sub, t, m) for t, m, _ in COLUMNS}
-        # Same warning make_mib_table prints. A partial row shows no Avg here (see `full`), so
-        # it cannot masquerade as a finished one in the table -- but silence at the terminal is
-        # how a row stays half-empty for a week without anyone noticing.
-        n = sum(v is not None for v in data.values())
-        if 0 < n < len(COLUMNS):
-            print(f"  NOTE {disp}: {n}/{len(COLUMNS)} cells ({'/'.join(d)}) -- still running")
-        rows.append((disp, data, {(t, m) for t, m, _ in COLUMNS if m == "llama3"}))
-    mask_rows = []   # (display, data)
-    for disp, base, sub in MASK_BASELINES:
-        data = {(t, m): _acc(base / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
-                for t, m, _ in COLUMNS}
-        if any(v is not None for v in data.values()):
-            mask_rows.append((disp, data))
-    mattr = {}   # dir -> data
-    for _, d, _ in NODE_METHODS:
-        mattr[d] = {(t, m): acc_mattr(d, t, m) for t, m, _ in COLUMNS}
-
-    all_data = [dd for _, dd, _ in rows] + [dd for _, dd in mask_rows] + list(mattr.values())
-    best, second = {}, {}
-    for t, m, _ in COLUMNS:
-        vals = sorted({dd[(t, m)] for dd in all_data if dd.get((t, m)) is not None}, reverse=True)
-        best[(t, m)] = vals[0] if vals else None
-        second[(t, m)] = vals[1] if len(vals) > 1 else None
-    # An average over a subset of columns is not comparable to one over all 11, so rows with
-    # missing cells neither print an average nor compete for the bolded best average.
-    def full(dd):
-        return all(dd.get((t, m)) is not None for t, m, _ in COLUMNS)
-
-    avs = sorted({a for a in (row_avg(dd) for dd in all_data if full(dd)) if a is not None},
-                 reverse=True)
-    abest, asec = (avs[0] if avs else None), (avs[1] if len(avs) > 1 else None)
-
-    def emit(disp, data, dcells, indent=True):
-        cells = []
-        for t, m, _ in COLUMNS:
-            v = data.get((t, m))
-            cells.append(fmt(v, bold=(v is not None and v == best[(t, m)]),
-                             dagger=((t, m) in dcells and v is not None)))
-        a = row_avg(data) if full(data) else None
-        cells.append(fmt(a, bold=(a is not None and a == abest)))
-        pre = f"\\quad {disp}" if indent else disp
-        return f"{pre} & " + " & ".join(cells) + " \\\\"
-
-    def unifk(name):
-        return "$+$ unif $k$" if name.startswith("\\ourmethod") else "$+$ unif $k$, " + name
-
     ncols = len(COLUMNS)
     L = ["\\begin{adjustbox}{max width=\\textwidth}",
-         "\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}", "\\toprule",
+         # CENTRED, not right-aligned: \cellcolor paints the whole cell including \tabcolsep,
+         # so a right-aligned number sits hard against the right edge of its own swatch. Same
+         # change and same reason as make_mib_table's column spec.
+         "\\begin{tabular}{l" + "c" * ncols + "@{\\quad}c}", "\\toprule",
          "& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & "
          "\\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\",
          "\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}",
-         "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\",
-         "\\midrule", f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{Node-level, acc-AUC}}}} \\\\",
-         "\\textbf{Gradient attribution} \\\\"]
-    for disp, data, dc in rows:
-        L.append(emit(disp, data, dc))
-    if mask_rows:
-        L.append("\\textbf{Mask learning} \\\\")
-        llama_cells = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
-        for disp, data in mask_rows:
-            L.append(emit(disp, data, llama_cells))   # llama3 eval is --head 200, as above
+         "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"]
 
-    llama_ioi = {("ioi", "llama3")}
-    # SGD is the default (see make_mib_table.emit_ours); same header/order flip mirrored here.
-    for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
-        ours = [(n, d) for n, d, g in NODE_METHODS if g == "ours" and opt_of(d) == opt]
-        unif = [(n, d) for n, d, g in NODE_METHODS if g == "uniform" and opt_of(d) == opt]
-        if not ours and not unif:
+    for li, (level, title, methods) in enumerate(
+            [("node", "Node-level, acc-AUC", NODE_METHODS),
+             ("edge", "Edge-level, acc-AUC", EDGE_METHODS)]):
+        grad, mask = collect(level)
+        mattr = {d: {(t, m): acc_mattr(d, t, m) for t, m, _ in COLUMNS} for _, d, _ in methods}
+        all_data = [dd for _, dd, _ in grad + mask] + list(mattr.values())
+        if not any(any(v is not None for v in dd.values()) for dd in all_data):
+            print(f"SKIP {level} section: no acc_auc anywhere")
             continue
-        L.append(f"\\textbf{{{label}}} \\\\")
-        for n, d in ours:
-            if not any(v is not None for v in mattr[d].values()):
-                # Same rule as make_mib_table's emit_ours: a row of 12 "---" claims a run that
-                # was scored and produced nothing, which is a wrong statement rather than a
-                # blank. Drop it until its first cell lands; it reappears on the next
-                # regeneration with no edit here. Announced, never silent.
-                print(f"SKIP row {n!r} ({d}): no acc_auc yet")
-                continue
-            L.append(emit(n, mattr[d], llama_ioi if d in IOI_LLAMA_CAPPED else set()))
-        for n, d in unif:
-            if not any(v is not None for v in mattr[d].values()):
-                print(f"SKIP row {unifk(n)!r} ({d}): no acc_auc yet")
-                continue
-            L.append(emit(unifk(n), mattr[d], llama_ioi if d in IOI_LLAMA_CAPPED else set()))
-    L += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
 
+        # *** BEST / SECOND / HEAT ARE ALL PER LEVEL. *** Node acc-AUC tops out near 0.60 and
+        # edge near 0.96 on the same column, so a shared scale would bold an edge cell in every
+        # column and shade the whole node section white. Same reason make_mib_table computes
+        # best_in_col per level rather than once.
+        best, second, crange = {}, {}, {}
+        for t, m, _ in COLUMNS:
+            vals = sorted({dd[(t, m)] for dd in all_data if dd.get((t, m)) is not None},
+                          reverse=True)
+            best[(t, m)] = vals[0] if vals else None
+            second[(t, m)] = vals[1] if len(vals) > 1 else None
+            crange[(t, m)] = (min(vals), max(vals)) if vals else None
+
+        # An average over a subset of columns is not comparable to one over all 11, so rows with
+        # missing cells neither print an average, compete for the bolded best, nor stretch the
+        # heat scale.
+        def full(dd):
+            return all(dd.get((t, m)) is not None for t, m, _ in COLUMNS)
+
+        avs = sorted({a for a in (row_avg(dd) for dd in all_data if full(dd)) if a is not None},
+                     reverse=True)
+        abest, asec = (avs[0] if avs else None), (avs[1] if len(avs) > 1 else None)
+        crange["avg"] = (min(avs), max(avs)) if avs else None
+
+        def emit(disp, data, dcells, _b=best, _s=second, _c=crange, _f=full,
+                 _ab=abest, _as=asec):
+            cells = []
+            for t, m, _ in COLUMNS:
+                v = data.get((t, m))
+                is_best = v is not None and v == _b[(t, m)]
+                cells.append(fmt(v, bold=is_best,
+                                 underline=(v is not None and not is_best
+                                            and v == _s[(t, m)]),
+                                 dagger=((t, m) in dcells and v is not None),
+                                 color=M.cell_color(v, _c[(t, m)])))
+            a = row_avg(data) if _f(data) else None
+            cells.append(fmt(a, bold=(a is not None and a == _ab),
+                             underline=(a is not None and a != _ab and a == _as),
+                             color=M.cell_color(a, _c["avg"])))
+            return f"\\quad {disp} & " + " & ".join(cells) + " \\\\"
+
+        L.append("\\midrule")
+        L.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{title}}}}} \\\\")
+        if grad:
+            L.append("\\textbf{Gradient attribution} \\\\")
+            L += [emit(d, dd, dc) for d, dd, dc in grad]
+        if mask:
+            L.append("\\textbf{Mask learning} \\\\")
+            L += [emit(d, dd, dc) for d, dd, dc in mask]
+
+        llama_ioi = {("ioi", "llama3")}
+        edge_llama = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+        # SGD is the default (see make_mib_table.emit_ours); same header/order flip mirrored.
+        for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
+            ours = [(n, d) for n, d, g in methods if g == "ours" and opt_of(d) == opt]
+            unif = [(n, d) for n, d, g in methods if g == "uniform" and opt_of(d) == opt]
+            if not ours and not unif:
+                continue
+            L.append(f"\\textbf{{{label}}} \\\\")
+            for name, rows_ in (("ours", ours), ("unif", unif)):
+                for n, d in rows_:
+                    disp = n if name == "ours" else unifk(n)
+                    if not any(v is not None for v in mattr[d].values()):
+                        # Same rule as make_mib_table's emit_ours: a row of 12 "---" claims a run
+                        # that was scored and produced nothing, which is a wrong statement rather
+                        # than a blank. Drop it until its first cell lands; it reappears on the
+                        # next regeneration with no edit here. Announced, never silent.
+                        print(f"SKIP row {disp!r} ({d}): no acc_auc yet")
+                        continue
+                    # Node ours are capped on ioi/llama3 only (IOI_LLAMA_CAPPED); every edge
+                    # llama3 cell is --head 200, as in make_mib_table's EDGE_LLAMA_DAGGER.
+                    dc = edge_llama if level == "edge" else (
+                        llama_ioi if d in IOI_LLAMA_CAPPED else set())
+                    L.append(emit(disp, mattr[d], dc))
+
+    L += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text("\n".join(L) + "\n")
-    print(f"Wrote {OUTPUT} ({len(NODE_METHODS)} MAttr + {len(BASELINES)} baseline rows)")
+    print(f"Wrote {OUTPUT} ({len(NODE_METHODS)} node + {len(EDGE_METHODS)} edge MAttr rows)")
 
 
 if __name__ == "__main__":

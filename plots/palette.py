@@ -15,6 +15,23 @@ small markers and every CVD type.
   ours      = cool  (MAttr blue, +hard bluish green)
   baselines = warm  (IG orange, I×G wine)
 
+THE OPTIMIZER RULE, which every figure follows without exception:
+
+  SGD  -> BLACK   ("MAttr (SGD)")
+  Adam -> BLUE    ("MAttr")
+
+Unconditionally -- whether or not both optimizers appear on the same panel. Two earlier
+attempts at something cleverer both failed the same way. Sharing MAttr's blue across
+optimizers and separating by linetype left MAttr+SGD blue in plot_mib_accauc_cpr_scatter and
+black in plot_optimizer_lr / plot_adamsgd_mlp_diag. Making the hue CONDITIONAL on whether a
+panel showed one optimizer or two was worse still: the arm then changed colour between two cuts
+of the SAME figure. If a figure needs a third MAttr arm, give it a hex here; do not re-purpose
+blue or black.
+
+"Blue = Adam" means the Adam configuration we RECOMMEND, i.e. eps=1e-2 at neuron scale. The
+library-default eps=1e-8 arm is the broken one and carries the violet as a marked variant --
+see "MAttr (Adam, default eps)" below.
+
 Run `python plots/palette.py` to re-verify: it simulates deuteranopia / protanopia / tritanopia
 (Machado et al. 2009, severity 1.0) and prints the worst pairwise CIE76 dE. Rule of thumb: dE>20
 is comfortably distinguishable. Keep the worst-case above that if you change anything.
@@ -70,6 +87,35 @@ METHOD = {
     # rather than a cool -- the alternative was making some other pair harder to tell apart.
     # Re-verify with `python plots/palette.py`.
     "MAttr (SGD)": "#000000",
+    # MAttr with Adam at the LIBRARY-DEFAULT eps=1e-8, as distinct from the eps=1e-2 arm we
+    # actually ship (scripts/submit_sva_eps.sh), which takes the canonical MAttr blue.
+    #
+    # WHICH WAY ROUND THIS GOES IS THE POINT. The paper-wide rule is SGD black / Adam blue,
+    # unconditionally, so "blue" has to be the Adam configuration we recommend. Default-eps Adam
+    # is the BROKEN one at neuron scale -- its update degenerates to ~sign(g) and costs ~0.10 IIA
+    # AUC on the MLP substrates -- so it is the variant worth marking, and it gets the violet.
+    # A third optimizer setting of the same method needs a hex rather than a linetype: the
+    # acc/faith scatter already spends shape on the training loss and fill on the method.
+    #
+    # BLUEVIOLET, and it is the first addition here that gets to stay in the "ours = cool"
+    # family rather than breaking the rule the way black had to. Measured over a 4096-point RGB
+    # grid against the whole palette under all three CVD simulations, the violet region is by a
+    # wide margin the emptiest part of the space this palette leaves free -- its worst-case
+    # distance is 28.1 dE (deuteranopia, vs Node Pruning), against 24.0 for the next candidate
+    # tried (orchid #b366ff), 22.6 (deep violet #6a00cc) and 21.1 (#b07aff). Everything in the
+    # muted-purple region that looked more natural next to the Wong/Tol stock fails outright:
+    # Tol purple #AA4499 8.0 dE (vs MAttr), plum #6a3d9a 8.2, amethyst #9966dd 12.8 -- each
+    # BELOW this palette's pre-existing worst pair of 16.05 (+hard vs GIM, tritanopia), i.e.
+    # each would have become the new binding constraint. Blueviolet leaves that 16.05 intact.
+    #
+    # ONE CAVEAT, stated because this palette's stated preference is lightness separation: at
+    # L* 42 this sits close to MAttr's blue (L* 47), so the two are told apart by HUE, not by
+    # lightness -- the one pair here that leans on the cue this module normally treats as the
+    # backup. That is deliberate and is why a violet was required to clear 20 dE by a margin
+    # rather than merely clear it: the hue distance has to do all the work. Semantically it is
+    # also the right place for it, since ours are cool and the warm hues are reserved for the
+    # gradient baselines. Re-verify with `python plots/palette.py`.
+    "MAttr (Adam, default eps)": "#8a2be2",
     # The random-ranking floor. Achromatic on purpose: it is a REFERENCE, not a competitor, so
     # it should not read as another method fighting for attention. Same value as OTHER, which is
     # already this palette's "un-highlighted" grey -- and under a black marker edge it reads as
@@ -82,6 +128,19 @@ METHOD = {
     # worst pair of 16.1 (+hard vs GIM, tritanopia), i.e. each would have become the new binding
     # constraint. #cccccc and lighter leave that 16.1 untouched.
     "Random": OTHER,
+}
+
+# WITHIN-FAMILY TINTS, kept OUT of METHOD on purpose. These are lightness variants of a hue
+# already in METHOD, used where one method appears at two settings and the pair is also
+# distinguished by label or linetype -- they are not competing hues and must not be scanned by
+# _check() as if they were. Adding "Node Pruning (KL)" to METHOD directly dropped the palette's
+# reported worst case from 16.1 to 8.1 dE (GIM vs the tint, protanopia), which is a meaningless
+# number: GIM and the two Node Pruning arms never appear in the same panel, and the tint's real
+# job is to separate from Node Pruning's own indigo, which it does by L* 62 vs 24.
+TINT = {
+    # Node Pruning's KL-objective arm against its logit-diff one, in the MIB scatter. Lived as
+    # a local hex in plot_mib_accauc_cpr_scatter.py until 2026-08-29.
+    "Node Pruning (KL)": "#9d95d1",
 }
 OTHER = "#cccccc"   # un-highlighted baselines in the MIB scatter
 
@@ -118,6 +177,24 @@ def furnish(ax):
     for sp in ax.spines.values():
         sp.set_linewidth(SPINE_LW)
 
+# Outline colours for the "beats baseline" marks on plots/plot_epsgrid_facets.py. THREE MUTUALLY
+# EXCLUSIVE categories, one outline per cell, so a cell is marked once and the colour says which
+# baseline(s) it cleared.
+#
+# Two of the three REUSE THE BEATEN BASELINE'S OWN METHOD COLOUR -- an orange outline means it
+# cleared IG (orange everywhere in this paper) and a black one means it cleared MAttr+SGD (black,
+# per the SGD rule above). That is the whole reason no new hue was invented for them: the reader
+# already knows those two colours, and inventing a second orange for "the thing IG is" would be
+# the exact duplication this module exists to prevent.
+#
+# "both" is the one new hex, and it is deliberately NOT a method colour. It has to separate from
+# orange AND black AND from the two backgrounds these outlines sit on (viridis: dark purple ->
+# yellow; RdBu_r: blue -> white -> red). Purple clears all four; a red or magenta would collide
+# with RdBu_r's warm arm, and a green with viridis's middle. Every outline is drawn over a white
+# halo (path_effects.withStroke), so contrast against the cell is already handled -- what these
+# three must do is separate from EACH OTHER.
+OUTLINE = {"ig": METHOD["IG"], "sgd": METHOD["MAttr (SGD)"], "both": "#7b3294"}
+
 # Qualitative suitability marks (+ / o / -) in the teaser figure's method-property table.
 # Not method colours -- a separate three-level ordinal scale -- but kept here so the whole
 # paper still has exactly one file with hex codes in it. Wong colourblind-safe stock:
@@ -151,12 +228,34 @@ ALIASES = {
     # linetype-encoded because all three rungs appear in figures that HAVE a spare linetype,
     # whereas the SGD arm had to be droppable from the acc/faith scatter for want of one.
     "MAttr-SGD": "MAttr (SGD)", "softsgd-log": "MAttr (SGD)",
+    # The big-eps Adam arm, under the key plot_accauc_vs_faithauc.parse_method emits and under
+    # the two spellings the figures label it with. The eps VALUE is part of every spelling on
+    # purpose: a future eps=1e-1 arm is a different series, and an alias that matched on "eps"
+    # alone would silently colour it the same.
+    # SGD is BLACK and Adam is BLUE, unconditionally, across every figure. So the Adam arm we
+    # actually ship (eps=1e-2) takes the canonical MAttr blue, and the violet marks the
+    # LIBRARY-DEFAULT eps arm instead -- the broken one, which is the variant worth flagging.
+    "stopk-log-eps1e-2": "MAttr",
+    "MAttr (Adam, ε=10⁻²)": "MAttr", "MAttr+Adam": "MAttr", "Adam": "MAttr",
+    # Back-compat: this was the entry's name until 2026-08-29, when blue and violet swapped
+    # roles. Kept so an un-updated caller gets the right colour rather than OTHER's grey --
+    # which is exactly what it silently got during the swap.
+    "MAttr (Adam eps=1e-2)": "MAttr",
+    "stopk-log": "MAttr (Adam, default eps)",
+    "MAttr (Adam, def. eps)": "MAttr (Adam, default eps)",
+    # SGD spellings, so a figure can pass parse_method's key or a display label either way.
+    "MAttr+SGD": "MAttr (SGD)", "SGD": "MAttr (SGD)", "softsgd-unif": "MAttr (SGD)",
 }
 
 
 def color(name):
-    """Colour for a method under any of its label spellings; OTHER for unknown names."""
-    return METHOD.get(ALIASES.get(name, name), OTHER)
+    """Colour for a method under any of its label spellings; OTHER for unknown names.
+
+    Searches METHOD then TINT, so a caller does not need to know which of the two a series
+    lives in -- that split exists for _check()'s benefit, not the caller's.
+    """
+    key = ALIASES.get(name, name)
+    return METHOD.get(key, TINT.get(key, OTHER))
 
 
 def _check():   # python plots/palette.py

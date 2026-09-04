@@ -70,7 +70,12 @@ import palette as P                                          # noqa: E402
 from plot_accauc_vs_faithauc import ARITH, SVA, parse_method  # noqa: E402
 
 RES = "results/sva_sweep"
-TRAINED = [("stopk-log", "MAttr (Adam)"), ("softsgd-log", "MAttr (SGD)")]
+# HIGH-EPS ADAM (eps=1e-2) is the Adam arm as of 2026-08-30, not the default-eps one. At this
+# width the default eps=1e-8 makes Adam's update effectively sign(g) -- the learned score becomes
+# a signed COUNT of steps with every trace of effect magnitude divided out -- so `stopk-log` was
+# measuring that degeneracy rather than Adam. Only logit_diff was run at eps=1e-2, which is all
+# these panels use; --all-losses variants still need the default-eps key.
+TRAINED = [("stopk-log-eps1e-2", "MAttr (Adam)"), ("softsgd-log", "MAttr (SGD)")]
 REF = ("IG", "IG (untrained ref.)")
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]

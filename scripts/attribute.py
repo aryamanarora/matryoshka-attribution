@@ -211,7 +211,6 @@ def run_dataset(args, model, tokenizer, device, wandb):
         total, loss_fn, steps=args.steps,
         variant="hard_topk" if args.hard_fwd else "topk",
         k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters, lr=args.lr,
-        natural_k_frac=args.natural_k_frac, use_bias=False,
         extra_params=extra_params, lr_extra=lr_extra, device=device,
         on_step=on_step, logger=logger, log_every=50)
     scores = res.scores.to(device)        # back on device for the sparsity eval
@@ -382,8 +381,6 @@ def main():
                         help="Number of examples for sparsity evaluation")
     parser.add_argument("--hard_fwd", action="store_true",
                         help="Hard binary mask in forward, straight-through gradient backward")
-    parser.add_argument("--natural_k_frac", type=float, default=0.0,
-                        help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--das_dim", type=int, default=None,
                         help="DAS rotation subspace dimension (default: full d_model)")
     # underscore spelling to match every other option in this script
@@ -441,7 +438,8 @@ def main():
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
-    model.gradient_checkpointing_enable()
+    # (gradient_checkpointing_enable() removed 2026-08-26: transformers gates it on
+    # self.training and this model is in eval(), so it was always a no-op.)
     logger.info("Model loaded in %.1fs", time.time() - t0)
 
     # Dispatch

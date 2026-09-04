@@ -78,7 +78,11 @@ DIRECTIONS = [
 
 def main():
     rows, ks = [], []
-    for res, inp_label in R.SWEEPS:
+    # R.SWEEPS was renamed SOURCES and gained a third element (the ablation label) in the
+    # scatter module this file imports; the rename was never propagated here, so this script has
+    # been raising AttributeError rather than producing a figure. Unpack all three and keep the
+    # ablation out of the loop body, which only ever used the dir and the input label.
+    for res, inp_label, _abl in R.SOURCES:
         raw = C.load(res)
         ks += [d["n_nodes"][0] for d in raw.values()]
         for dir_label, get in DIRECTIONS:

@@ -84,7 +84,7 @@ OUR_METHODS = [
     ("$-$ $c_k$", "mib_node_detached_tau_log", "node", "ours"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce_log", "node", "ours"),
     ("$+$ id-STE", "mib_node_identity_sgd_log", "node", "ours"),
-    ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_log", "node", "ours"),
+    ("$+$ id-STE, Gum.", "mib_node_identity_gumbel_sgd_log", "node", "ours"),
     # Node level (uniform k-schedule = ablation). Swept -> lr=0.05.
     # Was final_node, which is the SAME variant at the default lr=0.01 -- the one dir in this
     # block not at lr=0.05, so "\ourmethod{}, uniform k" silently meant a different LR here than
@@ -98,11 +98,11 @@ OUR_METHODS = [
     # each of the two SGD rows carries its own LR instead of sharing one.
     ("\\ourmethod{}", "softuni_sgd_lr_3.0", "node", "uniform"),
     ("$+$ hard", "htk_lr_0.05", "node", "uniform"),
-    ("$+$ hard, $+$ Gumbel sel.", "mib_node_hard_topk_gumbel", "node", "uniform"),
+    ("$+$ hard, $+$ Gum.", "mib_node_hard_topk_gumbel", "node", "uniform"),
     ("$-$ $c_k$", "mib_node_detached_tau", "node", "uniform"),
     ("$+$ hard bwd", "mib_node_bernoulli_reinforce", "node", "uniform"),
     ("$+$ id-STE", "mib_node_identity_sgd", "node", "uniform"),
-    ("$+$ id-STE, Gumbel sel.", "mib_node_identity_gumbel_sgd_uniform", "node", "uniform"),
+    ("$+$ id-STE, Gum.", "mib_node_identity_gumbel_sgd_uniform", "node", "uniform"),
     # Edge level (log k-schedule = default). Swept methods -> lr=0.05.
     ("\\ourmethod{}", "mib_edge_topk_log_lr05", "edge", "ours"),
     # Edge twin of the node SGD row, submit_mib_edge_soft_sgd.sh. SAME LABEL POLICY as node
@@ -296,17 +296,49 @@ EPRUN_SPARSITIES = [
 # buried every other mask-learning baseline in the table, and the budget sweep is not the point
 # being made there (it is a hyperparameter search we ran to give the baseline a fair shot).
 #
-# Selected by validation row mean on 2026-08-08, over the SAME 11 cells:
-#   KL:         s=0.9 1.00  >  s=0.95 0.96  >  s=0.99 0.91   (s=0.5, s=0.8 partial at 6/11 and
-#               9/11; on their own subsets s=0.9 still wins, 1.05 vs 0.86 and 0.99 vs 0.90, so
-#               they cannot overtake it by finishing)
-#   logit-diff: s=0.5 1.67  >  s=0.8 1.46  >  s=0.95 1.36  >  s=0.9 1.28  >  s=0.99 1.24
-#               >  s=0.25 0.84  >  s=0.1 0.34   (interior optimum, agrees with HEADLINE_EPRUN)
+# *** ONE BUDGET, s=0.95, SHARED WITH THE ACC-AUC TABLE -- and it is deliberately NOT either
+# metric's argmax. *** Until 2026-09-02 each table named its own best budget: this one took the
+# CPR argmax per objective (KL s=0.9, LD s=0.5) and make_mib_accauc_table took the acc-AUC one
+# (s=0.99 for both). Both picks were defensible alone and together they were indefensible --
+# two tables, one page apart, with identically-named "Node Pruning" rows that were different
+# runs. CPR and acc-AUC rank the budgets in near-opposite orders (validation row means, 11
+# cells, higher s = sparser):
+#
+#   logit-diff   s=0.5   s=0.8   s=0.9   s=0.95  s=0.99
+#     CPR AUC     1.67    1.46    1.28    1.36    1.24     <- densest wins
+#     acc-AUC     0.23    0.31    0.34    0.36    0.38     <- sparsest wins, the other way
+#   KL           s=0.9  1.00/0.40    s=0.95  0.96/0.46    s=0.99  0.91/0.46
+#
+# so the single budget had to be chosen against BOTH metrics or it would flatter us under one
+# of them. s=0.95 is the rank-sum optimum for each objective: KL is the acc-AUC argmax (0.458,
+# tied with s=0.99 at 2dp) and second on CPR by 0.04; LD is second on acc-AUC (0.36 vs 0.38)
+# and third on CPR. Carrying the CPR pick into the acc-AUC table instead would have shown the
+# baseline at its WORST acc budget (0.23 vs 0.38), and carrying the acc-AUC pick in here would
+# have widened our node margin from 1.88-vs-1.36 to 1.88-vs-1.24. Both were rejected for the
+# same reason: consistency should not be bought out of the baseline's score.
+#
+# *** EPRUN_BEST_SPARSITY IS STILL s=0.5 LD, AND THAT IS NOT AN OVERSIGHT. *** The test split
+# has 11/11 pkls for eprun_eval_s0.5_ld and 0/11 for eprun_eval_s0.95_ld, so repointing it
+# would silently drop the only mask-learning baseline out of the headline test table. Until
+# scripts/submit_test_node_pruning.sh has been run for s=0.95, the test table shows s=0.5 LD
+# while these two validation tables show s=0.95 -- a real remaining inconsistency, recorded
+# here rather than papered over. Repoint it, and delete this paragraph, once those cells land.
 #
 # Other consumers (make_mib_accauc_table, plot_mib_accauc_cpr_scatter) still iterate the FULL
 # EPRUN_SPARSITIES on purpose -- the scatter wants every budget as a point. Only this table
-# filters. Set to None to restore all rows.
-EPRUN_SHOW = {"eprun_eval", "eprun_eval_s0.5_ld"}
+# filters. Set to None to restore all rows (they then keep their EPRUN_SPARSITIES suffixes).
+#
+# A DICT, not a set: the value REPLACES eprun_label's "$s{=}...$" suffix for this table only.
+# Once the twelve rows are filtered to one per objective the budget is no longer what
+# distinguishes them -- the objective is -- so the parenthetical names that instead.
+#
+# *** THE BUDGET IS INVISIBLE IN THE LABEL, SO IT HAD BETTER BE THE SAME EVERYWHERE. *** Both
+# rows are s=0.95, and make_mib_accauc_table now reads THIS dict rather than keeping its own
+# pick, so the two tables cannot drift into showing identically-named rows from different runs.
+# That is the whole reason the budget could be dropped from the label at all. If you ever point
+# the two tables at different budgets again, put s= back in these strings first.
+# The caption should still name the budget, since no row does any more.
+EPRUN_SHOW = {"eprun_eval_s0.95": "KL", "eprun_eval_s0.95_ld": "LD"}
 
 # The single config the test table and the figures show. Best by CPR AUC, which is the metric
 # the paper leads with -- validation row avg over 11 cells is 1.67 for logit-diff s=0.5 against
@@ -552,7 +584,7 @@ def eprun_rows(level):
         data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
         if not data:
             continue
-        label = eprun_label(level, suffix)
+        label = eprun_label(level, EPRUN_SHOW[dirn] if EPRUN_SHOW else suffix)
         if len(data) < len(COLUMNS):
             print(f"  NOTE {label}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
         rows.append((label, data, dirn))
@@ -610,15 +642,45 @@ def load_cpr_auc(results_dir, task, model):
         return None
 
 
-def fmt(v, bold=False, underline=False):
+# Per-cell heat, white at a column's minimum and CELL_HI at its maximum.
+#
+# *** NORMALISED PER (COLUMN, LEVEL), NOT GLOBALLY. *** CPR AUC is not comparable across columns
+# or across levels -- node ioi/gpt2 spans 0.25--1.85 while edge ioi/gpt2 spans 0.30--10.59 -- so
+# one shared scale would paint the entire node section white and say nothing. The colour answers
+# "where does this method sit among the methods, in this cell", which is the only comparison the
+# metric supports. It therefore cannot be read across a row: a dark cell in the Arithmetic column
+# and a dark cell in the ARC (C) column are both column-winners at different absolute scores.
+#
+# LIGHT RAMP ON PURPOSE. Every cell carries black text, some of it bold or underlined, so the
+# darkest end has to stay well above the legibility floor; ColorBrewer's light blue (relative
+# luminance 0.55) is about as dark as this can go before \mathbf on a 6pt digit starts to fill in.
+CELL_HI = (0x92, 0xC5, 0xDE)
+
+
+def cell_color(v, rng):
+    """Hex for one cell, or None where there is nothing to shade."""
+    if v is None or rng is None:
+        return None
+    lo, hi = rng
+    t = 0.0 if hi <= lo else (v - lo) / (hi - lo)
+    return "%02X%02X%02X" % tuple(round(255 + t * (c - 255)) for c in CELL_HI)
+
+
+def fmt(v, bold=False, underline=False, dagger=False, color=None):
+    """One table cell. Numbers are MATH mode -- so the digits, the \\mathbf of a column winner
+    and the dagger all set in the same face as the rest of the paper's numerals, instead of the
+    text figures \\textbf gave. \\cellcolor must lead the cell, before any content."""
     if v is None:
         return "---"
     s = f"{v:.2f}"
     if bold:
-        s = f"\\textbf{{{s}}}"
+        s = f"\\mathbf{{{s}}}"
     elif underline:
         s = f"\\underline{{{s}}}"
-    return s
+    if dagger:
+        s = "^{\\dagger}" + s
+    s = f"${s}$"
+    return f"\\cellcolor[HTML]{{{color}}}{s}" if color else s
 
 
 def main():
@@ -709,6 +771,31 @@ def main():
         avs = sorted({a for a in (row_avg(d) for d in full) if a is not None}, reverse=True)
         return (avs[0] if avs else None, avs[1] if len(avs) > 1 else None)
 
+    def range_in_col(level):
+        """{(task, model): (min, max)} + "avg", over every row that level will RENDER.
+
+        Deliberately the same membership rule as best_in_col -- baselines, mask learners and our
+        rows -- and, like it, CALLED FROM THE SECTION BODY rather than up here: the baseline
+        dicts are still empty at this point in main(), so a range computed now would be taken
+        over our rows alone and every baseline would clip to white or to full saturation.
+
+        The Avg entry follows section_avg_best and spans COMPLETE rows only. A partial row's Avg
+        is suppressed at render time, so including it would stretch the scale to fit a number
+        the table never prints.
+        """
+        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES} if level == "node" \
+            else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
+        dicts = list(baselines.values()) + [all_results.get(mkey(d, l, g), {})
+                                            for _, d, l, g in OUR_METHODS if l == level]
+        rng = {}
+        for task, model, _ in COLUMNS:
+            vals = [v for v in (d.get((task, model)) for d in dicts) if v is not None]
+            rng[(task, model)] = (min(vals), max(vals)) if vals else None
+        avs = [a for a in (row_avg(d) for d in dicts if len(d) == len(COLUMNS))
+               if a is not None]
+        rng["avg"] = (min(avs), max(avs)) if avs else None
+        return rng
+
     # display name -> LR string, populated where each row's RESULTS DIR is in scope. Same shape
     # as DAGGER, and for the same reason: the baseline dicts are keyed by display name, so by
     # the time the render loop sees a row the dir it came from is gone. emit_ours passes lr=
@@ -716,22 +803,24 @@ def main():
     ROW_LR = {}
 
     def make_row(name, data, best_col, second_col, indent=False, dagger=None,
-                 avg_best=None, avg_second=None, suppress_avg=False, cost=None, lr=None):
+                 avg_best=None, avg_second=None, suppress_avg=False, cost=None, lr=None,
+                 crange=None):
         dcells = dagger if dagger is not None else DAGGER.get(name, set())
+        cr = crange or {}
         vals = []
         for task, model, _ in COLUMNS:
             v = data.get((task, model))
             is_best = v is not None and best_col.get((task, model)) == v
             is_second = v is not None and not is_best and second_col.get((task, model)) == v
-            cell = fmt(v, bold=is_best, underline=is_second)
-            if v is not None and (task, model) in dcells:
-                cell = "$^{\\dagger}$" + cell
-            vals.append(cell)
+            vals.append(fmt(v, bold=is_best, underline=is_second,
+                            dagger=(task, model) in dcells,
+                            color=cell_color(v, cr.get((task, model)))))
         # A row that covers only some cells (UGS: 3 of 11) gets no average -- it would not
         # be comparable to the full-coverage rows.
         a = None if (suppress_avg or name in PARTIAL_COVERAGE) else row_avg(data)
         vals.append(fmt(a, bold=(a is not None and a == avg_best),
-                        underline=(a is not None and a != avg_best and a == avg_second)))
+                        underline=(a is not None and a != avg_best and a == avg_second),
+                        color=cell_color(a, cr.get("avg"))))
         prefix = f"\\quad {name}" if indent else name
         # The gradient rows are UNTRAINED, so their LR cell is "---" in the same sense as a
         # missing result: there is no such number, not one we failed to look up.
@@ -749,7 +838,8 @@ def main():
     def mask_cost(name):
         return COST_UGS if name == "UGS" else COST_EPRUN
 
-    def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None):
+    def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None,
+                  crange=None):
         # Split the "Ours" rows into two optimizer sets, each with a header. SGD IS THE UNMARKED
         # DEFAULT AT BOTH LEVELS as of 2026-08-26; Adam is the annotated ablation.
         #
@@ -798,14 +888,14 @@ def main():
                 lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level], lr=ours_lr(r)))
+                                      cost=COST_OURS[level], lr=ours_lr(r), crange=crange))
             for n, r, g in rows_u:
                 dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
                 lines.append(make_row(unifk(n), d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level], lr=ours_lr(r)))
+                                      cost=COST_OURS[level], lr=ours_lr(r), crange=crange))
 
     # Generate LaTeX
     ncols = len(COLUMNS)
@@ -813,7 +903,12 @@ def main():
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
     # Columns 2-3 are the two config columns (LR, then training cost), so every cmidrule below
     # is shifted by two: the first task column is 4, not 2.
-    lines.append("\\begin{tabular}{lrr@{\\quad}" + "r" * ncols + "@{\\quad}r}")
+    # CENTRED, not right-aligned, since the cells took a background colour. \cellcolor paints the
+    # whole cell including \tabcolsep, so a right-aligned number sits hard against the right edge
+    # of its own colour block with all the slack on the left -- which reads as a misalignment
+    # rather than as alignment. Every value here is two decimals of the same width, so the
+    # decimal points still line up; centring costs nothing and the swatches become a grid.
+    lines.append("\\begin{tabular}{lcc@{\\quad}" + "c" * ncols + "@{\\quad}c}")
     lines.append("\\toprule")
     lines.append("& & & \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
     lines.append("\\cmidrule(lr){4-7} \\cmidrule(lr){8-8} \\cmidrule(lr){9-11} \\cmidrule(lr){12-13} \\cmidrule(lr){14-14}")
@@ -915,6 +1010,7 @@ def main():
 
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
+    range_node = range_in_col("node")
     node_dicts = list(NODE_BASELINES.values()) + list(MASK_NODE_BASELINES.values()) \
         + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_uniform] \
         + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_ours]
@@ -930,15 +1026,16 @@ def main():
         # our margin -- the exact direction of error we should be most reluctant to publish.
         lines.append(make_row(name, data, best_node, second_node, indent=True, avg_best=avb,
                               avg_second=avs, suppress_avg=len(data) < len(COLUMNS),
-                              cost=grad_cost(name)))
+                              cost=grad_cost(name), crange=range_node))
     if MASK_NODE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
         for name, data in MASK_NODE_BASELINES.items():
             lines.append(make_row(name, data, best_node, second_node, indent=True,
                                   avg_best=avb, avg_second=avs,
                                   suppress_avg=len(data) < len(COLUMNS),
-                                  cost=mask_cost(name)))
-    emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs)
+                                  cost=mask_cost(name), crange=range_node))
+    emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs,
+              crange=range_node)
 
     # === Edge-level section ===
     lines.append("\\midrule")
@@ -987,6 +1084,7 @@ def main():
         ROW_LR[name] = eprun_lr(dirn)
 
     best_edge, second_edge = best_in_col("edge")
+    range_edge = range_in_col("edge")
     edge_dicts = list(EDGE_BASELINES.values()) + list(MASK_EDGE_BASELINES.values()) \
         + [all_results.get(mkey(d, "edge", g), {}) for _, d, _, g in edge_uniform] \
         + [all_results.get(mkey(d, "edge", g), {}) for _, d, _, g in edge_ours]
@@ -1003,7 +1101,7 @@ def main():
         # task where more IG steps HURT, which read as "10 steps is worse" until the rest came in.
         lines.append(make_row(name, data, best_edge, second_edge, indent=True, avg_best=eavb,
                               avg_second=eavs, suppress_avg=len(data) < len(COLUMNS),
-                              cost=grad_cost(name)))
+                              cost=grad_cost(name), crange=range_edge))
     # Mask learners rank by a learned gate rather than a gradient, so they get their own header.
     if MASK_EDGE_BASELINES:
         lines.append("\\textbf{Mask learning} \\\\")
@@ -1011,8 +1109,9 @@ def main():
             lines.append(make_row(name, data, best_edge, second_edge, indent=True,
                                   avg_best=eavb, avg_second=eavs,
                                   suppress_avg=len(data) < len(COLUMNS),
-                                  cost=mask_cost(name)))
-    emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs, dagger=EDGE_LLAMA_DAGGER)
+                                  cost=mask_cost(name), crange=range_edge))
+    emit_ours(edge_uniform, edge_ours, "edge", best_edge, second_edge, eavb, eavs,
+              dagger=EDGE_LLAMA_DAGGER, crange=range_edge)
 
     lines.append("\\bottomrule")
     lines.append("\\end{tabular}")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import torch
 
 
@@ -13,6 +14,8 @@ class LlamaAttributionHooks:
       - "attn_output": per-(layer, pos) scalar masking of full attention output
       - "attn_head": per-(layer, pos, head) masking of attention output
       - "mlp+attn_head": combined MLP neuron + attention head masking
+      - "mlp_tied+attn_head_tied": per-(layer, neuron) MLP + per-(layer, head) attention,
+        both TIED (broadcast) over token positions -- position-independent "global" nodes
       - "resid": per-(layer, pos) scalar masking of full layer output (residual stream)
 
     Score layout (flat vector):
@@ -20,13 +23,14 @@ class LlamaAttributionHooks:
       - attn_output:   [num_layers * seq_len]
       - attn_head:     [num_layers * seq_len * num_heads]
       - mlp+attn_head: [mlp_scores | attn_head_scores]
+      - mlp_tied+attn_head_tied: [num_layers*intermediate_size | num_layers*num_heads]
       - resid:         [num_layers * seq_len]
     """
 
-    MASK_TYPES = {"mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
+    MASK_TYPES = {"mlp", "mlp_tied", "mlp_tied+attn_head_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span", "attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "resid", "resid_dim", "node", "das", "sae"}
 
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False,
-                 num_spans=None, zero_ablation=False):
+                 num_spans=None, zero_ablation=False, sae_error="absorb"):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
         if zero_ablation and ("sae" in mask_type or "das" in mask_type):
             # The SAE/DAS paths do not route through _interpolate: they interchange in a learned
@@ -44,12 +48,28 @@ class LlamaAttributionHooks:
         #: means everywhere the mask is applied -- training, evaluation and the faithfulness
         #: endpoints alike -- so it is a property of the run, not of a single call.
         self.zero_ablation = zero_ablation
-        self.include_input = include_input and (mask_type == "node")
+        # Scoring/ablating the input-embedding node. Supported for `node` and for the two
+        # *_sae_span substrates (2026-08-30); every other per-token layout still silently drops
+        # it, which is why this is an explicit allowlist rather than a plain assignment -- a
+        # caller passing --include-input to `mlp` gets a run byte-identical to the -input one
+        # under a +input label, and nothing warns.
+        self.include_input = include_input and (
+            mask_type in ("node", "mlp_sae_span", "resid_sae_span"))
         self.num_spans = num_spans          # for mlp_span: # of causalgym content spans
         self.span_last = None               # per-batch [B, num_spans] long: base last-token pos/span
         self.span_last_src = None           # per-batch [B, num_spans] long: source last-token pos/span
         self.saes = None                    # {layer: LlamaScopeSAE} for *_sae_span
         self.d_sae = None; self.sae_width = None
+        # HOW THE SAE RECONSTRUCTION ERROR IS INTERVENED ON. Three settings, and the choice
+        # decides what an "error node" even is -- see _sae_interchange for the algebra.
+        #   "absorb" (legacy default) clean side is (b - sae_out), measured against the BLENDED
+        #            reconstruction, so keeping the error node restores the whole site.
+        #   "frozen" both sides frozen at their own reconstructions, so the error node carries
+        #            only the genuinely unexplained residual and cannot override the latents.
+        #   "none"   no error node at all: sae_width is d_sae, every offset shifts, and the
+        #            error is pinned at the frozen CLEAN residual.
+        assert sae_error in ("absorb", "frozen", "none"), sae_error
+        self.sae_error = sae_error
         self.cf_acts_saemlp = {}            # cached src MLP-out (down_proj output) per layer
         self.R = {}                        # {layer: RotateLayer} for das_*_span
         self.das_dim = None
@@ -63,6 +83,7 @@ class LlamaAttributionHooks:
 
         self.mlp_total = self.num_layers * seq_len * self.intermediate_size
         self.mlp_tied_total = self.num_layers * self.intermediate_size  # per-(layer,neuron), tied over pos
+        self.attn_head_tied_total = self.num_layers * self.num_heads    # per-(layer,head), tied over pos
         self.mlp_span_total = (self.num_layers * num_spans * self.intermediate_size
                                if num_spans else 0)  # per-(layer,span,neuron)
         self.attn_span_total = (self.num_layers * num_spans * self.hidden_size
@@ -79,6 +100,8 @@ class LlamaAttributionHooks:
             self.total = self.mlp_total
         elif mask_type == "mlp_tied":
             self.total = self.mlp_tied_total
+        elif mask_type == "mlp_tied+attn_head_tied":
+            self.total = self.mlp_tied_total + self.attn_head_tied_total
         elif mask_type == "mlp_span":
             assert num_spans, "mlp_span requires num_spans"
             self.total = self.mlp_span_total
@@ -116,11 +139,12 @@ class LlamaAttributionHooks:
 
     @property
     def has_mlp(self):
-        return self.mask_type in ("mlp", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp+attn_head", "mlp+attn_dim", "node")
+        return self.mask_type in ("mlp", "mlp_tied", "mlp_tied+attn_head_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp+attn_head", "mlp+attn_dim", "node")
 
     @property
     def has_attn(self):
-        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim", "mlp+attn_span", "mlp+attn_head_span", "node")
+        return self.mask_type in ("attn_output", "attn_head", "mlp+attn_head", "mlp+attn_dim",
+                                  "mlp+attn_span", "mlp+attn_head_span", "mlp_tied+attn_head_tied", "node")
 
     @property
     def has_resid(self):
@@ -136,12 +160,17 @@ class LlamaAttributionHooks:
 
     def set_saes(self, saes):
         """Provide per-layer frozen SAEs (.encode/.decode_delta/.d_sae). Sets the node layout:
-        per-(layer, span, d_sae feature) + 1 per-(layer,span) reconstruction-error node."""
+        per-(layer, span, d_sae feature) + 1 per-(layer,span) reconstruction-error node,
+        or without that error node when sae_no_error."""
         assert self.is_sae, "set_saes only for *_sae_span"
         self.saes = saes
         self.d_sae = next(iter(saes.values())).d_sae
-        self.sae_width = self.d_sae + 1
-        self.total = self.num_layers * self.num_spans * self.sae_width
+        self.sae_width = self.d_sae + (0 if self.sae_error == "none" else 1)
+        # `_node_offset` reserves index 0 for the input-embedding node when include_input, exactly
+        # as the `node` layout does. Every consumer of this layout must add the same offset --
+        # _sae_interchange below, and eval_sva.gradient_scores' SAE branch.
+        self.total = (self._node_offset
+                      + self.num_layers * self.num_spans * self.sae_width)
 
     @property
     def is_das(self):
@@ -178,6 +207,73 @@ class LlamaAttributionHooks:
     def _get_embed_module(self):
         return self.model.model.embed_tokens
 
+    # ---- gradient-attribution (embedding-path stepless IG) helpers ----------------------
+    # The model-specific half of trainer.stepless_ig, mirroring how register_hooks is the
+    # model-specific half of learn_scores. Scripts compose these into a grad_fn closure
+    # (see eval_global_kl.make_embed_ig_grad_fn).
+
+    def capture_node_acts(self, want_grad=False):
+        """Forward-pre hooks on the SAME sites ``register_hooks`` masks (the down_proj /
+        o_proj inputs), storing the incoming activation per ``(layer_idx, "mlp"|"attn")``.
+        With ``want_grad=True`` each stored tensor is marked requires_grad_/retain_grad, so a
+        later backward leaves ``.grad`` on it even with all model params frozen. Returns
+        ``(store, handles)``; the caller must remove the handles. Supported for the
+        position-tied and node layouts (the granularities gradient attribution scores)."""
+        assert self.mask_type in ("mlp_tied", "mlp_tied+attn_head_tied", "node"), \
+            f"capture_node_acts: unsupported mask_type {self.mask_type!r}"
+        store, handles = {}, []
+        def mk(li, kind):
+            def hook(mod, hook_args):
+                x = hook_args[0]
+                if want_grad:
+                    x.requires_grad_(True)
+                    x.retain_grad()
+                store[(li, kind)] = x
+                return (x,) + tuple(hook_args[1:])
+            return hook
+        for li in range(self.num_layers):
+            layer = self._get_layer(li)
+            if self.has_mlp:
+                handles.append(self._get_mlp_module(layer).register_forward_pre_hook(mk(li, "mlp")))
+            if self.has_attn:
+                handles.append(self._get_attn_module(layer).register_forward_pre_hook(mk(li, "attn")))
+        return store, handles
+
+    def override_embed(self, value):
+        """Force the embedding output of subsequent forwards to ``value`` (e.g. the
+        alpha-interpolated embedding). Returns the hook handle; caller removes it."""
+        return self._get_embed_module().register_forward_hook(lambda mod, inp, out: value)
+
+    def contract_node_grads(self, grads, deltas):
+        """Layout-aware contraction ``score_j = sum_{batch,pos} grads[site]_j * deltas[site]_j``
+        into a float64 ``[total]`` tensor ON THE GRADS' DEVICE (accumulate there across
+        steps and ``.cpu()`` once). Per-(layer, neuron) for MLP sites; per-(layer, head),
+        summed over head_dim, for attention sites; the ``node`` layout collapses each MLP
+        block to one scalar. Products are formed in the inputs' dtype and summed before the
+        float64 cast, matching the original script-level implementation bit-for-bit."""
+        L, N = self.num_layers, self.intermediate_size
+        nh, Hd = self.num_heads, self.head_dim
+        dev = next(iter(grads.values())).device
+        scores = torch.zeros(self.total, dtype=torch.float64, device=dev)
+        for li in range(L):
+            cm = ch = None
+            if self.has_mlp:
+                cm = grads[(li, "mlp")] * deltas[(li, "mlp")]                    # [B, P, N]
+            if self.has_attn:
+                ga, da = grads[(li, "attn")], deltas[(li, "attn")]
+                B, P = ga.shape[0], ga.shape[1]
+                ch = (ga.view(B, P, nh, Hd) * da.view(B, P, nh, Hd)).sum(-1)     # [B, P, nh]
+            if self.is_node:      # layout [attn: L*nh][mlp: L]
+                off0 = self._node_offset
+                scores[off0 + L * nh + li] += cm.sum().double()
+                scores[off0 + li * nh:off0 + (li + 1) * nh] += ch.sum((0, 1)).double()
+            else:                 # layout [mlp: L*N][attn: L*nh]
+                scores[li * N:(li + 1) * N] += cm.sum((0, 1)).double()
+                if ch is not None:
+                    off = self.mlp_tied_total + li * nh
+                    scores[off:off + nh] += ch.sum((0, 1)).double()
+        return scores
+
     def describe(self):
         parts = []
         if self.is_sae:
@@ -193,7 +289,7 @@ class LlamaAttributionHooks:
             parts.append(f"Node: {self.num_layers}L x ({self.num_heads}h + 1mlp){inp} = "
                          f"{self.node_total:,}")
         else:
-            if self.mask_type == "mlp_tied":
+            if self.mask_type in ("mlp_tied", "mlp_tied+attn_head_tied"):
                 parts.append(f"MLP(tied over pos): {self.num_layers}L x "
                              f"{self.intermediate_size}n = {self.mlp_tied_total:,}")
             elif self.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span"):
@@ -215,6 +311,9 @@ class LlamaAttributionHooks:
                 elif self.mask_type == "mlp+attn_head_span":
                     parts.append(f"Attn(per-span head): {self.num_layers}L x {self.num_spans}span x "
                                  f"{self.num_heads}h = {self.attn_head_span_total:,}")
+                elif self.mask_type == "mlp_tied+attn_head_tied":
+                    parts.append(f"Attn(tied over pos): {self.num_layers}L x "
+                                 f"{self.num_heads}h = {self.attn_head_tied_total:,}")
                 else:
                     parts.append(f"Attn: {self.num_layers}L x {self.seq_len}pos x "
                                  f"{self.num_heads}h = {self.attn_head_total:,}")
@@ -291,36 +390,95 @@ class LlamaAttributionHooks:
             return (x * (1 - m) + cf_act * m,)
         return (x * m + cf_act * (1 - m),)
 
+    def _ke(self, me):
+        """Weight on the CLEAN side of the error term, matching km's own convention."""
+        return (1.0 - me) if self.sufficient else me
+
     def _sae_interchange(self, out, cf, layer_idx):
         """SAE feature interchange at each span's LAST token, cross-aligned base<-src.
-        Node = per (span, feature) + 1 per-span reconstruction-error node. Reconstruction
-        error held at base; update = base + decode(masked feature delta) + masked err_diff.
+        Node = per (span, feature) + 1 per-span reconstruction-error node. The update is a
+        CONVEX BLEND of the clean and source reconstructions plus a blended error term (see
+        below), exact at both endpoints and bounded in between.
         sufficient (noising): mask=1 (top-k) -> source feature; else (denoising): mask=1 -> base."""
         sae = self.saes.get(layer_idx)
         if sae is None or cf is None or self.mask is None or self.span_last is None:
             return out
         S, dm, dsae, W = self.num_spans, out.shape[-1], self.d_sae, self.sae_width
         B = self.span_last.shape[0]
-        off = layer_idx * S * W
+        off = self._node_offset + layer_idx * S * W   # index 0 is the input node when +input
         per_span = self.mask[off:off + S * W].view(S, W)
         wdt = sae.W_enc.dtype
         mf = per_span[:, :dsae].to(wdt)[None]      # [1,S,dsae]
-        me = per_span[:, dsae].to(wdt)[None, :, None]   # [1,S,1]
+        me = None if self.sae_error == "none" else per_span[:, dsae].to(wdt)[None, :, None]
         bidx = self.span_last[:, :, None].expand(B, S, dm)
         sidx = self.span_last_src[:, :, None].expand(B, S, dm)
         b = out.gather(1, bidx).to(wdt)            # clean act at base span-last  [B,S,dm]
         c = cf.gather(1, sidx).to(wdt)             # source act at src span-last
         fb, fc = sae.encode(b), sae.encode(c)
-        fd = fc - fb
-        err_diff = (c - b) - sae.decode_delta(fd)
-        if self.sufficient:
-            new = b + sae.decode_delta(mf * fd) + me * err_diff
+
+        # CONVEX-BLEND FORM, not base-plus-delta. `km`/`ke` are the weights on the CLEAN side,
+        # so km=1 keeps the clean latent and km=0 takes the source one.
+        #
+        #     sae_out = decode( f_clean*km + f_source*(1-km) )
+        #     err     = (b - sae_out)*ke + (c - decode(f_source))*(1-ke)
+        #     new     = sae_out + err
+        #
+        # EXACT AT BOTH ENDPOINTS, which is the property the old form also had:
+        #   km=ke=1 -> sae_out = decode(fb), err = b - decode(fb), new = b   (clean)
+        #   km=ke=0 -> sae_out = decode(fc), err = c - decode(fc), new = c   (source)
+        # so no metric changes meaning and F_clean / F_patch are untouched.
+        #
+        # WHY IT REPLACED `new = b + decode_delta((1-mf)*fd) + (1-me)*err_diff` (2026-08-29).
+        # That form's exactness relied on the leading +b cancelling against the -b buried in
+        # err_diff = (c-b) - decode_delta(fc-fb). The cancellation is exact in real arithmetic
+        # but only holds numerically while decode(encode(x)) ~ x -- and this hook rewrites the
+        # layer OUTPUT, so a perturbed `b` feeds the next layer, leaves the SAE's training
+        # distribution, and the identity fails. Measured: ~1000x growth per layer from layer 19,
+        # fp32 overflow by layer 24, NaN by 30; 35 of 102 runs finished with a non-finite AUC,
+        # concentrated on the arithmetic tasks (IG 3/3 on all four) while Random never diverged
+        # at all -- divergence was a property of CONCENTRATING the top-k, not of any estimator.
+        #
+        # The blend has no such dependency: with km, ke in [0,1] the result is a mix of two
+        # reconstructions plus a mixed error, and there is no term whose coefficient on the live
+        # activation exceeds 1. It is the same shape as this class's own non-SAE intervention
+        # (`_interpolate`: x*m + cf_act*(1-m)) and as circuits/evals/mattr.py:132.
+        #
+        # A norm clamp used to hide all of this; see the note where it was removed.
+        km = (1.0 - mf) if self.sufficient else mf
+        sae_out = sae.decode(fb * km + fc * (1.0 - km))
+        # eb / ec are the two RECONSTRUCTION ERRORS, each measured against its OWN
+        # reconstruction. Both are constants of the mask: neither depends on km.
+        eb, ec = b - sae.decode(fb), c - sae.decode(fc)
+        if self.sae_error == "none":
+            # No error node in the substrate; the error is pinned at the clean residual. Same as
+            # "frozen" with ke == 1, which is the point -- "none" is not a fourth semantics.
+            # km=1 -> b exactly. km=0 -> decode(f_c) + eb, i.e. the source circuit carrying the
+            # clean error, NOT c. So F_patch (the k=0 endpoint) is a weaker corruption here and
+            # the faithfulness denominator F_clean - F_patch is a smaller interval than under
+            # the other two settings. eval_sva computes both endpoints through this same hook so
+            # each run is internally consistent, but do not read a "none" AUC against an
+            # "absorb"/"frozen" one.
+            new = sae_out + eb
+        elif self.sae_error == "frozen":
+            new = sae_out + eb * self._ke(me) + ec * (1.0 - self._ke(me))
         else:
-            new = b + sae.decode_delta((1.0 - mf) * fd) + (1.0 - me) * err_diff
-        # numerical guard: cap per-(B,S) norm at 8x source norm; fall back to source on NaN
-        nn = new.norm(dim=-1, keepdim=True); cap = 8.0 * c.norm(dim=-1, keepdim=True) + 1e-6
-        new = torch.where(torch.isfinite(nn) & (nn > cap), new * cap / nn, new)
-        new = torch.where(torch.isfinite(new), new, c)
+            # *** LEGACY "absorb", AND IT MAKES THE ERROR NODE A MASTER SWITCH. *** The clean
+            # side is (b - sae_out), measured against the BLENDED reconstruction rather than
+            # against decode(f_b) -- while the source side uses decode(f_c). That asymmetry
+            # means ke=1 collapses the whole line to
+            #     sae_out + (b - sae_out) = b
+            # FOR ANY km: keeping one error node restores its entire (layer, position) site to
+            # clean, overriding all d_sae latents there. Measured consequence on
+            # addition/mlp_sae_span: there are 32*5 = 160 error nodes in a 5,243,040-unit
+            # substrate, and MAttr's faithfulness reaches 0.981 by k=57 (1.1e-5 of the
+            # substrate) because it selects them first. "MAttr picks 90-100% error nodes" is
+            # therefore not an optimiser pathology -- it is the cheapest way to denoise under
+            # THIS intervention, and the intervention is what should change.
+            #
+            # Kept as the default only so existing results/sva_sweep SAE runs remain
+            # reproducible. Prefer "frozen" for anything new.
+            ke = self._ke(me)
+            new = sae_out + (b - sae_out) * ke + ec * (1.0 - ke)
         return out.scatter(1, bidx, new.to(out.dtype))
 
     def _das_interchange(self, out, cf, layer_idx):
@@ -344,6 +502,21 @@ class LlamaAttributionHooks:
     def register_hooks(self):
         self.remove_hooks()
 
+        # The input-embedding node is masked the SAME way for every substrate that supports it:
+        # a plain convex interpolation of the embedding toward the cached source embedding. It is
+        # registered BEFORE the substrate branches because the SAE/DAS branch returns early, and
+        # placing it after that return is what made --include-input a silent no-op there.
+        if self.include_input:
+            def make_embed_hook():
+                def hook(mod, input, output):
+                    if self.mask is None:
+                        return
+                    m = self.mask[0].view(1, 1, 1)
+                    return self._interpolate(output, m, self.cf_acts_embed)[0]
+                return hook
+            self._hooks.append(
+                self._get_embed_module().register_forward_hook(make_embed_hook()))
+
         if self.is_sae or self.is_das:
             interchange = self._sae_interchange if self.is_sae else self._das_interchange
             mlp_site = self.mask_type in ("mlp_sae_span", "das_mlp_span")
@@ -364,18 +537,8 @@ class LlamaAttributionHooks:
                 self._hooks.append(mod.register_forward_hook(make_post_hook(layer_idx, cf_dict)))
             return
 
-        # Input embedding hook (node mask with include_input)
-        if self.include_input:
-            def make_embed_hook():
-                def hook(mod, input, output):
-                    if self.mask is None:
-                        return
-                    m = self.mask[0].view(1, 1, 1)
-                    result = self._interpolate(output, m, self.cf_acts_embed)
-                    return result[0]
-                return hook
-            self._hooks.append(
-                self._get_embed_module().register_forward_hook(make_embed_hook()))
+        # (the input-embedding hook is registered at the top of this method, before the SAE/DAS
+        # branch returns -- registering it here as well would apply the mask TWICE for `node`)
 
         for layer_idx in range(self.num_layers):
             layer = self._get_layer(layer_idx)
@@ -391,7 +554,7 @@ class LlamaAttributionHooks:
                             off = self._node_offset
                             attn_count = self.num_layers * self.num_heads
                             m = self.mask[off + attn_count + li].view(1, 1, 1)
-                        elif self.mask_type == "mlp_tied":
+                        elif self.mask_type in ("mlp_tied", "mlp_tied+attn_head_tied"):
                             # per-(layer, neuron), tied/broadcast across all token positions
                             start = li * self.intermediate_size
                             end = start + self.intermediate_size
@@ -498,6 +661,19 @@ class LlamaAttributionHooks:
                             out = self._interpolate(x4, m, cf4)
                             return (out[0].reshape(B, seq, -1),)
 
+                        if self.mask_type == "mlp_tied+attn_head_tied":
+                            # per-(layer, head), tied/broadcast over batch AND positions: one
+                            # mask value per head, applied to the o_proj input reshaped to heads.
+                            nh, Hd = self.num_heads, self.head_dim
+                            B = x.shape[0]
+                            off = self.mlp_tied_total + li * nh
+                            m = self.mask[off:off + nh].view(1, 1, nh, 1)
+                            x4d = x.view(B, seq, nh, Hd)
+                            cf4d = (cf.view(cf.shape[0], cf.shape[1], nh, Hd)
+                                    if cf is not None else None)
+                            out = self._interpolate(x4d, m, cf4d)
+                            return (out[0].reshape(B, seq, -1),)
+
                         # attn_head or mlp+attn_head
                         if self.mask_type == "attn_head":
                             off = li * self.seq_len * self.num_heads
@@ -565,6 +741,17 @@ class LlamaAttributionHooks:
                 layer = flat_idx - attn_count
                 return {"component": "mlp", "layer": layer}
 
+        if self.mask_type in ("mlp_tied", "mlp_tied+attn_head_tied"):
+            # position-tied layout: [L*intermediate | L*num_heads] (attn half only for the
+            # combined type). No "pos" key -- these nodes span every token position.
+            if flat_idx < self.mlp_tied_total:
+                return {"component": "mlp",
+                        "layer": flat_idx // self.intermediate_size,
+                        "neuron": flat_idx % self.intermediate_size}
+            rem = flat_idx - self.mlp_tied_total
+            return {"component": "attn", "layer": rem // self.num_heads,
+                    "head": rem % self.num_heads}
+
         if self.mask_type == "mlp" or (
                 self.mask_type == "mlp+attn_head"
                 and flat_idx < self.mlp_total):
@@ -599,6 +786,16 @@ class LlamaAttributionHooks:
             attn_count = self.num_layers * self.num_heads
             attn = scores_flat[:attn_count].view(self.num_layers, self.num_heads)
             mlp = scores_flat[attn_count:].view(self.num_layers, 1)
+            return torch.cat([attn, mlp], dim=1)
+
+        if self.mask_type in ("mlp_tied", "mlp_tied+attn_head_tied"):
+            # [num_layers, num_heads + 1]: per-head scores then the per-layer max over neurons
+            # (same shape/order as the node heatmap, so the same plotting code reads both).
+            mlp = scores_flat[:self.mlp_tied_total].view(
+                self.num_layers, self.intermediate_size).max(dim=-1, keepdim=True).values
+            if self.mask_type == "mlp_tied":
+                return mlp
+            attn = scores_flat[self.mlp_tied_total:].view(self.num_layers, self.num_heads)
             return torch.cat([attn, mlp], dim=1)
 
         heatmap = torch.full((self.num_layers, self.seq_len), float("-inf"),
@@ -919,24 +1116,15 @@ class LlamaSpanAttributionHooks:
                 wdt = sae.W_enc.dtype                      # SAE compute dtype (float32)
                 b = base_act[0, bp].to(wdt); c = cf_act[0, sp].to(wdt)
                 fb, fc = sae.encode(b), sae.encode(c)
-                # The SAE reconstruction ERROR is a SCORED node (m_err), like every feature:
-                # err_diff = err_cf - err_base = (c-b) - decode(f_cf - f_base). With both the
-                # features and the error node selected, a full swap reaches the *clean* cf.
-                err_diff = (c - b) - sae.decode_delta(fc - fb)
-                if self.sufficient:    # noising: mask=1 (top-k) -> cf, rest base
-                    new = b + sae.decode_delta(m * (fc - fb)) + m_err * err_diff
-                else:                  # denoising/sufficient: mask=1 -> base, rest cf
-                    new = b + sae.decode_delta((1.0 - m) * (fc - fb)) + (1.0 - m_err) * err_diff
-                # Numerical guard: a near-full feature swap injects SAE reconstruction
-                # error that can compound/overflow across all 32 layers. The intended
-                # result is bounded by a real activation (base/cf), so cap the norm at a
-                # generous 8x max(|base|,|cf|) -- only triggers on true runaway.
-                cap = 8.0 * c.norm()        # c = clean cached cf act, always a sane anchor
-                nn_ = new.norm()
-                if torch.isfinite(nn_) and nn_ > cap:
-                    new = new * (cap / nn_)
-                elif not torch.isfinite(nn_):
-                    new = c  # degenerate: fall back to the clean cf act rather than NaN
+                # The SAE reconstruction ERROR is a SCORED node (m_err), like every feature.
+                # CONVEX-BLEND form, identical to _sae_interchange above -- see the long note
+                # there for why the base-plus-delta version was replaced. Keep the two in step:
+                # a different update in one and not the other makes the two hooker paths run
+                # different experiments.
+                km = (1.0 - m) if self.sufficient else m           # weight on the CLEAN latents
+                ke = (1.0 - m_err) if self.sufficient else m_err   # weight on the CLEAN error
+                sae_out = sae.decode(fb * km + fc * (1.0 - km))
+                new = sae_out + (b - sae_out) * ke + (c - sae.decode(fc)) * (1.0 - ke)
                 out[0, bp] = new.to(base_act.dtype)
         return out
 

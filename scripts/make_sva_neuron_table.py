@@ -403,7 +403,7 @@ _raw = json.load(open(CACHE)) if CACHE.exists() else {}
 _cache = _raw.get("data", {}) if _raw.get("v") == CACHE_V else {}
 
 # pdflatex-renderability. The paper builds with pdfTeX and loads neither inputenc nor fontenc
-# (checked in iclr2026_conference.log), so a Cyrillic or CJK codepoint in a description is not
+# (checked in iclr2027_conference.log), so a Cyrillic or CJK codepoint in a description is not
 # a cosmetic issue -- it is "Unicode character ... not set up for use with LaTeX" and a failed
 # Overleaf build. Many descriptions quote non-Latin activating tokens, so this is not rare.
 _PUNCT = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "--",
@@ -623,7 +623,7 @@ def main():
     #
     # longtable, not tabular, in BOTH modes: description mode is four pages, and while compact
     # mode fits on one, a tabular that later stops fitting overflows off the bottom of the page
-    # silently rather than breaking. That also means iclr2026_conference.tex must keep \input-ing
+    # silently rather than breaking. That also means iclr2027_conference.tex must keep \input-ing
     # this file at top level -- a longtable inside a table float is an error.
     # The method header is repeated on every continuation page (\endhead) since a reader landing
     # mid-table otherwise has no way to tell which column is which.

@@ -26,7 +26,7 @@ NODE = [
     ("$+$ unif $k$", "o", ("final_node",)),
     ("$+$ hard", "o", ("mib_node_hard_topk_log",)),
     ("$+$ unif $k$, $+$ hard", "o", ("mib_node_hard_topk",)),
-    ("$+$ unif $k$, $+$ hard, $+$ Gumbel", "o", ("mib_node_hard_topk_gumbel",)),
+    ("$+$ unif $k$, $+$ hard, $+$ Gum.", "o", ("mib_node_hard_topk_gumbel",)),
     ("$-c_k$", "o", ("mib_node_detached_tau_log",)),
     ("$+$ unif $k$, $-c_k$", "o", ("mib_node_detached_tau",)),
     ("$+$ hard bwd", "o", ("mib_node_bernoulli_reinforce_log",)),

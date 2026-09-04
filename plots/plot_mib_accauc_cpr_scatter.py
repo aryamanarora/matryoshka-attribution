@@ -110,21 +110,33 @@ BASE_CPR = {
 # Colour here means GROUP, not method -- ~50 points cannot carry ~50 hues, and the direct labels
 # already give identity. Shape still splits gradient vs mask learning, as in the compact figure.
 G_MLOG, G_MUNI = "MAttr (log $k$)", "MAttr (unif. $k$)"
+# SGD gets its OWN hue rather than sharing MAttr's blue. Until 2026-08-29 both optimizers landed
+# in G_MLOG and were told apart only by an "(Adam)" suffix on the point label -- which made this
+# the one figure in the paper where MAttr+SGD is blue, while plot_optimizer_lr.py and
+# plot_adamsgd_mlp_diag.py both draw it in palette's black. palette gives "MAttr (SGD)" its own
+# measured hex precisely so an optimizer contrast can be carried by colour; not using it here
+# meant the same arm changed colour between two figures a reader compares side by side.
+# Uniform-k keeps ONE hue (G_MUNI) across both optimizers: that green is the k-SCHEDULE
+# encoding shared with plot_mib_test_avg.FAMILY, and splitting it would break that instead.
+G_MSGD = "MAttr (SGD, log $k$)"
 G_GRAD, G_NPKL, G_NPLD = "Gradient baseline", "Node Pruning (KL)", "Node Pruning (logit-diff)"
 G_DBM = "DBM"
-FULL_ORDER = [G_MLOG, G_MUNI, G_GRAD, G_NPKL, G_NPLD, G_DBM]
+FULL_ORDER = [G_MLOG, G_MSGD, G_MUNI, G_GRAD, G_NPKL, G_NPLD, G_DBM]
 FULL_COLORS = {
-    G_MLOG: P.METHOD["MAttr"], G_MUNI: P.METHOD["+hard"], G_GRAD: P.METHOD["IG"],
-    G_NPLD: P.METHOD["Node Pruning"], G_NPKL: "#9d95d1",   # tint of the same indigo
+    G_MLOG: P.METHOD["MAttr"], G_MSGD: P.METHOD["MAttr (SGD)"],
+    G_MUNI: P.METHOD["+hard"], G_GRAD: P.METHOD["IG"],
+    G_NPLD: P.METHOD["Node Pruning"], G_NPKL: P.TINT["Node Pruning (KL)"],
     # Wong reddish purple. It was a warm #d98d3a, which is a near-twin of the gradient
     # baselines' Wong orange (#e69f00) -- survivable at 50 labelled points, not in the
     # 13-point main-text cut, where DBM sits three points from RelP+QK in the same hue and
     # only the marker SHAPE says they are different families. Purple keeps it in the
     # mask-learning family with Node Pruning's indigo while staying well clear of it in
     # lightness (L* ~60 vs ~24).
-    G_DBM: "#cc79a7",
+    # Was a local "#cc79a7" duplicating palette's DBM entry byte for byte. Imported now, so a
+    # recolour of DBM reaches this figure like every other one.
+    G_DBM: P.METHOD["DBM"],
 }
-FULL_MASK = {G_MLOG, G_MUNI, G_NPKL, G_NPLD, G_DBM}
+FULL_MASK = {G_MLOG, G_MSGD, G_MUNI, G_NPKL, G_NPLD, G_DBM}
 
 # === IG integration-step ladder ===
 # One method at three budgets, so it gets a dashed path like every other one-knob sweep here --
@@ -176,7 +188,7 @@ LR_SERIES = [
     # 1.0 is excluded here for the usual reason -- it is SGD's own best LR, so it comes in from
     # M.OUR_METHODS as the plotted bare "MAttr" point, and LR_ANCHOR stitches it back onto this
     # path.
-    (G_MLOG, "MAttr", [("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
+    (G_MSGD, "MAttr", [("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
                        ("0.05", "softlog_sgd_lr_0.05"),
                        ("0.1", "softlog_sgd_lr_0.1"), ("0.3", "softlog_sgd_lr_0.3"),
                        ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0")]),
@@ -262,7 +274,13 @@ EPRUN_LR_ANCHOR = {"eprun_eval_s0.5_ld": ("NP s=0.5", 0.8),
 # add an EDGE_LR_SERIES and switch this to the two-panel layout main_both() already implements.
 #
 # Colour follows palette.py's rule -- a colour is a METHOD, a hyperparameter variant is a
-# LINETYPE -- so all four MAttr-family paths take MAttr's blue and separate by dash pattern.
+# LINETYPE -- with ONE exception, applied UNCONDITIONALLY across the paper: SGD is black and
+# Adam is blue, everywhere, whether or not both are on the same panel. Until 2026-08-29 every
+# MAttr-family path here was blue, so MAttr+SGD was blue in this figure and black in
+# plot_optimizer_lr.py and plot_adamsgd_mlp_diag.py. A briefly-shipped middle version made the
+# hue conditional on whether a panel showed one optimizer or two; that is worse, because the
+# same arm still changes colour between figures. The k-schedule remains a linetype (solid log /
+# dotted unif), so the two axes are still separable.
 # That is why draw_points() takes `colors`/`order`/`path_style`: the group key here names a
 # series, not a family, so it can no longer double as the hue the way FULL_COLORS does.
 LR_SERIES_STYLE = {}          # filled below, keyed "lr:<short>" to match build_lr_rows
@@ -286,11 +304,11 @@ LR_ONLY_SERIES = [
     ("MAttr (log $k$, Adam)", "MAttr", P.METHOD["MAttr"], "solid",
      [("0.005", "topklog_lr_0.005"), ("0.05", "topklog_lr_0.05"),
       ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3")]),
-    ("MAttr (log $k$, SGD)", "M-SGD", P.METHOD["MAttr"], "dashed",
+    ("MAttr (log $k$, SGD)", "M-SGD", P.METHOD["MAttr (SGD)"], "dashed",
      [("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
       ("0.3", "softlog_sgd_lr_0.3"), ("1.0", "softlog_sgd_lr_1.0"),
       ("3.0", "softlog_sgd_lr_3.0"), ("10.0", "softlog_sgd_lr_10.0")]),
-    ("MAttr (unif. $k$, SGD)", "M-SGDu", P.METHOD["MAttr"], "dotted",
+    ("MAttr (unif. $k$, SGD)", "M-SGDu", P.METHOD["MAttr (SGD)"], "dotted",
      [("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
       ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
       ("3.0", "softuni_sgd_lr_3.0"), ("10.0", "softuni_sgd_lr_10.0")]),
@@ -454,7 +472,7 @@ def label_boxes(ax, labels, fig, pt=LAB_PT):
 def repel(x, y, w, lab_h, xr, yr, n=900, anchor_dx=DX, mark_r=MARK_R):
     """Label de-overlap by rectangle separation in normalized [0,1]^2 axes space (adjustText is
     not installed here, and a Gaussian point-repulsion does not converge on this figure -- the
-    long labels like "+id-STE, Gumbel sel." are ~10x wider than tall, so what matters is BOX
+    long labels like "+ unif k, + id-STE" are ~10x wider than tall, so what matters is BOX
     overlap, not centre distance). Each label is a box anchored right of its marker; overlapping
     boxes are pushed apart along whichever axis needs the smaller move, labels are also pushed
     off markers, and a weak spring pulls each back to its anchor. Leader lines make any residual
@@ -626,8 +644,8 @@ def node_rows(test_only=False):
         # (0.504, 1.886), i.e. the Adam point would be indistinguishable from the SGD one.
         if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
             label += " (Adam)"
-        rows.append(dict(acc=acc, cpr=cpr, grp=G_MLOG if g == "ours" else G_MUNI,
-                         label=label,
+        grp = G_MUNI if g != "ours" else (G_MLOG if M.opt_of(d) == "adam" else G_MSGD)
+        rows.append(dict(acc=acc, cpr=cpr, grp=grp, label=label,
                          paths=[(f"lr:{base}", lr)] if base else []))
     # all 12 budgets; the two objectives are separate dashed paths, each ordered sparse-ward
     for label, dirn in ([M.EPRUN_BEST_SPARSITY] if test_only else M.EPRUN_SPARSITIES):
@@ -714,7 +732,9 @@ def edge_rows():
         # make_mib_table.emit_ours() for the full argument.
         if M.opt_of(d) == "adam" and name == "\\ourmethod{}":
             label += " (Adam)"
-        cand.append((label, d, G_MLOG if g == "ours" else G_MUNI))
+        cand.append((label, d,
+                     G_MUNI if g != "ours"
+                     else (G_MLOG if M.opt_of(d) == "adam" else G_MSGD)))
 
     data = {d: cells(d) for _, d, _ in cand}
 
@@ -1085,7 +1105,7 @@ COMPACT = {
     # panel. Both Adam points are still in --full.
     #
     # "+hard" went with them: it is a MAttr ablation with no bar in the test-table figure.
-    (G_MLOG, "MAttr"): None,
+    (G_MSGD, "MAttr"): None,
     # Uniform k, SGD -- the bar chart's "+ unif k". An earlier version of this comment said
     # log-k ONLY, on the grounds that a lone uniform-k point would sit on the frontier with
     # nothing to read it against. That no longer applies: the pairing it wanted is now supplied

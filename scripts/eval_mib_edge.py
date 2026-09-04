@@ -77,12 +77,16 @@ def main():
                              "cause (=necessary, noising): corrupt the top-k, find what breaks "
                              "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_topk_gumbel", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
                              "hard_topk: hard 0/1 + straight-through. "
                              "hard_concrete: Bernoulli(sigmoid) + L0. "
                              "bernoulli_reinforce: Bernoulli fwd + REINFORCE bwd.")
     parser.add_argument("--l0-lambda", type=float, default=1e-3)
+    parser.add_argument("--cf-cache-gb", type=float, default=4.0,
+                        help="device-memory budget for the per-example corrupted-activation "
+                             "cache (skips the no-grad corrupted forward on resampled "
+                             "examples); 0 disables")
     parser.add_argument("--eval-examples", type=int, default=None)
     parser.add_argument("--output", type=str, default="results/mib_edge")
     wandb_util.add_args(parser)   # --no-wandb / --wandb-project / --wandb-entity; ON by default
@@ -174,36 +178,68 @@ def main():
     logger.info("Training for %d steps (mode=%s, k_schedule=%s, live activations)...",
                 args.steps, args.mode, args.k_schedule)
 
+    # Pre-tokenize the train set once (the old loss_fn ran tokenize_plus twice per sampled
+    # example per step over a fixed dataset). The randint draw + length-mismatch rejection
+    # below are unchanged, so a given seed samples the same example sequence as before.
+    t_pre = time.time()
+    pretok = []           # (clean_tokens, attention_mask, n_pos, corrupted_tokens, labels)
+    for i in range(n_examples):
+        clean, corrupted, labels = dataset[i]
+        ct, am, _, npos = tokenize_plus(model, [clean])
+        st, _, _, _ = tokenize_plus(model, [corrupted])
+        pretok.append((ct, am, npos, st, labels))
+    logger.info("Pre-tokenized %d examples in %.1fs", n_examples, time.time() - t_pre)
+
+    # Per-example corrupted-activation cache: the no-grad corrupted forward is deterministic
+    # per example, so re-running it on every resample is pure recompute. Device-resident,
+    # capped; on a hit the step skips the corrupted forward entirely.
+    corrupted_cache, cc_bytes = {}, 0
+    cc_max_bytes = int(args.cf_cache_gb * 1e9)
+    cc_stats = {"seen": 0, "fwd": 0, "full_logged": False}
+
     # The optimization (k-sampling, mask variants incl. REINFORCE/L0) is in learn_scores;
     # this closure is the EDGE environment: sample one pair, expand the flat edge mask to the
     # [n_forward, n_backward] adjacency, patch destinations with the live activation diffs,
     # and return the logit-diff loss. Returns None on a length-mismatch (skips the step).
     def loss_fn(mask_flat):
+        nonlocal cc_bytes
         idx = random.randint(0, n_examples - 1)
-        clean, corrupted, labels = dataset[idx]
+        clean_tokens, attention_mask, n_pos, corrupted_tokens, labels = pretok[idx]
         correct_idx, incorrect_idx = labels[0], labels[1]
-        clean_tokens, attention_mask, input_lengths, n_pos = tokenize_plus(model, [clean])
-        corrupted_tokens, _, _, _ = tokenize_plus(model, [corrupted])
         if clean_tokens.shape[1] != corrupted_tokens.shape[1]:
             return None
 
-        # Step 1: cache corrupted source outputs (no grad)
-        corrupted_acts = {}
+        # Step 1: corrupted source outputs (no grad) -- from the per-example cache on a hit
+        cc_stats["seen"] += 1
+        corrupted_acts = corrupted_cache.get(idx)
+        if corrupted_acts is None:
+            cc_stats["fwd"] += 1
+            corrupted_acts = {}
 
-        def make_corrupted_hook(name, fwd_idx, is_attn):
-            def hook(act, hook):
-                if is_attn:
-                    for h in range(n_heads):
-                        corrupted_acts[fwd_idx + h] = act[:, :, h].detach()
-                else:
-                    corrupted_acts[fwd_idx] = act.detach()
-            return hook
+            def make_corrupted_hook(name, fwd_idx, is_attn):
+                def hook(act, hook):
+                    if is_attn:
+                        for h in range(n_heads):
+                            corrupted_acts[fwd_idx + h] = act[:, :, h].detach()
+                    else:
+                        corrupted_acts[fwd_idx] = act.detach()
+                return hook
 
-        corrupted_fwd_hooks = [(hname, make_corrupted_hook(nname, fidx, is_a))
-                               for hname, nname, fidx, is_a in source_hooks]
-        with torch.no_grad():
-            model.run_with_hooks(corrupted_tokens, fwd_hooks=corrupted_fwd_hooks,
-                                 attention_mask=attention_mask)
+            corrupted_fwd_hooks = [(hname, make_corrupted_hook(nname, fidx, is_a))
+                                   for hname, nname, fidx, is_a in source_hooks]
+            with torch.no_grad():
+                model.run_with_hooks(corrupted_tokens, fwd_hooks=corrupted_fwd_hooks,
+                                     attention_mask=attention_mask)
+            # per-head entries are views into one tensor per hook, so summing their numels
+            # counts each element once
+            nbytes = sum(v.numel() * v.element_size() for v in corrupted_acts.values())
+            if cc_bytes + nbytes <= cc_max_bytes:
+                corrupted_cache[idx] = corrupted_acts
+                cc_bytes += nbytes
+            elif not cc_stats["full_logged"]:
+                cc_stats["full_logged"] = True
+                logger.info("corrupted-acts cache full at %.2f GB (%d examples); further "
+                            "examples recompute each step", cc_bytes / 1e9, len(corrupted_cache))
 
         # Step 2: differentiable expansion of mask_flat to full [n_forward, n_backward]
         expanded = mask_flat[cumsum]  # [n_full]
@@ -331,7 +367,9 @@ def main():
     scores = result.scores
     loss_log = result.loss_log
     train_time = result.train_time_s
-    logger.info("Training complete in %.1fs", train_time)
+    logger.info("Training complete in %.1fs (corrupted-acts cache: %d/%d forwards paid, "
+                "%d cached, %.2f GB)", train_time, cc_stats["fwd"], cc_stats["seen"],
+                len(corrupted_cache), cc_bytes / 1e9)
 
     # === MIB Evaluation ===
     logger.info("Running MIB evaluation (edge level)...")

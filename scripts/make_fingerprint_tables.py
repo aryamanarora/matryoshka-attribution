@@ -105,7 +105,15 @@ def parse_method(fname, d):
         # Optimizer belongs in the key -- see the matching comment in
         # plot_accauc_vs_faithauc.parse_method (this function mirrors it). Without the split the
         # 2026-08-21 `topk:sgd` arm lands in the MAttr rows of every fingerprint table.
-        return f"{'softsgd' if '_topk_sgd' in tag else 'stopk'}-{ks}"
+        #
+        # Adam's eps belongs there for the same reason, and here the consequence is one step
+        # worse than a mislabelled series: SECTIONS has no row for an eps key, so these runs
+        # DROP OUT of the fingerprint tables, which is correct. Pooled instead, the 2026-08-28
+        # eps wave would have been averaged into the MAttr rows of every table in the file --
+        # silently, since `load` keys on (method, loss, task) with no tag in it.
+        opt = "softsgd" if "_topk_sgd" in tag else "stopk"
+        eps = re.search(r"_eps([0-9.]+e[+-]?[0-9]+)", tag)
+        return f"{opt}-{ks}" + (f"-eps{eps.group(1)}" if eps else "")
     # eprun_s090[_ce|_acc] -> one key per budget. This branch must stay ABOVE the catch-all:
     # the tag matches none of the tests above, so without it every Node Pruning run is
     # silently averaged into the IG rows.

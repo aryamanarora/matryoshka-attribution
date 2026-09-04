@@ -19,7 +19,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import math
 
-from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES
+from learning_to_attribute import (sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES,
+                                   CFActivationCache)
 from learning_to_attribute import wandb_util
 from learning_to_attribute.losses import attribution_loss
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
@@ -87,6 +88,11 @@ def main():
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--adam-eps", type=float, default=1e-8,
+                        help="Adam epsilon (ignored for --optimizer sgd). The default is the "
+                             "sign(g) regime at large substrates; 1e-2 restores magnitude "
+                             "weighting (see scripts/submit_adam_eps_followup.sh). Encode a "
+                             "non-default value in --output -- it is not in any filename.")
     parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"],
                         help="Mask-score optimizer (sgd accumulates raw g*delta; adam normalizes).")
     parser.add_argument("--n_iters", type=int, default=30)
@@ -108,11 +114,10 @@ def main():
                              "cause (=necessary, noising): top-k get CF; find what breaks "
                              "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_topk_gumbel", "hard_topk_reinforce", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
                              "topk_detached: soft forward, detached tau (no coupling gradient). "
                              "hard_topk: random k + hard 0/1 mask with straight-through. "
-                             "hard_topk_reinforce: fully binary forward+backward (REINFORCE). "
                              "bernoulli_reinforce: Bernoulli(sigmoid) fwd, REINFORCE bwd. "
                              "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
     parser.add_argument("--l0-lambda", type=float, default=1e-3,
@@ -123,11 +128,13 @@ def main():
                         help="Max examples for MIB eval (default: all)")
     parser.add_argument("--train-batch-size", type=int, default=1,
                         help="Gradient accumulation batch size for training")
+    parser.add_argument("--cf-cache-gb", type=float, default=4.0,
+                        help="Device-memory budget for the per-example CF-activation cache "
+                             "(skips re-running the CF forward for resampled examples); "
+                             "0 disables it")
     parser.add_argument("--k-avg", type=int, default=1,
                         help="Average the gradient over this many independent k-draws per step "
                              "(reduces k-schedule variance; batch size only reduces example noise)")
-    parser.add_argument("--natural-k-frac", type=float, default=0.0,
-                        help="Fraction of steps using natural k (all scores >= 0)")
     parser.add_argument("--output", type=str, default="results/mib")
     parser.add_argument("--skip-eval", action="store_true",
                         help="Skip the MIB eval; just train and save the train log (for convergence diagnostics)")
@@ -148,6 +155,11 @@ def main():
                 if action.dest == dest:
                     action.default = value
                     break
+            else:
+                # A key that matches no flag would otherwise be SILENTLY ignored -- and a
+                # stale config (e.g. the retired natural-k-frac ones) would quietly run a
+                # different experiment into its output dir. Fail loudly instead.
+                parser.error(f"config {config_path}: unknown key {key!r}")
 
     args = parser.parse_args()
     args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
@@ -198,7 +210,11 @@ def main():
     hf_model.eval()
     for p in hf_model.parameters():
         p.requires_grad_(False)
-    hf_model.gradient_checkpointing_enable()
+    # NOTE an unconditional hf_model.gradient_checkpointing_enable() sat here until
+    # 2026-08-26. It was a silent NO-OP: transformers gates checkpointing on
+    # `self.training`, and this model is in eval(). Every stored result therefore already
+    # trained without checkpointing (which also proves the activation memory fits). If it
+    # is ever really needed, enabling requires model.train() plus forcing dropout off.
     logger.info("Model loaded in %.1fs", time.time() - t0)
 
     # Load MIB dataset for training examples
@@ -229,39 +245,64 @@ def main():
     n_examples = len(dataset)
     B = args.train_batch_size
 
+    # Pre-tokenize the train set ONCE. The old loss_fn made 3 tokenizer calls per accepted
+    # example per step (2 for the length check, 1 for the padded batch) over a dataset that
+    # never changes -- on small models that was most of the step's wall clock. The sampling
+    # retry loop below keeps the exact random.randint sequence (same rejection predicate on
+    # precomputed lengths), so batch composition is unchanged for a given seed.
+    t0 = time.time()
+    pretok = []   # (clean_ids [L], src_ids [L'], correct_id, incorrect_id, corrupted_str)
+    for i in range(n_examples):
+        clean, corrupted, labels = dataset[i]
+        pretok.append((tokenizer(clean, return_tensors="pt").input_ids[0],
+                       tokenizer(corrupted, return_tensors="pt").input_ids[0],
+                       labels[0], labels[1], corrupted))
+    logger.info("Pre-tokenized %d examples in %.1fs", n_examples, time.time() - t0)
+    pad_id = tokenizer.pad_token_id
+
+    def collate(seqs):
+        """Right-pad 1-D id tensors into [B, P] ids + attention mask (tokenizer parity)."""
+        lens = torch.tensor([s.shape[0] for s in seqs])
+        P = int(lens.max())
+        ids = torch.full((len(seqs), P), pad_id, dtype=torch.long)
+        for b, s in enumerate(seqs):
+            ids[b, : s.shape[0]] = s
+        attn = (torch.arange(P)[None] < lens[:, None]).long()
+        return ids.to(device), attn.to(device), lens
+
+    # CF activations are deterministic per example; cache them instead of re-running the CF
+    # forward for every resample (the cache runs the forward only on a batch's uncached
+    # examples). Keyed by the corrupted prompt string. --cf-cache-gb 0 disables.
+    cf_cache = CFActivationCache(hooker, max_gb=args.cf_cache_gb, logger=logger)
+
     def loss_fn(mask):
         # Sample B same-length pairs (Python RNG; does not touch the torch RNG stream, so the
         # k/mask draws stay bit-identical to the pre-refactor loop).
-        cleans, corrupteds, correct_ids, incorrect_ids = [], [], [], []
+        picks = []
         attempts = 0
-        while len(cleans) < B and attempts < B * 3:
+        while len(picks) < B and attempts < B * 3:
             attempts += 1
             idx = random.randint(0, n_examples - 1)
-            clean, corrupted, labels = dataset[idx]
-            c_ids = tokenizer(clean, return_tensors="pt").input_ids
-            s_ids = tokenizer(corrupted, return_tensors="pt").input_ids
-            if c_ids.shape[1] != s_ids.shape[1]:
+            if pretok[idx][0].shape[0] != pretok[idx][1].shape[0]:
                 continue
-            cleans.append(clean)
-            corrupteds.append(corrupted)
-            correct_ids.append(labels[0])
-            incorrect_ids.append(labels[1])
-        if not cleans:
+            picks.append(pretok[idx])
+        if not picks:
             return None                       # skip step (no same-length pairs sampled)
-        actual_B = len(cleans)
+        actual_B = len(picks)
 
-        base_tok = tokenizer(cleans, return_tensors="pt", padding=True).to(device)
-        src_tok = tokenizer(corrupteds, return_tensors="pt", padding=True).to(device)
-        base_ids = base_tok.input_ids
-        base_attn = base_tok.attention_mask
-        last_pos = base_attn.sum(dim=1) - 1
-        hooker.cache_cf_activations(src_tok.input_ids)
+        base_ids, base_attn, lens = collate([p[0] for p in picks])
+        src_ids, _, src_lens = collate([p[1] for p in picks])
+        last_pos = (lens - 1).to(device)
+        cf_cache.prepare([p[4] for p in picks], src_ids, src_lens.tolist())
 
         hooker.mask = mask
-        logits = hf_model(base_ids, attention_mask=base_attn).logits.float()
-        last_logits = logits[torch.arange(actual_B, device=device), last_pos]
-        correct_t = torch.tensor(correct_ids, device=device)
-        incorrect_t = torch.tensor(incorrect_ids, device=device)
+        # NOTE logits stay in model dtype until after the last-token gather: .float() on the
+        # full [B, P, vocab] tensor materialized ~50-160 MB fp32 in the autograd graph for a
+        # gradient that is zero everywhere but last_pos. Cast-after-slice is grad-identical.
+        logits = hf_model(base_ids, attention_mask=base_attn).logits
+        last_logits = logits[torch.arange(actual_B, device=device), last_pos].float()
+        correct_t = torch.tensor([p[2] for p in picks], device=device)
+        incorrect_t = torch.tensor([p[3] for p in picks], device=device)
         # shared loss core: logit_diff = correct - incorrect; necessary/noising maximizes the
         # break (returns diff.mean()), sufficient/denoising minimizes -diff. Bit-identical to the
         # previous inline form.
@@ -276,16 +317,14 @@ def main():
     result = learn_scores(
         total, loss_fn, steps=args.steps, variant=args.masking,
         k_schedule=args.k_schedule, k_avg=args.k_avg, T=args.T, n_iters=args.n_iters, lr=args.lr,
-        optimizer=args.optimizer, l0_lambda=args.l0_lambda,
-        natural_k_frac=args.natural_k_frac, use_bias=True, device=device,
-        on_step=on_step, logger=logger, log_every=50,
+        optimizer=args.optimizer, l0_lambda=args.l0_lambda, adam_eps=args.adam_eps,
+        device=device, on_step=on_step, logger=logger, log_every=50,
     )
     scores = result.scores
-    bias = result.bias
     loss_log = result.loss_log
     train_log = result.train_log
     train_time = result.train_time_s
-    logger.info("Training complete in %.1fs", train_time)
+    logger.info("Training complete in %.1fs (%s)", train_time, cf_cache.stats())
 
     # Save per-step train log (step, k, k_frac, loss, bias_step) for convergence plots
     output_dir = Path(args.output)
@@ -302,14 +341,6 @@ def main():
         hooker.remove_hooks()
         return
 
-    if args.natural_k_frac > 0:
-        n_pos = int((scores.detach() + bias.detach() >= 0).sum().item())
-        logger.info("Learned bias=%.4f -> %d/%d nodes have (score+bias)>=0",
-                    bias.item(), n_pos, total)
-        # Rank-preserving calibration: shift scores so that >=0 means "in circuit".
-        # Does NOT change CPR (global shift preserves the ranking / top-x%).
-        with torch.no_grad():
-            scores.data.add_(bias.data)
     hooker.remove_hooks()
 
     # Delete HF model to free memory. loss_fn closes over hf_model, so drop it too or the

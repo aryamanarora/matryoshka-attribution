@@ -103,16 +103,23 @@ OUTBASE=${OUTBASE:-results/sva_mlp_lr}
 STEPS=${STEPS:-2000}
 PROBE_EVERY=${PROBE_EVERY:-200}
 PROBE_EX=${PROBE_EX:-20}
+# Adam eps. Empty = torch's 1e-8 default, which at 2.29M mask logits makes the update ~sign(g)*lr
+# and turns the learned score into a signed COUNT of steps -- so EPS=1e-2 is a different
+# optimiser, not a numerical tweak. run_tag() encodes it (`..._adam_eps1e-2_bs1`), so the two
+# arms do not collide on disk; the JOB NAME has to carry it too or the second wave is skipped as
+# already-queued.
+EPS=${EPS:-}
+EPSARG=(); ETAG=""; [[ -n "$EPS" ]] && { EPSARG=(--adam-eps "$EPS"); ETAG="-eps${EPS}"; }
 
 n=0
 for lr in $LRS; do
   out="$OUTBASE/${VARIANT}_${OPT}/lr_$lr"
-  name="svalr-${TASK}-${NODES}-${VARIANT}-${OPT}-lr${lr}"
+  name="svalr-${TASK}-${NODES}-${VARIANT}-${OPT}${ETAG}-lr${lr}"
   args=(--model "$MODEL" --task "$TASK" --dataset "$DATASET" --nodes "$NODES"
         --method mattr --variant "$VARIANT" --optimizer "$OPT" --k-schedule log
         --loss logit_diff --mode sufficient --train-batch-size 1 --steps "$STEPS"
         --train-eval-every "$PROBE_EVERY" --train-eval-examples "$PROBE_EX"
-        --eval-examples 100 --lr "$lr" --output "$out")
+        --eval-examples 100 --lr "$lr" "${EPSARG[@]}" --output "$out")
   if [ "${DRY:-0}" = "1" ]; then echo "DRY $name -> $out"
   else mkdir -p "$out"; sbatch -J "$name" sva_sweep.sbatch "${args[@]}" >/dev/null && echo "submitted $name"
   fi
