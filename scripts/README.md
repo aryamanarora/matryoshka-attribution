@@ -14,7 +14,7 @@ results/log paths inside the scripts are root-relative and unchanged.
 | `causalgym/` | Span-aligned interchange-intervention attribution on CausalGym / NPI / arithmetic-wild: `attribute*.py` (DAS, neuron, SAE variables), multitask DAS, Transluce / logit-lens feature lookups, arithmetic tables. `configs/` holds the `attribute.py` YAMLs. |
 | `global_kl/` | Global-circuit (KL-to-clean on FineWeb-Edu) objective: `eval_global_kl.py` + collectors, `global_kl.sbatch`. |
 | `toy/` | Toy linear / bilinear / quadratic / variance models and their loss-AUC comparisons. (Companion `plots/toy_*.py` stay in `plots/`.) |
-| `vit/` | ViT-B/16 teaser: attribution, faithfulness, sparsity ladder, optimizer grid; runs in `.venv-vit`. |
+| `vit/` | ViT-B/16 teaser: attribution, faithfulness, sparsity ladder, optimizer grid; deps are the `vit` uv group, run via `UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python ...`. |
 | `vw/` | Interference-weights tiny-LM replication (`vw_*.py`, staged `launch/vw_stage*.sh`, `vw.sbatch`). |
 | `impossibility/` | Bilodeau et al. impossibility-benchmark replication. |
 | `tools/` | Repo utilities: `lock_paper.sh`, `monitor_jobs.sh`, `test_attnlrp_hf.py`. |

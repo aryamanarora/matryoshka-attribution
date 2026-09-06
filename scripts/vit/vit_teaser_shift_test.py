@@ -21,7 +21,7 @@ ridgeback), not the junk classes an adversarial pattern produces, and at a match
 score-selected mask beats a dilated one by 2x (14.2 vs 7.5 at 4.5%), i.e. the ranking does
 real work. Kept as a probe, not as a verdict.
 
-    .venv-vit/bin/python scripts/vit/vit_teaser_shift_test.py --results results/vit_teaser_pixelate
+    UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_shift_test.py --results results/vit_teaser_pixelate
 """
 import argparse
 import json

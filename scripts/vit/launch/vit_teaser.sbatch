@@ -9,9 +9,9 @@
 # Thin runner for the AttnLRP-Fig-1-style ViT teaser. Everything after the script name is
 # forwarded to scripts/vit/vit_teaser_attr.py.
 #   sbatch -J vit_ld scripts/vit/launch/vit_teaser.sbatch --target logit_diff --out results/vit_teaser_logitdiff
-# NOTE: uses .venv-vit (torchvision + lxt + zennit), NOT the project .venv -- lxt pins
-# transformers<5, which would break the rest of the repo.
+# NOTE: runs in the `vit` uv dependency group (torchvision + lxt + zennit, transformers<5),
+# synced into .venv-vit from uv.lock -- it conflicts with the default `lm` group, see pyproject.toml.
 set -euo pipefail
 cd ~/learning-to-attribute
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-.venv-vit/bin/python scripts/vit/vit_teaser_attr.py "$@"
+UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_attr.py "$@"

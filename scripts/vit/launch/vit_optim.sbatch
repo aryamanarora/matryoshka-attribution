@@ -9,8 +9,8 @@
 # Thin runner for the optimizer / LR / eps grid on the ViT teaser. Everything after the script
 # name is forwarded to scripts/vit/vit_teaser_optim.py.
 #   for s in 42 43 44; do sbatch -J vito$s scripts/vit/launch/vit_optim.sbatch --seed $s --out results/vit_optim/seed$s; done
-# Same venv caveat as scripts/vit/launch/vit_teaser.sbatch: .venv-vit (torchvision), NOT the project .venv.
+# Same env caveat as scripts/vit/launch/vit_teaser.sbatch: the `vit` uv group in .venv-vit, not the default env.
 set -euo pipefail
 cd ~/learning-to-attribute
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-.venv-vit/bin/python scripts/vit/vit_teaser_optim.py "$@"
+UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_optim.py "$@"

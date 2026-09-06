@@ -53,7 +53,7 @@ IMPORTANT (ordering): `lxt.efficient.monkey_patch` rewrites `torch.nn.LayerNorm`
 therefore always run LAST, after every other method, no matter the `--methods` order.
 
 Usage
-  uv run --python .venv-vit python scripts/vit/vit_teaser_attr.py \
+  UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_attr.py \
       --image assets/cat_dog.jpg --out results/vit_teaser
 """
 import argparse

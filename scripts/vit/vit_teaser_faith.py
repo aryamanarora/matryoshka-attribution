@@ -12,7 +12,7 @@ to win, and the margin here is not evidence about held-out data -- that is what 
 results in the paper are for. What this check rules out is the opposite failure, a headline
 panel whose ranking is not even sufficient on its own image.
 
-    .venv-vit/bin/python scripts/vit/vit_teaser_faith.py --results results/vit_teaser_logitdiff
+    UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_faith.py --results results/vit_teaser_logitdiff
 """
 import argparse
 import json

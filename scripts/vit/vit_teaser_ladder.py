@@ -15,7 +15,7 @@ With a corruption that is a distribution rather than a fixed image (`--baseline 
 probabilities are averaged over `--draws` draws, while the displayed image always uses the
 canonical member of the family, so the columns differ only in which patches are revealed.
 
-    .venv-vit/bin/python scripts/vit/vit_teaser_ladder.py --method mattr_pixel --granularity pixel
+    UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_ladder.py --method mattr_pixel --granularity pixel
 """
 import argparse
 import json
