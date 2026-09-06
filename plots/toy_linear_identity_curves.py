@@ -5,7 +5,7 @@ mean over seeds, with IxG as reference. Shows the trajectory behind the final-va
 identity+SGD should climb like IxG (it IS IxG-by-SGD), identity+Adam should stall low.
 
 Saves results/toy_linear_identity_curves.pkl, plots paper/figs/toy_linear_identity_curves.pdf.
-  uv run python scripts/toy_linear_identity_curves.py
+  uv run python plots/toy_linear_identity_curves.py
 """
 import pickle
 from pathlib import Path

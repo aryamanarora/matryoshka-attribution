@@ -1,6 +1,6 @@
 """Did MAttr converge on the ViT teaser? -- the sufficiency-AUC probe traced during training.
 
-`scripts/vit_teaser_attr.py` evaluates, every `--probe-every` steps, the hard top-k
+`scripts/vit/vit_teaser_attr.py` evaluates, every `--probe-every` steps, the hard top-k
 sufficiency curve of the *current* score ranking over MIB's sparsity grid and records its
 log-spaced area (`mattr/auc_trace` in the npz). That is the quantity being optimised; the
 raw training loss is not a convergence signal, because k is resampled every step and the

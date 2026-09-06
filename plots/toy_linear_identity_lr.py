@@ -9,7 +9,7 @@ less hurt by Adam.
 
 Fixed n=256 (largest gap). x=LR, y=final Spearman, line per (ste,opt); IxG as reference.
 Saves results/toy_linear_identity_lr.pkl, plots paper/figs/toy_linear_identity_lr.pdf.
-  uv run python scripts/toy_linear_identity_lr.py
+  uv run python plots/toy_linear_identity_lr.py
 """
 import pickle
 from pathlib import Path

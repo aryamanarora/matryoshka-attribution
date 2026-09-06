@@ -1,7 +1,7 @@
 """Mask-variant registry: the single place every MAttr masking ablation is defined.
 
 These reproduce, bit-for-bit (including RNG-draw order), the inline ``if/elif`` block in
-``scripts/eval_mib.py`` (lines ~271-339). The trainer (``trainer.learn_scores``) calls
+``scripts/mib/eval_mib.py`` (lines ~271-339). The trainer (``trainer.learn_scores``) calls
 ``build_mask`` each step and dispatches the optimizer step on the returned
 :class:`MaskResult` aux fields (REINFORCE manual gradient, L0 penalty).
 

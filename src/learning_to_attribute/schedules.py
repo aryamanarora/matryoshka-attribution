@@ -1,8 +1,8 @@
 """Sampling schedules for the number of kept nodes ``k`` and related helpers.
 
 Canonical home for the ``k``-sampling logic that was copy-pasted across
-``scripts/eval_mib.py`` (lines ~265-269), ``scripts/eval_mib_edge.py`` (``sample_k``),
-``scripts/attribute.py`` (``sample_k``), and the toy scripts. Each function makes exactly
+``scripts/mib/eval_mib.py`` (lines ~265-269), ``scripts/mib/eval_mib_edge.py`` (``sample_k``),
+``scripts/causalgym/attribute.py`` (``sample_k``), and the toy scripts. Each function makes exactly
 one ``torch.rand(1).item()`` draw in the same place as the originals, so seeded runs stay
 bit-identical after migration.
 """

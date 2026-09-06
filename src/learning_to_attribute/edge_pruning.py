@@ -428,7 +428,7 @@ def learn_scores_dcm(
         k >= 20%, a DCM CPR-AUC is mostly a statement about pruning order rather than about
         the circuit. Runs whose mask collapsed to zero units still post competitive AUC on
         it. Report CPR at the pin (``collect_dcm_sweep.py``), never the AUC, and see
-        ``scripts/dcm_rank_agreement.py`` for how much of a rho-vs-other-methods this term
+        ``scripts/mib/dcm_rank_agreement.py`` for how much of a rho-vs-other-methods this term
         generates on its own.
       - **The setpoint.** Their controller ramps the pruned count to *all* units and runs
         until the circuit is empty (``pid_target_frac=1.0`` + early stop), because they

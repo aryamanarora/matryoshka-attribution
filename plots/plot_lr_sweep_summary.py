@@ -67,7 +67,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "mib"))
 import palette as P                                     # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                 # _pair, COLS, RC   # noqa: E402
 import make_lr_table as M                               # LR_METHODS -- the table's own list  # noqa: E402

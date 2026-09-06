@@ -2,7 +2,7 @@
 combinations, faceted into the four SVA+ subtasks.
 
 One panel per SVA subtask (Simple / Noun PP / RC / Within RC), each an N x N matrix over the
-METHOD x LOSS grid that scripts/make_sva_neuron_table.py already tabulates: 6 methods x 3 losses
+METHOD x LOSS grid that scripts/sva/make_sva_neuron_table.py already tabulates: 6 methods x 3 losses
 = 18 series, or 24 with --wide. Every entry is Spearman's rho between the two runs' per-unit
 score vectors over the WHOLE substrate, not a top-k overlap -- this asks whether two runs order
 the units the same way, which is the property every faithfulness curve in the paper is a
@@ -43,7 +43,7 @@ from plotnine import (ggplot, aes, geom_tile, geom_point, geom_blank, geom_vline
                       facet_wrap, scale_fill_gradient2, scale_x_discrete, scale_y_discrete,
                       theme_bw, theme_set, theme, element_text, element_line, element_blank)
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "sva"))
 # One source of truth for the grid: this figure and tabs/sva_top_*.tex must describe the same
 # runs, so the substrate map, method templates, loss fragments and subtask list are IMPORTED
 # rather than restated. A method added to that table appears here on the next run.

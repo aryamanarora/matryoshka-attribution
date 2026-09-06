@@ -11,10 +11,10 @@ on one axis (one image strip each, and the probability of the
 *explained* class only -- the contrast class sits at ~0 for every method until the last
 rung, so plotting it N times only adds ink).
 
-Data from `scripts/vit_teaser_ladder.py`. Regenerate with:
+Data from `scripts/vit/vit_teaser_ladder.py`. Regenerate with:
 
-    .venv-vit/bin/python scripts/vit_teaser_ladder.py --method mattr   --granularity patch
-    .venv-vit/bin/python scripts/vit_teaser_ladder.py --method attnlrp --granularity patch
+    .venv-vit/bin/python scripts/vit/vit_teaser_ladder.py --method mattr   --granularity patch
+    .venv-vit/bin/python scripts/vit/vit_teaser_ladder.py --method attnlrp --granularity patch
     uv run python plots/plot_vit_sparsity_ladder.py \
         --ladder results/vit_teaser_cat/ladder_{mattr,attnlrp}.npz
 

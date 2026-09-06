@@ -55,7 +55,7 @@ R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 
 # The headline MAttr dirs, one per harness. MIB: verified against
-# scripts/submit_softlog_sgd_lr.sh:94-96 (`--k-schedule log --masking topk --optimizer sgd
+# scripts/mib/launch/submit_softlog_sgd_lr.sh:94-96 (`--k-schedule log --masking topk --optimizer sgd
 # --include-input`, node level, 500 steps). SVA: the `_sufficient_topk_sgd_bs1` tag is the same
 # recipe (variant=topk soft forward, k_schedule=log, optimizer=sgd, lr=1.0, loss=logit_diff,
 # mode=sufficient) at 2000 steps; the `_acc` / `_ce` siblings are loss ablations and `_uniformk`

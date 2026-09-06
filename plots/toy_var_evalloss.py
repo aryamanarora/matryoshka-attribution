@@ -8,9 +8,10 @@ denoising MSE (y_topk_clean - y_clean)^2 averaged over ALL sparsity levels k=1..
 A random-ranking baseline is shown for reference.
 
 n up to 16. Saves results/toy_var_evalloss.pkl, plots paper/figs/toy_var_evalloss.pdf.
-  uv run python scripts/toy_var_evalloss.py
+  uv run python plots/toy_var_evalloss.py
 """
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,7 @@ from plotnine import (
 from mizani.formatters import label_log
 
 from learning_to_attribute import learn_scores
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "toy"))
 from toy_var_mattr import build_model, forward
 
 R = Path("results"); OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)

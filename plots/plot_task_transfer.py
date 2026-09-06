@@ -3,7 +3,7 @@
 The causal twin of plots/plot_task_corr_heatmap.py. That figure asks whether two tasks RANK the
 nodes the same way (Spearman rho of the score vectors); this one asks what actually happens when
 you run task B's faithfulness eval with task A's ranking (results/transfer_{mib,sva}, written by
-scripts/submit_transfer.sh -- headline MAttr soft-fwd/log-k/SGD node scores, 200 eval examples
+scripts/transfer/launch/submit_transfer.sh -- headline MAttr soft-fwd/log-k/SGD node scores, 200 eval examples
 everywhere including the recomputed diagonal). Rows are the TARGET task whose eval set is scored;
 columns are the SOURCE task whose ranking is evaluated -- so unlike the correlation heatmap this
 matrix is directional, and asymmetry is part of the content.
@@ -41,7 +41,7 @@ from plotnine import (ggplot, aes, geom_tile, geom_text, geom_vline, geom_hline,
                       scale_fill_gradient, theme_bw, theme_set, theme,
                       element_text, element_blank)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "transfer"))
 from collect_transfer import TASKS, MIB_TASKS, load_row   # single source for files + metric map
 
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)

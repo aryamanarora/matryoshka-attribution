@@ -7,11 +7,11 @@ contrast, results/vit_teaser_cat). AttnLRP's Figure 1 follows the strip with a m
 suitability marks (+ / o / -); that table is kept behind `--table` and off by default, since
 on a single image the marks are opinion rather than measurement.
 
-Data comes from `scripts/vit_teaser_attr.py` (see that file for the substrate and the
+Data comes from `scripts/vit/vit_teaser_attr.py` (see that file for the substrate and the
 explained scalar). Regenerate end to end with:
 
-    sbatch -J teaser vit_teaser.sbatch --baseline pixelate --out results/vit_teaser_pixelate
-    sbatch -J teaser vit_teaser.sbatch --baseline pixelate --explain cat --out results/vit_teaser_cat
+    sbatch -J teaser scripts/vit/launch/vit_teaser.sbatch --baseline pixelate --out results/vit_teaser_pixelate
+    sbatch -J teaser scripts/vit/launch/vit_teaser.sbatch --baseline pixelate --explain cat --out results/vit_teaser_cat
     uv run python plots/plot_vit_teaser.py
 
 (Only the attribution step needs `.venv-vit`; plotting reads the npz and runs in the

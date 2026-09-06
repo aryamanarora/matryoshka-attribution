@@ -31,7 +31,7 @@ from plotnine import (ggplot, aes, geom_point, annotate, facet_wrap, labs,
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from plot_task_corr_heatmap import TASKS
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "transfer"))
 from collect_transfer import load_row
 
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)

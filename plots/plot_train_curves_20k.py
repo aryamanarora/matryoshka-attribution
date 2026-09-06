@@ -79,7 +79,7 @@ from plot_train_curves import (ARM_COLOR, FIG_OVERLAY_W, FS_OVERLAY,   # noqa: E
                                LEG_H, METRICS, REF, ROW_H_NARROW, TITLE_H)
 
 # The three 20k runs, from `STEPS=20000 PROBE_EVERY=500 PROBE_EX=64
-# OUTBASE=results/sva_mlp_steps20k bash scripts/submit_sva_mlp_lr.sh` (2026-08-22).
+# OUTBASE=results/sva_mlp_steps20k bash scripts/sva/launch/submit_sva_mlp_lr.sh` (2026-08-22).
 # The SGD arm is the CONTROL and is not optional: a 20k Adam run that gains 0.1 proves nothing if
 # SGD gains as much over the same span, since the claim is about the GAP
 # (submit_sva_mlp_lr.sh's "SUBMIT THE SGD CONTROL TOO").

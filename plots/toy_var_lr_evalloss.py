@@ -7,7 +7,7 @@ as reference lines. Tests whether MAttr's poor convergence here is an LR/varianc
 structural. Reuses run_mattr / run_ixg / make_eval / random_baseline from toy_var_evalloss.
 
 Saves results/toy_var_lr_evalloss.pkl, plots paper/figs/toy_var_lr_evalloss.pdf.
-  uv run python scripts/toy_var_lr_evalloss.py
+  uv run python plots/toy_var_lr_evalloss.py
 """
 import pickle
 from pathlib import Path

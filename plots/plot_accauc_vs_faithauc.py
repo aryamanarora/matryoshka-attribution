@@ -114,7 +114,7 @@ GROUPS = [("SVA", SVA), ("Arith", ARITH), ("ARC-E", ["arc_easy"]), ("IOI", ["ioi
 # figure's headline arm was drawn from a different model than the baselines beside it, with
 # nothing on the figure to show it. On IOI that is worth 0.443 vs 0.495 acc-AUC for IG and
 # 0.022 vs 0.256 for I×G. The 3 missing qwen2.5 cells were submitted by
-# scripts/submit_softsgd_ioi_qwen.sh; until they land, group_avg drops the series and the
+# scripts/sva/launch/submit_softsgd_ioi_qwen.sh; until they land, group_avg drops the series and the
 # panel report's MISSING column names it.
 TASK_MODEL = dict.fromkeys(SVA + ARITH + ["arc_easy"], "llama3")
 TASK_MODEL["ioi"] = "qwen2.5"
@@ -125,7 +125,7 @@ def on_model(d):
     must gate on this, whatever its key -- a model-less key COLLIDES (glob order picks a model)
     and a model-bearing one DOUBLE-COUNTS (ioi contributes twice to any task average). It is
     exported rather than restated so the pin cannot drift between the figure and its consumers;
-    scripts/method_winrate.py already imports this module for exactly that reason."""
+    scripts/sva/method_winrate.py already imports this module for exactly that reason."""
     return d["model"] == TASK_MODEL.get(d["task"], d["model"])
 
 
@@ -151,7 +151,7 @@ REQUIRED = {"node": ["SVA", "Arith", "ARC-E", "IOI"],
 #
 # sva_zeroabl_input carries ONLY this figure's three default series (IG, I×G, MAttr-SGD),
 # submitted 2026-08-21 by `ONLY="ig ixg softsgd" OUT=results/sva_zeroabl_input ABLATION=zero
-# bash scripts/submit_input_replication.sh`. So `--all` will report the zeroed `+input` panel
+# bash scripts/sva/launch/submit_input_replication.sh`. So `--all` will report the zeroed `+input` panel
 # as short: the registry's other methods (MAttr-Adam, Node Pruning, DBM, AttnLRP) were never
 # run there. That is a scope choice, not a stalled wave -- the MISSING column in main()'s
 # panel report names them, and the same ONLY= line with more arms fills them in.
@@ -161,7 +161,7 @@ SOURCES = [("results/sva_sweep", "−input", "Patched"),
            ("results/sva_zeroabl_input", "+input", "Zero-abl.")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 # The SAE column is added to the DEFAULT cut only, not to the module-level SUBSTRATES, because
-# that list is iterated by plot_accauc_vs_faithauc_cause.py and scripts/method_winrate.py --
+# that list is iterated by plot_accauc_vs_faithauc_cause.py and scripts/sva/method_winrate.py --
 # widening it there would silently add an SAE column to two other artifacts.
 #
 # NOT EVERY METHOD IS ON IT. Node Pruning and DBM have no SAE runs at all, so group_avg drops
@@ -245,7 +245,7 @@ METHODS = {
     # Single-pass like I×G (only the backward RULES change): LN-freeze, gated-MLP secant +
     # half-rule, and the uniform half-rule on the QK/OV matmuls. The HF-side implementation is
     # src/learning_to_attribute/grad_attribution.py, verified against vanilla eager attention
-    # by scripts/test_attnlrp_hf.py; on MIB the equivalent TransformerLens path is within
+    # by scripts/tools/test_attnlrp_hf.py; on MIB the equivalent TransformerLens path is within
     # Spearman 0.96 of GIM (MIB-circuit-track/gim_attnlrp_decomp.py), so this series stands in
     # for the whole LRP family here.
     "AttnLRP":    ("AttnLRP",      P.color("AttnLRP")),
@@ -259,7 +259,7 @@ METHODS = {
     # unit takes the same size step whatever its effect size, and the score degenerates into a
     # signed count of steps. Above the typical |g| magnitude weighting comes back. Measured on
     # addition/llama3/mlp that is acc-AUC 0.388 -> 0.490, with the top-k overlap against IG
-    # going 0.08 -> 0.73 (scripts/submit_adam_eps_followup.sh). The prediction this figure
+    # going 0.08 -> 0.73 (scripts/sva/launch/submit_adam_eps_followup.sh). The prediction this figure
     # tests is that it is NEUTRAL at the node substrate, where per-unit gradients are far
     # larger -- the node control already on disk reads 0.525 either way.
     #
@@ -290,7 +290,7 @@ METHODS = {
     # Not a competitor -- it is the reference the other series are only interesting relative to,
     # which is why it is grey (see palette.py) and why it sits last in the legend. 3 seeds per
     # cell, averaged in `load`. Filled in for all 68 previously-missing cells by
-    # scripts/submit_random_baseline.sh; before that it existed only for the 2 MIB tasks in the
+    # scripts/sva/launch/submit_random_baseline.sh; before that it existed only for the 2 MIB tasks in the
     # 2 patched dirs, so group_avg's all-or-nothing rule dropped it from every panel.
     "Random": ("Random", P.color("Random")),
 }
@@ -363,7 +363,7 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # narrowed for legibility back when it carried three losses and every method cost three
 # markers per panel. At one loss they cost one each, so the mask-learning family and the
 # LRP baseline fit. Stepless IG is the one registry method still missing (12/36; the backfill
-# is scripts/submit_stepless_backfill.sh) -- add it here once those land.
+# is scripts/sva/launch/submit_stepless_backfill.sh) -- add it here once those land.
 # AttnLRP dropped again 2026-08-29 (requested). It has full coverage and is still in the
 # registry, so `--all` keeps drawing it; it is out of THIS cut only.
 # Stepless IG is deliberately OUT of this cut (2026-08-29, requested) even though its backfill
@@ -472,9 +472,9 @@ ALL_METHODS = [k for k in METHODS if k not in ("soft-log", "mc_ig")]
 # narrowed with it, so the panels still compare one task population. Read it as a preview of the
 # arm, not as a drop-in for the paper figure -- the numbers are not comparable to the default
 # cut's, whose points average four task-groups. Backfilling is one submitter away:
-#   ARITH_TASKS="addition months weekdays hours" bash scripts/submit_sva_sweep.sh
-#   MIB_TASKS=arc_easy bash scripts/submit_sva_sweep.sh
-#   MIB_TASKS=ioi MODEL=qwen2.5 bash scripts/submit_sva_sweep.sh
+#   ARITH_TASKS="addition months weekdays hours" bash scripts/sva/launch/submit_sva_sweep.sh
+#   MIB_TASKS=arc_easy bash scripts/sva/launch/submit_sva_sweep.sh
+#   MIB_TASKS=ioi MODEL=qwen2.5 bash scripts/sva/launch/submit_sva_sweep.sh
 # (each also re-emits the other GRAD arms, but the submitter skips runs already on disk).
 STEPLESS_METHODS = ["IG", "IxG", "mc_ig", "softsgd-log", "Random"]
 STEPLESS_SOURCES = [("results/sva_sweep", "−input", "Patched")]
@@ -597,7 +597,7 @@ def load(res):
     affine map that leaves within-cell ordering alone); a per-run one is not. Raw acc-AUC is
     that, trivially. The cost is that the zero row's x axis carries a ~0.5 baseline and so
     visually flatters it next to the patched row -- which is why the rows must be read
-    separately, as the module docstring says. See scripts/method_winrate.py for the same
+    separately, as the module docstring says. See scripts/sva/method_winrate.py for the same
     reasoning applied to the win-rate tables.
 
     Files are filtered to TASK_MODEL[task] first -- see that comment for why the model cannot be

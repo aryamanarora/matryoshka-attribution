@@ -88,7 +88,7 @@ METHOD = {
     # Re-verify with `python plots/palette.py`.
     "MAttr (SGD)": "#000000",
     # MAttr with Adam at the LIBRARY-DEFAULT eps=1e-8, as distinct from the eps=1e-2 arm we
-    # actually ship (scripts/submit_sva_eps.sh), which takes the canonical MAttr blue.
+    # actually ship (scripts/sva/launch/submit_sva_eps.sh), which takes the canonical MAttr blue.
     #
     # WHICH WAY ROUND THIS GOES IS THE POINT. The paper-wide rule is SGD black / Adam blue,
     # unconditionally, so "blue" has to be the Adam configuration we recommend. Default-eps Adam

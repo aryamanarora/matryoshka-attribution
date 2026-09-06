@@ -122,7 +122,7 @@ def main():
     missing = [k for k, v in data.items() if v is None]
     if missing:
         raise SystemExit(f"{len(missing)} missing cells, e.g. {missing[:4]} -- "
-                         "run scripts/submit_sae_budget.sh's split sweep first")
+                         "run scripts/sva/launch/submit_sae_budget.sh's split sweep first")
 
     plt.rcParams.update(P.RC)
     fig, axes = plt.subplots(1, len(TASKS) + 1, figsize=(FIG_W, FIG_H), sharey=True)

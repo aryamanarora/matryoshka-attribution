@@ -1,7 +1,7 @@
 """Per-concept accuracy vs % features for an attribute_concepts run (necessity or
 sufficiency). x = % of SAE features in the mask (log), y = accuracy hitting the concept
 target; facet by task, colour by concept. Usage:
-  python scripts/plot_concepts_acc.py results/arith_sae_concepts.pkl plots/arith_concepts_nec_acc.pdf
+  python plots/plot_concepts_acc.py results/arith_sae_concepts.pkl plots/arith_concepts_nec_acc.pdf
 """
 import pickle, sys
 import pandas as pd

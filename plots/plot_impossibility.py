@@ -1,6 +1,6 @@
 """MAttr on the Bilodeau et al. (2022) impossibility benchmark: ROC panel + budget curve.
 
-Reads `results/impossibility/*.json` (from `scripts/impossibility_bench.py`) and writes
+Reads `results/impossibility/*.json` (from `scripts/impossibility/impossibility_bench.py`) and writes
 
   paper/figs/impossibility_roc.pdf      ROC per end-task x READOUT, pooled over models and
                                         examples and vertically averaged over the five UCI
@@ -38,7 +38,7 @@ from plotnine import (aes, element_blank, element_line, element_text, facet_grid
                       scale_x_log10, scale_y_continuous, theme, theme_bw, theme_set)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "impossibility"))
 import palette                                              # noqa: E402
 from impossibility_report import TASKS, auc, collect, rung  # noqa: E402
 
@@ -54,7 +54,7 @@ READOUT_ORDER = [READOUT_LABEL["paper"], READOUT_LABEL["raw"]]
 
 # display name -> (palette key, arm key in the results). See the COLOUR note above.
 # `mattr_adam` in RESULTS is Adam at the LIBRARY-DEFAULT eps=1e-8; the tuned arm lives in
-# EPS_RESULTS (scripts/impossibility_bench.py --eps-sweep). The paper's encoding already
+# EPS_RESULTS (scripts/impossibility/impossibility_bench.py --eps-sweep). The paper's encoding already
 # distinguishes those two -- blue is the Adam configuration we recommend, violet the default-
 # eps one -- so both are drawn rather than silently quoting whichever is on hand.
 SERIES = [

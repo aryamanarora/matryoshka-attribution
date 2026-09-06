@@ -20,7 +20,7 @@ WHAT TO LOOK FOR, all of which is in the numbers and none of which needs the cap
     s=0.9 OF THE SUBSTRATE, so their absolute circuit is ~1k units at node and ~2M at neuron
     scale, and the collapse is partly a budget mismatch rather than purely a method failure.
   * MAttr under Adam dips on the neuron substrates specifically (0.501 on MLP vs SGD's 0.596).
-    That is the eps degeneracy (see scripts/submit_sva_eps.sh): at 2.29M mask logits the
+    That is the eps degeneracy (see scripts/sva/launch/submit_sva_eps.sh): at 2.29M mask logits the
     default eps=1e-8 sits below the typical |grad|, Adam's update becomes ~sign(g), and the
     score stops carrying magnitude.
 

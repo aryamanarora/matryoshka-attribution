@@ -57,9 +57,9 @@ that MIB's README specifies.
 
 ```bash
 # 1. train the mask (one job per cell; ~1 s/it, 1900 steps for ioi)
-sbatch scripts/run_ugs.sbatch gpt2-small ioi 0.001
-sbatch scripts/run_ugs.sbatch qwen ioi 0.001
-sbatch scripts/run_ugs.sbatch qwen mcqa 0.001
+sbatch scripts/mib/launch/run_ugs.sbatch gpt2-small ioi 0.001
+sbatch scripts/mib/launch/run_ugs.sbatch qwen ioi 0.001
+sbatch scripts/mib/launch/run_ugs.sbatch qwen mcqa 0.001
 # -> ~/optimalablation/results/pruning/<task>/cf/ugs_mib_<model>/0.001/snapshot.pth
 
 # 2. convert the mask to a MIB graph (writes graph.json next to the snapshot)

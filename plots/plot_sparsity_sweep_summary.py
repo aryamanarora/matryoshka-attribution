@@ -108,7 +108,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "mib"))
 import palette as P                                     # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                 # RC only  # noqa: E402
 import make_lr_table as M                               # SPARSITY_METHODS + cpr()  # noqa: E402

@@ -1,6 +1,6 @@
 """Accuracy vs #MLP neurons kept (sufficient) / corrupted (necessary), faceted by
 intervention type x dataset. Reads results/arith_accuracy.csv (see
-scripts/eval_arith_accuracy.py). Saves a textwidth-suitable PDF.
+scripts/causalgym/eval_arith_accuracy.py). Saves a textwidth-suitable PDF.
 """
 import pandas as pd
 from plotnine import (

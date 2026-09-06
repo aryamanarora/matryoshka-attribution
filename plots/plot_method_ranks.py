@@ -19,7 +19,7 @@ outright. (3) is handled by COMPLETE-CASE ranking, below.
 THE UNIT is a cell = (substrate, task, loss), and methods are ranked WITHIN a cell -- i.e. at
 matched training loss on matched data. Matched-loss is the honest default; letting each method
 take its best loss per cell is an oracle that rewards whichever method has the most variants on
-disk (the same rule scripts/method_winrate.py argues for at length).
+disk (the same rule scripts/sva/method_winrate.py argues for at length).
 
 COMPLETE-CASE: a cell contributes only if EVERY plotted arm ran in it. Ranking over whichever
 arms happen to be on disk would silently reward a method for the cells it is missing -- drop a

@@ -1,6 +1,6 @@
 """MAttr's optimizer, learning rate and Adam-eps on the ViT teaser, against Stepless IG.
 
-Data from `scripts/vit_teaser_optim.py`, one directory per seed (`results/vit_optim/seed*`).
+Data from `scripts/vit/vit_teaser_optim.py`, one directory per seed (`results/vit_optim/seed*`).
 Every number is the held-out hard-top-k sufficiency AUC of a patch ranking (log-spaced area of
 the explained logit difference over MIB's sparsity grid, `vit_teaser_faith.py`'s protocol),
 averaged over seeds; ribbons/whiskers are the seed range.

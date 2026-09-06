@@ -13,7 +13,7 @@ transform produce byte-identical circuits. That also makes the diagonal structur
 an arm whose backward reads no score magnitude is exactly rank-invariant in the LR, so its
 whole matrix should be 1.000.
 
-Data: results/sva_mlp_lr/<variant>_<opt>/lr_<lr>/ (scripts/submit_sva_mlp_lr.sh). ONE cell --
+Data: results/sva_mlp_lr/<variant>_<opt>/lr_<lr>/ (scripts/sva/launch/submit_sva_mlp_lr.sh). ONE cell --
 addition / llama3 / --nodes mlp / logit_diff, 2.29M mask logits -- so read this as the anatomy
 of a single well-chosen failure case, not a population result. The three arms complete the
 optimizer x gate cross that submit_sva_sweep.sh never runs.

@@ -10,7 +10,7 @@ necessity) and is what MIB's CPR measures — so all our MIB runs are the *suffi
 
 - MIB scripts (`eval_mib.py`, `eval_mib_edge.py`): `--mode sufficient` (now the default)
   = denoising = our runs. `--mode necessary` = noising.
-- DAS / CausalGym (`scripts/attribute.py`): config key / flag `sufficient: true` = denoising
+- DAS / CausalGym (`scripts/causalgym/attribute.py`): config key / flag `sufficient: true` = denoising
   = top-k clean, matching MIB. **Gotcha:** the *internal* legacy flag (and
   `sigmoid_das.intervene`'s `sufficient=` param) use the OPPOSITE sense (`True` = top-k get
   CF / noising); `attribute.py` inverts once right after `parse_args` (`args.sufficient =
@@ -72,7 +72,7 @@ row read **4.96** against the Adam row's **6.23** — a wrong-LR artefact, not a
 **Fixed 2026-09-04 by repointing, not by flipping back**: `make_mib_test_table.OUR_EDGE_METHODS`
 and `make_mib_table.OUR_METHODS` now name `mib_edge_softlog_sgd_lr_3.0` /
 `test_edge_softlog_sgd_lr_3.0` (all 22 cells landed 2026-09-04 via
-`scripts/submit_edge_sgd_lr3.sh`; gemma2 trained in the MIB venv, so no reeval stamp). Full-row
+`scripts/mib/launch/submit_edge_sgd_lr3.sh`; gemma2 trained in the MIB venv, so no reeval stamp). Full-row
 effect, 11 cells: validation avg 4.99 -> 6.04 (Adam 6.37), test avg 4.96 -> 5.93 (Adam 6.23).
 10/11 cells improve (ioi/gemma2 is saturated for every method); SGD now beats Adam on the three
 gemma2 cells and arith_sub/llama3, Adam wins every other llama3 cell by 1-2. So the bare edge row
@@ -113,7 +113,7 @@ The L2A venv is fine for gpt2/qwen2.5/llama3 (the bug is Gemma-2-specific), thou
 scoping rests on `525673a`'s diagnosis rather than a per-model cross-check.
 
 All gemma2 cells of the LR sweep + MAttr node dirs were re-evaluated under TL 2.15.4 on
-2026-07-24 by `scripts/reeval_gemma_mib.py` (which asserts TL 2.x and overwrites the pkls
+2026-07-24 by `scripts/mib/reeval_gemma_mib.py` (which asserts TL 2.x and overwrites the pkls
 in place), so `paper/tabs/lr_sweep.tex` and the MAttr rows of `mib_results.tex` are clean.
 `submit_lr_sweep_*.sh` still points at `$ABS/.venv/bin/python` — re-running one of those
 scripts would silently reintroduce the bad Gemma numbers.
@@ -132,7 +132,7 @@ full-split, so capping a test cell would make it the only subset-scored row in t
 
 ### "Node Pruning" vs "Edge Pruning" is a display name, not a different method
 Same recipe and same code (`src/learning_to_attribute/edge_pruning.py`); the paper labels the
-rows by the granularity actually pruned, mapped in `scripts/make_mib_table.py:EPRUN_NAME`
+rows by the granularity actually pruned, mapped in `scripts/mib/make_mib_table.py:EPRUN_NAME`
 (`node` → "Node Pruning", `edge` → "Edge Pruning"). Everything on disk keeps the original
 name — `results/eprun_*` and the `EdgePruning_patching_<level>` subfolder MIB's
 `run_evaluation.py --method EdgePruning` writes. Don't rename those; it would orphan the pkls.
@@ -142,7 +142,7 @@ These compare NAP-IG against the **uniform-k** `mib_node_hard_topk` instead of t
 log-k `mib_node_hard_topk_log`, so they're inconsistent with the paper's L2A:
 - `plots/plot_rank_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
 - `plots/plot_score_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
-- `scripts/compare_ranks.py` → `paper/tabs/rank_correlations.tex` (`compare_node_methods("mib_node_hard_topk", ...)`)
+- `scripts/mib/compare_ranks.py` → `paper/tabs/rank_correlations.tex` (`compare_node_methods("mib_node_hard_topk", ...)`)
 
 The natural-k comparison scripts (`plot_cpr_curves_naturalk.py`,
 `plot_rank_scatter_naturalk.py`, `plot_score_scatter_naturalk.py`) were fixed to use
@@ -158,13 +158,13 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
 - Always prepend `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` for the big models.
 - `-r` must keep mem/cpu ≤ MaxMemPerCPU (~30G on jag): e.g. 64G needs `-c 3`, 96G needs
   `-c 4`. Mismatch triggers `srun: fatal: cpus-per-task set by two different env vars`.
-- `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/`; task
+- `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/mib/`; task
   names in configs must use underscores (`arc_easy`, not `arc-easy`).
 - `mib-path` defaults to `./MIB-circuit-track` (gitignored symlink to the cloned repo).
 
 ## ViT teaser: optimizer / LR / Adam-eps grid (2026-09-02)
 
-`scripts/vit_teaser_optim.py` + `vit_optim.sbatch` -> `results/vit_optim/seed{42,43,44}`,
+`scripts/vit/vit_teaser_optim.py` + `scripts/vit/launch/vit_optim.sbatch` -> `results/vit_optim/seed{42,43,44}`,
 figure `plots/plot_vit_optim.py` -> `paper/figs/vit_optim.pdf`. Same substrate as the teaser
 (ViT-B/16, 196 patch tokens, resampled pixelate corruption, basenji-vs-Siamese logit diff, 2000
 steps); metric is the held-out sufficiency AUC (`vit_teaser_faith.py` protocol), mean of 3 seeds.

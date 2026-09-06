@@ -5,7 +5,7 @@ Raw logit diff is NOT stored in the result pkls (only the normalised faithfulnes
 faithfulness = (raw - C) / (B - C) with method-independent anchors B=baseline (clean) and
 C=corrupted (all-ablated). So we invert the stored faithfulness for every method:
     raw(pct) = C + faithfulness(pct) * (B - C)
-using anchors computed once per task/model by scripts/eval_mib_anchors.py -> results/anchors/.
+using anchors computed once per task/model by scripts/mib/eval_mib_anchors.py -> results/anchors/.
 
 Dashed line = clean baseline B (raw diff of the full model); dotted line = corrupted floor C.
 Curves above B are absolute-terms gap-padding (ablated circuit beats the clean model).

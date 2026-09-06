@@ -149,7 +149,7 @@ def _key(d, method):
 
 def _auc_of(xs, ya):
     """Trapezoid on a log-x grid, normalised by the log span. Mirrors eval_sva.py:738, which is
-    the source of truth (scripts/compare_ablation.py carries the same three lines)."""
+    the source of truth (scripts/sva/compare_ablation.py carries the same three lines)."""
     lx = np.log10(np.asarray(xs, float))
     ya = np.asarray(ya, float)
     return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
@@ -174,7 +174,7 @@ def load_zero(metric: str) -> dict:
       other loss to invisibility, which is why it is not the default.
 
     Either way, k* is NOT offered: it is an absolute 0.5 threshold (eval_sva.py:754) and
-    degenerates outright under zeroing. See scripts/compare_ablation.py.
+    degenerates outright under zeroing. See scripts/sva/compare_ablation.py.
     """
     out = {}
     for f in sorted(glob.glob(str(ZERO / "*.json"))):

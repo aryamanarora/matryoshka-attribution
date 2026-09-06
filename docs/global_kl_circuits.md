@@ -5,12 +5,12 @@ counterfactual, and a logit diff on one answer token. This one asks the task-fre
 **which MLP neurons and attention heads does Llama-3.1-8B need to reproduce its own next-token
 distribution on ordinary text?** — and it turns out the answer is shaped very differently.
 
-    scripts/eval_global_kl.py     the experiment (train + sweep)
-    scripts/collect_global_kl.py  cross-arm table + rank agreement
-    scripts/fetch_fineweb_edu.py  data                -> data/fineweb_edu_200.jsonl
-    scripts/submit_global_kl.sh   the four arms       -> results/global_kl
-    scripts/submit_global_kl_lr.sh  the LR bracket    -> results/global_kl_lr
-    global_kl.sbatch              thin runner (.venv; no TransformerLens, so no gemma2 caveat)
+    scripts/global_kl/eval_global_kl.py     the experiment (train + sweep)
+    scripts/global_kl/collect_global_kl.py  cross-arm table + rank agreement
+    scripts/global_kl/fetch_fineweb_edu.py  data                -> data/fineweb_edu_200.jsonl
+    scripts/global_kl/launch/submit_global_kl.sh   the four arms       -> results/global_kl
+    scripts/global_kl/launch/submit_global_kl_lr.sh  the LR bracket    -> results/global_kl_lr
+    scripts/global_kl/launch/global_kl.sbatch              thin runner (.venv; no TransformerLens, so no gemma2 caveat)
 
 ## What is different from eval_sva / eval_mib
 
@@ -97,7 +97,7 @@ Implemented and smoke-tested, not yet run at 8B.
 
 ## Result 4: ranking anatomy — the arms do not agree with each other
 
-`scripts/analyse_global_ranks.py` reads the saved `*_scores.pt` (CPU only, no model).
+`scripts/global_kl/analyse_global_ranks.py` reads the saved `*_scores.pt` (CPU only, no model).
 
 **Heads are hugely over-represented** in every real arm. They are 0.22% of nodes; in the
 top-100 they are 90% (SGD), 37% (Stepless IG), 18% (magnitude), 5% (Adam). Random sits at the

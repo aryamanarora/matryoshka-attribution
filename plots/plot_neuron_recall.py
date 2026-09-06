@@ -110,7 +110,7 @@ METHODS = [
     ("MAttr ($\\epsilon{=}10^{-8}$)", "sufficient_topk_adam%s_bs1",
      "MAttr (Adam, default eps)", "solid"),
     # "+ unif k" DROPPED from this figure 2026-08-30 (requested). It is still a column of
-    # scripts/make_sva_neuron_table.py (`stopk-unif`), so the figure and the table no longer
+    # scripts/sva/make_sva_neuron_table.py (`stopk-unif`), so the figure and the table no longer
     # describe the same method set -- the docstring's "same runs and the same order as
     # make_sva_neuron_table.METHODS" no longer holds, and re-adding it here needs
     # sufficient_topk_adam_eps1e-2%s_uniformk_bs1 runs, which do not exist (the eps arm was only

@@ -7,7 +7,7 @@ correct vs incorrect next-token verb form, so the metric is a logit-diff exactly
 
 Drop-in for ``MIB_circuit_track.dataset.HFEAPDataset``: ``dataset[idx]`` returns
 ``(clean_text, corrupted_text, [correct_token_id, incorrect_token_id])`` and ``len(dataset)``
-works — so it plugs straight into ``scripts/eval_mib.py``'s ``loss_fn`` (and the shared
+works — so it plugs straight into ``scripts/mib/eval_mib.py``'s ``loss_fn`` (and the shared
 ``learn_scores`` trainer / hook-based masking) with no nnsight.
 
 Data: ``data/sva_data/{task}_{split}.json`` (copied from circuits' ``data/feature_circuits``),

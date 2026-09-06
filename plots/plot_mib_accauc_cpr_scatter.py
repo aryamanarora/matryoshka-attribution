@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import palette as P
 
-sys.path.insert(0, "scripts")
+sys.path.insert(0, "scripts/mib")
 import make_mib_table as M            # noqa: E402  COLUMNS, OUR_METHODS, load_cpr_auc
 import make_mib_accauc_table as A     # noqa: E402  acc_mattr / acc_base / BASELINES
 

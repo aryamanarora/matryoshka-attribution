@@ -3,7 +3,7 @@
 > **Naming.** In the paper the node-level rows are called **Node Pruning** and the edge-level
 > rows **Edge Pruning** — same recipe, same code, the label just tracks what was pruned
 > (Bhaskar et al. named the method for its granularity, and every result we currently report
-> is node-level). `scripts/make_mib_table.py:EPRUN_NAME` is the single place that mapping
+> is node-level). `scripts/mib/make_mib_table.py:EPRUN_NAME` is the single place that mapping
 > lives. Everything on disk keeps the original name: the `eprun_*` results dirs and the
 > `EdgePruning_patching_<level>` subfolder that MIB's `run_evaluation.py --method EdgePruning`
 > writes. Renaming those would orphan every existing pkl, so don't.
@@ -24,7 +24,7 @@ stretched hard concrete with T=2/3 on [-0.1, 1.1], multipliers trained by gradie
 *ascent*, AdamW lr 0.8 with linear warmup/decay, 3000 steps). The final log-alphas are
 the attribution scores; MIB ranks units by them.
 
-`scripts/eval_mib_edge_pruning.py` supplies the patching environment:
+`scripts/mib/eval_mib_edge_pruning.py` supplies the patching environment:
 
 - `--level edge`: gates every real edge; a gated-off edge adds
   `(corrupted - clean)` of its source into its destination's input (same
@@ -42,13 +42,13 @@ task loss for MAttr's objective if you want to isolate objective from parameteri
 
 ```bash
 # <model> <task> [level=node] [steps=3000] [split=validation] [target_sparsity]
-sbatch scripts/run_edge_pruning.sbatch gpt2   ioi   node
-sbatch scripts/run_edge_pruning.sbatch llama3 arc_challenge node
+sbatch scripts/mib/launch/run_edge_pruning.sbatch gpt2   ioi   node
+sbatch scripts/mib/launch/run_edge_pruning.sbatch llama3 arc_challenge node
 
 # TEST-set numbers: reuse the already-trained graph, only re-score. The mask is trained on the
 # TRAIN split regardless of --split (--train-split train), so the validation-pass circuit is
 # the same circuit the test set is owed -- retraining would produce a different one.
-bash scripts/submit_test_node_pruning.sh          # all 11 cells, EVAL_ONLY=1, s=0.9
+bash scripts/mib/launch/submit_test_node_pruning.sh          # all 11 cells, EVAL_ONLY=1, s=0.9
 ```
 
 `--head 200` (the llama3 validation cap the gradient baselines use) is applied on the

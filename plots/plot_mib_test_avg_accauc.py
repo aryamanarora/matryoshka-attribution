@@ -47,7 +47,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "mib"))
 import palette as P                                     # noqa: E402
 import make_mib_test_table as T                         # noqa: E402
 import plot_mib_test_avg as V                           # the parent figure -- shared structure  # noqa: E402
