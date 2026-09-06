@@ -1,28 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:00<03:52,  1.24it/s]Loading weights:  28%|██▊       | 81/288 [00:00<00:01, 116.82it/s]Loading weights:  41%|████▏     | 119/288 [00:01<00:01, 132.02it/s]Loading weights:  51%|█████▏    | 148/288 [00:01<00:01, 127.67it/s]Loading weights:  59%|█████▉    | 170/288 [00:01<00:00, 126.29it/s]Loading weights:  66%|██████▋   | 191/288 [00:01<00:00, 136.82it/s]Loading weights:  73%|███████▎  | 210/288 [00:01<00:00, 143.83it/s]Loading weights:  79%|███████▉  | 228/288 [00:01<00:00, 138.14it/s]Loading weights:  85%|████████▌ | 246/288 [00:02<00:00, 130.70it/s]Loading weights:  93%|█████████▎| 268/288 [00:02<00:00, 137.18it/s]Loading weights: 100%|██████████| 288/288 [00:02<00:00, 124.72it/s]
-task=syntaxgym/agr_gender num_spans=4 d_sae=16384 layer=12
-per-span scores: 4 spans x 16385 = 65540
-step 0  loss 0.9464  k~41991
-evaluating sufficiency curve...
-ERROR NODES per span: [-0.248, 0.281, 0.184, 0.093] (max feat 0.341)
-=== SUFFICIENCY CURVE (prob-diff base-src; higher=more sufficient) ===
-k=    1  learned acc=0.000 pd=-3.750   random acc=0.000 pd=-3.792
-k=    2  learned acc=0.000 pd=-3.750   random acc=0.000 pd=-3.792
-k=    4  learned acc=0.000 pd=-1.792   random acc=0.000 pd=-3.792
-k=    8  learned acc=0.000 pd=-0.792   random acc=0.000 pd=-3.792
-k=   12  learned acc=0.000 pd=-0.500   random acc=0.000 pd=-3.792
-k=   16  learned acc=0.000 pd=-0.458   random acc=0.000 pd=-3.792
-k=   24  learned acc=0.333 pd=-0.167   random acc=0.000 pd=-3.792
-k=   32  learned acc=0.333 pd=-0.167   random acc=0.000 pd=-3.792
-k=   48  learned acc=1.000 pd=+1.833   random acc=0.000 pd=-3.792
-k=   64  learned acc=1.000 pd=+2.250   random acc=0.000 pd=-3.792
-k=   96  learned acc=1.000 pd=+2.333   random acc=0.000 pd=-3.792
-k=  128  learned acc=1.000 pd=+2.375   random acc=0.000 pd=-3.792
-k=  192  learned acc=1.000 pd=+2.958   random acc=0.000 pd=-3.750
-k=  256  learned acc=1.000 pd=+3.042   random acc=0.000 pd=-3.708
-k=  384  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.750
-k=  512  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.500
-k=  768  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.458
-k= 1024  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.458
-k= 2048  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.542
-k= 4096  learned acc=1.000 pd=+3.083   random acc=0.000 pd=-3.542

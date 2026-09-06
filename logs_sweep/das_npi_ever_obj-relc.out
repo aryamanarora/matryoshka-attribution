@@ -1,54 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:00<04:00,  1.19it/s]Loading weights:  32%|███▏      | 93/288 [00:00<00:01, 126.33it/s]Loading weights:  45%|████▌     | 130/288 [00:01<00:01, 132.57it/s]Loading weights:  55%|█████▍    | 157/288 [00:01<00:00, 138.56it/s]Loading weights:  62%|██████▎   | 180/288 [00:01<00:00, 128.26it/s]Loading weights:  69%|██████▉   | 199/288 [00:01<00:00, 133.51it/s]Loading weights:  75%|███████▌  | 217/288 [00:01<00:00, 128.37it/s]Loading weights:  81%|████████  | 233/288 [00:02<00:00, 134.27it/s]Loading weights:  86%|████████▋ | 249/288 [00:02<00:00, 127.15it/s]Loading weights:  93%|█████████▎| 268/288 [00:02<00:00, 139.54it/s]Loading weights: 100%|██████████| 288/288 [00:02<00:00, 122.13it/s]
-DAS-64 single-layer L12 task=syntaxgym/npi_ever_obj-relc
-step 0 loss 12.4336
-step 100 loss 1.6801
-step 200 loss 0.2350
-step 300 loss 0.1758
-step 400 loss 0.1282
-step 500 loss 0.2120
-step 600 loss 0.0877
-step 700 loss 0.0468
-step 800 loss 0.3849
-step 900 loss 0.0942
-step 1000 loss 0.1018
-step 1100 loss 0.0823
-step 1200 loss 0.0529
-step 1300 loss 0.1012
-step 1400 loss 0.3281
-step 1500 loss 0.1808
-step 1600 loss 0.2087
-step 1700 loss 0.0693
-step 1800 loss 0.0473
-step 1900 loss 0.0869
-step 2000 loss 0.0850
-step 2100 loss 0.0394
-step 2200 loss 0.0330
-step 2300 loss 0.0793
-step 2400 loss 0.1304
-step 2500 loss 0.1755
-step 2600 loss 0.0916
-step 2700 loss 0.1189
-step 2800 loss 0.1363
-step 2900 loss 0.1219
-step 3000 loss 0.0423
-step 3100 loss 0.0981
-step 3200 loss 0.1215
-step 3300 loss 0.1029
-step 3400 loss 0.1134
-step 3500 loss 0.0298
-step 3600 loss 0.1996
-step 3700 loss 0.1894
-step 3800 loss 0.0678
-step 3900 loss 0.2359
-=== DAS-64 SUFFICIENCY ===
-k=  1 learned acc=0.800 pd=+2.445 random acc=0.037
-k=  2 learned acc=1.000 pd=+4.998 random acc=0.037
-k=  4 learned acc=1.000 pd=+8.150 random acc=0.037
-k=  8 learned acc=1.000 pd=+9.988 random acc=0.037
-k= 12 learned acc=1.000 pd=+10.066 random acc=0.037
-k= 16 learned acc=1.000 pd=+10.226 random acc=0.050
-k= 24 learned acc=1.000 pd=+9.768 random acc=0.125
-k= 32 learned acc=1.000 pd=+10.447 random acc=0.125
-k= 48 learned acc=1.000 pd=+10.284 random acc=0.100
-k= 64 learned acc=1.000 pd=+11.061 random acc=1.000

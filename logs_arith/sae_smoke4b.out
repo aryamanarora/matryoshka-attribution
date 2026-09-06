@@ -1,290 +1,0 @@
-ARGS: --mask sae --tasks months,weekdays,hours,addition --steps 15 --n_eval 2 --output results/arith_sae_smoke4b
-2026-06-18 12:01:57,689 INFO httpx: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-2026-06-18 12:01:57,919 INFO httpx: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
-2026-06-18 12:01:58,078 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
-2026-06-18 12:01:58,269 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
-2026-06-18 12:01:59,285 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
-2026-06-18 12:01:59,459 INFO httpx: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:   0%|          | 1/291 [00:00<02:01,  2.39it/s]Loading weights:   1%|          | 2/291 [00:00<02:15,  2.13it/s]Loading weights:   2%|▏         | 5/291 [00:01<00:45,  6.22it/s]Loading weights:   2%|▏         | 7/291 [00:01<00:33,  8.41it/s]Loading weights:   5%|▌         | 15/291 [00:01<00:14, 19.22it/s]Loading weights:   7%|▋         | 20/291 [00:01<00:11, 24.32it/s]Loading weights:   8%|▊         | 24/291 [00:01<00:11, 23.96it/s]Loading weights:  10%|▉         | 29/291 [00:01<00:10, 24.58it/s]Loading weights:  14%|█▍        | 41/291 [00:01<00:06, 41.59it/s]Loading weights:  16%|█▌        | 46/291 [00:02<00:06, 39.69it/s]Loading weights:  18%|█▊        | 51/291 [00:02<00:08, 28.84it/s]Loading weights:  20%|██        | 59/291 [00:02<00:06, 36.68it/s]Loading weights:  22%|██▏       | 64/291 [00:02<00:06, 35.79it/s]Loading weights:  24%|██▎       | 69/291 [00:02<00:06, 34.38it/s]Loading weights:  26%|██▋       | 77/291 [00:02<00:05, 41.32it/s]Loading weights:  28%|██▊       | 82/291 [00:03<00:05, 37.48it/s]Loading weights:  30%|██▉       | 87/291 [00:03<00:05, 38.85it/s]Loading weights:  32%|███▏      | 92/291 [00:03<00:04, 40.00it/s]Loading weights:  36%|███▌      | 104/291 [00:03<00:03, 55.71it/s]Loading weights:  38%|███▊      | 112/291 [00:03<00:02, 61.56it/s]Loading weights:  41%|████      | 119/291 [00:03<00:02, 61.88it/s]Loading weights:  43%|████▎     | 126/291 [00:03<00:02, 55.15it/s]Loading weights:  45%|████▌     | 132/291 [00:04<00:03, 44.02it/s]Loading weights:  48%|████▊     | 139/291 [00:04<00:03, 46.70it/s]Loading weights:  50%|████▉     | 145/291 [00:04<00:03, 37.34it/s]Loading weights:  52%|█████▏    | 150/291 [00:04<00:03, 35.26it/s]Loading weights:  54%|█████▍    | 158/291 [00:04<00:03, 39.93it/s]Loading weights:  57%|█████▋    | 166/291 [00:04<00:02, 44.20it/s]Loading weights:  59%|█████▉    | 172/291 [00:05<00:02, 43.32it/s]Loading weights:  61%|██████    | 177/291 [00:05<00:03, 37.65it/s]Loading weights:  63%|██████▎   | 184/291 [00:05<00:02, 41.52it/s]Loading weights:  67%|██████▋   | 194/291 [00:05<00:01, 48.86it/s]Loading weights:  69%|██████▉   | 202/291 [00:05<00:01, 51.82it/s]Loading weights:  71%|███████▏  | 208/291 [00:05<00:01, 45.68it/s]Loading weights:  75%|███████▍  | 217/291 [00:05<00:01, 54.54it/s]Loading weights:  77%|███████▋  | 223/291 [00:06<00:01, 47.41it/s]Loading weights:  79%|███████▊  | 229/291 [00:06<00:01, 48.80it/s]Loading weights:  81%|████████  | 235/291 [00:06<00:01, 46.76it/s]Loading weights:  82%|████████▏ | 240/291 [00:06<00:01, 45.52it/s]Loading weights:  85%|████████▌ | 248/291 [00:06<00:00, 52.10it/s]Loading weights:  87%|████████▋ | 254/291 [00:06<00:00, 43.50it/s]Loading weights:  90%|█████████ | 263/291 [00:06<00:00, 52.51it/s]Loading weights:  92%|█████████▏| 269/291 [00:07<00:00, 41.96it/s]Loading weights:  95%|█████████▍| 276/291 [00:07<00:00, 41.77it/s]Loading weights:  97%|█████████▋| 283/291 [00:07<00:00, 46.95it/s]Loading weights:  99%|█████████▉| 289/291 [00:07<00:00, 49.85it/s]Loading weights: 100%|██████████| 291/291 [00:07<00:00, 38.70it/s]
-2026-06-18 12:02:11,130 INFO httpx: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:11,284 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L0R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:11,511 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L0R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:11,673 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L0R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:11,810 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L0R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:11,816 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L0R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:12,289 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L1R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:12,444 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L1R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:12,602 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L1R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:12,740 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L1R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:12,746 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L1R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:13,232 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L2R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:13,374 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L2R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:13,531 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L2R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:13,676 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L2R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:13,682 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L2R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:14,152 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L3R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:14,307 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L3R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:14,466 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L3R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:14,602 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L3R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:14,608 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L3R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:15,093 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L4R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:15,229 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L4R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:15,401 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L4R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:15,539 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L4R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:15,549 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L4R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:16,022 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L5R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:16,163 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L5R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:16,331 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L5R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:16,468 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L5R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:16,474 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L5R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:16,961 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L6R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:17,111 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L6R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:17,266 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L6R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:17,405 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L6R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:17,413 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L6R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:17,880 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L7R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:18,025 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L7R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:18,181 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L7R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:18,318 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L7R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:18,324 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L7R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:18,791 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L8R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:18,928 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L8R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:19,149 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L8R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:19,285 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L8R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:19,299 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L8R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:19,765 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L9R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:19,922 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L9R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:20,082 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L9R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:20,221 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L9R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:20,227 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L9R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:20,709 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L10R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:20,849 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L10R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:21,006 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L10R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:21,143 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L10R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:21,151 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L10R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:21,610 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L11R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:21,751 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L11R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:21,907 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L11R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:22,047 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L11R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:22,052 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L11R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:22,511 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L12R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:22,661 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L12R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:22,822 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L12R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:22,962 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L12R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:22,969 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L12R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:23,426 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L13R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:23,567 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L13R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:23,728 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L13R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:23,879 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L13R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:23,885 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L13R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:24,356 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L14R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:24,506 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L14R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:24,665 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L14R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:25,008 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L14R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:25,014 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L14R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:25,509 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L15R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:25,670 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L15R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:25,824 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L15R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:25,978 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L15R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:25,984 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L15R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:26,413 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L16R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:26,554 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L16R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:26,703 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L16R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:26,842 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L16R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:26,848 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L16R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:27,276 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L17R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:27,418 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L17R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:27,569 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L17R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:27,707 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L17R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:27,713 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L17R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:28,122 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L18R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:28,261 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L18R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:28,407 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L18R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:28,553 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L18R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:28,560 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L18R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:29,022 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L19R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:29,175 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L19R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:29,322 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L19R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:29,457 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L19R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:29,462 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L19R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:29,873 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L20R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:30,012 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L20R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:30,158 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L20R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:30,302 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L20R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:30,308 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L20R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:30,705 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L21R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:30,874 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L21R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:31,020 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L21R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:31,158 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L21R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:31,163 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L21R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:31,557 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L22R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:31,697 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L22R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:31,852 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L22R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:32,013 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L22R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:32,019 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L22R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:32,412 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L23R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:32,576 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L23R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:32,719 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L23R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:32,857 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L23R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:32,866 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L23R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:33,269 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L24R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:33,517 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L24R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:33,664 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L24R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:33,799 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L24R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:33,808 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L24R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:34,204 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L25R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:34,345 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L25R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:34,494 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L25R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:34,631 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L25R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:34,637 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L25R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:35,039 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L26R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:35,178 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L26R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:35,325 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L26R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:35,462 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L26R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:35,469 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L26R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:35,877 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L27R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:36,029 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L27R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:36,172 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L27R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:36,306 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L27R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:36,312 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L27R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:36,708 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L28R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:36,851 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L28R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:36,998 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L28R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:37,212 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L28R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:37,217 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L28R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:37,615 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L29R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:37,754 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L29R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:37,908 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L29R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:38,045 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L29R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:38,051 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L29R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:38,438 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L30R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:38,586 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L30R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:38,736 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L30R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:38,874 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L30R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:38,880 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L30R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:39,270 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L31R-8x/checkpoints/final.safetensors "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:39,414 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L31R-8x/checkpoints/final.safetensors "HTTP/1.1 302 Found"
-2026-06-18 12:02:39,563 INFO httpx: HTTP Request: HEAD https://huggingface.co/fnlp/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L31R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:39,696 INFO httpx: HTTP Request: HEAD https://huggingface.co/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/resolve/main/Llama3_1-8B-Base-L31R-8x/hyperparams.json "HTTP/1.1 307 Temporary Redirect"
-2026-06-18 12:02:39,702 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/OpenMOSS-Team/Llama3_1-8B-Base-LXR-8x/8dbc1d85edfced43081c03c38b05514dbab1368b/Llama3_1-8B-Base-L31R-8x%2Fhyperparams.json "HTTP/1.1 200 OK"
-2026-06-18 12:02:39,969 INFO arith:   months       spans=3 total=3145728
-2026-06-18 12:02:39,981 INFO arith:   weekdays     spans=3 total=3145728
-2026-06-18 12:02:39,994 INFO arith:   hours        spans=3 total=3145728
-2026-06-18 12:02:40,001 INFO arith:   addition     spans=3 total=3145728
-2026-06-18 12:02:40,002 INFO arith: mask=sae tasks=['months', 'weekdays', 'hours', 'addition'] steps=15 sufficient=True
-2026-06-18 12:02:42,003 INFO arith: step     1/15  mean_loss=11.1291  (2.0 task-fwd/s)
-2026-06-18 12:02:42,728 INFO arith: step     2/15  mean_loss=8.4122  (2.9 task-fwd/s)
-2026-06-18 12:02:43,461 INFO arith: step     3/15  mean_loss=7.8608  (3.5 task-fwd/s)
-2026-06-18 12:02:44,188 INFO arith: step     4/15  mean_loss=8.5461  (3.8 task-fwd/s)
-2026-06-18 12:02:44,916 INFO arith: step     5/15  mean_loss=8.1494  (4.1 task-fwd/s)
-2026-06-18 12:02:45,743 INFO arith: step     6/15  mean_loss=7.6400  (4.2 task-fwd/s)
-2026-06-18 12:02:46,464 INFO arith: step     7/15  mean_loss=7.5200  (4.3 task-fwd/s)
-2026-06-18 12:02:47,301 INFO arith: step     8/15  mean_loss=7.4621  (4.4 task-fwd/s)
-2026-06-18 12:02:48,032 INFO arith: step     9/15  mean_loss=7.2700  (4.5 task-fwd/s)
-2026-06-18 12:02:48,753 INFO arith: step    10/15  mean_loss=7.1062  (4.6 task-fwd/s)
-2026-06-18 12:02:49,480 INFO arith: step    11/15  mean_loss=6.8078  (4.6 task-fwd/s)
-2026-06-18 12:02:50,193 INFO arith: step    12/15  mean_loss=6.5861  (4.7 task-fwd/s)
-2026-06-18 12:02:50,914 INFO arith: step    13/15  mean_loss=6.5232  (4.8 task-fwd/s)
-2026-06-18 12:02:51,633 INFO arith: step    14/15  mean_loss=6.4824  (4.8 task-fwd/s)
-2026-06-18 12:02:52,354 INFO arith: step    15/15  mean_loss=6.3907  (4.9 task-fwd/s)
-2026-06-18 12:02:52,653 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.2703  KL_cf_L=0.000001  KL_cf_R=0.000004
-2026-06-18 12:02:52,851 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.4937  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:02:53,045 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.7329  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:02:53,238 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.2093  KL_cf_L=0.000005  KL_cf_R=0.000001
-2026-06-18 12:02:53,431 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.2887  KL_cf_L=0.000001  KL_cf_R=0.000003
-2026-06-18 12:02:53,624 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.1042  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:02:53,816 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.8517  KL_cf_L=0.000012  KL_cf_R=0.000004
-2026-06-18 12:02:54,009 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0003  KL_random=0.0000  CE_learned=33.4169  KL_cf_L=0.000267  KL_cf_R=0.000001
-2026-06-18 12:02:54,202 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.9983  KL_cf_L=0.000012  KL_cf_R=0.000003
-2026-06-18 12:02:54,396 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=6.4736  KL_cf_L=0.000010  KL_cf_R=0.000004
-2026-06-18 12:02:54,589 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=2.3549  KL_cf_L=0.000003  KL_cf_R=0.000001
-2026-06-18 12:02:54,784 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=0.5017  KL_cf_L=0.000015  KL_cf_R=0.000015
-2026-06-18 12:02:55,016 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.5800  KL_cf_L=0.000002  KL_cf_R=0.000002
-2026-06-18 12:02:55,211 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.5866  KL_cf_L=0.000002  KL_cf_R=0.000002
-2026-06-18 12:02:55,405 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.5938  KL_cf_L=0.000001  KL_cf_R=0.000008
-2026-06-18 12:02:55,599 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.7262  KL_cf_L=0.000002  KL_cf_R=0.000003
-2026-06-18 12:02:55,796 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.2475  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:02:55,990 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.5195  KL_cf_L=0.000001  KL_cf_R=0.000003
-2026-06-18 12:02:56,190 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.1026  KL_cf_L=0.000006  KL_cf_R=0.000001
-2026-06-18 12:02:56,384 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.1026  KL_cf_L=0.000006  KL_cf_R=0.000002
-2026-06-18 12:02:56,577 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.0784  KL_cf_L=0.000007  KL_cf_R=0.000001
-2026-06-18 12:02:56,770 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.1033  KL_cf_L=0.000006  KL_cf_R=0.000001
-2026-06-18 12:02:56,963 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.1825  KL_cf_L=0.000006  KL_cf_R=0.000000
-2026-06-18 12:02:57,160 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=0.3236  KL_cf_L=0.000026  KL_cf_R=0.000026
-2026-06-18 12:02:57,162 INFO arith:   months: CE_learned@0.5%=3.9678
-2026-06-18 12:02:57,397 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.5690  KL_cf_L=0.000000  KL_cf_R=0.000001
-2026-06-18 12:02:57,589 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0003  KL_random=0.0000  CE_learned=36.1739  KL_cf_L=0.000269  KL_cf_R=0.000000
-2026-06-18 12:02:57,783 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1195  KL_cf_L=0.000002  KL_cf_R=0.000000
-2026-06-18 12:02:57,978 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0000  KL_random=0.0003  CE_learned=3.9122  KL_cf_L=0.000000  KL_cf_R=0.000269
-2026-06-18 12:02:58,175 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0003  CE_learned=4.0828  KL_cf_L=0.000000  KL_cf_R=0.000270
-2026-06-18 12:02:58,371 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.2967  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:02:58,565 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.3442  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:02:58,763 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.8560  KL_cf_L=0.000001  KL_cf_R=0.000000
-2026-06-18 12:02:58,957 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.8887  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:02:59,153 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.2282  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:02:59,348 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.0675  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:02:59,543 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=0.4668  KL_cf_L=0.000025  KL_cf_R=0.000025
-2026-06-18 12:02:59,776 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.5700  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:02:59,970 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0000  KL_random=0.0003  CE_learned=4.5721  KL_cf_L=0.000001  KL_cf_R=0.000270
-2026-06-18 12:03:00,167 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0003  KL_random=0.0000  CE_learned=35.3129  KL_cf_L=0.000269  KL_cf_R=0.000001
-2026-06-18 12:03:00,365 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.2427  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:03:00,558 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.0400  KL_cf_L=0.000000  KL_cf_R=0.000001
-2026-06-18 12:03:00,751 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.5880  KL_cf_L=0.000000  KL_cf_R=0.000002
-2026-06-18 12:03:00,943 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.5880  KL_cf_L=0.000000  KL_cf_R=0.000001
-2026-06-18 12:03:01,136 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.2199  KL_cf_L=0.000000  KL_cf_R=0.000002
-2026-06-18 12:03:01,329 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.5541  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:03:01,522 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.5400  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:03:01,714 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=3.7291  KL_cf_L=0.000001  KL_cf_R=0.000000
-2026-06-18 12:03:01,908 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.0145  KL_cf_L=0.000029  KL_cf_R=0.000029
-2026-06-18 12:03:01,910 INFO arith:   weekdays: CE_learned@0.5%=4.0775
-2026-06-18 12:03:02,140 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=25.2197  KL_cf_L=0.000227  KL_cf_R=0.000227
-2026-06-18 12:03:02,332 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=25.1944  KL_cf_L=0.000227  KL_cf_R=0.000227
-2026-06-18 12:03:02,524 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=15.6582  KL_cf_L=0.000127  KL_cf_R=0.000228
-2026-06-18 12:03:02,716 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=10.7936  KL_cf_L=0.000071  KL_cf_R=0.000227
-2026-06-18 12:03:02,909 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=6.8826  KL_cf_L=0.000028  KL_cf_R=0.000227
-2026-06-18 12:03:03,104 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=7.5577  KL_cf_L=0.000027  KL_cf_R=0.000227
-2026-06-18 12:03:03,297 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=7.8486  KL_cf_L=0.000028  KL_cf_R=0.000226
-2026-06-18 12:03:03,491 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=5.1254  KL_cf_L=0.000001  KL_cf_R=0.000227
-2026-06-18 12:03:03,684 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=5.8012  KL_cf_L=0.000000  KL_cf_R=0.000228
-2026-06-18 12:03:03,876 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.5142  KL_cf_L=0.000001  KL_cf_R=0.000001
-2026-06-18 12:03:04,069 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.4050  KL_cf_L=0.000002  KL_cf_R=0.000001
-2026-06-18 12:03:04,267 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=0.0723  KL_cf_L=0.000046  KL_cf_R=0.000046
-2026-06-18 12:03:04,499 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.3416  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:04,692 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1969  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:04,884 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1932  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:05,077 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1856  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:05,272 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1889  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:05,467 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.4882  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:05,662 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.1748  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:05,863 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.3535  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:06,057 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.2536  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:06,251 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=5.0659  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:06,445 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=4.9497  KL_cf_L=0.000000  KL_cf_R=0.000000
-2026-06-18 12:03:06,640 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=0.9812  KL_cf_L=0.000035  KL_cf_R=0.000035
-2026-06-18 12:03:06,646 INFO arith:   hours: CE_learned@0.5%=7.9896
-2026-06-18 12:03:06,880 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=27.8652  KL_cf_L=0.000215  KL_cf_R=0.000218
-2026-06-18 12:03:07,073 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=27.0771  KL_cf_L=0.000210  KL_cf_R=0.000218
-2026-06-18 12:03:07,267 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=24.0552  KL_cf_L=0.000188  KL_cf_R=0.000218
-2026-06-18 12:03:07,459 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=22.0121  KL_cf_L=0.000173  KL_cf_R=0.000218
-2026-06-18 12:03:07,652 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=17.4841  KL_cf_L=0.000141  KL_cf_R=0.000217
-2026-06-18 12:03:07,850 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=15.7458  KL_cf_L=0.000128  KL_cf_R=0.000217
-2026-06-18 12:03:08,045 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=13.6968  KL_cf_L=0.000110  KL_cf_R=0.000217
-2026-06-18 12:03:08,238 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=9.4001  KL_cf_L=0.000080  KL_cf_R=0.000219
-2026-06-18 12:03:08,429 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=7.6588  KL_cf_L=0.000068  KL_cf_R=0.000218
-2026-06-18 12:03:08,621 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=7.7551  KL_cf_L=0.000066  KL_cf_R=0.000212
-2026-06-18 12:03:08,813 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0001  KL_random=0.0000  CE_learned=7.7485  KL_cf_L=0.000066  KL_cf_R=0.000000
-2026-06-18 12:03:09,006 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=1.0725  KL_cf_L=0.000031  KL_cf_R=0.000031
-2026-06-18 12:03:09,241 INFO attribute: keep=  0.0% (    314/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=7.3218  KL_cf_L=0.000001  KL_cf_R=0.000206
-2026-06-18 12:03:09,435 INFO attribute: keep=  0.1% (   1572/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=7.4272  KL_cf_L=0.000000  KL_cf_R=0.000207
-2026-06-18 12:03:09,627 INFO attribute: keep=  0.1% (   3145/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=7.5849  KL_cf_L=0.000000  KL_cf_R=0.000207
-2026-06-18 12:03:09,820 INFO attribute: keep=  0.2% (   6291/3145728)  KL_learned=0.0002  KL_random=0.0002  CE_learned=21.8918  KL_cf_L=0.000157  KL_cf_R=0.000207
-2026-06-18 12:03:10,010 INFO attribute: keep=  0.5% (  15728/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=17.1414  KL_cf_L=0.000122  KL_cf_R=0.000207
-2026-06-18 12:03:10,205 INFO attribute: keep=  1.0% (  31457/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=15.0768  KL_cf_L=0.000109  KL_cf_R=0.000206
-2026-06-18 12:03:10,397 INFO attribute: keep=  2.0% (  62914/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=12.0665  KL_cf_L=0.000089  KL_cf_R=0.000207
-2026-06-18 12:03:10,588 INFO attribute: keep=  5.0% ( 157286/3145728)  KL_learned=0.0001  KL_random=0.0002  CE_learned=8.4818  KL_cf_L=0.000059  KL_cf_R=0.000206
-2026-06-18 12:03:10,780 INFO attribute: keep= 10.0% ( 314572/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=7.6080  KL_cf_L=0.000051  KL_cf_R=0.000207
-2026-06-18 12:03:10,972 INFO attribute: keep= 20.0% ( 629145/3145728)  KL_learned=0.0000  KL_random=0.0002  CE_learned=7.8486  KL_cf_L=0.000052  KL_cf_R=0.000199
-2026-06-18 12:03:11,170 INFO attribute: keep= 50.0% (1572864/3145728)  KL_learned=0.0000  KL_random=0.0000  CE_learned=7.8844  KL_cf_L=0.000052  KL_cf_R=0.000000
-2026-06-18 12:03:11,362 INFO attribute: keep=100.0% (3145728/3145728)  KL_learned=-0.0000  KL_random=-0.0000  CE_learned=0.8222  KL_cf_L=0.000012  KL_cf_R=0.000012
-2026-06-18 12:03:11,363 INFO arith:   addition: CE_learned@0.5%=21.9520
-2026-06-18 12:03:11,559 INFO arith: saved results/arith_sae_smoke4b.pkl

@@ -1,54 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:01<07:09,  1.49s/it]Loading weights:  32%|███▏      | 91/288 [00:01<00:02, 77.35it/s]Loading weights:  46%|████▌     | 133/288 [00:02<00:02, 71.66it/s]Loading weights:  55%|█████▌    | 159/288 [00:02<00:02, 64.38it/s]Loading weights:  61%|██████▏   | 177/288 [00:02<00:01, 69.23it/s]Loading weights:  67%|██████▋   | 192/288 [00:03<00:01, 62.20it/s]Loading weights:  73%|███████▎  | 209/288 [00:03<00:01, 67.35it/s]Loading weights:  76%|███████▋  | 220/288 [00:03<00:00, 68.91it/s]Loading weights:  80%|███████▉  | 230/288 [00:03<00:00, 65.01it/s]Loading weights:  83%|████████▎ | 239/288 [00:03<00:00, 66.44it/s]Loading weights:  86%|████████▌ | 247/288 [00:04<00:00, 65.14it/s]Loading weights:  89%|████████▉ | 257/288 [00:04<00:00, 66.60it/s]Loading weights:  93%|█████████▎| 268/288 [00:04<00:00, 73.40it/s]Loading weights:  96%|█████████▌| 277/288 [00:04<00:00, 75.44it/s]Loading weights: 100%|██████████| 288/288 [00:04<00:00, 63.75it/s]
-DAS-64 single-layer L12 task=syntaxgym/garden_npz_v-trans_mod
-step 0 loss 5.4259
-step 100 loss 3.6128
-step 200 loss 2.5934
-step 300 loss 2.8825
-step 400 loss 2.5013
-step 500 loss 2.5625
-step 600 loss 2.2184
-step 700 loss 2.1684
-step 800 loss 2.2086
-step 900 loss 2.0401
-step 1000 loss 2.1773
-step 1100 loss 2.1150
-step 1200 loss 1.9258
-step 1300 loss 2.1398
-step 1400 loss 1.7658
-step 1500 loss 2.1143
-step 1600 loss 2.0000
-step 1700 loss 1.9912
-step 1800 loss 1.9006
-step 1900 loss 1.9211
-step 2000 loss 2.2153
-step 2100 loss 1.9974
-step 2200 loss 2.1187
-step 2300 loss 1.8719
-step 2400 loss 1.8963
-step 2500 loss 1.8407
-step 2600 loss 2.1337
-step 2700 loss 1.8757
-step 2800 loss 1.9151
-step 2900 loss 1.8642
-step 3000 loss 1.8275
-step 3100 loss 2.1173
-step 3200 loss 1.9437
-step 3300 loss 2.1255
-step 3400 loss 2.0436
-step 3500 loss 1.7330
-step 3600 loss 1.9584
-step 3700 loss 1.7816
-step 3800 loss 1.7272
-step 3900 loss 1.8643
-=== DAS-64 SUFFICIENCY ===
-k=  1 learned acc=0.575 pd=+0.308 random acc=0.225
-k=  2 learned acc=0.762 pd=+1.592 random acc=0.212
-k=  4 learned acc=0.812 pd=+2.281 random acc=0.212
-k=  8 learned acc=0.912 pd=+3.306 random acc=0.225
-k= 12 learned acc=0.925 pd=+3.825 random acc=0.225
-k= 16 learned acc=0.925 pd=+4.222 random acc=0.225
-k= 24 learned acc=0.950 pd=+4.723 random acc=0.287
-k= 32 learned acc=0.950 pd=+4.987 random acc=0.675
-k= 48 learned acc=0.950 pd=+5.236 random acc=0.800
-k= 64 learned acc=0.950 pd=+5.304 random acc=0.950

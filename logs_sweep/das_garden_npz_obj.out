@@ -1,54 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:01<07:10,  1.50s/it]Loading weights:  32%|███▏      | 91/288 [00:01<00:02, 77.75it/s]Loading weights:  48%|████▊     | 137/288 [00:02<00:02, 70.76it/s]Loading weights:  57%|█████▋    | 165/288 [00:02<00:01, 69.47it/s]Loading weights:  64%|██████▍   | 185/288 [00:03<00:01, 69.93it/s]Loading weights:  69%|██████▉   | 200/288 [00:03<00:01, 66.71it/s]Loading weights:  74%|███████▎  | 212/288 [00:03<00:01, 64.92it/s]Loading weights:  77%|███████▋  | 222/288 [00:03<00:00, 66.10it/s]Loading weights:  80%|████████  | 231/288 [00:03<00:00, 65.37it/s]Loading weights:  83%|████████▎ | 240/288 [00:03<00:00, 61.67it/s]Loading weights:  86%|████████▌ | 248/288 [00:04<00:00, 59.96it/s]Loading weights:  89%|████████▉ | 257/288 [00:04<00:00, 62.39it/s]Loading weights:  93%|█████████▎| 269/288 [00:04<00:00, 61.37it/s]Loading weights: 100%|██████████| 288/288 [00:04<00:00, 63.78it/s]
-DAS-64 single-layer L12 task=syntaxgym/garden_npz_obj
-step 0 loss 9.4387
-step 100 loss 2.2179
-step 200 loss 0.8551
-step 300 loss 0.7364
-step 400 loss 0.5605
-step 500 loss 0.7118
-step 600 loss 0.6697
-step 700 loss 0.5639
-step 800 loss 0.5039
-step 900 loss 0.6469
-step 1000 loss 0.6126
-step 1100 loss 0.6263
-step 1200 loss 0.7093
-step 1300 loss 0.3687
-step 1400 loss 0.3695
-step 1500 loss 0.6701
-step 1600 loss 0.6943
-step 1700 loss 0.6672
-step 1800 loss 0.5922
-step 1900 loss 0.5618
-step 2000 loss 0.4355
-step 2100 loss 0.2151
-step 2200 loss 0.4548
-step 2300 loss 0.4063
-step 2400 loss 0.3270
-step 2500 loss 0.2669
-step 2600 loss 0.3777
-step 2700 loss 0.4490
-step 2800 loss 0.6030
-step 2900 loss 0.4833
-step 3000 loss 0.6727
-step 3100 loss 0.4042
-step 3200 loss 0.4063
-step 3300 loss 0.3639
-step 3400 loss 0.7510
-step 3500 loss 0.8622
-step 3600 loss 0.6433
-step 3700 loss 0.4521
-step 3800 loss 0.6005
-step 3900 loss 0.7132
-=== DAS-64 SUFFICIENCY ===
-k=  1 learned acc=0.762 pd=+1.591 random acc=0.037
-k=  2 learned acc=1.000 pd=+6.144 random acc=0.037
-k=  4 learned acc=1.000 pd=+8.209 random acc=0.037
-k=  8 learned acc=1.000 pd=+8.863 random acc=0.037
-k= 12 learned acc=1.000 pd=+9.021 random acc=0.125
-k= 16 learned acc=1.000 pd=+9.291 random acc=0.113
-k= 24 learned acc=1.000 pd=+9.591 random acc=0.100
-k= 32 learned acc=1.000 pd=+9.758 random acc=0.087
-k= 48 learned acc=1.000 pd=+9.987 random acc=1.000
-k= 64 learned acc=1.000 pd=+9.130 random acc=1.000

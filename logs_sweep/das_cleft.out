@@ -1,54 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:01<09:28,  1.98s/it]Loading weights:  32%|███▏      | 93/288 [00:02<00:03, 61.33it/s]Loading weights:  48%|████▊     | 137/288 [00:02<00:02, 65.19it/s]Loading weights:  57%|█████▋    | 164/288 [00:03<00:01, 69.49it/s]Loading weights:  64%|██████▍   | 184/288 [00:03<00:01, 66.83it/s]Loading weights:  69%|██████▉   | 199/288 [00:03<00:01, 64.72it/s]Loading weights:  73%|███████▎  | 211/288 [00:03<00:01, 66.92it/s]Loading weights:  77%|███████▋  | 222/288 [00:03<00:00, 67.89it/s]Loading weights:  81%|████████  | 232/288 [00:04<00:00, 69.42it/s]Loading weights:  84%|████████▎ | 241/288 [00:04<00:00, 68.35it/s]Loading weights:  87%|████████▋ | 250/288 [00:04<00:00, 65.94it/s]Loading weights:  92%|█████████▏| 264/288 [00:04<00:00, 73.92it/s]Loading weights:  95%|█████████▍| 273/288 [00:04<00:00, 69.17it/s]Loading weights: 100%|██████████| 288/288 [00:04<00:00, 60.49it/s]
-DAS-64 single-layer L12 task=syntaxgym/cleft
-step 0 loss 15.5858
-step 100 loss 1.9787
-step 200 loss 0.9118
-step 300 loss 0.7464
-step 400 loss 0.6494
-step 500 loss 0.5849
-step 600 loss 0.6620
-step 700 loss 0.7326
-step 800 loss 0.6963
-step 900 loss 0.5559
-step 1000 loss 0.5391
-step 1100 loss 0.6812
-step 1200 loss 0.5953
-step 1300 loss 0.5931
-step 1400 loss 0.6053
-step 1500 loss 0.4002
-step 1600 loss 0.3949
-step 1700 loss 0.4028
-step 1800 loss 0.3868
-step 1900 loss 0.7932
-step 2000 loss 0.6760
-step 2100 loss 0.8466
-step 2200 loss 0.5839
-step 2300 loss 0.4676
-step 2400 loss 0.5368
-step 2500 loss 0.5086
-step 2600 loss 0.4028
-step 2700 loss 0.5174
-step 2800 loss 0.3728
-step 2900 loss 0.6050
-step 3000 loss 0.4094
-step 3100 loss 0.5471
-step 3200 loss 0.5259
-step 3300 loss 0.5385
-step 3400 loss 0.6707
-step 3500 loss 0.5027
-step 3600 loss 0.2942
-step 3700 loss 0.4140
-step 3800 loss 0.4290
-step 3900 loss 0.2835
-=== DAS-64 SUFFICIENCY ===
-k=  1 learned acc=0.675 pd=+4.227 random acc=0.000
-k=  2 learned acc=1.000 pd=+11.139 random acc=0.000
-k=  4 learned acc=1.000 pd=+11.421 random acc=0.000
-k=  8 learned acc=1.000 pd=+11.928 random acc=0.000
-k= 12 learned acc=1.000 pd=+12.453 random acc=0.000
-k= 16 learned acc=1.000 pd=+12.730 random acc=0.000
-k= 24 learned acc=1.000 pd=+13.108 random acc=0.000
-k= 32 learned acc=1.000 pd=+13.223 random acc=0.000
-k= 48 learned acc=1.000 pd=+13.142 random acc=0.000
-k= 64 learned acc=1.000 pd=+10.007 random acc=1.000

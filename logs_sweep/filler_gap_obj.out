@@ -1,66 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:01<07:57,  1.66s/it]Loading weights:  35%|███▍      | 100/288 [00:01<00:02, 78.50it/s]Loading weights:  54%|█████▍    | 156/288 [00:02<00:01, 76.18it/s]Loading weights:  66%|██████▌   | 190/288 [00:02<00:01, 75.39it/s]Loading weights:  74%|███████▍  | 214/288 [00:03<00:01, 73.17it/s]Loading weights:  81%|████████  | 232/288 [00:03<00:00, 76.05it/s]Loading weights:  86%|████████▌ | 247/288 [00:03<00:00, 72.23it/s]Loading weights:  90%|████████▉ | 259/288 [00:03<00:00, 71.72it/s]Loading weights:  94%|█████████▍| 270/288 [00:04<00:00, 69.93it/s]Loading weights: 100%|██████████| 288/288 [00:04<00:00, 68.21it/s]
-task=syntaxgym/filler_gap_obj num_spans=6 d_sae=16384 layer=12
-step 0  loss 1.3249  k~1189
-step 100  loss 5.6796  k~12153
-step 200  loss 4.6311  k~12
-step 300  loss 5.1503  k~581
-step 400  loss 4.9932  k~632
-step 500  loss 4.6716  k~9706
-step 600  loss 4.8843  k~2978
-step 700  loss 4.5522  k~1
-step 800  loss 4.5278  k~8169
-step 900  loss 4.8071  k~5
-step 1000  loss 4.7674  k~17
-step 1100  loss 4.6890  k~25
-step 1200  loss 4.6038  k~5
-step 1300  loss 4.5915  k~13182
-step 1400  loss 4.6460  k~98
-step 1500  loss 4.8669  k~4
-step 1600  loss 4.9210  k~3219
-step 1700  loss 4.8206  k~366
-step 1800  loss 4.6262  k~9
-step 1900  loss 4.8183  k~1384
-step 2000  loss 4.5962  k~16301
-step 2100  loss 4.8128  k~271
-step 2200  loss 4.7681  k~6108
-step 2300  loss 4.2950  k~1515
-step 2400  loss 4.5003  k~2
-step 2500  loss 4.6550  k~11
-step 2600  loss 4.7945  k~408
-step 2700  loss 4.7755  k~37
-step 2800  loss 4.6112  k~23
-step 2900  loss 4.6906  k~496
-step 3000  loss 4.9611  k~5
-step 3100  loss 4.3735  k~5
-step 3200  loss 4.6444  k~74
-step 3300  loss 4.6093  k~133
-step 3400  loss 4.6285  k~195
-step 3500  loss 4.7656  k~2
-step 3600  loss 4.5150  k~35
-step 3700  loss 4.6543  k~150
-step 3800  loss 4.7252  k~23
-step 3900  loss 4.8785  k~3
-evaluating sufficiency curve...
-ERROR NODE: score=13.312 rank=1/16384 (max feat score 14.230)
-=== SUFFICIENCY CURVE (prob-diff base-src; higher=more sufficient) ===
-k=    1  learned acc=0.287 pd=-1.617   random acc=0.287 pd=-2.009
-k=    2  learned acc=0.362 pd=-1.203   random acc=0.287 pd=-2.009
-k=    4  learned acc=0.438 pd=-0.405   random acc=0.287 pd=-2.009
-k=    8  learned acc=0.637 pd=+1.072   random acc=0.287 pd=-2.009
-k=   12  learned acc=0.650 pd=+1.298   random acc=0.287 pd=-2.008
-k=   16  learned acc=0.688 pd=+1.492   random acc=0.287 pd=-2.008
-k=   24  learned acc=0.725 pd=+1.927   random acc=0.287 pd=-2.009
-k=   32  learned acc=0.738 pd=+2.102   random acc=0.275 pd=-2.011
-k=   48  learned acc=0.738 pd=+2.339   random acc=0.263 pd=-2.013
-k=   64  learned acc=0.738 pd=+2.453   random acc=0.250 pd=-2.011
-k=   96  learned acc=0.775 pd=+2.602   random acc=0.250 pd=-2.011
-k=  128  learned acc=0.787 pd=+2.706   random acc=0.263 pd=-2.014
-k=  192  learned acc=0.787 pd=+2.842   random acc=0.250 pd=-2.016
-k=  256  learned acc=0.812 pd=+2.945   random acc=0.287 pd=-1.945
-k=  384  learned acc=0.838 pd=+3.027   random acc=0.300 pd=-1.950
-k=  512  learned acc=0.838 pd=+3.114   random acc=0.300 pd=-1.947
-k=  768  learned acc=0.863 pd=+3.197   random acc=0.312 pd=-1.889
-k= 1024  learned acc=0.850 pd=+3.255   random acc=0.338 pd=-1.492
-k= 2048  learned acc=0.850 pd=+3.336   random acc=0.375 pd=-1.177
-k= 4096  learned acc=0.838 pd=+3.337   random acc=0.388 pd=-0.998

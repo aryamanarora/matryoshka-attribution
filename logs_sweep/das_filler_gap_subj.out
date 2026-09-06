@@ -1,54 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/288 [00:00<?, ?it/s]Loading weights:   0%|          | 1/288 [00:00<03:39,  1.31it/s]Loading weights:  32%|███▏      | 91/288 [00:00<00:01, 141.05it/s]Loading weights:  49%|████▉     | 141/288 [00:01<00:00, 148.85it/s]Loading weights:  61%|██████    | 176/288 [00:01<00:00, 148.87it/s]Loading weights:  70%|███████   | 203/288 [00:01<00:00, 141.93it/s]Loading weights:  78%|███████▊  | 225/288 [00:01<00:00, 141.33it/s]Loading weights:  85%|████████▍ | 244/288 [00:01<00:00, 147.54it/s]Loading weights:  91%|█████████▏| 263/288 [00:02<00:00, 155.54it/s]Loading weights:  98%|█████████▊| 282/288 [00:02<00:00, 153.66it/s]Loading weights: 100%|██████████| 288/288 [00:02<00:00, 135.03it/s]
-DAS-64 single-layer L12 task=syntaxgym/filler_gap_subj
-step 0 loss 3.6110
-step 100 loss 2.0565
-step 200 loss 0.9681
-step 300 loss 1.1720
-step 400 loss 1.0057
-step 500 loss 0.7950
-step 600 loss 0.7288
-step 700 loss 0.8157
-step 800 loss 0.5007
-step 900 loss 0.4696
-step 1000 loss 0.7895
-step 1100 loss 0.6553
-step 1200 loss 0.7785
-step 1300 loss 0.3821
-step 1400 loss 0.5565
-step 1500 loss 0.3930
-step 1600 loss 0.4361
-step 1700 loss 0.3528
-step 1800 loss 0.6981
-step 1900 loss 0.3389
-step 2000 loss 0.3244
-step 2100 loss 0.4274
-step 2200 loss 0.4998
-step 2300 loss 0.4501
-step 2400 loss 0.3047
-step 2500 loss 0.6510
-step 2600 loss 0.7083
-step 2700 loss 0.4001
-step 2800 loss 0.3663
-step 2900 loss 0.2130
-step 3000 loss 0.3325
-step 3100 loss 0.1907
-step 3200 loss 0.3094
-step 3300 loss 0.3913
-step 3400 loss 0.3285
-step 3500 loss 0.7645
-step 3600 loss 0.3606
-step 3700 loss 0.6533
-step 3800 loss 0.7413
-step 3900 loss 0.4160
-=== DAS-64 SUFFICIENCY ===
-k=  1 learned acc=0.850 pd=+2.077 random acc=0.100
-k=  2 learned acc=0.988 pd=+5.694 random acc=0.100
-k=  4 learned acc=1.000 pd=+6.507 random acc=0.113
-k=  8 learned acc=1.000 pd=+8.182 random acc=0.113
-k= 12 learned acc=1.000 pd=+8.708 random acc=0.113
-k= 16 learned acc=1.000 pd=+9.012 random acc=0.113
-k= 24 learned acc=1.000 pd=+9.161 random acc=0.125
-k= 32 learned acc=1.000 pd=+9.340 random acc=0.938
-k= 48 learned acc=1.000 pd=+9.760 random acc=1.000
-k= 64 learned acc=1.000 pd=+9.273 random acc=1.000

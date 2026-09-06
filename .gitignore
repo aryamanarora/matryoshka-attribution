@@ -4,6 +4,7 @@ __pycache__/
 MIB-circuit-track/
 results/
 logs/
+logs_*/
 plots/*
 !plots/*.py
 .claude/
