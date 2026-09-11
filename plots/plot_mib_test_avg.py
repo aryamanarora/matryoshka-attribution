@@ -261,8 +261,15 @@ STRIP_HEADROOM = 1.30
 # "MAttr costs 0.5k, Node Pruning 3k" readable at all. Bars above the threshold are legible
 # as bars and stay unlabelled so the row is not fifteen strings again.
 TINY_FRAC = 0.12
-# The lighter extension from a range's minimum to its maximum, same hue as the solid part.
+# HIGHLIGHT (2026-09-11, requested): only OUR bars are filled; every baseline is drawn as an
+# outline in its family colour, in both rows and in the legend. Family is still the hue, so
+# the grouping survives; fill is the one cue reserved for the method the figure is about.
+FILLED = ("ours", "ours_uni")
+BAR_LW = 0.8
+# A ranged cost on a filled bar: solid to the minimum, RANGE_ALPHA of the same hue on to the
+# maximum. On an outlined bar: solid outline to the minimum, DASHED outline on to the maximum.
 RANGE_ALPHA = 0.35
+RANGE_DASH = (0, (2.0, 1.2))
 # Left margin, figure fraction: clears "Backward passes" plus the widest tick label of either
 # row ("30k"). Measured against the render, like the old supylabel x was.
 LEFT = 0.095
@@ -299,6 +306,14 @@ def parse_cost(s):
     unit = 1000 if body.endswith("k") else 1
     parts = [float(x) * unit for x in body.rstrip("k").split("-")]
     return parts[0], parts[-1]
+
+
+def bar_style(fam):
+    """Fill/edge kwargs for a bar of family `fam`: filled for FILLED, outlined otherwise."""
+    colour = FAMILY[fam][1]
+    if fam in FILLED:
+        return dict(color=colour, lw=0)
+    return dict(facecolor="none", edgecolor=colour, lw=BAR_LW)
 
 
 def avg(data):
@@ -469,8 +484,8 @@ def draw(ax, recs, title):
     has to appear somewhere is unchanged.
     """
     xs = range(len(recs))
-    ax.bar(xs, [r[2] for r in recs], width=BAR_W,
-           color=[FAMILY[r[0]][1] for r in recs], lw=0, zorder=2)
+    for x, r in zip(xs, recs):
+        ax.bar(x, r[2], width=BAR_W, zorder=2, **bar_style(r[0]))
     # Caps drawn in black on top of every bar colour, thin enough not to read as part of the bar.
     ax.errorbar(list(xs), [r[2] for r in recs],
                 yerr=[r[3] or 0.0 for r in recs], fmt="none", ecolor="#000000",
@@ -514,10 +529,14 @@ def draw_cost(sx, recs):
     top = max(hi for _, hi in ranges)
     for x, (fam, _, _, _, cost), (lo, hi) in zip(xs, recs, ranges):
         colour = FAMILY[fam][1]
-        sx.bar(x, lo, width=BAR_W, color=colour, lw=0, zorder=2)
+        sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
-            sx.bar(x, hi - lo, bottom=lo, width=BAR_W, color=colour, alpha=RANGE_ALPHA,
-                   lw=0, zorder=2)
+            if fam in FILLED:
+                sx.bar(x, hi - lo, bottom=lo, width=BAR_W, color=colour, alpha=RANGE_ALPHA,
+                       lw=0, zorder=2)
+            else:
+                sx.bar(x, hi - lo, bottom=lo, width=BAR_W, facecolor="none", edgecolor=colour,
+                       lw=BAR_LW, ls=RANGE_DASH, zorder=2)
         if hi < TINY_FRAC * top:
             sx.annotate(cost, (x, hi), textcoords="offset points", xytext=(0, 1.2),
                         ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=COST_COLOR,
@@ -563,7 +582,10 @@ def main():
     top = 1.0 - HEAD / fh
     fig.subplots_adjust(top=top, bottom=FOOT / fh, left=LEFT, right=0.995,
                         wspace=0.22, hspace=0.10)
-    fig.legend(handles=[Patch(facecolor=c, label=tex_to_mpl(lab)) for lab, c in LEGEND],
+    # Swatches follow the bars: filled only for the families in FILLED. LEGEND is de-duplicated
+    # on colour, so look the family key up by colour to decide.
+    fam_of = {c: k for k, (_, c) in FAMILY.items()}
+    fig.legend(handles=[Patch(label=tex_to_mpl(lab), **bar_style(fam_of[c])) for lab, c in LEGEND],
                fontsize=FS_TICK, ncol=len(LEGEND), loc="lower center",
                bbox_to_anchor=(0.5, top + 0.03),
                frameon=False, handlelength=1.2, handleheight=1.0, handletextpad=0.4,
