@@ -212,11 +212,14 @@ SUBSTRATE_RES = {"mlp_sae_span": "results/sva_sweep_ferr5k",
                  # 0.91 -> 1.04 and 0.86 -> 1.29. Above 1 is over-recovery, so read Adam's extra
                  # accuracy as partly bought with gap padding.
                  #
-                 # *** THE TREE MIXES BUDGETS ACROSS METHODS, WHICH THE CAPTION MUST SAY. *** Only
-                 # the two MAttr arms were bumped; IG / IxG / Stepless IG / Random do not train at
-                 # all, and Node Pruning and DBM still train at their own 3000 steps. They are
-                 # symlinked in unchanged. `node` also stays at 2k -- its eps x lr grid is flat
-                 # (0.477-0.526 over 24 cells), so it is not budget-limited.
+                 # BUDGETS ARE NOW MATCHED ACROSS TRAINED METHODS AND ATTRIBUTION PASSES
+                 # (2026-09-06): MAttr, Node Pruning and DBM all train 5k steps in this tree
+                 # (`_s5000` tags; the NP/DBM 2k logit-diff symlinks were removed when those
+                 # landed), and the gradient baselines attribute at the same PASS budget
+                 # (5,000, capped at the train pool; IG spends it as 500 ex x 10 path points).
+                 # The acc/ce arms of every trained method remain 2k. `node` stays at 2k
+                 # throughout -- its eps x lr grid is flat (0.477-0.526 over 24 cells), so it
+                 # is not budget-limited.
                  "mlp": "results/sva_sweep_5k",
                  "mlp+attn_head": "results/sva_sweep_5k"}
 # SAE (resid) WAS THE SECOND COLUMN HERE AND WAS DROPPED (2026-09-03, requested). It is still in
@@ -249,6 +252,15 @@ METHODS = {
     # Spearman 0.96 of GIM (MIB-circuit-track/gim_attnlrp_decomp.py), so this series stands in
     # for the whole LRP family here.
     "AttnLRP":    ("AttnLRP",      P.color("AttnLRP")),
+    # GIM has NO SVA+ runs; it is in the registry only so the --cpr cut's MIB panels can draw
+    # it (gim_eval on the test split). parse_method never returns it, and it is kept out of
+    # ALL_METHODS below, so no other cut is affected.
+    "GIM":        ("GIM",          P.color("GIM")),
+    # Uniform-k twin of the eps arm, 5k steps (scripts/sva/launch/submit_unifk_eps_5k.sh). In
+    # the --cpr cut only; the bar chart's "unif k" green (P.METHOD["+hard"], the hue
+    # plot_mib_test_avg / plot_mib_accauc_cpr_scatter give uniform-k). Kept out of ALL_METHODS
+    # like GIM so no other cut changes.
+    "stopk-unif-eps1e-2": ("MAttr (Adam, unif k)", P.METHOD["+hard"]),
     "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
     # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
     # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
@@ -286,6 +298,16 @@ METHODS = {
     # (lr 0.3, L1 6.0) because that pair, not the method name, decides the circuit -- it is the
     # MIB validation argmax carried over, and a re-swept lr would be a DIFFERENT series.
     "sig_lr0.3_l16.0": ("DBM", P.color("DBM")),
+    # DBM's WHOLE lambda ladder scored at each run's own converged L0 (scripts/mib/
+    # dbm_multisparsity.py), not one run swept over MIB's grid. MIB-panel-only, like GIM: there
+    # is no SVA+ equivalent and it is kept out of ALL_METHODS so no other cut sees it.
+    #
+    # *** IT IS NOT THE SAME KIND OF OBJECT AS EVERY OTHER POINT ON THIS PANEL, and the caption
+    # must say so. *** Eight separately trained masks supplying one budget each, against every
+    # other point's single ranking that supplies all ten. The table carries that as a 21k cost
+    # against 3k. Plotted here because the comparison is worth making, not because it is like
+    # for like.
+    "dbm-multisp": ("DBM (multi-sparsity)", P.color("DBM")),
     # The random-ranking floor: score every unit i.i.d. uniform, then run the same eval sweep.
     # Not a competitor -- it is the reference the other series are only interesting relative to,
     # which is why it is grey (see palette.py) and why it sits last in the legend. 3 seeds per
@@ -379,6 +401,48 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # all -- verified bit-identical on node / resid_sae_span / mlp_sae_span, it only appends one more
 # scored unit -- so those panels duplicated their -input twins. It still exists on disk
 # (results/sva_sweep_input) and --all / --adam still draw it.
+# `--cpr`: the default cut plus the three remaining node-level gradient baselines of the MIB
+# test table. Stepless IG and AttnLRP have SVA+ runs on mlp / mlp+attn_head only (no SAE
+# runs), GIM has none, so those panels carry fewer points -- the report says which.
+# ONE MAttr OPTIMISER (2026-09-08, requested): the SGD arm is dropped, so the two remaining
+# ours-points are Adam at the two k-schedules, drawn and labelled exactly as the bar chart
+# plots/plot_mib_test_avg.py draws them. `softsgd-log` stays in METHODS and in MIB_TEST -- it
+# is one list entry away from coming back -- it is simply not in this cut.
+# "dbm-multisp" was in this cut 2026-09-09 to 2026-09-11 (beside the single-lambda DBM point:
+# same method, one run vs eight, +0.38 CPR / +0.09 IIA at node level) and was dropped again
+# on request. It stays in the registry, MIB_TEST and FAMILY_COLOR, one list entry from
+# coming back.
+#
+# WHICH MAttr ARM IS "MAttr" HERE (2026-09-11, requested): the UNIFORM-k Adam arm is the
+# figure's MAttr -- it carries the star and the plain label -- and the log-k Adam arm is
+# drawn as its ablation, a circle labelled "+log k". That matches plot_mib_test_avg.py,
+# where the uniform-k bar is the only MAttr bar since the same day. It is the OPPOSITE of
+# the default cut (accauc_vs_faithauc.pdf), where "MAttr" is still the log-k eps arm; the
+# swap is applied inside main()'s --cpr branch (CPR_STARS / CPR_POINT_LABEL) precisely so
+# the default cut does not move.
+CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
+               "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
+CPR_STARS = {"stopk-unif-eps1e-2"}
+CPR_POINT_LABEL = {"stopk-unif-eps1e-2": "MAttr", "stopk-log-eps1e-2": "$+$log $k$"}
+# Mask-learning methods draw as SQUARES (gradient = circles, MAttr = stars), the same
+# gradient/mask shape split plot_mib_accauc_cpr_scatter.FAMILY_SHAPE uses.
+MASK_KEYS = {"eprun-s090", "sig_lr0.3_l16.0", "dbm-multisp"}
+# The keys drawn as STARS in draw_labelled. Module-level so a cut can narrow it (the --cpr
+# branch sets it to CPR_STARS); everything not a star and not in MASK_KEYS is a circle.
+STAR_KEYS = {"stopk-log-eps1e-2", "softsgd-log", "stopk-unif-eps1e-2"}
+# Methods that exist on SOME panels only, by construction rather than by coverage gap:
+# key -> the facet-label prefixes where the method IS expected. report() uses this so a
+# panel that cannot draw a method does not report itself short forever and name it MISSING
+# -- the "report that is never green" report()'s own comment warns about.
+# dbm-multisp: no SVA+ runs at all (it is a MIB ladder), and NODE level only -- there is no
+# entry in MIB_TEST_EDGE and no edge DBM on disk. A key whose method DOES exist on a panel
+# listed here would silently stop that panel reporting a real gap, so keep this exact.
+MIB_ONLY = {"dbm-multisp": ("MIB (node",)}
+
+
+def expected_on(m, facet):
+    """Is method `m` supposed to appear on `facet`? True for everything not in MIB_ONLY."""
+    return m not in MIB_ONLY or facet.startswith(MIB_ONLY[m])
 FIGURE_SOURCES = [s for s in SOURCES if s[2] == "Patched" and "_input" not in s[0]]
 FIGURE_LOSSES = {"logit_diff": LOSSES["logit_diff"]}
 # Point labels for the directly-labelled default cut. SHORT on purpose: the labels sit inside
@@ -407,8 +471,16 @@ POINT_LABEL = {
     # other label on a ~1.1in panel. One abbreviation across both figures, not two.
     "mc_ig": "IG-free",
     "stopk-log": "MAttr$^\\mathrm{A}$ (def. ε)",
-    "stopk-log-eps1e-2": "MAttr$^\\mathrm{A}$",
+    # No optimiser superscript now that only one arm is drawn: with no SGD point on the panel
+    # "MAttr$^A$" marks a contrast that is not there. Restore both superscripts together if
+    # softsgd-log goes back into CPR_METHODS.
+    "stopk-log-eps1e-2": "MAttr",
     "softsgd-log": "MAttr$^\\mathrm{S}$",
+    "stopk-unif-eps1e-2": "$+$unif. $k$",
+    # "DBM x8", not "DBM (multi-sparsity)": the full name is ~2x the widest label this panel
+    # carries. The x8 names the thing that differs from the "DBM" point beside it -- eight
+    # trained masks instead of one -- which is the comparison the two points exist to make.
+    "dbm-multisp": "DBM $\\times$8",
 }
 # Panel grid for the labelled cut: ONE ROW of 5 at full \textwidth, ~1.1in per panel.
 #
@@ -457,7 +529,8 @@ LAB_MSIZE = 15          # marker AREA in pt^2, uniform across methods -- see dra
 # above says fits on one legend row, which is why the fill guide wraps to two rows when the cut
 # is this wide (see `legend_rows`).
 ADAM_METHODS = ["IG", "IxG", "stopk-log", "stopk-log-eps1e-2", "softsgd-log", "Random"]
-ALL_METHODS = [k for k in METHODS if k not in ("soft-log", "mc_ig")]
+ALL_METHODS = [k for k in METHODS
+               if k not in ("soft-log", "mc_ig", "GIM", "stopk-unif-eps1e-2", "dbm-multisp")]
 # `--stepless`: the default cut plus Stepless IG. It is a SEPARATE cut, and a narrowed one, for a
 # coverage reason that cannot be fixed by adding a key to FIGURE_METHODS.
 #
@@ -503,6 +576,12 @@ def parse_method(fname, d):
     # trained MAttr run carries a step suffix, so only those are stripped.
     if "sufficient_" in tag or "hard_topk" in tag:
         tag = re.sub(r"_s\d+$", "", tag)
+    # Node Pruning / DBM at a bumped budget (the 2026-09-06 5k runs) carry the same marker,
+    # but their tags ALSO end in _s090 (a sparsity) / seeds elsewhere, so the strip demands
+    # >= 4 digits: _s5000 strips, _s090 and _s42 survive. Step budgets below 1000 never
+    # reach a figure tree.
+    if tag.startswith(("eprun", "sig_")):
+        tag = re.sub(r"_s\d{4,}$", "", tag)
     if tag.startswith("conductance") or "fixedk" in tag:
         return None
     # `random_s42` / `random_s43` / `random_s44` -- the seed lives in the TAG and not in the key,
@@ -570,8 +649,24 @@ def _auc_of(xs, ya):
     return float(np.sum((lx[1:] - lx[:-1]) * (ya[1:] + ya[:-1]) / 2) / (lx[-1] - lx[0]))
 
 
+def _cpr_of(d):
+    """MIB-style CPR from the stored curve: LINEAR trapezoid of faithfulness over the kept
+    PROPORTION p = k / total, unnormalised (the span is ~1, as MIB's .001..1 grid is).
+
+    Same integrand as `faith_auc`, different measure -- log-x normalised there, linear-p here.
+    eval_sva's 24 sparsities are log-spaced from 1/total to 1 (eval_sva.py:1248), so this is
+    the number MIB's `area_under` would report if scored on this grid: the linear weight puts
+    almost all of the mass on the last three or four points (p >= 0.1), which is exactly the
+    property the paper's CPR critique is about and what the --cpr cut exists to show.
+    """
+    p = np.asarray(d["n_nodes"], float) / float(d["total"])
+    f = np.asarray(d["faithfulness"], float)
+    return float(np.sum((p[1:] - p[:-1]) * (f[1:] + f[:-1]) / 2))
+
+
 def load(res):
-    """(method, loss, substrate, task) -> (acc_auc, faith_auc), both as stored.
+    """(method, loss, substrate, task) -> (acc_auc, faith_auc, cpr); the first two as stored,
+    CPR recomputed from the curve by `_cpr_of`.
 
     NO chance correction, deliberately. The zero row used to be rescaled by
 
@@ -615,8 +710,8 @@ def load(res):
         if not on_model(d):
             continue
         runs.setdefault((m, d["loss"], d["nodes"], d["task"]), []).append(
-            (d["acc_auc"], d["faith_auc"]))
-    return {k: (float(np.mean([v[0] for v in vs])), float(np.mean([v[1] for v in vs])))
+            (d["acc_auc"], d["faith_auc"], _cpr_of(d)))
+    return {k: tuple(float(np.mean([v[i] for v in vs])) for i in range(3))
             for k, vs in runs.items()}
 
 
@@ -639,7 +734,7 @@ def group_avg(raw, m, loss, sub, required=None):
     """
     required = REQUIRED if required is None else required
     have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, loss, sub)}
-    gx, gy = [], []
+    gx, gy, gz = [], [], []
     for gname, tasks in GROUPS:
         if gname not in required[sub]:
             continue
@@ -648,13 +743,23 @@ def group_avg(raw, m, loss, sub, required=None):
         vs = [raw[(m, loss, sub, t)] for t in tasks]
         gx.append(np.mean([v[0] for v in vs]))
         gy.append(np.mean([v[1] for v in vs]))
+        gz.append(np.mean([v[2] for v in vs]))
     if not gx:
         return None
-    return float(np.mean(gx)), float(np.mean(gy)), tuple(required[sub])
+    return float(np.mean(gx)), float(np.mean(gy)), tuple(required[sub]), float(np.mean(gz))
 
 
-def draw_labelled(df, figure_methods, out):
+def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-AUC (↑)",
+                  xlabel="IIA log-AUC (↑)", colors=None, hlines=(), figsize=None):
     """The default cut, raw matplotlib: uniform circles + direct point labels, no legend.
+
+    `ycol`/`ylabel` select the y metric: the stored log-AUC (default) or the MIB-style CPR the
+    --cpr cut recomputes from the same curves (see _cpr_of / mib_rows). Both AUCs on the
+    default cut are LOG-weighted and the labels say so; CPR is a linear AUC and does not.
+
+    `colors` overrides the per-method palette (the --cpr cut colours by FAMILY, as
+    plot_mib_test_avg.py does). `hlines` = [(facet, y, label, colour)] draws a reference line
+    in one panel for a method with a y value but no x -- MIB's Random control.
 
     WHY NOT PLOTNINE, which every other cut here uses. Direct labelling needs the rendered
     geometry of each string -- its width in axes fractions, measured through the renderer after
@@ -685,7 +790,8 @@ def draw_labelled(df, figure_methods, out):
     plt.rcParams.update(P.RC)
     # Height scales with the row count: LAB_FIG is sized for one row, and a second row of
     # panels needs its own height rather than half of the first row's.
-    figsize = LAB_FIG if nrow == 1 else (LAB_FIG[0], LAB_FIG[1] * nrow * 0.92)
+    base = figsize or LAB_FIG
+    figsize = base if nrow == 1 else (base[0], base[1] * nrow * 0.92)
     fig, axes = plt.subplots(nrow, ncol, figsize=figsize)
     axes = np.atleast_1d(axes).ravel()
     # A trailing slot can still exist when the facet count is not a multiple of ncol (e.g. 6
@@ -693,28 +799,40 @@ def draw_labelled(df, figure_methods, out):
     # cell whose runs all failed.
     for ax in axes[len(facets):]:
         ax.set_visible(False)
-    colors = {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
+    colors = colors or {METHODS[m][0]: METHODS[m][1] for m in figure_methods}
 
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
+        for hf, hy, hlab, hc in hlines:
+            if hf == facet:
+                ax.axhline(hy, ls=(0, (3, 2)), lw=0.7, color=hc, zorder=2)
+                ax.annotate(hlab, (0.03, hy), xycoords=("axes fraction", "data"),
+                            fontsize=LAB_PT, color=hc, va="bottom", ha="left")
         # The MAttr arms draw as STARS, everything else as the uniform circles the docstring
         # argues for -- "ours" carries a shape as well as its colours, matching the starred
         # Pareto frontier of plot_mib_accauc_cpr_scatter's compact cut. A star packs less fill
         # area into its bounding box than a circle (same fact the plotnine cuts handle for
         # Random), so it gets ~2x the marker area to read at the same visual weight.
-        star = sub["_key"].isin(["stopk-log-eps1e-2", "softsgd-log"])
-        ax.scatter(sub["acc_auc"][~star], sub["faith_auc"][~star], s=LAB_MSIZE,
-                   c=[colors[m] for m in sub["method"][~star]],
+        star = sub["_key"].isin(STAR_KEYS)
+        sq = sub["_key"].isin(MASK_KEYS)
+        circ = ~star & ~sq
+        ax.scatter(sub["acc_auc"][circ], sub[ycol][circ], s=LAB_MSIZE,
+                   c=[colors[m] for m in sub["method"][circ]],
                    edgecolor="#000000", linewidth=0.3, zorder=3)
-        ax.scatter(sub["acc_auc"][star], sub["faith_auc"][star], s=LAB_MSIZE * 2.2,
+        # A square packs more ink into its box than a circle of equal `s`; scale it down a
+        # touch so the two read at the same weight.
+        ax.scatter(sub["acc_auc"][sq], sub[ycol][sq], s=LAB_MSIZE * 0.85, marker="s",
+                   c=[colors[m] for m in sub["method"][sq]],
+                   edgecolor="#000000", linewidth=0.3, zorder=3)
+        ax.scatter(sub["acc_auc"][star], sub[ycol][star], s=LAB_MSIZE * 2.2,
                    marker="*", c=[colors[m] for m in sub["method"][star]],
                    edgecolor="#000000", linewidth=0.3, zorder=4)
         # Anchor at 0 on both axes, as the plotnine version does via expand_limits: the Random
         # point is the floor and a panel that crops it loses the only absolute reference.
         # XPAD then adds room on the right for labels that hang off the last point.
-        xs, ys = sub["acc_auc"], sub["faith_auc"]
+        xs, ys = sub["acc_auc"], sub[ycol]
         ax.set_xlim(0, max(xs) * (1 + LAB_XPAD))
-        ax.set_ylim(0, max(ys) * 1.12)
+        ax.set_ylim(0, max([max(ys)] + [hy for hf, hy, _, _ in hlines if hf == facet]) * 1.12)
         # Title DROPS the strip's last line, which is the task-group list. The faceted cuts
         # keep it because there it stops the node and per-position column families being read
         # as the same average; here the panels are named on the figure and the datasets belong
@@ -730,15 +848,15 @@ def draw_labelled(df, figure_methods, out):
 
     for ax in axes[len(facets):]:
         ax.set_visible(False)
-    fig.supxlabel("IIA AUC (↑)", fontsize=7, y=0.015)
-    fig.supylabel("Faith AUC (↑)", fontsize=7, x=0.012)
+    fig.supxlabel(xlabel, fontsize=7, y=0.015)
+    fig.supylabel(ylabel, fontsize=7, x=0.012)
     fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1, 1))
     # AFTER tight_layout: place_labels measures the marker half-extent and the label widths off
     # the laid-out panel, so calling it earlier would size every offset against a panel geometry
     # that is about to change.
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
-        lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub["faith_auc"].values,
+        lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub[ycol].values,
                                 label=[POINT_LABEL.get(m, METHODS[m][0])
                                        for m in sub["_key"]],
                                 grp=sub["method"].astype(str).values))
@@ -746,6 +864,135 @@ def draw_labelled(df, figure_methods, out):
         S.place_labels(fig, ax, lab, pt=LAB_PT, msize=LAB_MSIZE, colors=colors)
     fig.savefig(out)
     fig.savefig(out.replace(".pdf", ".png"), dpi=200)
+
+
+# The MIB (node) panel of the --cpr cut, on the TEST split so it is the same population as
+# plots/plot_mib_test_avg.py's node panel and as the Random control below (a literal transcribed
+# from MIB's Table 1, test set). Six methods, the same as the SVA+ panels; the dirs are the ones
+# make_mib_test_table.py names for each row. Read directly off the pkls: CPR = `area_under`
+# (linear trapezoid over MIB's ten proportions), IIA = `acc_auc` (log-weighted over the same
+# grid). Two caveats the caption must carry: MIB's MAttr+Adam is at the DEFAULT eps
+# (topk_log_lr05), whereas the SVA+ Adam arm is eps=1e-2; and the llama3 cells are full-split
+# here (test is uncapped, see CLAUDE.md), so this is not the validation panel
+# plot_mib_accauc_cpr_scatter.py draws.
+MIB_FACET = "MIB (node, test)\nMIB"
+# Sentinel standing where a results dir goes in MIB_TEST, for the one row whose numbers are
+# computed from a ladder rather than read off a pkl. A unique object rather than a string so it
+# cannot collide with a real dir name.
+DBMMS = object()
+# Edge level, same split. Only the two MAttr arms have BOTH metrics on the test split; the
+# edge gradient baseline EAP-IG-inp has a Table 1 test CPR (make_mib_test_table.EDGE_BASELINES)
+# but no IIA anywhere (our own edge EAP-IG evals, results/eapig_clean_eval, are validation),
+# so it draws as a reference line like Random does at node level. No mask baseline exists at
+# edge level on any split (no EdgePruning_patching_edge on disk).
+MIB_EDGE_FACET = "MIB (edge, test)\nMIB"
+MIB_TEST_EDGE = {
+    "stopk-log-eps1e-2": ("test_edge_topk_log_lr05", None),
+    "softsgd-log":       ("test_edge_softlog_sgd_lr_3.0", None),   # SGD's own edge optimum
+    "stopk-unif-eps1e-2": ("test_edge_topk_uniform_lr05", None),
+}
+# registry key -> (results dir, subfolder or None). None = MAttr layout `{task}_{model}_test.pkl`;
+# a subfolder = run_evaluation.py layout `{task-dashed}_{model}_test_abs-False.pkl`.
+MIB_TEST = {
+    "IxG":               ("ig1_test", "EAP-IG-inputs_patching_node"),
+    "IG":                ("napig10_test", "EAP-IG-inputs_patching_node"),   # SVA+ IG is m=10 too
+    "mc_ig":             ("napig_mc_test", "EAP-IG-inputs-mc_patching_node"),
+    "AttnLRP":           ("attnlrp_eval", "AttnLRP_patching_node"),
+    "GIM":               ("gim_eval", "GIM_patching_node"),
+    "eprun-s090":        ("eprun_eval_s0.5_ld", "EdgePruning_patching_node"),   # NODE_PRUNING
+    "sig_lr0.3_l16.0":   ("eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node"),
+    "stopk-log-eps1e-2": ("test_node_topk_log_lr05", None),
+    "softsgd-log":       ("test_node_softlog_sgd_lr_1.0", None),
+    # "+ Adam, unif k" of the test table. DEFAULT eps, like the Adam log-k row above.
+    "stopk-unif-eps1e-2": ("test_node_topk_uniform_lr05", None),
+    # Our own random node ordering on the test split (MIB-circuit-track/run_random_test.sh,
+    # U(0,1) node scores, seed 42+cell). It supplies the IIA log-AUC that MIB's Table 1 does
+    # not report; until all 11 cells land, Random falls back to a reference line at the
+    # Table 1 CPR (mib_random_cpr).
+    "Random":            ("random_test", "Random_patching_node"),
+    # NOT A PKL. The multi-sparsity row has no `area_under`/`acc_auc` on disk to read: its two
+    # scalars are integrated over MIB's grid FROM the ladder by scripts/mib/dbm_multisparsity.py,
+    # which is also what make_mib_test_table.py calls, so the point and the table row cannot
+    # disagree. The DBMMS sentinel routes it there in mib_rows.
+    "dbm-multisp":       (DBMMS, None),
+}
+# Colour by FAMILY, exactly plot_mib_test_avg.FAMILY: the two gradient baselines share IG's
+# orange, the two mask baselines Node Pruning's indigo, both MAttr arms MAttr's blue, Random
+# grey. Labels carry the within-family identity.
+FAMILY_COLOR = {
+    "IG": P.METHOD["IG"], "IxG": P.METHOD["IG"], "mc_ig": P.METHOD["IG"],
+    "AttnLRP": P.METHOD["IG"], "GIM": P.METHOD["IG"],
+    "eprun-s090": P.METHOD["Node Pruning"], "sig_lr0.3_l16.0": P.METHOD["Node Pruning"],
+    # Same indigo as the single-lambda DBM point: it is the SAME METHOD at a different
+    # protocol, and giving it its own hue would read as a fourth family.
+    "dbm-multisp": P.METHOD["Node Pruning"],
+    # BOTH k-SCHEDULES IN MAttr BLUE, matching plot_mib_test_avg.FAMILY after its own
+    # 2026-09-08 recolour: there the uniform-k bars stopped carrying their own hue, so a
+    # separate colour here would make one method two colours across two figures on one page.
+    # The two are told apart by their labels, as they are in the bar chart.
+    "stopk-log-eps1e-2": P.METHOD["MAttr"], "softsgd-log": P.METHOD["MAttr"],
+    "stopk-unif-eps1e-2": P.METHOD["MAttr"],
+    "Random": P.METHOD["Random"],
+}
+
+
+def mib_rows(figure_methods, table=None, facet=MIB_FACET):
+    """Rows for one MIB test panel, shaped like main()'s SVA+ rows (faith_auc NaN: not on disk).
+
+    Every method must have all 11 cells or it is skipped, printed -- the same all-or-nothing
+    rule group_avg applies to the SVA+ task-groups.
+    """
+    import pickle
+    sys.path.insert(0, "scripts/mib")
+    import make_mib_test_table as T
+    table = MIB_TEST if table is None else table
+    out = []
+    for m in figure_methods:
+        if m not in table:
+            continue
+        d, sub = table[m]
+        accs, cprs = [], []
+        for task, model, _ in T.COLUMNS:
+            if d is DBMMS:
+                # Same reader make_mib_test_table.py uses, so this point and the table's
+                # "DBM (multi-sparsity)" row are the same two numbers by construction.
+                import dbm_multisparsity as _DBMMS
+                got = _DBMMS.cell(task, model, "test")
+                if got is None:
+                    continue
+                cpr, iia, _n = got
+                accs.append(iia); cprs.append(cpr)
+                continue
+            f = (f"results/{d}/{task}_{model}_test.pkl" if sub is None else
+                 f"results/{d}/{sub}/{task.replace('_', '-')}_{model}_test_abs-False.pkl")
+            if not os.path.exists(f):
+                continue
+            r = pickle.load(open(f, "rb"))
+            accs.append(r["acc_auc"]); cprs.append(r["area_under"])
+        if len(accs) < len(T.COLUMNS):
+            print(f"  MIB panel {facet.splitlines()[0]}: {m} has {len(accs)}/{len(T.COLUMNS)} "
+                  f"test cells, skipped", file=sys.stderr)
+            continue
+        out.append(dict(acc_auc=float(np.mean(accs)), faith_auc=float("nan"),
+                        cpr=float(np.mean(cprs)), method=METHODS[m][0], _key=m,
+                        loss=LOSSES["logit_diff"], facet=facet, ablation="Patched",
+                        groups="MIB"))
+    return out
+
+
+def mib_edge_eapig_cpr():
+    """Mean test CPR of EAP-IG-inp at edge level (MIB Table 1 literal). No IIA on disk."""
+    sys.path.insert(0, "scripts/mib")
+    import make_mib_test_table as T
+    return float(np.mean(list(T.EDGE_BASELINES["EAP-IG-inp (CF)"].values())))
+
+
+def mib_random_cpr():
+    """Mean test CPR of MIB's Random control (Table 1 literal, via make_mib_test_table).
+    There is no IIA number for it anywhere on disk, so it draws as a reference line."""
+    sys.path.insert(0, "scripts/mib")
+    import make_mib_test_table as T
+    return float(np.mean(list(T.NODE_BASELINES["Random"].values())))
 
 
 def report(df, figure_methods, losses, dropped):
@@ -759,19 +1006,31 @@ def report(df, figure_methods, losses, dropped):
     # report nobody reads.
     # `losses`, not the module-level LOSSES: the single-loss default cut expects one point from
     # EVERY method, so counting against all three would report every complete panel as short.
-    n_full = sum(1 if m in LOSSLESS or m in SINGLE_LOSS else len(losses)
-                 for m in figure_methods)
+    # MIB_ONLY methods are expected on the MIB panels and NOWHERE ELSE, so the expected count
+    # is per-facet rather than one number. Without this, adding a MIB-only row makes every SVA+
+    # panel report n/of short forever and name the row as MISSING -- the "report that is never
+    # green" this function's own comment warns about, arrived at by a different route.
+    def expected(facet):
+        ms = [m for m in figure_methods if expected_on(m, facet)]
+        return sum(1 if m in LOSSLESS or m in SINGLE_LOSS else len(losses) for m in ms)
+
     cov = df.groupby(["ablation", "facet"], observed=True).agg(
         n=("groups", "size"), groups=("groups", lambda s: " / ".join(sorted(set(s)))))
-    cov["of"] = n_full
+    cov["of"] = [expected(f) for _, f in cov.index]
     # A method with NO runs at all for a substrate/input combo is invisible to group_avg (which
     # guards missing tasks within a method, not a missing method), so a panel can silently draw
     # a smaller method set than its neighbours. With the three-method cut that is not cosmetic:
     # MAttr (SGD) has no sva_sweep_input runs, so `Node, +input` would show the two BASELINES
     # and no MAttr, i.e. exactly the panel a reader would misread as a loss.
-    cov["methods"] = df.groupby(["ablation", "facet"], observed=True)["method"].agg(
-        lambda s: ",".join(m for m in [METHODS[k][0] for k in figure_methods]
-                           if m not in set(s)) or "-")
+    def missing_for(facet, present):
+        ks = [k for k in figure_methods if expected_on(k, facet)]
+        return ",".join(m for m in [METHODS[k][0] for k in ks] if m not in present) or "-"
+
+    # dict, not a Series of sets: .loc on a Series whose VALUES are sets makes pandas try to
+    # hash them as an indexer and raises "unhashable type: 'set'".
+    grp = {k: set(v) for k, v in
+           df.groupby(["ablation", "facet"], observed=True)["method"]}
+    cov["methods"] = [missing_for(f, grp[(a, f)]) for a, f in cov.index]
     cov = cov.rename(columns={"methods": "MISSING"})
     print("\npoints and task-groups per panel:")
     print(cov.to_string())
@@ -804,12 +1063,21 @@ def main():
     ap.add_argument("--stepless", action="store_true",
                     help="default cut plus Stepless IG; NARROWS the figure to patched/−input and "
                          "to the SVA task-group, which is all that arm has been run on")
+    ap.add_argument("--cpr", action="store_true",
+                    help="default cut with MIB-style CPR (linear trapezoid over the kept "
+                         "proportion, recomputed from the stored curves) on y instead of the "
+                         "log-weighted Faith AUC, plus a leading panel of the same methods on "
+                         "MIB node-level validation read from the MIB pkls. Writes "
+                         "accauc_vs_cpr.pdf; the paper figure is untouched.")
     a = ap.parse_args()
     figure_methods = (ALL_METHODS if a.draw_all
                       else STEPLESS_METHODS if a.stepless
-                      else ADAM_METHODS if a.adam else FIGURE_METHODS)
+                      else ADAM_METHODS if a.adam
+                      else CPR_METHODS if a.cpr else FIGURE_METHODS)
     suffix = ("_all" if a.draw_all else "_stepless" if a.stepless
               else "_adam" if a.adam else "_zero" if a.zero else "")
+    if a.cpr and (other_cut_flags := (a.draw_all or a.stepless or a.adam or a.zero)):
+        raise SystemExit("--cpr is a variant of the default cut only")
     other_cut = a.draw_all or a.stepless or a.adam
     # --zero is a DEFAULT-cut variant, not an `other_cut`: same five methods, same one loss, same
     # labelled renderer -- only the source list grows. So it must not flip other_cut, which is
@@ -818,6 +1086,10 @@ def main():
                else SOURCES if (other_cut or a.zero) else FIGURE_SOURCES)
     losses = LOSSES if other_cut else FIGURE_LOSSES
     substrates = SUBSTRATES if other_cut else FIGURE_SUBSTRATES
+    if a.cpr:
+        # The MIB test panel IS the node-level comparison, on 11 cells rather than the SVA+
+        # node column's 4 groups; keeping both would draw the same ordering twice side by side.
+        substrates = [(sub, lab) for sub, lab in substrates if sub != "node"]
     required = STEPLESS_REQUIRED if a.stepless else REQUIRED
     # With one loss and one ablation the shape aesthetic and the ablation strip line each carry
     # a constant, so both are dropped rather than drawn as a legend/label with one value in it.
@@ -884,9 +1156,12 @@ def main():
                     # `_key` is the registry key, kept alongside the display label so
                     # draw_labelled can look up POINT_LABEL without reverse-mapping a label
                     # string back to its method.
-                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], method=mlabel, _key=m,
-                                     loss=llabel, facet=facet, ablation=abl,
+                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], cpr=r[3], method=mlabel,
+                                     _key=m, loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
+    if a.cpr:
+        rows = (mib_rows(figure_methods)
+                + mib_rows(figure_methods, MIB_TEST_EDGE, MIB_EDGE_FACET) + rows)
     df = pd.DataFrame(rows)
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
@@ -909,6 +1184,8 @@ def main():
                    for abl in abls
                    for inp in (["−input", "+input"] if show_inp else [None])
                    for sub, g in SUB_IN]
+    if a.cpr:
+        facet_order = [MIB_FACET, MIB_EDGE_FACET] + facet_order   # MIB node, edge, then SVA+
     # This list is the RENDER WHITELIST, not just a sort key: pd.Categorical maps anything absent
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
@@ -948,14 +1225,41 @@ def main():
     # one-row group -- a zero-length segment plus ggplot2's "each group consists of only one
     # observation" warning. Testing the precondition directly also covers the case a partial
     # sweep produces, where a normally-three-loss method is down to one landed cell in a panel.
-    out = f"plots/accauc_vs_faithauc{suffix}.pdf"
+    out = f"plots/accauc_vs_{'cpr' if a.cpr else 'faithauc'}{suffix}.pdf"
     # The default cut leaves here: it is drawn by raw matplotlib (direct labels need measured
     # per-annotation geometry) and never touches the plotnine spec below. Returning BEFORE that
     # spec is built, rather than building and discarding it, keeps a plotnine change from being
     # able to break the paper figure -- and everything shared between the two renderers (the
     # frame, the categories, the facet order, the coverage report) has already happened above.
     if not other_cut:
-        draw_labelled(df, figure_methods, out)
+        if a.cpr:
+            # Uniform-k is this cut's MAttr (star, plain label); log-k is its ablation (circle,
+            # "+log k"). Applied here, not at module level, so the default cut keeps its own
+            # assignment -- see the comment on CPR_METHODS.
+            global STAR_KEYS
+            STAR_KEYS = CPR_STARS
+            POINT_LABEL.update(CPR_POINT_LABEL)
+            # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
+            # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
+            # what tell the reader the two axes weight the sparsity grid differently.
+            fam = {METHODS[m][0]: FAMILY_COLOR[m] for m in figure_methods}
+            hl = [(MIB_EDGE_FACET, mib_edge_eapig_cpr(), "EAP-IG-inp", P.METHOD["IG"])]
+            have_rnd = ((df["facet"] == MIB_FACET) & (df["_key"] == "Random")).any()
+            if not have_rnd:
+                rnd = mib_random_cpr()
+                print(f"MIB Random control: test CPR {rnd:.2f} from Table 1; our random-ordering "
+                      f"eval (results/random_test) is incomplete, so no IIA -- drawn as a line")
+                hl.append((MIB_FACET, rnd, "Random", P.METHOD["Random"]))
+            # 1.95 -> 1.65 when the SGD arm was dropped: one point fewer per panel is one
+            # label fewer for repel() to place, and vertical crowding is what binds this
+            # layout. Check BOTH diagnostics printed below (overlap count AND x headroom) and
+            # the rendered PNG before going lower -- the overlap count stays 0 well past the
+            # height at which labels start sliding off their own markers.
+            draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
+                          xlabel="IIA log-AUC (↑)", colors=fam, hlines=hl,
+                          figsize=(LAB_FIG[0], 1.65))
+        else:
+            draw_labelled(df, figure_methods, out)
         print("wrote", out, f"({len(df)} points)")
         report(df, figure_methods, losses, dropped)
         return
@@ -1009,7 +1313,7 @@ def main():
         # and "n/a" explains nothing and costs a third of the legend strip.
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss",
                              guide=(True if show_loss else None))
-        + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
+        + labs(x="IIA log-AUC (↑)", y="Faith log-AUC (↑)")
         # Method keys wrap to a second row once the cut is wide enough that one row would run
         # past \textwidth -- which is the failure the --all cut is documented as having, with
         # the Loss key's shape entries clipping off the right edge. Five 5.5in-wide keys fit;
