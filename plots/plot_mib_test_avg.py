@@ -160,6 +160,12 @@ OURS_DROPPED_PER_LEVEL = 2
 # properly by flipping the table to Adam-default, not by patching more names in here; this map
 # is keyed on the table's current strings and will raise the moment they change.
 RENAME_OURS = {"$+$ Adam": "\\ourmethod{}", "$+$ Adam, unif $k$": "$+$ unif. $k$"}
+# Baseline rows relabelled for the figure only (2026-09-11, requested). The table keeps MIB's
+# own name for its published edge row; here it is drawn under the node panel's naming, since
+# it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"
+# reads as two methods. Same guard as RENAME_OURS: a key that matches no drawn row raises.
+RENAME_BASELINES = {"EAP-IG-inp (CF)": "IG ($m{=}5$)"}
+RENAME = {**RENAME_OURS, **RENAME_BASELINES}
 # Third element = families whose rows carry the llama3 dagger at that level. EMPTY at both levels
 # since 2026-09-11 (requested): the edge rows used to carry it ("ours", "ours_uni") for the
 # 200-example llama3 cells, but the mark was dropped from the figure -- the caveat is the
@@ -420,16 +426,17 @@ def bars():
                     f"{name!r} ({level}) has no COST entry -- add one (the validation table's "
                     "rendered cost column in paper/tabs/mib_results.tex is the ground truth) "
                     "or the bar would claim a free method.")
-            lab = tex_to_mpl(RENAME_OURS.get(name, name)) \
+            lab = tex_to_mpl(RENAME.get(name, name)) \
                 + ("$^{\\dagger}$" if fam in dagger else "")
             recs.append((fam, lab, avg(data), sem(data), COST[level][name]))
         out[level_lab] = recs
     seen = {name for _, lab, _ in LEVELS for _, name, _ in ()} | {
         name for level, _, _ in LEVELS for _, name, _ in panel_rows(level, loaded)}
-    unused = [k for k in RENAME_OURS if k not in seen]
+    unused = [k for k in RENAME if k not in seen]
     if unused:
-        raise SystemExit(f"RENAME_OURS keys match no drawn row: {unused} -- renamed in "
-                         "make_mib_test_table.OUR_*_METHODS? update RENAME_OURS")
+        raise SystemExit(f"RENAME keys match no drawn row: {unused} -- renamed in "
+                         "make_mib_test_table.OUR_*_METHODS / EDGE_BASELINES? update RENAME_OURS "
+                         "or RENAME_BASELINES")
     stale = [n for n in PENDING
              if all(sum(1 for t, m, _ in T.COLUMNS if (t, m) in d) == len(T.COLUMNS)
                     for lvl, _, _ in LEVELS
