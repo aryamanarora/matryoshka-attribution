@@ -127,7 +127,15 @@ METHOD = {
     # (vs +hard), #666666 8.4 (vs I×G) -- every one of them BELOW this palette's pre-existing
     # worst pair of 16.1 (+hard vs GIM, tritanopia), i.e. each would have become the new binding
     # constraint. #cccccc and lighter leave that 16.1 untouched.
-    "Random": OTHER,
+    # Mid-dark grey, not OTHER's #cccccc (2026-09-11, requested): as an outlined marker or a
+    # bar beside saturated hues the light grey vanished at print size. Only plot_mib_test_avg
+    # and plot_accauc_vs_faithauc read this entry; OTHER is unchanged for its other users.
+    # #6e6e6e is the best of seven greys tried against the check below (worst 11.6 dE, I×G vs
+    # Random, deuteranopia): #8c8c8c / #999999 / #a0a0a0 collide with DBM's reddish purple at
+    # 7-8.5, #666666 and below with I×G at 8.4 and 4.3. It is under the palette's previous
+    # 16.1 floor; accepted because Random also sits at the origin and is labelled in both
+    # figures, so hue is not its only cue.
+    "Random": "#6e6e6e",
 }
 
 # WITHIN-FAMILY TINTS, kept OUT of METHOD on purpose. These are lightness variants of a hue

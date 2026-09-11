@@ -423,6 +423,7 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
                "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
 CPR_STARS = {"stopk-unif-eps1e-2"}
+CPR_FILLED = {"stopk-log-eps1e-2"}
 CPR_POINT_LABEL = {"stopk-unif-eps1e-2": "MAttr", "stopk-log-eps1e-2": "$+$log $k$"}
 # Mask-learning methods draw as SQUARES (gradient = circles, MAttr = stars), the same
 # gradient/mask shape split plot_mib_accauc_cpr_scatter.FAMILY_SHAPE uses.
@@ -436,6 +437,10 @@ STAR_KEYS = {"stopk-log-eps1e-2", "softsgd-log", "stopk-unif-eps1e-2"}
 # non-star here on purpose: the point is that ONE marker per panel is filled.
 OUTLINE_NON_STAR = False
 OUTLINE_LW = 0.8
+# Non-star keys that stay FILLED when OUTLINE_NON_STAR is on. The --cpr branch sets it to
+# CPR_FILLED: the "+log k" circle is MAttr's own ablation and reads as ours, so it is solid
+# like the star; every baseline is an outline.
+FILLED_KEYS = set()
 # Methods that exist on SOME panels only, by construction rather than by coverage gap:
 # key -> the facet-label prefixes where the method IS expected. report() uses this so a
 # panel that cannot draw a method does not report itself short forever and name it MISSING
@@ -822,16 +827,21 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
         star = sub["_key"].isin(STAR_KEYS)
         sq = sub["_key"].isin(MASK_KEYS)
         circ = ~star & ~sq
-        def style(mask):
+        outline = OUTLINE_NON_STAR & ~star & ~sub["_key"].isin(FILLED_KEYS)
+
+        def style(mask, hollow):
             cols = [colors[m] for m in sub["method"][mask]]
-            if OUTLINE_NON_STAR:
+            if hollow:
                 return dict(facecolor="none", edgecolor=cols, linewidth=OUTLINE_LW)
             return dict(c=cols, edgecolor="#000000", linewidth=0.3)
-        ax.scatter(sub["acc_auc"][circ], sub[ycol][circ], s=LAB_MSIZE, zorder=3, **style(circ))
-        # A square packs more ink into its box than a circle of equal `s`; scale it down a
-        # touch so the two read at the same weight.
-        ax.scatter(sub["acc_auc"][sq], sub[ycol][sq], s=LAB_MSIZE * 0.85, marker="s",
-                   zorder=3, **style(sq))
+        for hollow in (False, True):
+            # A square packs more ink into its box than a circle of equal `s`; scale it down
+            # a touch so the two read at the same weight.
+            for mask, marker, size in ((circ, "o", LAB_MSIZE), (sq, "s", LAB_MSIZE * 0.85)):
+                m = mask & (outline if hollow else ~outline)
+                if m.any():
+                    ax.scatter(sub["acc_auc"][m], sub[ycol][m], s=size, marker=marker,
+                               zorder=3, **style(m, hollow))
         ax.scatter(sub["acc_auc"][star], sub[ycol][star], s=LAB_MSIZE * 2.2,
                    marker="*", c=[colors[m] for m in sub["method"][star]],
                    edgecolor="#000000", linewidth=0.3, zorder=4)
@@ -1244,9 +1254,10 @@ def main():
             # Uniform-k is this cut's MAttr (star, plain label); log-k is its ablation (circle,
             # "+log k"). Applied here, not at module level, so the default cut keeps its own
             # assignment -- see the comment on CPR_METHODS.
-            global STAR_KEYS, OUTLINE_NON_STAR
+            global STAR_KEYS, OUTLINE_NON_STAR, FILLED_KEYS
             STAR_KEYS = CPR_STARS
             OUTLINE_NON_STAR = True
+            FILLED_KEYS = CPR_FILLED
             POINT_LABEL.update(CPR_POINT_LABEL)
             # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
             # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
