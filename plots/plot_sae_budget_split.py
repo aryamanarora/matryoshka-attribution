@@ -181,7 +181,7 @@ def main():
     axm.annotate(f"{s - g:+.2f}", xy=(x1 * 0.85, (s + g) / 2), fontsize=FS_ANN,
                  va="center", ha="right")
 
-    axes[0].set_ylabel("IIA AUC (↑)", fontsize=FS_LAB)
+    axes[0].set_ylabel("Compactness (↑)", fontsize=FS_LAB)
     fig.supxlabel(f"training samples $E$  (bottom)   vs   integration steps "
                   f"$m = {BUDGET:,}/E$  (top)", fontsize=FS_LAB, y=0.02)
     fig.tight_layout(pad=0.3, w_pad=0.5, rect=(0, 0.04, 1, 0.90))

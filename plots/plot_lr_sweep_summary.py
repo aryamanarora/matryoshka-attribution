@@ -100,7 +100,7 @@ STYLE = {
     "Node Pruning ($s{=}0.8$, logit-diff)": ("Node Pruning, $s{=}0.8$",
                                             P.METHOD["Node Pruning"], DASH),
 }
-METRICS = [("cpr", "CPR AUC (↑)"), ("acc", "IIA log-AUC (↑)")]
+METRICS = [("cpr", "CPR AUC (↑)"), ("acc", "Compactness (↑)")]
 FIG_W, ROW_H = 5.4, 1.75
 FS_LABEL, FS_TICK, FS_LEGEND = 7.5, 7, 6
 # Header strip for the one shared legend. Nine entries at ncol=5 is two rows of handles; there are

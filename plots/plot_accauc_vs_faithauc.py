@@ -761,7 +761,7 @@ def group_avg(raw, m, loss, sub, required=None):
 
 
 def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-AUC (↑)",
-                  xlabel="IIA log-AUC (↑)", colors=None, hlines=(), figsize=None):
+                  xlabel="Compactness (↑)", colors=None, hlines=(), figsize=None):
     """The default cut, raw matplotlib: uniform circles + direct point labels, no legend.
 
     `ycol`/`ylabel` select the y metric: the stored log-AUC (default) or the MIB-style CPR the
@@ -1276,7 +1276,7 @@ def main():
             # the rendered PNG before going lower -- the overlap count stays 0 well past the
             # height at which labels start sliding off their own markers.
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
-                          xlabel="IIA log-AUC (↑)", colors=fam, hlines=hl,
+                          xlabel="Compactness (↑)", colors=fam, hlines=hl,
                           figsize=(LAB_FIG[0], 1.65))
         else:
             draw_labelled(df, figure_methods, out)
@@ -1333,7 +1333,7 @@ def main():
         # and "n/a" explains nothing and costs a third of the legend strip.
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss",
                              guide=(True if show_loss else None))
-        + labs(x="IIA log-AUC (↑)", y="Faith log-AUC (↑)")
+        + labs(x="Compactness (↑)", y="Faith log-AUC (↑)")
         # Method keys wrap to a second row once the cut is wide enough that one row would run
         # past \textwidth -- which is the failure the --all cut is documented as having, with
         # the Loss key's shape entries clipping off the right edge. Five 5.5in-wide keys fit;

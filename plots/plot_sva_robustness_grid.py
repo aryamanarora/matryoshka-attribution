@@ -203,7 +203,7 @@ def main():
                       orientation="horizontal", fraction=0.05, pad=0.085, aspect=48)
     # Kept under ~95 characters: at FS_NOTE over FIG_W the label is not wrapped or
     # shrunk to fit, it is simply clipped at both ends, which is silent.
-    cb.set_label("IIA AUC (↑).  Cell text = rank of 8 (1 = best);  Random row and "
+    cb.set_label("Compactness (↑).  Cell text = rank of 8 (1 = best);  Random row and "
                  "'worst' column show scores.", fontsize=FS_NOTE)
     cb.ax.tick_params(labelsize=FS_CELL, length=2)
     cb.outline.set_linewidth(0.5)

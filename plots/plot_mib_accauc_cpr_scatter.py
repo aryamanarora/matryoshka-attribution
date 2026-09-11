@@ -877,7 +877,7 @@ def draw_points(ax, rows, xpad=XPAD, legend=True, title=None, xlabel=True,
         # is taken over the 10 LOG-spaced sparsity points (0.1...100%), not a linear sweep. The
         # compact figure still says "acc-AUC" -- change both together or the two versions of the
         # same figure disagree about what their shared x axis measures.
-        ax.set_xlabel("IIA log-AUC (↑)", fontsize=fs[0])
+        ax.set_xlabel("Compactness (↑)", fontsize=fs[0])
     ax.set_ylabel("CPR AUC (↑)", fontsize=fs[0])
     if title:
         ax.set_title(title, fontsize=fs[0], loc="left", pad=4)

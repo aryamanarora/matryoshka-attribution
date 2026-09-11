@@ -120,7 +120,7 @@ def main():
         ax.set_visible(False)
 
     fig.supxlabel("training step", fontsize=FS_LAB, y=0.015)
-    fig.supylabel({"acc_auc": "IIA AUC (↑)", "faith_auc": "Faith AUC (↑)"}[a.metric],
+    fig.supylabel({"acc_auc": "Compactness (↑)", "faith_auc": "Faith AUC (↑)"}[a.metric],
                   fontsize=FS_LAB, x=0.008)
     fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.5, rect=(0.012, 0.03, 1, 0.93))
     handles = [Line2D([], [], color=c, ls=ls, lw=0.9, label=f"{lab} (probe, train subset)")

@@ -89,7 +89,7 @@ ROWS = [
 # faith 0.173-1.833, rho-IG 0.002-0.744, rho-SGD 0.009-0.868.
 # (key, column title, cmap, vmin, vmax, transform-or-None)
 COLS = [
-    ("acc_auc", "IIA log-AUC", "viridis", 0.0, 0.55, None),
+    ("acc_auc", "Compactness", "viridis", 0.0, 0.55, None),
     # vmax 3.5, NOT 2.0: the Gemma row reaches 3.19 and would clip flat against the old ceiling.
     # A plain linear 0-3.5 would move the diverging map's white point to 1.75, which means
     # nothing -- so this column alone uses TwoSlopeNorm pinned at 1.0 (exact full-model

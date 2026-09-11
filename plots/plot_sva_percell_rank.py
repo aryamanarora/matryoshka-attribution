@@ -190,7 +190,7 @@ def main():
                 ax.set_ylabel(task.replace("_", "\n"), fontsize=FS_ROW, rotation=0,
                               ha="right", va="center", labelpad=12)
 
-    fig.supxlabel("IIA AUC (↑)  —  per-panel scale, order is comparable and distance is not",
+    fig.supxlabel("Compactness (↑)  —  per-panel scale, order is comparable and distance is not",
                   fontsize=FS_HEAD, y=0.012)
     fig.supylabel("Faith AUC (↑)", fontsize=FS_HEAD, x=0.008)
     fig.tight_layout(pad=0.25, w_pad=0.5, h_pad=0.55, rect=(0.012, 0.022, 1, 0.955))

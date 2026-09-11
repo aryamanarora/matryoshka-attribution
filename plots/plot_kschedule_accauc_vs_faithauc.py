@@ -164,7 +164,7 @@ def main():
         + scale_color_manual(values={lab: col for lab, col in SCHEDULES.values()},
                              name="$k$-schedule")
         + scale_shape_manual(values=LOSS_SHAPE, name="Loss")
-        + labs(x="IIA AUC (↑)", y="Faith AUC (↑)")
+        + labs(x="Compactness (↑)", y="Faith AUC (↑)")
         + guides(color=guide_legend(order=1, nrow=1), shape=guide_legend(order=2, nrow=1))
     )
     p.save(OUT, dpi=300, verbose=False)

@@ -157,41 +157,95 @@ def main():
             "text.color": "#000000", "axes.labelcolor": "#000000",
             "xtick.color": "#000000", "ytick.color": "#000000",
         })
-        fig, ax = plt.subplots(figsize=(1.45, 1.5))
-        # NOT the blue/orange of the neighbouring shared-circuit scatter: there those hues
-        # mean head/MLP, and reusing them here would read as the same encoding. Tol indigo /
-        # Wong reddish purple -- palette.py's cool-purple family, lightness-separated
-        # (L* ~24 vs ~60), unclaimed by any per-node meaning in this row.
-        for kind, c in (("Across", "#cc79a7"), ("Within", "#332288")):
-            m = df.kind == kind
-            ax.scatter(df.r[m], df.xfer[m], s=11, c=c, alpha=1.0, linewidths=0.3,
-                       edgecolors="#000000", label=kind, zorder=2 if kind == "Within" else 1)
-        ax.set_xlabel("Pearson r of scores", fontsize=6)
-        ax.set_ylabel("Rel. transfer (acc-AUC)", fontsize=6)
-        ax.tick_params(labelsize=5, width=0.5, length=2)
+        # Three-panel row of fig:task-transfer: square plot rectangle, authored at final page
+        # size. The full solve and the LaTeX subfigure widths live in
+        # plots/plot_method_corr_heatmap.py above its p1b spec -- one copy, since changing any
+        # panel means resolving all three.
+        fig, ax = plt.subplots(figsize=(1.518, 1.457))
+        ax.set_box_aspect(1)          # square plotting rectangle, matching the two heatmaps
+        # ONE SERIES, ONE COLOUR (2026-09-08, requested). The Within/Across split used to be
+        # drawn as two hues (Tol indigo / Wong reddish purple) with the words as the key.
+        #
+        # *** WHAT THE FIGURE NO LONGER SHOWS. *** `kind` was on the panel because the family
+        # block structure is the obvious confounder for the trend this figure claims: pairs
+        # inside one task family sit high on both axes and pairs across families sit low, so
+        # some of the r below is between-family separation rather than a within-family relation.
+        # The column is still computed and still in the frame -- put the hues back by restoring
+        # the two-series loop -- but a reader of the panel alone cannot check that confound now,
+        # so the caption or the prose has to carry it.
+        ax.scatter(df.r, df.xfer, s=6, c="#332288", alpha=1.0, linewidths=0.25,
+                   edgecolors="#000000", zorder=2)
+        ax.set_xlabel("Pearson r of scores", fontsize=5.5)
+        # "IIA log-AUC", not "acc-AUC": the paper's prose and every other figure call this
+        # metric IIA log-AUC (it is the log-weighted interchange-intervention accuracy of
+        # eq. logauc), and the pkl key `acc_auc` is an implementation name, not a display one.
+        # 5.5pt, not 6: at 6pt this 26-character string is taller than the 1.258in box and
+        # its closing paren clipped off the top of the PDF.
+        ax.set_ylabel("Rel. transfer (compactness)", fontsize=5.5)
+        ax.tick_params(labelsize=4.5, width=0.5, length=2)
         ax.grid(True, lw=0.25, color="#dddddd")
         ax.set_axisbelow(True)
         for sp in ax.spines.values():
             sp.set_linewidth(0.5)
-        # house-style labels (leader + white bbox, series-coloured text) on three pairs the
+            sp.set_color("#000000")          # palette.SPINE_COLOR; this file predates it
+        # House-style labels (leader + white bbox, series-coloured text) on three pairs the
         # prose leans on: the cross-benchmark arithmetic pair sitting inside the within-family
-        # cluster, the ARC ceiling, and the biggest r>>transfer outlier. Short forms -- the
-        # full task names are wider than this panel affords (same rule as POINT_LABEL in
-        # plot_accauc_vs_faithauc).
+        # cluster, the ARC ceiling, and the biggest r-much-greater-than-transfer outlier. Short
+        # forms -- the full task names are wider than this panel affords (same rule as
+        # POINT_LABEL in plot_accauc_vs_faithauc).
+        #
+        # These were dropped for one revision when the row was solved at a 0.68in axes box and
+        # all three collided; the squared row gives this panel 1.13in and they fit again. If the
+        # row is ever re-solved smaller, check this block before anything else -- positions are
+        # DATA coordinates tuned against xlim/ylim below, so they do not follow a resize.
         ax.set_xlim(0.10, 1.02); ax.set_ylim(0.0, 1.14)
-        CANN = {"Within": "#332288", "Across": "#cc79a7"}
+        # Least-squares fit across the drawn x range, annotated with its PEARSON r.
+        #
+        # *** THE TWO r's ON THIS PANEL ARE NOT THE SAME QUANTITY. *** The x AXIS is the
+        # Pearson r between two tasks' score vectors; this annotation is the Pearson r between
+        # that x and the transfer on y, i.e. how well score similarity predicts transfer. The
+        # label says "r =" as requested; if a reader ever conflates the two, disambiguate in
+        # the caption rather than by renaming the axis.
+        #
+        # A LINE IS A WEAKER CLAIM HERE THAN IT LOOKS, which is why the module docstring told
+        # callers to quote the rank correlation instead: the points carry family block
+        # structure (Within pairs sit high, Across low), so a straight fit is partly tracing
+        # that split rather than a within-family trend. Drawn because it was asked for; both
+        # statistics still print to stdout so the caption can use either.
+        import numpy as np
+        m, b = np.polyfit(df.r.to_numpy(), df.xfer.to_numpy(), 1)
+        xs = np.array(ax.get_xlim())
+        ax.plot(xs, m * xs + b, lw=0.7, color="#666666", ls=(0, (4, 2)), zorder=0)
+        pear = pearsonr(df.r, df.xfer)[0]
+        # Upper-left: the fit runs bottom-left to top-right, so this corner is the one region
+        # of the panel that no point occupies.
+        ax.annotate(f"r = {pear:.2f}", (0.04, 0.96), xycoords="axes fraction",
+                    fontsize=5, ha="left", va="top", color="#000000")
+        # Labels in the single series colour now that `kind` is not encoded.
         for pair, short, (tx, ty), ha in (
-                ("Arith. (sub.) ~ Addition", "Arith.~Add.",   (0.585, 1.030), "right"),
-                ("ARC-E ~ ARC-C",            "ARC-E~ARC-C",   (0.800, 1.095), "right"),
-                ("Arith. (sub.) ~ Simple",   "Arith.~Simple", (0.760, 0.300), "left")):
-            row = df[df.pair == pair].iloc[0]
+                # Positions avoid three occupied regions, in this order of priority: the
+                # upper-LEFT block (r + the two series words), the point cloud itself, and the
+                # right frame. "Arith.~Add." moved twice: at y 1.03 its white bbox covered the
+                # "0.90" of the r annotation, and at (0.560, 0.940) it covered the tail of
+                # "Within" -- it now starts right of that block at x 0.35. "Arith.~Simple" is
+                # right-ALIGNED at the frame rather than left-aligned at its point, which ran
+                # ~0.05 of the x range past the edge.
+                ("Arith. (sub.) ~ Addition", "Arith.~Add.",   (0.660, 0.900), "right"),
+                ("ARC-E ~ ARC-C",            "ARC-E~ARC-C",   (0.820, 1.100), "right"),
+                ("Arith. (sub.) ~ Simple",   "Arith.~Simple", (1.010, 0.080), "right")):
+            hit = df[df.pair == pair]
+            if hit.empty:                       # a pair named here but not drawn is a bug,
+                raise SystemExit(f"label pair {pair!r} is not in the plotted set")
+            row = hit.iloc[0]
             ax.plot([row.r, tx + (0.01 if ha == "left" else -0.01)], [row.xfer, ty],
                     lw=0.35, color="#888888", zorder=3)
             ax.annotate(short, (tx, ty), fontsize=4.5, va="center", ha=ha,
-                        color=CANN[row.kind], zorder=5,
+                        color="#332288", zorder=5,
                         bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
-        ax.legend(fontsize=5, frameon=False, loc="lower right", handletextpad=0.1,
-                  borderaxespad=0.2, labelspacing=0.2)
+        # NO LEGEND AND NO KEY OF ANY KIND: with one series there is nothing to key. An
+        # earlier revision drew a frameless ax.legend inside the axes, whose swatches sat at
+        # data-plausible positions and read as two extra points; that is why any future key
+        # here should be series-coloured words rather than markers.
         fig.tight_layout(pad=0.3)
         fig.savefig(OUT / "transfer_vs_corr_third.pdf", dpi=300)
         print("wrote", OUT / "transfer_vs_corr_third.pdf")

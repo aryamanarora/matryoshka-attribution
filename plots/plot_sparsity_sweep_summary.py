@@ -140,7 +140,7 @@ STYLE = {
         title="DBM (logit-diff, lr 0.3)", xlabel=r"L1 coefficient $\lambda$",
         colour=P.METHOD["DBM"], xscale="symlog", label="logit-diff loss", dash="solid", extra=[]),
 }
-METRICS = [("area_under", "CPR AUC (↑)"), ("acc_auc", "IIA log-AUC (↑)")]
+METRICS = [("area_under", "CPR AUC (↑)"), ("acc_auc", "Compactness (↑)")]
 FIG_W, ROW_H = 5.4, 1.62
 # 6pt ticks, not the 7 the two-column layout used: at 1.3in per panel DBM's symlog axis has to
 # print six explicit swept-value labels (0/0.2/0.6/2/6/20) and they collide at 7.
