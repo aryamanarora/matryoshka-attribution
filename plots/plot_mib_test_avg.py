@@ -86,6 +86,7 @@ import math
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
 from matplotlib.patches import Patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -261,10 +262,15 @@ STRIP_HEADROOM = 1.30
 # "MAttr costs 0.5k, Node Pruning 3k" readable at all. Bars above the threshold are legible
 # as bars and stay unlabelled so the row is not fifteen strings again.
 TINY_FRAC = 0.12
-# HIGHLIGHT (2026-09-11, requested): only OUR bars are filled; every baseline is drawn as an
-# outline in its family colour, in both rows and in the legend. Family is still the hue, so
-# the grouping survives; fill is the one cue reserved for the method the figure is about.
+# HIGHLIGHT (2026-09-11, requested): OUR bars are drawn at full strength and every baseline is
+# demoted, in both rows and in the legend. Family is still the hue, so the grouping survives;
+# strength is the one cue reserved for the method the figure is about. Two demotions, chosen
+# by BASELINE_STYLE:
+#   "muted"   -- baselines filled with their family colour blended MUTE of the way to white
+#   "outline" -- baselines hollow, outlined in their family colour
 FILLED = ("ours", "ours_uni")
+BASELINE_STYLE = "muted"
+MUTE = 0.55           # fraction of the way from the family colour to white
 BAR_LW = 0.8
 # A ranged cost on a filled bar: solid to the minimum, RANGE_ALPHA of the same hue on to the
 # maximum. On an outlined bar: solid outline to the minimum, DASHED outline on to the maximum.
@@ -308,12 +314,22 @@ def parse_cost(s):
     return parts[0], parts[-1]
 
 
+def tint(colour, frac):
+    """`colour` blended `frac` of the way to white."""
+    r, g, b = to_rgb(colour)
+    return (r + (1 - r) * frac, g + (1 - g) * frac, b + (1 - b) * frac)
+
+
 def bar_style(fam):
-    """Fill/edge kwargs for a bar of family `fam`: filled for FILLED, outlined otherwise."""
+    """Fill/edge kwargs for a bar of family `fam`: full strength for FILLED, demoted otherwise."""
     colour = FAMILY[fam][1]
     if fam in FILLED:
         return dict(color=colour, lw=0)
-    return dict(facecolor="none", edgecolor=colour, lw=BAR_LW)
+    if BASELINE_STYLE == "muted":
+        return dict(color=tint(colour, MUTE), lw=0)
+    if BASELINE_STYLE == "outline":
+        return dict(facecolor="none", edgecolor=colour, lw=BAR_LW)
+    raise SystemExit(f"unknown BASELINE_STYLE {BASELINE_STYLE!r}")
 
 
 def avg(data):
@@ -534,6 +550,10 @@ def draw_cost(sx, recs):
             if fam in FILLED:
                 sx.bar(x, hi - lo, bottom=lo, width=BAR_W, color=colour, alpha=RANGE_ALPHA,
                        lw=0, zorder=2)
+            elif BASELINE_STYLE == "muted":
+                # the extension is RANGE_ALPHA of the already-muted fill, same as for ours
+                sx.bar(x, hi - lo, bottom=lo, width=BAR_W, color=tint(colour, MUTE),
+                       alpha=RANGE_ALPHA, lw=0, zorder=2)
             else:
                 sx.bar(x, hi - lo, bottom=lo, width=BAR_W, facecolor="none", edgecolor=colour,
                        lw=BAR_LW, ls=RANGE_DASH, zorder=2)
