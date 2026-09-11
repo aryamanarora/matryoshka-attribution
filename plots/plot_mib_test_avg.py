@@ -546,7 +546,7 @@ def main():
 
     # One y label per ROW, on the left column, aligned so the two read as one axis edge.
     axes[0, 0].set_ylabel("CPR (↑)", fontsize=FS_AXIS)
-    axes[1, 0].set_ylabel("Backward\npasses (↓)", fontsize=FS_AXIS)
+    axes[1, 0].set_ylabel("Cost (↓)", fontsize=FS_AXIS)
     fig.align_ylabels(axes[:, 0])
     top = 1.0 - HEAD / fh
     fig.subplots_adjust(top=top, bottom=FOOT / fh, left=LEFT, right=0.995,
