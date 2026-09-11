@@ -148,7 +148,11 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
 PENDING = ()   # nothing mid-flight; see make_mib_test_table.GRAD_NODE_BASELINES for the
                # Conductance wave that was cancelled at 8/11 rather than left pending here
 DROP_OURS_OPT = "sgd"
-OURS_DROPPED_PER_LEVEL = 2
+# Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
+# is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
+# row string like RENAME_OURS, and guarded the same way: a name here that matches no row raises.
+DROP_OURS_NAMES = ("$+$ Adam",)
+OURS_DROPPED_PER_LEVEL = 3
 # Display names for the two survivors (2026-09-08, requested). With no non-Adam MAttr left in
 # the figure, "$+$ Adam" is an ablation marker pointing at nothing, so the rows are drawn as
 # the plain method and its one k-schedule ablation.
@@ -160,7 +164,9 @@ OURS_DROPPED_PER_LEVEL = 2
 # runs -- worth 0.00 CPR at node level (1.89 vs 1.89) but 0.31 at edge (6.23 vs 5.92). Fix it
 # properly by flipping the table to Adam-default, not by patching more names in here; this map
 # is keyed on the table's current strings and will raise the moment they change.
-RENAME_OURS = {"$+$ Adam": "\\ourmethod{}", "$+$ Adam, unif $k$": "$+$ unif. $k$"}
+# 2026-09-11 (requested): uniform-k IS the figure's MAttr. The log-k arm is gone (see
+# DROP_OURS_NAMES), so the surviving uniform-k Adam row is drawn as the plain method name.
+RENAME_OURS = {"$+$ Adam, unif $k$": "\\ourmethod{}"}
 # Baseline rows relabelled for the figure only (2026-09-11, requested). The table keeps MIB's
 # own name for its published edge row; here it is drawn under the node panel's naming, since
 # it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"
@@ -385,11 +391,17 @@ def ours_kept(level, rows):
         if name not in dirs:
             raise SystemExit(f"{level}: our row {name!r} is not in make_mib_test_table.OUR_"
                              f"{level.upper()}_METHODS -- cannot resolve its optimiser")
-        (dropped if T._M.opt_of(dirs[name]) == DROP_OURS_OPT else kept).append(name)
+        drop = T._M.opt_of(dirs[name]) == DROP_OURS_OPT or name in DROP_OURS_NAMES
+        (dropped if drop else kept).append(name)
     if len(dropped) != OURS_DROPPED_PER_LEVEL:
-        raise SystemExit(f"{level}: dropped {len(dropped)} {DROP_OURS_OPT} rows "
-                         f"({dropped}), expected {OURS_DROPPED_PER_LEVEL} -- repointed in "
-                         "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT")
+        raise SystemExit(f"{level}: dropped {len(dropped)} rows ({dropped}), expected "
+                         f"{OURS_DROPPED_PER_LEVEL} -- repointed or renamed in "
+                         "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / "
+                         "DROP_OURS_NAMES")
+    unknown = [n for n in DROP_OURS_NAMES if n not in dirs]
+    if unknown:
+        raise SystemExit(f"{level}: DROP_OURS_NAMES {unknown} match no row in "
+                         "make_mib_test_table.OUR_*_METHODS -- renamed? update DROP_OURS_NAMES")
     return [(n, d) for n, d in rows if n in set(kept)]
 
 
