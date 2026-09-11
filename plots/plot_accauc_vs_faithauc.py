@@ -424,6 +424,13 @@ CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
                "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
 CPR_STARS = {"stopk-unif-eps1e-2"}
 CPR_FILLED = {"stopk-log-eps1e-2"}
+# Labels anchored LEFT of their marker, key -> facet-label prefixes where it applies. The
+# MIB panels stack five points up the right side; at the reduced --cpr height the star's
+# "MAttr" label was repelled a third of the axis below its marker on a leader line, while
+# the top-left of both panels is empty. "NP" moves left too so it does not take the space
+# the star's label needs. Set in main()'s --cpr branch via LABEL_LEFT; default cut untouched.
+CPR_LABEL_LEFT = {"stopk-unif-eps1e-2": ("MIB (node", "MIB (edge"), "eprun-s090": ("MIB (node",)}
+LABEL_LEFT = {}
 CPR_POINT_LABEL = {"stopk-unif-eps1e-2": "MAttr", "stopk-log-eps1e-2": "$+$log $k$"}
 # Mask-learning methods draw as SQUARES (gradient = circles, MAttr = stars), the same
 # gradient/mask shape split plot_mib_accauc_cpr_scatter.FAMILY_SHAPE uses.
@@ -877,7 +884,9 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
         lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub[ycol].values,
                                 label=[POINT_LABEL.get(m, METHODS[m][0])
                                        for m in sub["_key"]],
-                                grp=sub["method"].astype(str).values))
+                                grp=sub["method"].astype(str).values,
+                                side=["left" if facet.startswith(LABEL_LEFT.get(m, ()))
+                                      else "right" for m in sub["_key"]]))
         print(f"  {facet.splitlines()[0]}:", file=sys.stderr)
         S.place_labels(fig, ax, lab, pt=LAB_PT, msize=LAB_MSIZE, colors=colors)
     fig.savefig(out)
@@ -1254,10 +1263,11 @@ def main():
             # Uniform-k is this cut's MAttr (star, plain label); log-k is its ablation (circle,
             # "+log k"). Applied here, not at module level, so the default cut keeps its own
             # assignment -- see the comment on CPR_METHODS.
-            global STAR_KEYS, OUTLINE_NON_STAR, FILLED_KEYS
+            global STAR_KEYS, OUTLINE_NON_STAR, FILLED_KEYS, LABEL_LEFT
             STAR_KEYS = CPR_STARS
             OUTLINE_NON_STAR = True
             FILLED_KEYS = CPR_FILLED
+            LABEL_LEFT = CPR_LABEL_LEFT
             POINT_LABEL.update(CPR_POINT_LABEL)
             # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
             # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
@@ -1270,14 +1280,15 @@ def main():
                 print(f"MIB Random control: test CPR {rnd:.2f} from Table 1; our random-ordering "
                       f"eval (results/random_test) is incomplete, so no IIA -- drawn as a line")
                 hl.append((MIB_FACET, rnd, "Random", P.METHOD["Random"]))
-            # 1.95 -> 1.65 when the SGD arm was dropped: one point fewer per panel is one
-            # label fewer for repel() to place, and vertical crowding is what binds this
-            # layout. Check BOTH diagnostics printed below (overlap count AND x headroom) and
-            # the rendered PNG before going lower -- the overlap count stays 0 well past the
-            # height at which labels start sliding off their own markers.
+            # 1.95 -> 1.65 when the SGD arm was dropped, -> 1.30 on 2026-09-11 (requested)
+            # once DBM x8 was gone AND the MIB panels' crowded labels were anchored LEFT
+            # (CPR_LABEL_LEFT). Without the left anchors 1.55 / 1.45 / 1.30 all pushed the
+            # star's "MAttr" label a third of the axis below its marker while the overlap
+            # count stayed 0 -- so check the rendered PNG, not just the two diagnostics
+            # printed below, before changing this.
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                           xlabel="Compactness (↑)", colors=fam, hlines=hl,
-                          figsize=(LAB_FIG[0], 1.65))
+                          figsize=(LAB_FIG[0], 1.3))
         else:
             draw_labelled(df, figure_methods, out)
         print("wrote", out, f"({len(df)} points)")

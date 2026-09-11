@@ -908,10 +908,20 @@ def place_labels(fig, ax, df, pt=LAB_PT, msize=46, colors=None):
     axb = ax.get_window_extent(renderer=fig.canvas.get_renderer())
     half = 0.5 * np.sqrt(msize) * fig.dpi / 72.0        # marker half-extent, px
     mark_r = max(half / axb.width, half / axb.height)
+    # Optional per-label SIDE (df["side"] == "left"): the box is anchored so its RIGHT edge
+    # clears the marker on the left, instead of its left edge clearing it on the right. repel()
+    # takes the per-label anchor offsets as an array; the spring pulls each label back to its
+    # own side. Used where a stack of points crowds the right of a marker but the left is
+    # empty (the MIB panels of plot_accauc_vs_faithauc --cpr at reduced height). Absent = right.
+    left = (df["side"].values == "left") if "side" in df else np.zeros(len(df), bool)
+    adx = np.where(left, -(1.45 * mark_r + w), 1.45 * mark_r)
     lx, ly = repel(df.acc.values, df.cpr.values, w, h, xr, yr,
-                   anchor_dx=1.45 * mark_r, mark_r=mark_r)
-    for (x, y, lxi, lyi, lab, grp) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp):
-        ax.plot([x, lxi], [y, lyi], lw=0.35, color="#888888", zorder=2)
+                   anchor_dx=adx, mark_r=mark_r)
+    for (x, y, lxi, lyi, lab, grp, wi, li) in zip(df.acc, df.cpr, lx, ly, df.label, df.grp,
+                                                  w, left):
+        # leader to the box edge that faces the marker
+        ex = lxi + wi * (xr[1] - xr[0]) if li else lxi
+        ax.plot([x, ex], [y, lyi], lw=0.35, color="#888888", zorder=2)
         ax.annotate(lab, (lxi, lyi), fontsize=pt, va="center", ha="left",
                     color=colors[grp], zorder=4,
                     bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.75))
