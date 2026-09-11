@@ -103,21 +103,35 @@ NUM_HEADS = {"llama3": 32}
 # single threshold would either colour nothing in one table or everything in the other.
 #
 # Where each value comes from (the descending count list main() prints is the evidence):
-#   mlp            14  the original gap: 24 22 18 16 14 14 14 | 9 7 7 ...
-#   mlp+attn_head  14  MATCHED to mlp, not gap-read. This distribution is a smooth staircase --
-#                      20 17 15 14 12 11 10 9 9 9 | 6 -- whose only gap in the palette range is
-#                      at >=9, and that selects 10 units for 8 colours AND cuts a three-way tie
-#                      at 9. With no gap to read, comparability wins: a chip here means the same
-#                      frequency as a chip in the mlp table, which is the table it is read against.
+#   mlp            10  (5k tree, logit-diff only, 56 cells; re-read 2026-09-11) the gap:
+#                      13 12 11 10 10 10 10 | 6 6 6 6 6 5 ... -- 7 units for 8 colours.
+#                      The 2k three-loss table (168 cells) had 24 22 18 16 14 14 14 | 9 7 7 and
+#                      was cut at 14; that cut colours NOTHING at 56 cells.
+#   mlp+attn_head  10  MATCHED to mlp, not gap-read, as before. 5k distribution is again a
+#                      staircase -- 17 15 12 12 11 11 10 | 9 8 7 7 7 6 -- so >=10 happens to
+#                      land on a 10|9 step and also selects 7 units. With no real gap to read,
+#                      comparability wins: a chip here means the same frequency as a chip in
+#                      the mlp table, which is the table it is read against. (The old 2k
+#                      distribution was 20 17 15 14 12 11 10 9 9 9 | 6, matched at 14.)
 #   node           29  gap 30 | 24 (nothing sits at 29, so >=29 and >=30 select the same 3)
 #   node+input     29  gap 29 29 | 22
 # The two node values are deliberately EQUAL rather than separately gap-read, for the same
 # comparability reason: these two tables exist to be read against each other.
+# The two MLP-level tables read the 5k-STEP TREE (2026-09-11, requested): every column is a
+# 5000-step run (or the compute-matched gradient baseline), the MAttr columns are the TUNED
+# Adam arms (eps=1e-2, see the adam-eps investigation) rather than the default-eps 2k runs the
+# tables carried until then, and ONLY the logit-difference loss is shown because the
+# cross-entropy and accuracy arms were never run at 5k or with the tuned eps. The node tables
+# still read results/sva_sweep at 2k steps with all three losses: there is no node run in the
+# 5k tree, and "5k only" would empty them. `losses` / `methods` here override the module
+# defaults per substrate; absent means the defaults.
 SUBSTRATES = {
-    ("mlp", False): dict(res="results/sva_sweep", tag="mlp",
-                         out="sva_top_neurons", recur=14),
-    ("mlp+attn_head", False): dict(res="results/sva_sweep", tag="mlp-attn_head",
-                                   out="sva_top_mlp_attn", recur=14),
+    ("mlp", False): dict(res="results/sva_sweep_5k", tag="mlp",
+                         out="sva_top_neurons", recur=10,
+                         losses="LOSSES_LD", methods="METHODS_5K"),
+    ("mlp+attn_head", False): dict(res="results/sva_sweep_5k", tag="mlp-attn_head",
+                                   out="sva_top_mlp_attn", recur=10,
+                                   losses="LOSSES_LD", methods="METHODS_5K"),
     ("node", False): dict(res="results/sva_sweep", tag="node",
                           out="sva_top_nodes", recur=29),
     ("node", True): dict(res="results/sva_sweep_input", tag="node",
@@ -188,9 +202,24 @@ METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
            # is really about Adam. Adding a column also re-opens the 14-of-72 recurrence cut
            # below -- main() prints the counts either side of the gap; check it after a rerun.
            ("softsgd-log", "sufficient_topk_sgd%s_bs1")]
+# The 5k-tree column set (see SUBSTRATES). Same seven columns in the same order; the two MAttr
+# keys carry the eps suffix parse_method() emits for the tuned runs, and the trained baselines
+# carry the `_s5000` tag eval_sva.py appends at that budget (IG / IxG have no step count).
+# Same series as plot_accauc_vs_faithauc's CPR cut, which is where the tuned uniform-k arm
+# lives in the paper.
+METHODS_5K = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s_s5000"),
+              # parse_method keeps DBM's step suffix in the key (it strips only _ce/_acc).
+              ("sig_lr0.3_l16.0_s5000", "sig_lr0.3_l16.0%s_s5000"),
+              ("stopk-log-eps1e-2", "sufficient_topk_adam_eps1e-2%s_bs1_s5000"),
+              ("stopk-unif-eps1e-2", "sufficient_topk_adam_eps1e-2%s_uniformk_bs1_s5000"),
+              ("softsgd-log", "sufficient_topk_sgd%s_bs1_s5000")]
+LOSSES_LD = [LOSSES[0]]
+assert LOSSES_LD[0][0] == "logit_diff"
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",
-          "sig_lr0.3_l16.0": "DBM",
+          "sig_lr0.3_l16.0": "DBM", "sig_lr0.3_l16.0_s5000": "DBM",
           "stopk-log": r"\ourmethod{}", "stopk-unif": r"\ourmethod{} $+$ unif $k$",
+          "stopk-log-eps1e-2": r"\ourmethod{}",
+          "stopk-unif-eps1e-2": r"\ourmethod{} $+$ unif $k$",
           "softsgd-log": r"\ourmethod{} $+$ SGD"}
 # Truncation budget per description. The layout is one column per METHOD, so the space per
 # description shrinks with the number of methods -- but the font drops a step at six columns
@@ -518,6 +547,12 @@ def main():
                  f"(there is no results/sva_sweep_input run for it)")
     cfg = SUBSTRATES[(sub, inp)]
     res, recur_min = Path(cfg["res"]), args.recur_min or cfg["recur"]
+    # Per-substrate column / loss set. The render code below reads the module-level METHODS
+    # and LOSSES in several places, so the override is applied to those names rather than
+    # threaded through every call; one substrate per process, so nothing else can observe it.
+    global METHODS, LOSSES
+    METHODS = globals()[cfg["methods"]] if "methods" in cfg else METHODS
+    LOSSES = globals()[cfg["losses"]] if "losses" in cfg else LOSSES
     # Descriptions are per-NEURON facts from Transluce's database; at `node` a unit is a whole
     # MLP block or attention head and there is nothing to look up, so every cell would render
     # two "---" lines and quadruple the page count to say nothing.
