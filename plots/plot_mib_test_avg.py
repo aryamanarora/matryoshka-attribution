@@ -164,7 +164,12 @@ RENAME_OURS = {"$+$ Adam": "\\ourmethod{}", "$+$ Adam, unif $k$": "$+$ unif. $k$
 # own name for its published edge row; here it is drawn under the node panel's naming, since
 # it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"
 # reads as two methods. Same guard as RENAME_OURS: a key that matches no drawn row raises.
-RENAME_BASELINES = {"EAP-IG-inp (CF)": "IG ($m{=}5$)"}
+RENAME_BASELINES = {
+    "EAP-IG-inp (CF)": "IG ($m{=}5$)",
+    # The L1 ladder of 8 DBM runs (make_mib_table.DBM_MULTI_COST); "sweep" says what it is
+    # in one word, and the cost row beneath shows what the sweep costs.
+    "DBM (multi-sparsity)": "DBM (sweep)",
+}
 RENAME = {**RENAME_OURS, **RENAME_BASELINES}
 # Third element = families whose rows carry the llama3 dagger at that level. EMPTY at both levels
 # since 2026-09-11 (requested): the edge rows used to carry it ("ours", "ours_uni") for the
