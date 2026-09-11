@@ -262,14 +262,13 @@ STRIP_HEADROOM = 1.30
 # "MAttr costs 0.5k, Node Pruning 3k" readable at all. Bars above the threshold are legible
 # as bars and stay unlabelled so the row is not fifteen strings again.
 TINY_FRAC = 0.12
-# HIGHLIGHT (2026-09-11, requested): OUR bars are drawn at full strength and every baseline is
-# demoted, in both rows and in the legend. Family is still the hue, so the grouping survives;
-# strength is the one cue reserved for the method the figure is about. Two demotions, chosen
-# by BASELINE_STYLE:
+# How baseline bars are drawn relative to OURS, in both rows and in the legend. Family is
+# always the hue. Three options were tried on 2026-09-11 and "solid" was kept (requested):
+#   "solid"   -- every bar at full strength; nothing singles ours out but its colour
 #   "muted"   -- baselines filled with their family colour blended MUTE of the way to white
 #   "outline" -- baselines hollow, outlined in their family colour
 FILLED = ("ours", "ours_uni")
-BASELINE_STYLE = "muted"
+BASELINE_STYLE = "solid"
 MUTE = 0.55           # fraction of the way from the family colour to white
 BAR_LW = 0.8
 # A ranged cost on a filled bar: solid to the minimum, RANGE_ALPHA of the same hue on to the
@@ -323,7 +322,7 @@ def tint(colour, frac):
 def bar_style(fam):
     """Fill/edge kwargs for a bar of family `fam`: full strength for FILLED, demoted otherwise."""
     colour = FAMILY[fam][1]
-    if fam in FILLED:
+    if fam in FILLED or BASELINE_STYLE == "solid":
         return dict(color=colour, lw=0)
     if BASELINE_STYLE == "muted":
         return dict(color=tint(colour, MUTE), lw=0)
@@ -547,7 +546,7 @@ def draw_cost(sx, recs):
         colour = FAMILY[fam][1]
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
-            if fam in FILLED:
+            if fam in FILLED or BASELINE_STYLE == "solid":
                 sx.bar(x, hi - lo, bottom=lo, width=BAR_W, color=colour, alpha=RANGE_ALPHA,
                        lw=0, zorder=2)
             elif BASELINE_STYLE == "muted":
