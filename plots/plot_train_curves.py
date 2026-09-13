@@ -67,15 +67,34 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette as P                                          # noqa: E402
-from plot_accauc_vs_faithauc import ARITH, SVA, parse_method  # noqa: E402
+from plot_accauc_vs_faithauc import ARITH, SVA, SUBSTRATE_RES, parse_method  # noqa: E402
 
 RES = "results/sva_sweep"
+#: EACH SUBSTRATE IS READ FROM THE TREE ITS REPORTED SCORES COME FROM, which is not one tree:
+#: `plot_accauc_vs_faithauc.SUBSTRATE_RES` puts MLP and MLP+Attn in results/sva_sweep_5k (bumped
+#: 2026-09-03 because 2k undertrains MAttr on the ARITHMETIC tasks) and leaves node in the 2k
+#: sweep (its eps x lr grid is flat, so it is not budget-limited). This figure used to draw all
+#: three columns from the 2k tree, so its MLP curves stopped 3,000 steps before the numbers beside
+#: them in the paper did. Imported rather than restated, so a later move of either tree reaches
+#: both figures. `--res` overrides every substrate, for reading one tree end to end.
+SUBSTRATE_SOURCES = {"node": RES, **{k: v for k, v in SUBSTRATE_RES.items() if k != "mlp_sae_span"}}
 # HIGH-EPS ADAM (eps=1e-2) is the Adam arm as of 2026-08-30, not the default-eps one. At this
 # width the default eps=1e-8 makes Adam's update effectively sign(g) -- the learned score becomes
 # a signed COUNT of steps with every trace of effect magnitude divided out -- so `stopk-log` was
 # measuring that degeneracy rather than Adam. Only logit_diff was run at eps=1e-2, which is all
 # these panels use; --all-losses variants still need the default-eps key.
 TRAINED = [("stopk-log-eps1e-2", "MAttr (Adam)"), ("softsgd-log", "MAttr (SGD)")]
+#: ``--arms uniform`` swaps the k-schedule of both trained arms. THE ADAM ARM IS NOT THE SAME
+#: OPTIMISER in the two settings: only logit_diff was run at eps=1e-2 and only under log k, so the
+#: uniform Adam key is the DEFAULT-eps one, which at this width makes the update effectively
+#: sign(g) (see the note above). So a uniform panel differs from its log twin in two things at
+#: once, and the difference cannot be attributed to the k-schedule alone. Both arms' curve counts
+#: are also thinner -- 30 of 81 uniform stopk files carry a train_eval_log against 81 of 81 for
+#: softsgd-unif -- so some cells will be missing one arm and drop out of the pairing entirely.
+#: The labels are the log panel's, so colour and legend keep one meaning across the two figures;
+#: which eps the Adam arm is stays in this comment and in the stdout banner, not on the canvas.
+ARMS = {"log": TRAINED,
+        "uniform": [("stopk-unif", "MAttr (Adam)"), ("softsgd-unif", "MAttr (SGD)")]}
 REF = ("IG", "IG (untrained ref.)")
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
@@ -132,26 +151,35 @@ LEG_H, LEG_H_WIDE, TITLE_H = 0.52, 0.6, 0.22
 LOSS_LINETYPE = {"CE": "dotted", "acc": "dashed", "logit-diff": "solid"}
 
 
-def load(res=RES, tasks=None):
-    """(substrate, task, loss) -> {arm: {"curve": [(step, {metric: v})], "final": {...}}}."""
+def load(res=None, tasks=None):
+    """(substrate, task, loss) -> {arm: {"curve": [(step, {metric: v})], "final": {...}}}.
+
+    ``res`` forces every substrate to one tree; the default reads each from SUBSTRATE_SOURCES, so
+    a cell can only ever come from the tree whose numbers the paper quotes for that substrate.
+    """
     cells = {}
     keep = {k for k, _ in TRAINED} | {REF[0]}
-    for f in glob.glob(res + "/*.json"):
-        d = json.load(open(f))
-        m = parse_method(os.path.basename(f), d)
-        if m not in keep or (tasks and d["task"] not in tasks):
-            continue
-        tot = d["total"]
+    want = {sub: (res or src) for sub, src in SUBSTRATE_SOURCES.items()}
+    for src in sorted(set(want.values())):
+        for f in glob.glob(src + "/*.json"):
+            d = json.load(open(f))
+            m = parse_method(os.path.basename(f), d)
+            if m not in keep or (tasks and d["task"] not in tasks):
+                continue
+            if want.get(d["nodes"]) != src:
+                continue
+            tot = d["total"]
 
-        def pct(e):
-            ks = e.get("kstar_50")
-            return 100.0 * (tot if ks is None else ks) / tot
+            def pct(e, tot=tot):
+                ks = e.get("kstar_50")
+                return 100.0 * (tot if ks is None else ks) / tot
 
-        rec = {"final": {"acc_auc": d["acc_auc"], "faith_auc": d["faith_auc"],
-                         "kstar_pct": pct(d)}}
-        rec["curve"] = [(e["step"], {"acc_auc": e["acc_auc"], "faith_auc": e["faith_auc"],
-                                     "kstar_pct": pct(e)}) for e in (d.get("train_eval_log") or [])]
-        cells.setdefault((d["nodes"], d["task"], d["loss"]), {})[m] = rec
+            rec = {"final": {"acc_auc": d["acc_auc"], "faith_auc": d["faith_auc"],
+                             "kstar_pct": pct(d)}}
+            rec["curve"] = [(e["step"], {"acc_auc": e["acc_auc"], "faith_auc": e["faith_auc"],
+                                         "kstar_pct": pct(e)})
+                            for e in (d.get("train_eval_log") or [])]
+            cells.setdefault((d["nodes"], d["task"], d["loss"]), {})[m] = rec
     return cells
 
 
@@ -312,7 +340,9 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--res", default=RES)
+    ap.add_argument("--res", default=None,
+                    help="force every substrate to one results tree; default is per-substrate, "
+                         "SUBSTRATE_SOURCES (node 2k, MLP and MLP+Attn 5k)")
     ap.add_argument("--metric", choices=list(METRICS), default="acc_auc")
     ap.add_argument("--tasks", choices=["arith", "sva", "all"], default="arith")
     # In the 3x3 grid the loss is the facet. `--overlay` is the other view: the three losses share
@@ -321,6 +351,8 @@ def main():
     # of them, so --metric does nothing here. Colour stays the arm in both layouts, so a reader
     # moving between them does not have to relearn which line is Adam.
     ap.add_argument("--overlay", action="store_true")
+    ap.add_argument("--arms", choices=list(ARMS), default="log",
+                    help="k-schedule of the two trained arms (default: log); see ARMS")
     # The overlay layout is half-width by DEFAULT (see FIG_OVERLAY_W) because that is the size
     # the paper uses it at. Default rather than an opt-in flag so that re-running this script
     # bare reproduces the committed figs/train_curves_arith_overlay.pdf instead of silently
@@ -333,6 +365,11 @@ def main():
     ap.add_argument("--loss", choices=[lb for _, lb in LOSSES], default="logit-diff")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
+    global TRAINED
+    TRAINED = ARMS[a.arms]
+    if a.arms != "log":
+        print(f"arms={a.arms}: {[k for k, _ in TRAINED]} -- note the Adam arm here is DEFAULT eps "
+              "(1e-8), not the log panels' eps=1e-2, so a difference is not the k-schedule alone")
     tasks = {"arith": ARITH, "sva": SVA, "all": ARITH + SVA}[a.tasks]
     one = a.substrate is not None
     overlay = a.overlay and not one     # a single panel has no row axis to spend on a metric
@@ -344,7 +381,8 @@ def main():
     # Re-add it by putting "kstar_pct" back here; kstar_axis() already handles the axis.
     mrows = ["acc_auc", "faith_auc"] if overlay else [a.metric]
     if overlay:
-        out = a.out or f"plots/train_curves_{a.tasks}_overlay.pdf"
+        suffix = "" if a.arms == "log" else f"_{a.arms}k"
+        out = a.out or f"plots/train_curves_{a.tasks}_overlay{suffix}.pdf"
     else:
         suf = (f"_{a.substrate.lower().replace('+', '')}_{a.loss.replace('-', '')}" if one else "")
         out = a.out or f"plots/train_curves_{a.tasks}_{a.metric}{suf}.pdf"
@@ -382,7 +420,13 @@ def main():
                                          task="__mean__", step=step, y=float(np.mean(vs)),
                                          kind="mean"))
                 ref = float(np.mean([cells[k][REF[0]]["final"][met] for k in keys]))
-                for step in (0, 1999):
+                # IG is a single-pass attribution with no trajectory, so its line has to be drawn
+                # to the width of the panel it sits in -- and that width is now PER SUBSTRATE (node
+                # 2k, MLP and MLP+Attn 5k). It was hardcoded to 1999, which stopped it three fifths
+                # of the way across a 5k panel and read as "IG ends here" rather than as a constant.
+                last = max(st for k in keys for m, _ in TRAINED
+                           for st, _ in cells[k][m]["curve"])
+                for step in (0, last):
                     refs.append(dict(substrate=slabel, loss=llabel, arm=REF[1], metric=met,
                                      task="__mean__", step=step, y=ref, kind="mean"))
             notes.append((slabel, llabel, len(keys), sorted(k[1] for k in keys)))
