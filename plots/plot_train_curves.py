@@ -81,7 +81,12 @@ SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 # kstar_50 is logged as an absolute unit count and censors at `total`; normalise exactly as
 # plot_method_ranks does so the three substrates are on one scale.
-METRICS = {"acc_auc": "acc-AUC (↑)", "faith_auc": "faith-AUC (↑)",
+#: AXIS LABELS ARE THE PAPER'S METRIC NAMES, not the log keys. `acc_auc` is the compactness
+#: measure and `faith_auc` is CPR; they were drawn as "acc-AUC"/"faith-AUC" here while every other
+#: figure in the repo had already moved (plot_ablation_bars, plot_dbm_l0_vs_metric,
+#: plot_mib_accauc_cpr_scatter, plot_epsgrid_facets), so a reader crossing figures met two names
+#: for one quantity. The keys are untouched -- only what is printed on an axis.
+METRICS = {"acc_auc": "Compactness (↑)", "faith_auc": "CPR (↑)",
            "kstar_pct": r"$k^\star$ (% of units, ↓)"}
 LINETYPE = {"MAttr (Adam)": "solid", "MAttr (SGD)": "dashed", REF[1]: "dotted"}
 # See the module docstring: hue is the optimizer here, as in plot_optimizer_lr.py's MIB panels.
