@@ -11,8 +11,10 @@ not agree with acc-AUC about which arm is best, so no single configuration wins 
 The 20,000-step MAttr runs: does Adam's deficit at the neuron substrates survive a longer budget?
 
 fig:optimiser-curves (plot_train_curves.py --overlay) stops at step 1999 because that is where
-the sweep stops: `submit_sva_sweep.sh`'s MATTR_COMMON is 2000 steps, so every Adam-vs-SGD number
-in the paper is read off that window. It shows Adam below SGD at the neuron substrates. It cannot
+the sweep stops, so every Adam-vs-SGD number in the paper is read off that window (the band and
+`PUBLISHED_STEPS` were moved 2000 -> 5000 on 2026-09-13 to follow it; the @2k figures quoted below
+are from the old budget and are kept because they are what the earlier revision of this docstring
+claimed, NOT because they are the current window's numbers). It shows Adam below SGD at the neuron substrates. It cannot
 show whether Adam is WORSE or merely SLOWER, because it has no data past the budget -- and the
 answer turns out to be mostly "slower":
 
@@ -29,7 +31,7 @@ THIS IS ONE CELL, ONE LOSS, ONE SEED, and the figure must not be read as a 20k m
 fig:optimiser-curves' population. Until 2026-08-24 this script drew that population in a left-hand
 column (the 18 paired ARITH cells, rebuilt from the sweep) so the two could be compared side by
 side; that column is gone, at the cost that the reader now has to carry the comparison across
-figures. The shaded strip is what carries it: it marks step 0-2000, the ENTIRE width of
+figures. The shaded strip is what carries it: it marks step 0-5000, the ENTIRE width of
 fig:optimiser-curves, so the part of this curve that the paper's numbers actually cover is
 visually separated from the part they do not. Do not remove the band without replacing that cue.
 
@@ -126,7 +128,7 @@ RUNS = [
 # It is a single-pass attribution with no trajectory, so it is a horizontal constant that the
 # trained curves either do or do not cross -- not "IG at step 0".
 IG_JSON = "results/sva_sweep/addition_llama3_mlp_ig.json"
-PUBLISHED_STEPS = 2000            # where fig:optimiser-curves (and every reported number) ends
+PUBLISHED_STEPS = 5000            # where fig:optimiser-curves (and every reported number) ends
 MROWS = ["acc_auc", "faith_auc"]  # same two rows as the overlay layout, same order
 BAND = "#dcdcdc"
 XTICKS = [0, 5000, 10000, 15000, 20000]
@@ -215,7 +217,7 @@ def main():
     fig.savefig(out_path.replace(".pdf", ".png"), dpi=200)
     print("wrote", a.out)
 
-    print("\n(addition/llama3/mlp/logit-diff), probe@2000 -> probe@20k -> test:")
+    print(f"\n(addition/llama3/mlp/logit-diff), probe@{PUBLISHED_STEPS} -> probe@20k -> test:")
     for arm, lrlab, _, curve, final in runs:
         d = dict(curve)
         at2k = max(s for s in d if s <= PUBLISHED_STEPS)
