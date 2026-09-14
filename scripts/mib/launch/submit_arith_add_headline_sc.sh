@@ -11,7 +11,7 @@
 #   bash scripts/mib/launch/submit_arith_add_headline_sc.sh              # test, node + edge
 #   SPLITS="validation test" LEVELS=node DRYRUN=1 bash scripts/mib/launch/submit_arith_add_headline_sc.sh
 set -u
-ABS=/nlp/scr/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS=/nlp/scr/aryaman/learning-to-attribute; cd "$ABS"; PY="uv run python"   # uv syncs the env inside the job
 DRYRUN=${DRYRUN:-0}
 SPLITS=${SPLITS:-test}
 LEVELS=${LEVELS:-"node edge"}
