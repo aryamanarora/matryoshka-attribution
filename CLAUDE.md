@@ -161,6 +161,15 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
 - `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/mib/`; task
   names in configs must use underscores (`arc_easy`, not `arc-easy`).
 - `mib-path` defaults to `./MIB-circuit-track` (gitignored symlink to the cloned repo).
+  **It must be OUR FORK, with submodules**: `git clone --recurse-submodules
+  https://github.com/aryamanarora/MIB-circuit-track.git` at fork `main` >= `f329461` (EAP-IG
+  submodule at `41e9b9c`). Upstream MIB's `evaluate_area_under_curve` returns 5 values; ours
+  returns 7 (`accuracies`, `acc_auc`) and `eval_mib.py` / `eval_mib_edge.py` unpack 7, so an
+  upstream or stale clone trains for hours and then dies with `ValueError: not enough values to
+  unpack (expected 7, got 5)` AFTER eval, before `scores.pt` is written (2026-09-14, sc, lost a
+  1.5 h llama3 node eval + a 25 min edge run). Both scripts import that function at startup, so
+  fixing the clone does not rescue a running job -- cancel and resubmit. Until 2026-09-14 the
+  7-value patch and the EAP-IG pin existed only as uncommitted state on Tilde; both are pushed now.
 
 ## ViT teaser: optimizer / LR / Adam-eps grid (2026-09-02)
 
