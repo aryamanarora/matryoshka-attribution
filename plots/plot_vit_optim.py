@@ -36,7 +36,9 @@ SERIES = {   # arm -> (label, colour); per palette's optimizer rule
     "sgd": ("MAttr (SGD)", METHOD["MAttr (SGD)"]),
     "adam_best": ("MAttr (Adam, best ε)", METHOD["MAttr"]),
     "adam_default": ("MAttr (Adam, ε = 10⁻⁸)", METHOD["MAttr (Adam, default eps)"]),
-    "ig": ("Expected Gradients", METHOD["Expected Gradients"]),
+    # Drawn as "EG" everywhere in the figure (rule label, strip title); panel (c)'s legend
+    # spells it out once. The full name does not fit the rule region or the strip.
+    "ig": ("EG", METHOD["Expected Gradients"]),
     "ref_kernelshap": ("KernelSHAP", METHOD["Node Pruning"]),
     "ref_attnlrp": ("AttnLRP", METHOD["AttnLRP"]),
     "random": ("random", "#888888"),
@@ -110,7 +112,7 @@ def main():
     top_h, gap, lm, rm = 1.45, 0.62, 0.38, 0.06
     pw = (W - lm - rm - 2 * gap) / 3
     strip = [("ref_mattr", "MAttr (teaser)"), (best_adam, "Adam, best"),
-             (best_default, "Adam, ε = 10⁻⁸"), (best_sgd, "SGD"), ("ig", "Expected Gradients"),
+             (best_default, "Adam, ε = 10⁻⁸"), (best_sgd, "SGD"), ("ig", "EG"),
              ("ref_kernelshap", "KernelSHAP")]
     strip = [(k, lab) for k, lab in strip if k in arms and arms[k]["scores"]]
     n_s = len(strip)
@@ -171,20 +173,15 @@ def main():
     # reference rules, labelled in the clear region right of the MAttr optima. The random
     # floor (~0.6) is left off the axis: drawing it would spend half the panel on empty space
     # below every real method; it is reported in the printed table instead.
-    # "Expected Gradients" is too wide for that region (it ran off the frame at lr 8 and
-    # collides with SGD's collapse at lr 100 if right-anchored), so its rule is labelled at the
-    # LEFT edge, where nothing sits below AUC ~4.3.
-    xlo, xhi = min(sgd_lrs + lrs) / 1.6, max(sgd_lrs + lrs) * 1.6
     for k in ("ref_kernelshap", "ref_attnlrp", "ig"):
         if k not in mean:
             continue
         lab, col = SERIES[k]
         ax.axhline(mean[k], color=col, lw=0.8, ls="dashed", zorder=2)
-        x = xlo * 1.15 if k == "ig" else 8.0
-        ax.text(x, mean[k] + 0.04, lab, size=5.5, color=col, ha="left", va="bottom")
+        ax.text(8.0, mean[k] + 0.04, lab, size=5.5, color=col, ha="left", va="bottom")
     ax.set_xscale("log")
     logticks(ax, sgd_lrs + lrs)
-    ax.set_xlim(xlo, xhi)
+    ax.set_xlim(min(sgd_lrs + lrs) / 1.6, max(sgd_lrs + lrs) * 1.6)
     floor = min(mean[k] for k in ("ig", "ref_attnlrp") if k in mean)
     ax.set_ylim(min(floor, min(lo[k] for k in list(key_s.values()) + list(key_a.values()))) - 0.15,
                 max(hi[k] for k in list(key_s.values()) + list(key_a.values())) + 0.1)
@@ -200,7 +197,8 @@ def main():
     ax = add(lm + 2 * (pw + gap), y_top, pw, top_h)
     furnish(ax)
     for k, (lab, col) in [(best_adam, SERIES["adam_best"]), (best_default, SERIES["adam_default"]),
-                          (best_sgd, SERIES["sgd"]), ("ig", SERIES["ig"])]:
+                          (best_sgd, SERIES["sgd"]),
+                          ("ig", ("Expected Gradients (EG)", SERIES["ig"][1]))]:
         if k not in arms or not arms[k]["trace"]:
             continue
         tr = np.stack(arms[k]["trace"])              # [seed, n, 2]

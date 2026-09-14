@@ -268,7 +268,7 @@ SUBSETS = ["Attention heads", "MLPs"]
 # to this figure's DISPLAY mapping instead of a results-dir list.
 DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
-           "Node Pruning": "NodePrune"}
+           "Node Pruning": "NodePrune", "Expected Gradients": "EG"}
 
 # ORDER matches paper/tabs/mib_test_results.tex's node-level row order exactly (ascending avg
 # CPR AUC within Gradient-based / Mask-based / Ours), NOT a re-cluster -- so a reader holding the
