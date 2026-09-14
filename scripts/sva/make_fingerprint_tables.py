@@ -129,7 +129,7 @@ def parse_method(fname, d):
     # run would be averaged into the IG rows.
     if tag.startswith("attnlrp"):
         return "AttnLRP"
-    # `mc_ig_m{draws}_s{seed}` -- the stepless / MC-alpha IG arm (2026-08-23). It is a DIFFERENT
+    # `mc_ig_m{draws}_s{seed}` -- the Expected Gradients (MC-alpha IG) arm (2026-08-23). It is a DIFFERENT
     # estimator with no row in SECTIONS, and it does not start with "ixg", so the old lenient
     # catch-all below relabelled it "IG"; since `load` keys on (method, loss, task) with no tag
     # in it, glob order then decided whether the IG cell of every SVA column showed 10-step IG or

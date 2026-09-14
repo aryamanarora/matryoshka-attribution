@@ -8,7 +8,7 @@ from .sigmoid_das import RotateLayer, make_rotate_layer, householder_product, ca
 # import build_mask` without pulling transformers/datasets.
 from .masks import MaskResult, build_mask, VARIANTS
 from .schedules import sample_k, sample_k_sum_pow2, natural_k
-from .trainer import learn_scores, stepless_ig, TrainResult
+from .trainer import learn_scores, expected_gradients, TrainResult
 from .cf_cache import CFActivationCache
 from .edge_pruning import learn_scores_edge_pruning
 from .evaluate import sparsity_sweep
@@ -37,7 +37,7 @@ __all__ = [
     # MAttr learning algorithm (shared core)
     "MaskResult", "build_mask", "VARIANTS",
     "sample_k", "sample_k_sum_pow2", "natural_k",
-    "learn_scores", "stepless_ig", "TrainResult", "sparsity_sweep",
+    "learn_scores", "expected_gradients", "TrainResult", "sparsity_sweep",
     "CFActivationCache",
     "learn_scores_edge_pruning",
     "normalize_mode", "preferred_mode", "MODE_CHOICES", "ISO", "CAUSE",

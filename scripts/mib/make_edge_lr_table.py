@@ -6,7 +6,7 @@ the reader having to check whether a difference is a table-construction differen
 
 FOUR COLUMNS, AND THAT IS FINAL -- DO NOT "BACKFILL" IT. submit_mib_edge_lr_sweep.sh defines
 nine cells; the qwen2.5 (24 jobs) and gemma2 (36 jobs) arms were CANCELLED on 2026-08-22 with
-the sweep's question already answered, to free the 2-node QOS cap for the stepless-IG wave.
+the sweep's question already answered, to free the 2-node QOS cap for the Expected Gradients wave.
 Those five columns are a deliberate scope decision, not jobs that are still pending, so a
 future reader who sees four columns and resubmits gemma2 is spending ~113 GPU-hours to widen
 a table whose conclusion does not depend on it. If they are ever wanted, the recipe is

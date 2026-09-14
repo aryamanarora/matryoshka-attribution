@@ -93,7 +93,7 @@ METHODS = [
     # make_mib_test_table, plot_mib_accauc_cpr_scatter); _s1/_s2 are 5/11 seed replicates.
     # Its own MIB subfolder name -- run_napig_mc.sh passes --method EAP-IG-inputs-mc precisely
     # so it cannot overwrite the fixed-grid NAP-IG pkls.
-    ("Stepless IG", P.color("Stepless IG"), "solid", "base",
+    ("Expected Gradients", P.color("Expected Gradients"), "solid", "base",
      ("napig_mc_eval", "EAP-IG-inputs-mc_patching_node")),
     # ig1_accauc, NOT ig1_eval: same run (area_under 0.478 vs 0.477 over 11 cells) but only the
     # _accauc dir carries the `accuracies` array the top figure needs.

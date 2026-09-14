@@ -87,9 +87,9 @@ BASE_CPR = {
     # dual-root cpr_base above.
     "$+$ 10 IG steps": ("napig10_eval", "EAP-IG-inputs_patching_node"),
     "$+$ 30 IG steps": ("napig30_eval", "EAP-IG-inputs_patching_node"),
-    # Stepless IG -- keyed by the acc table's display name, like every entry here. MIB-side only
+    # Expected Gradients -- keyed by the acc table's display name, like every entry here. MIB-side only
     # (12/12 validation), so it relies on cpr_base's dual root exactly as the step rungs do.
-    "Stepless IG": ("napig_mc_eval", "EAP-IG-inputs-mc_patching_node"),
+    "Expected Gradients": ("napig_mc_eval", "EAP-IG-inputs-mc_patching_node"),
     "Conductance": ("napig_local_eval", "EAP-IG-inputs-local_patching_node"),
     "I$\\times$G": ("ig1_eval", "EAP-IG-inputs_patching_node"),
     "RelP": ("relp_eval", "RelP_patching_node"),
@@ -1154,12 +1154,11 @@ COMPACT = {
     (G_GRAD, "IG (5 steps)"): "IG-5",
     (G_GRAD, "IG (10 steps)"): "IG-10",
     (G_GRAD, "IG (30 steps)"): "IG-30",
-    # Stepless IG, added with the RelP swap. It is the one gradient point whose POSITION is the
+    # Expected Gradients, added with the RelP swap. It is the one gradient point whose POSITION is the
     # claim: same x-cost as I x G at the bottom-left of this cloud, but landing with IG-10 at the
-    # top. Shortened to "IG-free" -- "Stepless IG" is wider than any label this 1.65in panel
-    # currently carries, and the hyphenated form reads against IG-5/IG-10 as the same family at
-    # a different budget, which is exactly what it is.
-    (G_GRAD, "Stepless IG"): "IG-free",
+    # top. Shortened to "EG" -- "Expected Gradients" is wider than any label this 1.65in panel
+    # currently carries. (Was "IG-free" while the method was labelled "Stepless IG".)
+    (G_GRAD, "Expected Gradients"): "EG",
     (G_GRAD, "IxG"): "I$\\times$G",
 }
 

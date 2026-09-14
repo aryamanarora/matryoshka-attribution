@@ -34,7 +34,7 @@ read -ra TASKS <<< "${SVA_TASKS-nounpp rc simple within_rc}"   # SVA_TASKS="" (s
 NODES=(mlp "mlp+attn_head" node)   # node = MIB granularity (mlp block + attn head per layer)
 LOSSES=(ce acc logit_diff)
 GRAD=(ig ixg attnlrp mc_ig)
-# "Stepless IG": alpha ~ U(0,1) per example instead of the fixed grid. MC_DRAWS=1 is the arm
+# "Expected Gradients": alpha ~ U(0,1) per example instead of the fixed grid. MC_DRAWS=1 is the arm
 # that matters -- it costs exactly what ixg costs (one fwd+bwd), so mc_ig vs ixg is a
 # compute-matched contrast and mc_ig vs ig is a 1x-vs-10x one. eval_sva.py's --ig-steps default
 # is 10, which for this method would silently buy a 10x run, so it is ALWAYS passed explicitly.

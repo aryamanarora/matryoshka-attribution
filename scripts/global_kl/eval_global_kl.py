@@ -13,15 +13,15 @@ Differences from eval_sva.py / eval_mib.py, all of which follow from "global":
 Arms (--method):
   mattr   -- MAttr: soft top-k mask (`--variant topk`) + log-k schedule, per CLAUDE.md's
              headline recipe; --optimizer {sgd,adam} is the arm distinction.
-  mc_ig   -- Stepless IG over the ablation->clean INPUT-EMBEDDING path, score =
+  mc_ig   -- Expected Gradients over the ablation->clean INPUT-EMBEDDING path, score =
              mean_alpha grad . (clean_act - base), alpha per EXAMPLE. Now the UNIFIED
-             implementation: learning_to_attribute.stepless_ig drives the loop and shares
+             implementation: learning_to_attribute.expected_gradients drives the loop and shares
              MAttr's --steps / --train-batch-size / --k-schedule (alpha ~ k/total; uniform =
              canonical U(0,1)); the hooker's capture_node_acts / override_embed /
              contract_node_grads own the model-specific half (see make_embed_ig_grad_fn).
              One forward+backward per step -> equal --steps is compute-comparable to mattr
              (but NOT draw-matched: per-example alpha is free for IG, while MAttr fixes one
-             k per forward -- see stepless_ig's docstring).
+             k per forward -- see expected_gradients's docstring).
              The ALPHA CONVENTION IS FLIPPED vs eval_sva (alpha=1 clean, alpha=0 the
              zero/mean baseline) because the baseline is an ablation, not a patch input.
              Round-1 files (`*_mc_ig_m*`) are the superseded fixed-batch-sweep
@@ -44,7 +44,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import LlamaAttributionHooks, learn_scores, stepless_ig
+from learning_to_attribute import LlamaAttributionHooks, learn_scores, expected_gradients
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -144,9 +144,9 @@ def corpus_means(hf, hooker, chunks, device, batch_size):
 
 def gradient_scores(hf, hooker, chunks, total, device, *, batch_size, draws, seed,
                     metric="kl", mc=True, means=None):
-    """IG / Stepless-IG over the zero->clean INPUT-EMBEDDING path, scored at the node acts.
+    """IG / Expected Gradients over the zero->clean INPUT-EMBEDDING path, scored at the node acts.
 
-    NOTE: the mc=True (stepless) path is SUPERSEDED by learning_to_attribute.stepless_ig +
+    NOTE: the mc=True (Expected Gradients) path is SUPERSEDED by learning_to_attribute.expected_gradients +
     make_embed_ig_grad_fn (same per-example-alpha estimator; alpha now comes from the shared
     --k-schedule and batches are sampled for --steps steps instead of swept once). Kept for
     --method ig (the fixed grid) and to reproduce the round-1 ``*_mc_ig_m*`` files.
@@ -246,7 +246,7 @@ def gradient_scores(hf, hooker, chunks, total, device, *, batch_size, draws, see
 
 def make_embed_ig_grad_fn(hf, hooker, chunks, *, batch_size, metric="kl", means=None,
                           device="cuda", alpha_per_example=True):
-    """``grad_fn(alpha)`` for ``trainer.stepless_ig`` -- the unified mc_ig arm's environment.
+    """``grad_fn(alpha)`` for ``trainer.expected_gradients`` -- the unified mc_ig arm's environment.
 
     Mirrors the MAttr ``loss_fn``: sample ONE batch from ``chunks``, compute the clean
     reference (capturing the node activations along the way), then run a forward from the
@@ -258,7 +258,7 @@ def make_embed_ig_grad_fn(hf, hooker, chunks, *, batch_size, metric="kl", means=
 
     ``alpha_per_example=True`` (default, the round-1 / eval_sva convention) gives every
     example its own alpha -- free variance reduction. ``False`` shares ONE alpha across the
-    batch, which is draw-matched to MAttr's one-k-per-forward (see stepless_ig's docstring
+    batch, which is draw-matched to MAttr's one-k-per-forward (see expected_gradients's docstring
     on the asymmetry) at the cost of that reduction.
     """
     n = chunks.shape[0]
@@ -452,7 +452,7 @@ def main():
     p.add_argument("--method", default="mattr",
                    choices=["mattr", "mc_ig", "ig", "magnitude", "random"],
                    help="magnitude = the objective-free write-norm null; see magnitude_scores. "
-                        "mc_ig = unified embedding-path Stepless IG (shares mattr's --steps/"
+                        "mc_ig = unified embedding-path Expected Gradients (shares mattr's --steps/"
                         "--train-batch-size/--k-schedule; canonical IG is --k-schedule "
                         "uniform); ig = the legacy fixed-grid variant")
     p.add_argument("--nodes", default="mlp_tied+attn_head_tied",
@@ -475,7 +475,7 @@ def main():
                         "FIRST) and small complement (which to DROP LAST). Plain log only ever "
                         "supervises the head of the ranking -- and round 1's dense end is where "
                         "the learned orderings lost to a random one. Also mc_ig's alpha "
-                        "distribution (alpha = k/total): uniform = canonical stepless IG, "
+                        "distribution (alpha = k/total): uniform = canonical Expected Gradients, "
                         "anything else = a p(alpha)-weighted path integral.")
     p.add_argument("--optimizer", default="sgd", choices=["sgd", "adam"])
     p.add_argument("--lr", type=float, default=None,
@@ -517,7 +517,7 @@ def main():
                           if args.method == "mattr" else "")
                        # mc_ig ALWAYS names its alpha distribution (= the k-schedule): the
                        # flag default "log" is a mattr convention, and an untagged mc_ig run
-                       # would silently read as canonical (uniform-alpha) stepless IG. Also
+                       # would silently read as canonical (uniform-alpha) Expected Gradients. Also
                        # keeps the new stems distinct from the round-1 `mc_ig_m*` files.
                        + (f"_{args.k_schedule}_s{args.steps}"
                           + ("_abatch" if args.alpha_per_batch else "")
@@ -587,10 +587,10 @@ def main():
                                         batch_size=args.train_batch_size,
                                         metric=args.metric, means=means, device=device,
                                         alpha_per_example=not args.alpha_per_batch)
-        logger.info("Stepless IG (embedding path): %d steps, alpha ~ %s (%s) over %d nodes",
+        logger.info("Expected Gradients (embedding path): %d steps, alpha ~ %s (%s) over %d nodes",
                     args.steps, args.k_schedule,
                     "per batch" if args.alpha_per_batch else "per example", total)
-        res = stepless_ig(total, grad_fn, steps=args.steps, k_schedule=args.k_schedule,
+        res = expected_gradients(total, grad_fn, steps=args.steps, k_schedule=args.k_schedule,
                           logger=logger, log_every=50)
         scores = res.scores
         train_log = res.train_log

@@ -15,7 +15,7 @@
 #   2. THE PATH. MAttr's ranking is orthogonal to IG's (rho ~0.02 vs IG-IxG's 0.51) because IG
 #      integrates over the INPUT EMBEDDING while MAttr interpolates latents toward CACHED patch
 #      latents. That is a property of the two algorithms, not of the dictionary, so it SHOULD
-#      replicate exactly. If it does not, the path story is wrong. Stepless IG (mc_ig) is the
+#      replicate exactly. If it does not, the path story is wrong. Expected Gradients (mc_ig) is the
 #      discriminating cell: MAttr's alpha draws on IG's path -- it scored rho=0.80 with IG on
 #      resid, and must again here.
 #

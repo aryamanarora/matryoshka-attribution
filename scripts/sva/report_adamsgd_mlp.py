@@ -1,5 +1,5 @@
 """Build docs/adam_vs_sgd_mlp.html -- the report on why MAttr+Adam loses to MAttr+SGD (and to
-IG / Stepless IG) at MLP-neuron scale.
+IG / Expected Gradients) at MLP-neuron scale.
 
 ONE cell: addition / llama3 / --nodes mlp (2,293,760 neurons), sufficient (denoising), bs=1,
 100 eval pairs, 2000 steps unless stated. Everything is read from disk at build time -- no
@@ -92,7 +92,7 @@ def table(headers, rows, cls=""):
 # ============================================================ data
 REFS = {
     "IG (10 steps, 100 examples)": "results/sva_sweep/addition_llama3_mlp_ig.json",
-    "Stepless IG (1 draw, 100 examples)": "results/adamsgd_mlp/E_steplessig/*mc_ig*.json",
+    "Expected Gradients (1 draw, 100 examples)": "results/adamsgd_mlp/E_steplessig/*mc_ig*.json",
     "I×G": "results/sva_sweep/addition_llama3_mlp_ixg.json",
     "AttnLRP": "results/sva_sweep/addition_llama3_mlp_attnlrp.json",
     "Random ranking": "results/sva_sweep/addition_llama3_mlp_random_s42.json",
@@ -268,7 +268,7 @@ def generality_table():
     rows = []
     for task in ("addition", "nounpp", "rc", "simple", "within_rc"):
         for lab, fn in (("IG", f"{task}_llama3_mlp_ig.json"),
-                        ("Stepless IG", f"{task}_llama3_mlp_mc_ig_m1_s42.json"),
+                        ("Expected Gradients", f"{task}_llama3_mlp_mc_ig_m1_s42.json"),
                         ("MAttr+SGD", f"{task}_llama3_mlp_sufficient_topk_sgd_bs1.json"),
                         ("MAttr+Adam", f"{task}_llama3_mlp_sufficient_topk_adam_bs1.json")):
             d = rd(f"results/sva_sweep/{fn}")
@@ -427,7 +427,7 @@ def second_cell_table():
         b = best_of(pat)
         rows.append([lab, b[0] if b else None, (b[1]["faith_max"] if b else None)])
     for lab, fn in (("IG (on disk)", "nounpp_llama3_mlp_ig.json"),
-                    ("Stepless IG (on disk)", "nounpp_llama3_mlp_mc_ig_m1_s42.json")):
+                    ("Expected Gradients (on disk)", "nounpp_llama3_mlp_mc_ig_m1_s42.json")):
         d = rd(f"results/sva_sweep/{fn}")
         rows.append([lab, d["acc_auc"] if d else None, d["faith_max"] if d else None])
     return table(["nounpp / llama3 / mlp (2,293,760 units)", "accuracy AUC", "max faithfulness"],

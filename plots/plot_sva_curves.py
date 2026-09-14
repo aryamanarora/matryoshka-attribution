@@ -31,7 +31,7 @@ but the SAE columns and the arithmetic tasks are where methods get close to it, 
 never separates from grey is the single most useful thing a reader can see here.
 
 MISSING SERIES ARE EXPECTED, not a bug. The SAE columns carry only the methods that have been
-run there (IG, I x G, both MAttr arms, Random); AttnLRP, Node Pruning, DBM and Stepless IG exist
+run there (IG, I x G, both MAttr arms, Random); AttnLRP, Node Pruning, DBM and Expected Gradients exist
 at node/MLP only. main() prints a per-column inventory so a gap is always attributable.
 
 Run:  uv run python plots/plot_sva_curves.py                 -> plots/sva_curves_iia.pdf

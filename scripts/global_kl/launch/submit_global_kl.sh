@@ -8,7 +8,7 @@
 # Four arms, one job each (each loads the 8B model once):
 #   mattr + sgd   (lr 1.0)   -- the CLAUDE.md headline recipe's optimizer/LR
 #   mattr + adam  (lr 0.05)  -- the "$+$ Adam" ablation's optimizer/LR
-#   mc_ig m=1                -- Stepless IG, compute-matched to ONE forward+backward per doc
+#   mc_ig m=1                -- Expected Gradients, compute-matched to ONE forward+backward per doc
 #   random                   -- ranking-free control (the sweep also reports its own random
 #                               ordering, so this is a second seed of the same control)
 #

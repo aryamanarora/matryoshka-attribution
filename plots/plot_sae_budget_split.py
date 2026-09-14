@@ -1,4 +1,4 @@
-"""How to spend a FIXED attribution budget: integration steps vs examples, grid IG vs Stepless IG.
+"""How to spend a FIXED attribution budget: integration steps vs examples, grid IG vs Expected Gradients.
 
 THE QUESTION. A gradient attribution's cost is (draws x examples) backward passes over one
 example each -- call it example-backwards. At a fixed budget those two factors trade off, and
@@ -15,12 +15,12 @@ than at a 4,000 they never reached.
 THE RESULT, and it is the reason the figure is one row rather than a table. The GRID estimator
 has exactly one bad operating point and it is the cheapest-looking one: at m=1 the left-endpoint
 rule degenerates to the single point alpha=0, which is not an integral estimate at all -- it IS
-I x G -- and it costs 0.111 mean IIA AUC. STEPLESS IG, which draws alpha ~ U(0,1) PER EXAMPLE,
+I x G -- and it costs 0.111 mean IIA AUC. EXPECTED GRADIENTS, which draws alpha ~ U(0,1) PER EXAMPLE,
 has no such point: at m=1 its 4,000 examples give 4,000 independent alpha draws for the same one
 backward pass each, so it is already unbiased and already at the plateau. From m=5 on the two
 estimators are indistinguishable (|delta| <= 0.005, inside run-to-run noise).
 
-So the honest reading is NOT "stepless beats grid" -- it is "stepless has no setting you can get
+So the honest reading is NOT "Expected Gradients beats grid" -- it is "Expected Gradients has no setting you can get
 wrong, and the grid has one". That is why both curves are drawn over the whole range instead of
 quoting the m=1 pair alone.
 
@@ -34,7 +34,7 @@ CAPPED POINTS ARE MARKED, not silently drawn. `months` and `weekdays` have only 
 usable pairs at their modal prompt length, so at m=1 (E=4000) they cannot reach the budget and
 ran short. Those markers are hollow. It matters because m=1 is exactly where the grid looks
 worst, so an unmarked point would let a reader credit the estimator for a data shortfall. Note
-Stepless hits the same ceiling on the same two cells and still scores 0.270/0.331, which is what
+Expected Gradients hits the same ceiling on the same two cells and still scores 0.270/0.331, which is what
 says the shortfall is not the explanation.
 
 WHY ONLY FOUR TASKS. The other four cannot afford the low-m end at all -- `simple` has 413
@@ -45,7 +45,7 @@ not a knob) and is stated in the prose, not hidden here.
 
 Data: results/sae_budget_split/m<m>/<task>_llama3_resid_sae_span_{ig,mc_ig_m<m>_s42}.json,
 produced at --grad-batch 25 (chunking is exact; it only bounds memory).
-ONE SEED (s42). Stepless is stochastic by construction, so its error bar is a seed replicate
+ONE SEED (s42). Expected Gradients is stochastic by construction, so its error bar is a seed replicate
 that has not been run -- do not read the <=0.005 differences at m>=5 as ordered.
 
 Run:  uv run python plots/plot_sae_budget_split.py
@@ -72,7 +72,7 @@ ROOT = "results/sae_budget_split"
 # line. Only the m=1 column ever falls short: it asks for E=4,000 distinct pairs and
 # gradient_scores keeps a pair only when BOTH the clean and the corrupted prompt tokenise to the
 # modal length, which leaves months 2,471 and weekdays 2,759. Everything else hit its nominal E
-# exactly, and the grid and stepless sweeps realised identical counts (same filter, same data).
+# exactly, and the grid and Expected Gradients sweeps realised identical counts (same filter, same data).
 #
 # HARDCODED rather than re-derived: a count of clean prompts at the modal length gives 2,705 /
 # 2,759, not 2,471 / 2,759 -- the pair-level filter is stricter than the prompt-level one, so
@@ -93,10 +93,10 @@ def n_examples(task, m):
     return REALISED.get((task, m), BUDGET // m)
 
 # Colour = ESTIMATOR (palette's rule), plus linetype and marker so the pair survives at 1in
-# panel width -- IG's orange and Stepless's sand are 39 dE apart but both light and both warm,
+# panel width -- IG's orange and Expected Gradients' sand are 39 dE apart but both light and both warm,
 # which is the one pairing in this palette where hue alone is thin.
 SERIES = [("ig",     "IG (fixed grid)",  P.color("IG"),          "solid",  "o"),
-          ("mc_ig",  "Stepless IG",      P.color("Stepless IG"), "dashed", "s")]
+          ("mc_ig",  "Expected Gradients",      P.color("Expected Gradients"), "dashed", "s")]
 
 FIG_W, FIG_H = 5.5, 2.15
 FS_TITLE, FS_TICK, FS_LAB, FS_ANN = 6.5, 5.5, 6.5, 5.5
@@ -197,7 +197,7 @@ def main():
     fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
     print("wrote", a.out)
 
-    print(f"\n{'m':>4}{'E':>7}   {'grid IG':>9}{'stepless':>10}{'delta':>8}")
+    print(f"\n{'m':>4}{'E':>7}   {'grid IG':>9}{'EG':>10}{'delta':>8}")
     for m in MS:
         gg = np.mean([data[(t, m, "ig")] for t, _ in TASKS])
         ss = np.mean([data[(t, m, "mc_ig")] for t, _ in TASKS])

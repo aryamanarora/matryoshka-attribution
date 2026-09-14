@@ -240,11 +240,11 @@ SUBSTRATE_RES = {"mlp_sae_span": "results/sva_sweep_ferr5k",
 METHODS = {
     "IG":         ("IG",           P.color("IG")),
     "IxG":        ("I×G",          P.color("I×G")),
-    # "Stepless" IG: alpha ~ U(0,1) drawn per example at m=1, instead of IG's fixed grid. Same
+    # Expected Gradients: alpha ~ U(0,1) drawn per example at m=1, instead of IG's fixed grid. Same
     # integral, unbiased at every m, and at m=1 it costs exactly what I×G costs -- so it sits
     # BETWEEN the two baselines above by construction and the three-way ordering is the point.
     # Tag on disk is `mc_ig_m{draws}_s{seed}`; only the m=1/s=42 arm is drawn (see parse_method).
-    "mc_ig":      ("Stepless IG",  P.color("Stepless IG")),
+    "mc_ig":      ("Expected Gradients",  P.color("Expected Gradients")),
     # Single-pass like I×G (only the backward RULES change): LN-freeze, gated-MLP secant +
     # half-rule, and the uniform half-rule on the QK/OV matmuls. The HF-side implementation is
     # src/learning_to_attribute/grad_attribution.py, verified against vanilla eager attention
@@ -384,11 +384,11 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 # this cut's cells, so nothing had to be run -- they were absent because the cut had been
 # narrowed for legibility back when it carried three losses and every method cost three
 # markers per panel. At one loss they cost one each, so the mask-learning family and the
-# LRP baseline fit. Stepless IG is the one registry method still missing (12/36; the backfill
+# LRP baseline fit. Expected Gradients is the one registry method still missing (12/36; the backfill
 # is scripts/sva/launch/submit_stepless_backfill.sh) -- add it here once those land.
 # AttnLRP dropped again 2026-08-29 (requested). It has full coverage and is still in the
 # registry, so `--all` keeps drawing it; it is out of THIS cut only.
-# Stepless IG is deliberately OUT of this cut (2026-08-29, requested) even though its backfill
+# Expected Gradients is deliberately OUT of this cut (2026-08-29, requested) even though its backfill
 # landed and it now has 36/36 patched logit-diff cells. It tracks IG to within 0.009-0.018 IIA
 # AUC in every panel, so it costs an eighth marker and 0.25in of height to draw a point that
 # sits on top of one already there. The numbers belong in the prose. `--all` still draws it.
@@ -402,7 +402,7 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # scored unit -- so those panels duplicated their -input twins. It still exists on disk
 # (results/sva_sweep_input) and --all / --adam still draw it.
 # `--cpr`: the default cut plus the three remaining node-level gradient baselines of the MIB
-# test table. Stepless IG and AttnLRP have SVA+ runs on mlp / mlp+attn_head only (no SAE
+# test table. Expected Gradients and AttnLRP have SVA+ runs on mlp / mlp+attn_head only (no SAE
 # runs), GIM has none, so those panels carry fewer points -- the report says which.
 # ONE MAttr OPTIMISER (2026-09-08, requested): the SGD arm is dropped, so the two remaining
 # ours-points are Adam at the two k-schedules, drawn and labelled exactly as the bar chart
@@ -483,11 +483,11 @@ FIGURE_LOSSES = {"logit_diff": LOSSES["logit_diff"]}
 # make the 1x4 layout work at all -- see LAB_XPAD.
 POINT_LABEL = {
     "eprun-s090": "NP",          # point label only; the registry name stays "Node Pruning"
-    # Kept for when Stepless IG is drawn (it is out of FIGURE_METHODS, in --all only).
-    # "IG-free", not "Stepless IG": the same abbreviation plot_mib_accauc_cpr_scatter.py
+    # Kept for when Expected Gradients is drawn (it is out of FIGURE_METHODS, in --all only).
+    # "EG", not "Expected Gradients": the same abbreviation plot_mib_accauc_cpr_scatter.py
     # uses in its compact cut, and for the same reason -- the full name is wider than any
     # other label on a ~1.1in panel. One abbreviation across both figures, not two.
-    "mc_ig": "IG-free",
+    "mc_ig": "EG",
     "stopk-log": "MAttr$^\\mathrm{A}$ (def. ε)",
     # No optimiser superscript now that only one arm is drawn: with no SGD point on the panel
     # "MAttr$^A$" marks a contrast that is not there. Restore both superscripts together if
@@ -515,7 +515,7 @@ LAB_NCOL = 5
 # leader lines in the two Node panels, while the overlap count stays 0 and gives no warning.
 # Check the rendered PNG, not just the diagnostics, after changing it.
 # 1.95in is the FLOOR AT SEVEN SERIES, found by bisection and by looking at the render -- not by
-# the diagnostics. Each added series costs vertical room: at eight (with Stepless IG) 1.95 was
+# the diagnostics. Each added series costs vertical room: at eight (with Expected Gradients) 1.95 was
 # too tight and 2.2 was the floor, so re-check this after adding anything.
 # Found by bisection and by looking at the render -- not by the
 # diagnostics, which report 0 overlaps at every height tried and give no warning at all.
@@ -549,13 +549,13 @@ LAB_MSIZE = 15          # marker AREA in pt^2, uniform across methods -- see dra
 ADAM_METHODS = ["IG", "IxG", "stopk-log", "stopk-log-eps1e-2", "softsgd-log", "Random"]
 ALL_METHODS = [k for k in METHODS
                if k not in ("soft-log", "mc_ig", "GIM", "stopk-unif-eps1e-2", "dbm-multisp")]
-# `--stepless`: the default cut plus Stepless IG. It is a SEPARATE cut, and a narrowed one, for a
+# `--stepless`: the default cut plus Expected Gradients. It is a SEPARATE cut, and a narrowed one, for a
 # coverage reason that cannot be fixed by adding a key to FIGURE_METHODS.
 #
-# Stepless IG exists ONLY in results/sva_sweep (patched, −input) and ONLY for the four SVA tasks:
+# Expected Gradients exists ONLY in results/sva_sweep (patched, −input) and ONLY for the four SVA tasks:
 # 36 runs = 4 tasks x 3 substrates x 3 losses, submitted 2026-08-22. There are no Arith, ARC-E or
 # IOI runs, and none in the other three SOURCES dirs. Under the normal REQUIRED sets every panel
-# demands SVA+Arith (and ARC-E+IOI at `node`), so group_avg would drop Stepless IG from all seven
+# demands SVA+Arith (and ARC-E+IOI at `node`), so group_avg would drop Expected Gradients from all seven
 # panels and the figure would come out looking exactly like the default one -- a silent no-op.
 #
 # So this cut narrows the figure to what the arm actually covers, and says so on the figure: one
@@ -589,7 +589,7 @@ def parse_method(fname, d):
     # Two other families end in it and both broke when the strip was unconditional:
     #   eprun_s090      `_s090` is a SPARSITY budget; stripping gave `eprun`, which matches no
     #                   branch, and Node Pruning vanished from all four panels (26 -> 23 points)
-    #   mc_ig_m1_s42    `_s42` is a SEED; stripping cost Stepless IG its series (8 -> 7)
+    #   mc_ig_m1_s42    `_s42` is a SEED; stripping cost Expected Gradients its series (8 -> 7)
     # `random_s42` happens to survive on its prefix branch, but the rule is the same: only a
     # trained MAttr run carries a step suffix, so only those are stripped.
     if "sufficient_" in tag or "hard_topk" in tag:
@@ -1088,7 +1088,7 @@ def main():
                          "are not on a comparable scale -- read each against its own Random "
                          "point, which is labelled in every panel for exactly that reason.")
     ap.add_argument("--stepless", action="store_true",
-                    help="default cut plus Stepless IG; NARROWS the figure to patched/−input and "
+                    help="default cut plus Expected Gradients; NARROWS the figure to patched/−input and "
                          "to the SVA task-group, which is all that arm has been run on")
     ap.add_argument("--cpr", action="store_true",
                     help="default cut with MIB-style CPR (linear trapezoid over the kept "

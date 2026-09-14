@@ -42,7 +42,7 @@ SRC = Path("results/transfer_src")   # prep_transfer_sources.py's normalised [10
 # IxG's MIB side is the `ig1` run (EAP at m=1 = attribution patching = I x G; see
 # prep_transfer_sources), so all four facets cover the full 78 pairs.
 FACET_METHODS = [("mattr", "MAttr", ""), ("adam", "MAttr + Adam", "adam"),
-                 ("mc_ig", "Stepless IG", "mc_ig"), ("ixg", "I×G", "ixg")]
+                 ("mc_ig", "Expected Gradients", "mc_ig"), ("ixg", "I×G", "ixg")]
 
 
 def pairs_frame(method_key, round_suffix, raw=False, xstat="pearson"):
@@ -91,7 +91,7 @@ def main():
                          "diagonal-relative -- shows absolute transferred performance, folding "
                          "each task's difficulty (diagonal 0.49-0.60) back in")
     sz.add_argument("--facet", action="store_true",
-                    help="full-width: one panel per method (MAttr / +Adam / Stepless IG / "
+                    help="full-width: one panel per method (MAttr / +Adam / Expected Gradients / "
                          "IxG), each method's OWN scores and OWN transfer round; per-panel "
                          "Spearman rho annotated")
     args = ap.parse_args()

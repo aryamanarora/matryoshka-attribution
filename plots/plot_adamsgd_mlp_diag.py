@@ -56,7 +56,7 @@ CLEAN_MARGIN = 6.68           # F_clean on this cell; the level faithfulness = 1
 C_ADAM = METHOD["MAttr"]          # blue
 C_SGD = METHOD["MAttr (SGD)"]     # black
 C_IG = METHOD["IG"]               # orange
-C_SIG = METHOD["Stepless IG"]     # sand
+C_SIG = METHOD["Expected Gradients"]     # sand
 C_FIX = METHOD["+hard"]           # bluish green -- the "intervention" colour
 
 
@@ -97,11 +97,11 @@ def tail_loss(d):
 # ---------------------------------------------------------------- reference runs
 REF = {
     "IG": "results/sva_sweep/addition_llama3_mlp_ig.json",
-    "Stepless IG": "results/adamsgd_mlp/E_steplessig/addition_llama3_mlp_mc_ig_m1_s42.json",
+    "Expected Gradients": "results/adamsgd_mlp/E_steplessig/addition_llama3_mlp_mc_ig_m1_s42.json",
     "MAttr+Adam": "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json",
     "MAttr+SGD": "results/sva_mlp_lr/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1.json",
 }
-COL = {"IG": C_IG, "Stepless IG": C_SIG, "MAttr+Adam": C_ADAM, "MAttr+SGD": C_SGD}
+COL = {"IG": C_IG, "Expected Gradients": C_SIG, "MAttr+Adam": C_ADAM, "MAttr+SGD": C_SGD}
 
 
 # =================================================================== FIG 1
@@ -479,7 +479,7 @@ def fig_interventions():
 
     bars = [
         ("IG (10 steps)", best("results/sva_sweep/addition_llama3_mlp_ig.json"), C_IG),
-        ("Stepless IG (1 draw)", best("results/adamsgd_mlp/E_steplessig/*.json"), C_SIG),
+        ("Expected Gradients (1 draw)", best("results/adamsgd_mlp/E_steplessig/*.json"), C_SIG),
         # "best Adam / best SGD at this budget" = best over EVERY 2000-step run of that
         # optimizer on this cell with the default logit_diff loss, wherever it lives.
         ("MAttr+SGD", best(["results/sva_mlp_lr/topk_sgd/lr_*/*.json",

@@ -52,7 +52,7 @@ METHOD = {
     # the dE>20 rule of thumb but above this palette's pre-existing worst pair (16.1), so it
     # does not become the binding constraint. Checked with `python plots/palette.py`.
     "AttnLRP": "#d55e00",
-    # Tol sand: "stepless" IG (alpha ~ U(0,1) per example at m=1) on SVA+. It is an IG ESTIMATOR
+    # Tol sand: Expected Gradients (alpha ~ U(0,1) per example at m=1) on SVA+. It is an IG ESTIMATOR
     # variant, not a new method, so it belongs in the warm gradient family with IG and AttnLRP --
     # but the family already holds three hues, and this is the fourth. Sand is the ONLY candidate
     # tried that does not become the new binding constraint: its worst CVD distance is 17.0 dE
@@ -64,7 +64,7 @@ METHOD = {
     # went there, sand comes here. The 17.0 is against Random, which in the scatter also carries
     # its own marker SHAPE (a star, LOSS_SHAPE[NO_LOSS]), so hue is not the only cue there.
     # Re-verify with `python plots/palette.py`.
-    "Stepless IG": "#ddcc77",
+    "Expected Gradients": "#ddcc77",
     "Node Pruning": "#332288",   # Tol indigo; mask-learning baseline, MIB scatter + curves
     # Wong reddish purple: the other mask-learning baseline, so it stays in Node Pruning's
     # cool-purple family while separating from it by lightness (L* ~60 vs ~24). Deliberately
@@ -176,14 +176,21 @@ RC = {
 # half-weight spines. A function rather than more rcParams because `set_axisbelow` and the spine
 # widths are per-Axes, and figures in this repo mix gridded panels with ungridded ones.
 GRID_LW, GRID_COLOR, SPINE_LW = 0.25, "#dddddd", 0.5
+# Panel frames are BLACK across the paper (2026-09-08), matching figs/baseline_strongreject.
+# Set explicitly rather than left to matplotlib's axes.edgecolor default so a future rcParams
+# change cannot quietly grey them, and so the plotnine figures have one value to copy: their
+# theme_bw default panel_border is grey20, which read visibly lighter next to these.
+SPINE_COLOR = "#000000"
 
 
 def furnish(ax):
-    """Apply the shared grid/spine treatment to one Axes."""
+    """Apply the shared grid/spine treatment to one Axes: full black frame + faint grid."""
     ax.grid(True, lw=GRID_LW, color=GRID_COLOR)
     ax.set_axisbelow(True)
     for sp in ax.spines.values():
         sp.set_linewidth(SPINE_LW)
+        sp.set_color(SPINE_COLOR)
+        sp.set_visible(True)
 
 # Outline colours for the "beats baseline" marks on plots/plot_epsgrid_facets.py. THREE MUTUALLY
 # EXCLUSIVE categories, one outline per cell, so a cell is marked once and the colour says which

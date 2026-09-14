@@ -178,9 +178,11 @@ def main():
     fig.tight_layout(pad=0.3, w_pad=1.0, h_pad=0.6)
     top = 1.0 - V.HEAD / fh
     fig.subplots_adjust(top=top)
+    # V.LEGEND, not V.FAMILY.values(): the uniform-k rows share the log-k hue, so the family
+    # dict now holds two keys with one colour and only the de-duplicated LEGEND may be drawn.
     fig.legend(handles=[Patch(facecolor=c, label=V.tex_to_mpl(lab))
-                        for lab, c in V.FAMILY.values()],
-               fontsize=V.FS_TICK, ncol=len(V.FAMILY), loc="lower center",
+                        for lab, c in V.LEGEND],
+               fontsize=V.FS_TICK, ncol=len(V.LEGEND), loc="lower center",
                bbox_to_anchor=(0.5, top), frameon=False, handlelength=1.2, handleheight=1.0,
                handletextpad=0.4, columnspacing=1.4)
     fig.savefig(a.out)

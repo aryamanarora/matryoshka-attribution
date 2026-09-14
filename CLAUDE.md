@@ -168,7 +168,7 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
 figure `plots/plot_vit_optim.py` -> `paper/figs/vit_optim.pdf`. Same substrate as the teaser
 (ViT-B/16, 196 patch tokens, resampled pixelate corruption, basenji-vs-Siamese logit diff, 2000
 steps); metric is the held-out sufficiency AUC (`vit_teaser_faith.py` protocol), mean of 3 seeds.
-Adam 7 LRs x 6 eps, SGD 9 LRs, Stepless IG (patch-embedding path, alpha ~ U(0,1), 2000 draws).
+Adam 7 LRs x 6 eps, SGD 9 LRs, Expected Gradients (patch-embedding path, alpha ~ U(0,1), 2000 draws).
 
 - **Tuned Adam and tuned SGD tie within seed spread**: Adam lr 0.3 / eps 1e-2 = 5.62 [5.34, 5.84],
   SGD lr 1 = 5.42 [5.27, 5.64]. The teaser's shipped cell (Adam lr 0.05, eps 1e-8) re-measures
@@ -178,7 +178,7 @@ Adam 7 LRs x 6 eps, SGD 9 LRs, Stepless IG (patch-embedding path, alpha ~ U(0,1)
   range of ~0.5). The only structure is the expected diagonal: at eps >= 1e-1 the optimum shifts
   to larger LRs (Adam ~ SGD at lr/eps). The |s| p99/p50 ratio is 3-7 at every eps, i.e. no
   sign(g) collapse -- with 196 logits the per-step gradients are well above 1e-8.
-- **Stepless IG is far behind (3.55 [3.45, 3.70]), below AttnLRP (3.98) and KernelSHAP (4.51)**,
+- **Expected Gradients is far behind (3.55 [3.45, 3.70]), below AttnLRP (3.98) and KernelSHAP (4.51)**,
   and its probe trace plateaus by ~300 draws, so it is not under-sampled -- the gradient-path
   ranking is simply a worse sufficiency ranking on this image. Top-20 overlap of Adam's ranking
   with IG's is 0.27-0.37 at every eps, i.e. raising eps does not pull MAttr toward IG here.

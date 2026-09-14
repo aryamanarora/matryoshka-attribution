@@ -1,10 +1,10 @@
 #!/bin/bash
-# Backfill Stepless IG so it can be drawn in the MAIN acc-vs-faith figure
+# Backfill Expected Gradients so it can be drawn in the MAIN acc-vs-faith figure
 # (plots/plot_accauc_vs_faithauc.py, default cut).
 #
 # WHY 24 RUNS. That figure's default cut is patched / logit-diff over four panels, and
 # group_avg is all-or-nothing per task-group -- a method missing ANY subtask of a required
-# group is dropped from the panel entirely. Stepless IG had 12/36 of those cells: the four SVA
+# group is dropped from the panel entirely. Expected Gradients had 12/36 of those cells: the four SVA
 # tasks in results/sva_sweep at each substrate, and nothing else. So it was silently absent
 # from all four panels, which is why it has its own narrowed `--stepless` cut. Missing:
 #
@@ -13,7 +13,7 @@
 #   results/sva_sweep        mlp+attn_head  addition months weekdays hours                (4)
 #   results/sva_sweep_input  node           all ten tasks                                 (10)
 #
-# LOGIT-DIFF ONLY, because that is all the default cut draws. This does NOT make Stepless IG
+# LOGIT-DIFF ONLY, because that is all the default cut draws. This does NOT make Expected Gradients
 # complete for the multi-loss artifacts: `--all` / `--adam` and plots/plot_sva_robustness_grid.py
 # want ce and acc too, which is a further ~66 runs. Those stay out of scope until someone wants
 # that figure to carry the row.

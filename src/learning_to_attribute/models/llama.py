@@ -207,8 +207,8 @@ class LlamaAttributionHooks:
     def _get_embed_module(self):
         return self.model.model.embed_tokens
 
-    # ---- gradient-attribution (embedding-path stepless IG) helpers ----------------------
-    # The model-specific half of trainer.stepless_ig, mirroring how register_hooks is the
+    # ---- gradient-attribution (embedding-path Expected Gradients) helpers ----------------------
+    # The model-specific half of trainer.expected_gradients, mirroring how register_hooks is the
     # model-specific half of learn_scores. Scripts compose these into a grad_fn closure
     # (see eval_global_kl.make_embed_ig_grad_fn).
 

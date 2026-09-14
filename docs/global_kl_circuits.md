@@ -53,11 +53,11 @@ Two consequences:
 
 KL to the clean model is exactly 0 with exactly 0 gradient at the clean point. So **IxG is
 identically zero** here — `eval_global_kl.py` refuses the arm rather than emitting a bf16 noise
-ranking. Stepless IG survives only because α~U(0,1) puts its gradient at perturbed points, and
+ranking. Expected Gradients survives only because α~U(0,1) puts its gradient at perturbed points, and
 it does not survive well: KL-AUC 11.71 against a random ordering's 11.91, flat at KL ≈ 12 at
 every budget, top-1 agreement ≈ 0.
 
-Do not read this as a verdict on Stepless IG. It is a property of the metric — the SVA/MIB
+Do not read this as a verdict on Expected Gradients. It is a property of the metric — the SVA/MIB
 harnesses use a logit diff, which has a perfectly good gradient at the clean point.
 `--metric ce` (next-token cross-entropy on the real text) is the non-degenerate alternative if
 a gradient-at-clean baseline is wanted.
@@ -75,11 +75,11 @@ Tuned against tuned (KL-AUC, lower better / top-1-agreement-AUC, higher better):
 |----------------------|--------|---------|-----------------|---------------|
 | MAttr + Adam lr 0.2  | **5.39** | **0.164** | **6.56**    | **0.236**     |
 | MAttr + SGD lr 100   | 6.86   | 0.056   | 6.65            | 3.598         |
-| Stepless IG m=1      | 11.71  | 0.002   | 10.55           | 11.934        |
+| Expected Gradients m=1      | 11.71  | 0.002   | 10.55           | 11.934        |
 | magnitude (null)     | 11.99  | 0.016   | -               | -             |
 | random ordering      | 11.91  | 0.022   | 14.93           | 0.649         |
 
-(`m` in "Stepless IG m=1" is the number of MC draws, `--ig-steps`. alpha is drawn per EXAMPLE,
+(`m` in "Expected Gradients m=1" is the number of MC draws, `--ig-steps`. alpha is drawn per EXAMPLE,
 so m=1 over 100 documents is 100 independent draws and the estimator error falls like
 1/sqrt(n_examples), not 1/sqrt(m). m=1 is compute-matched to IxG at one backward per document.)
 
@@ -100,7 +100,7 @@ Implemented and smoke-tested, not yet run at 8B.
 `scripts/global_kl/analyse_global_ranks.py` reads the saved `*_scores.pt` (CPU only, no model).
 
 **Heads are hugely over-represented** in every real arm. They are 0.22% of nodes; in the
-top-100 they are 90% (SGD), 37% (Stepless IG), 18% (magnitude), 5% (Adam). Random sits at the
+top-100 they are 90% (SGD), 37% (Expected Gradients), 18% (magnitude), 5% (Adam). Random sits at the
 0.22% null. Unsurprising — a head writes 128 dimensions, a neuron writes one scaled column —
 but it means a "top-k node circuit" is a head circuit at small k and a neuron circuit at large k.
 
@@ -108,12 +108,12 @@ but it means a "top-k node circuit" is a head circuit at small k and a neuron ci
 
 | arm | L0-1 | L30-31 |
 |---|---|---|
-| Stepless IG | **43.8%** | 7.2% |
+| Expected Gradients | **43.8%** | 7.2% |
 | MAttr + Adam | 11.9% | 26.5% |
 | MAttr + SGD | 14.4% | 35.1% |
 | magnitude (null) | 0.3% | **65.5%** |
 
-Stepless IG is 7x enriched at the input end, which is the expected artifact of integrating along
+Expected Gradients is 7x enriched at the input end, which is the expected artifact of integrating along
 the *input-embedding* path: nodes nearest the embedding see the largest activation change along
 it. Both MAttr arms lean toward the output instead.
 
@@ -125,13 +125,13 @@ by chance, so read these against 64:
 | Adam vs SGD | +0.024 | 2/64 | 59 |
 | Adam vs random | -0.055 | 4/64 | 57 |
 | SGD vs magnitude | +0.068 | 7/64 | 64 |
-| Adam vs Stepless IG | **+0.153** | **9/64** | **92** |
-| Stepless IG vs magnitude | +0.115 | 14/64 | 92 |
+| Adam vs Expected Gradients | **+0.153** | **9/64** | **92** |
+| Expected Gradients vs magnitude | +0.115 | 14/64 | 92 |
 
 Adam and SGD differ only in optimizer — same method, objective, data and k-schedule — and share
 **2 of their top 64 heads**, below what either shares with a random ranking. **Do not interpret
-an individual head out of these runs.** The only above-chance pairs are Adam/Stepless-IG and
-Stepless-IG/magnitude.
+an individual head out of these runs.** The only above-chance pairs are Adam/Expected Gradients and
+Expected Gradients/magnitude.
 
 ## Result 5: the magnitude null is REFUTED
 
@@ -158,7 +158,7 @@ over all nodes the intersection is inflated by the fact that every arm puts head
 so an all-node top-k consensus partly measures "they all like heads", not "they all like this
 head".
 
-Across MAttr+Adam, MAttr+SGD and Stepless IG:
+Across MAttr+Adam, MAttr+SGD and Expected Gradients:
 
 | population | in top-k of all 3 | chance | enrichment |
 |---|---|---|---|
@@ -194,10 +194,10 @@ three arms; bottom-10,000 is 2.7x chance and bottom-100,000 is 1.1x. The methods
 about what matters than about what does not — consistent with Result 3's finding that the tail
 of the SGD ranking is anti-informative.
 
-### Correction to Result 2: Stepless IG is not noise
+### Correction to Result 2: Expected Gradients is not noise
 
 Its sweep score is at random, but its ranking is not uninformative. **49.5% of the 951
-adam+sgd consensus neurons are also in Stepless IG's top-10k, against 2.2% for a noise arm**
+adam+sgd consensus neurons are also in Expected Gradients's top-10k, against 2.2% for a noise arm**
 (a 22x enrichment), and adding it as a third arm above sharpens the core rather than thinning it
 at random. Read Result 2 as "this ORDERING does not reproduce the model at any budget" — which
 is what a sweep measures — not as "this ranking identifies nothing". The two are compatible

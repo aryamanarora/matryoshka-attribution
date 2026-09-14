@@ -166,7 +166,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     backward first (LN-freeze + MLP gate rule + QK-detach); attnlrp=True applies AttnLRP's
     instead (LN-freeze + MLP gate rule + half-rule on the QK/OV matmuls, softmax kept).
 
-    mc=True is "stepless IG": draw alpha ~ U(0,1) PER EXAMPLE instead of walking the fixed grid
+    mc=True is "Expected Gradients": draw alpha ~ U(0,1) PER EXAMPLE instead of walking the fixed grid
     alpha = s/ig_steps. The grid below is a LEFT-endpoint Riemann sum over [0,1) -- it contains
     the clean endpoint (alpha=0) and omits the patch one -- so at ig_steps=1 it degenerates to
     the single point alpha=0 and IG *is* IxG (that is exactly what --method ixg computes). The
@@ -179,13 +179,57 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     falls like 1/sqrt(n_examples), not 1/sqrt(n_batches).
 
     This mirrors get_scores_eap_ig_mc in MIB-circuit-track/EAP-IG/src/eap/attribute_node.py; the
-    two harnesses must stay in step or the SVA and MIB stepless-IG numbers stop being the same
+    two harnesses must stay in step or the SVA and MIB Expected Gradients numbers stop being the same
     estimator. Note the ALPHA CONVENTION IS REVERSED between them (here alpha=0 is clean and
     alpha=1 is patch; there alpha=1 is clean) -- U(0,1) is symmetric so the estimator is
     identical, but do not copy an alpha expression across without checking which end is which.
     """
     if hooker.mask_type in ("das_mlp_span", "das_resid_span"):
         raise NotImplementedError("gradient attribution not supported for DAS nodes; use --method mattr")
+    # ---- example-chunking for the NON-SAE branch (the SAE branch chunks internally). Exact,
+    # not an approximation: every score below is a SUM over the batch, so summing per-chunk
+    # scores reproduces the full-batch result up to fp addition order. This is what makes a
+    # compute-matched --grad-examples (thousands, to match MAttr's step budget) runnable at
+    # all -- the full-batch path stores 32 layers x [B, P, d] for clean, patch AND grad, which
+    # is terabytes at B=5000 on the neuron substrates. Collection happens here (same filters as
+    # below) and each chunk recurses with grad_batch=0, BEFORE the RelP/AttnLRP install so the
+    # modified backward is installed exactly once per chunk. conductance is excluded: it
+    # tracks a running activation trajectory across path steps (node-only and cheap anyway).
+    # MC chunks draw alphas from per-chunk seeds (mc_seed + 7919*chunk_idx) -- a different
+    # stream than the unchunked run, which is fine for a Monte-Carlo estimator but means a
+    # chunked and an unchunked mc run are only statistically, not bitwise, comparable.
+    if grad_batch and not hooker.is_sae and not conductance:
+        span_ = hooker.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span")
+        node_ = hooker.mask_type == "node"
+        cl_, co_, ci_, ii_ = [], [], [], []
+        i_ = 0
+        while len(cl_) < n_examples and i_ < len(ds):
+            clean_, corr_, lab_ = ds[i_]; i_ += 1
+            if not span_ and not node_:
+                if tok(clean_, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+                if tok(corr_, return_tensors="pt").input_ids.shape[1] != seq_len: continue
+            elif node_:
+                if tok(clean_, return_tensors="pt").input_ids.shape[1] != \
+                   tok(corr_, return_tensors="pt").input_ids.shape[1]: continue
+            cl_.append(clean_); co_.append(corr_); ci_.append(lab_[0]); ii_.append(lab_[1])
+        acc_scores = None
+        for j_, s0 in enumerate(range(0, len(cl_), grad_batch)):
+            sub_ds = [(cl_[t], co_[t], [ci_[t], ii_[t]]) for t in range(s0, min(s0 + grad_batch, len(cl_)))]
+            part = gradient_scores(hf, hooker, sub_ds, seq_len, total, tok, device,
+                                   n_examples=len(sub_ds), relp=relp, ig_steps=ig_steps,
+                                   loss=loss, hinge_margin=hinge_margin, acc_temp=acc_temp,
+                                   ld_scale=ld_scale, conductance=False, attnlrp=attnlrp,
+                                   mc=mc, mc_seed=mc_seed + 7919 * j_, grad_batch=0)
+            # metric_of is a BATCH MEAN, so each chunk's per-example weight is 1/chunk_size;
+            # rescale by chunk/N so every example carries 1/N exactly as in the full-batch
+            # path (the SAE branch's kb/n_total factor, which this wrapper must mirror --
+            # without it a ragged last chunk is overweighted by N/chunk_size).
+            part = part * (len(sub_ds) / max(1, len(cl_)))
+            acc_scores = part if acc_scores is None else acc_scores + part
+            torch.cuda.empty_cache()
+        logger.info("gradient attribution: %d examples in chunks of %d (%d chunks) x %d draws",
+                    len(cl_), grad_batch, j_ + 1, ig_steps if (mc or ig_steps > 1) else 1)
+        return acc_scores
     assert not (relp and attnlrp), "relp and attnlrp are alternative backward rule sets"
     modified_bwd = relp or attnlrp
     if modified_bwd:
@@ -739,7 +783,11 @@ def run_tag(args):
         tag += f"_gc{args.grad_norm:g}"
     if args.method == "mattr" and args.train_batch_size != 8:
         tag += f"_bs{args.train_batch_size}"
-    if args.method == "mattr" and args.steps != 2000:
+    if args.method in ("mattr", "edge_pruning", "sigmoid_mask") and args.steps != 2000:
+        # edge_pruning/sigmoid_mask added 2026-09-06 (the NP/DBM 5k bump): without the suffix a
+        # 5k run writes eprun_s090.json THROUGH the 5k tree's symlink and destroys the 2k
+        # original. Consumers strip a trailing _s\d{4,} for these tags (parse_method), which
+        # cannot collide with eprun's _s090 sparsity or mc_ig's _s42 seed.
         tag += f"_s{args.steps}"
     if args.method == "mattr" and args.loss == "acc" and args.acc_temp != 1.0:
         tag += f"_t{str(args.acc_temp).replace('.', '')}"

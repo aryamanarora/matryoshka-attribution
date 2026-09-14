@@ -398,6 +398,37 @@ EPRUN_BEST_SPARSITY = ("$s{=}0.5$, logit-diff", "eprun_eval_s0.5_ld")
 SIGMOID_MASK_ROWS = [
     ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0"),
 ]
+# The same method read as a FRONTIER instead of a ranking: seven lambda rungs, each evaluated
+# only at the L0 it converged to, integrated over MIB's p range. See
+# scripts/mib/dbm_multisparsity.py for the anchors and, more importantly, for why this row is
+# not the same object as every other row in the table -- it spends seven training runs where a
+# ranking spends one, and the caption has to say so.
+#
+# THE ROW IS IN THE TEST TABLE ONLY (make_mib_test_table.py), NOT THIS ONE. These two constants
+# live here only because that module imports them.
+#
+# Both validation tables (this one and make_mib_accauc_table.py) were wired up on 2026-09-09 and
+# UNWIRED the same day: the row needs its own validation-split evaluation of the ladder -- the
+# test numbers cannot stand in, or it would be the one row in the table scored on different data
+# from its neighbours -- and that eval was declined as not worth the GPU time. If it is ever
+# wanted, the work is one `bash scripts/mib/launch/submit_dbm_multisparsity.sh` (SPLIT defaults
+# to validation) plus a MASK_NODE_BASELINES entry reading _DBMMS.cell(task, model,
+# "validation"); do NOT point the row at the test JSONs to save the wave.
+DBM_MULTI_ROW = "DBM (multi-sparsity)"
+# Cost is the LADDER's, not one run's: 8 rungs x COST_EPRUN (3k backward passes each) = 24k.
+# Stated as a literal rather than derived because COST_EPRUN is already a display string; if the
+# ladder length in eval_dbm_multisparsity.L1S changes, change this with it.
+#
+# 21k -> 24k on 2026-09-09 when lambda=200 joined the ladder. THE COUNT IS THE ATTEMPTED LADDER,
+# not the rungs that land: a lambda that collapses to zero open gates (3 of 11 cells at 200) was
+# still trained and still cost 3k, and a cost column that only charged for successful runs would
+# understate exactly the method whose knob is hardest to aim.
+#
+# *** NOTHING EMITS THIS. *** The test table, the row's only home, has no cost column, and this
+# table has no such row. It is kept because the number is real and the CAPTION has to carry it
+# -- 8 training runs against every other row's 1 -- and deriving it again from L1S at writing
+# time is how it would end up stated as 21k in the paper.
+DBM_MULTI_COST = "24k"
 
 
 # === Training-cost column ===

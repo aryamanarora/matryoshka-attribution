@@ -67,7 +67,7 @@ SVA_TAG = "node_sufficient_topk_sgd_bs1"
 MODEL = "llama3"
 NL, NH = 32, 32                      # llama3-8B: 32 layers, 32 heads
 
-# The second figure's comparison method. Stepless IG (alpha ~ U(0,1) per example, m=1) is the
+# The second figure's comparison method. Expected Gradients (alpha ~ U(0,1) per example, m=1) is the
 # gradient baseline that ties 30-step IG on MIB at I x G's cost, so it is the strongest
 # gradient-side answer to "is this task structure a property of MAttr or of the tasks?".
 #
@@ -190,27 +190,27 @@ def load_sva(task):
 
 
 def load_sig_mib(task):
-    """{node name: score} for Stepless IG from MIB's nested run_evaluation output."""
+    """{node name: score} for Expected Gradients from MIB's nested run_evaluation output."""
     p = R_MIB / SIG_MIB_DIR / f"{task.replace('_', '-')}_{MODEL}" / "importances.json"
     if not p.exists():
-        raise SystemExit(f"missing {p} -- Stepless IG has no {task}/{MODEL} cell")
+        raise SystemExit(f"missing {p} -- Expected Gradients has no {task}/{MODEL} cell")
     d = json.load(open(p)); nodes = d.get("nodes", d)
     return {n: i["score"] for n, i in nodes.items() if n != "logits" and "score" in i}
 
 
 def load_sig_sva(task):
-    """{node name: score} for Stepless IG from eval_sva.py's tensor. These runs predate the
+    """{node name: score} for Expected Gradients from eval_sva.py's tensor. These runs predate the
     --include-input twin dir, so the layout is names() MINUS the input node."""
     p = R / SIG_SVA_DIR / f"{task}_{MODEL}_{SIG_SVA_TAG}.json"
     if not p.exists():
-        raise SystemExit(f"missing {p} -- no Stepless IG run for {task}; the arithmetic-wild "
+        raise SystemExit(f"missing {p} -- no Expected Gradients run for {task}; the arithmetic-wild "
                          "tasks have `_node_ig` (10-step) but not `_node_mc_ig_m1_s42`")
     cfg = json.load(open(p)).get("config", {})
     want = {"nodes": "node", "method": "mc_ig", "ig_steps": 1, "mode": "sufficient",
             "ablation": "patch", "loss": "logit_diff", "include_input": False, "model": MODEL}
     bad = {k: (cfg.get(k), v) for k, v in want.items() if cfg.get(k) != v}
     if bad:
-        raise SystemExit(f"{p}: not the Stepless IG recipe -- "
+        raise SystemExit(f"{p}: not the Expected Gradients recipe -- "
                          + ", ".join(f"{k}={g!r} (want {e!r})" for k, (g, e) in bad.items()))
     vec = torch.load(p.with_suffix(".scores.pt")).float().tolist()
     nm = names()[1:]                     # include_input=False -> no index-0 input node
@@ -222,14 +222,14 @@ def load_sig_sva(task):
 LOADERS = {"mib": load_mib, "sva": load_sva,
            "sig_mib": load_sig_mib, "sig_sva": load_sig_sva}
 
-# Second figure: method x subset, over the tasks BOTH methods cover. Stepless IG has no run for
+# Second figure: method x subset, over the tasks BOTH methods cover. Expected Gradients has no run for
 # the four arithmetic-in-the-wild tasks (results/sva_sweep has `_node_ig` at 10 steps for them,
 # not `_node_mc_ig_m1_s42`), so this drops the Arith. group and keeps MIB + SVA = 9 tasks.
 METHOD_TASKS = [t for t in TASKS if t[3] != "Arith."]
 # Strip labels are plain text, not LaTeX: plotnine hands them to matplotlib, which knows
 # mathtext but not \ourmethod{}. plot_mib_test_avg.py expands the macro for the same reason.
 METHODS = [("MAttr", {"mib": "mib", "sva": "sva"}),
-           ("Stepless IG", {"mib": "sig_mib", "sva": "sig_sva"})]
+           ("Expected Gradients", {"mib": "sig_mib", "sva": "sig_sva"})]
 
 
 SEP = dict(color="#555555", size=0.35)
@@ -334,9 +334,9 @@ def figure_tasks():
 
 def figure_methods():
     """Figure 2: does the task structure belong to the method or to the tasks? Same matrix for
-    MAttr and for Stepless IG, rows = method, columns = subset.
+    MAttr and for Expected Gradients, rows = method, columns = subset.
 
-    The node space here EXCLUDES the input node, because Stepless IG's SVA runs were submitted
+    The node space here EXCLUDES the input node, because Expected Gradients's SVA runs were submitted
     without --include-input. Dropping it costs nothing measurable -- it is 1 of 1057 nodes, and
     the MAttr block means move by <=0.002 against figure 1 -- but it is a real difference between
     the two figures, so it is asserted (1056) rather than assumed.

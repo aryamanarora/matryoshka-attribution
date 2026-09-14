@@ -94,13 +94,13 @@ BASELINES = [
     # (Confirmed, not assumed: the 10-step pkls have non-null acc_auc for every finished cell.)
     ("$+$ 10 IG steps", ["napig10_eval"], "EAP-IG-inputs_patching_node"),
     ("$+$ 30 IG steps", ["napig30_eval"], "EAP-IG-inputs_patching_node"),
-    # Stepless IG: alpha ~ U(0,1) drawn per example at m=1 instead of a fixed grid. Same
+    # Expected Gradients: alpha ~ U(0,1) drawn per example at m=1 instead of a fixed grid. Same
     # integral, unbiased at every m, and at m=1 it costs exactly what I x G costs -- so it is a
     # rung of the ladder above in QUALITY while sitting at the bottom of it in COST, which is
     # the whole reason it is worth a row. Dir is MIB-side only (napig_mc_eval, 12/12 validation
     # cells); the subfolder is EAP-IG-inputs-mc_patching_node, NOT the grid arms' folder --
     # run_napig_mc.sh passes --method EAP-IG-inputs-mc precisely so it cannot overwrite them.
-    ("Stepless IG", ["napig_mc_eval"], "EAP-IG-inputs-mc_patching_node"),
+    ("Expected Gradients", ["napig_mc_eval"], "EAP-IG-inputs-mc_patching_node"),
     ("Conductance", ["napig_local_eval", "napig_local_accauc"], "EAP-IG-inputs-local_patching_node"),
     ("I$\\times$G", ["ig1_eval", "ig1_accauc"], "EAP-IG-inputs_patching_node"),
     ("RelP", ["relp_eval", "relp_accauc"], "RelP_patching_node"),
@@ -119,8 +119,8 @@ EDGE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "edge"]
 # had both levels; this one silently did not, which reads as "acc-AUC has nothing to say about
 # edges" rather than "nobody wrote the section".
 #
-# ROW SET follows make_mib_table's EDGE section, plus Stepless IG. The extra row is this
-# table's own precedent, not an invention: the node section here already carries a Stepless IG
+# ROW SET follows make_mib_table's EDGE section, plus Expected Gradients. The extra row is this
+# table's own precedent, not an invention: the node section here already carries a Expected Gradients
 # row that the node CPR table does not, on the argument that at m=1 it costs what I x G costs
 # while scoring like the grid arms -- and eapig_mc_eval is 11/11 at edge too. Edge Pruning has
 # no edge-level results at all (eprun_eval_*/EdgePruning_patching_edge is empty), so UGS is the
@@ -128,7 +128,7 @@ EDGE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "edge"]
 EDGE_BASELINES_ACC = [
     ("EAP-IG-inp (CF, repro)", ["eapig_clean_eval"], "EAP-IG-inputs_patching_edge"),
     ("$+$ 10 IG steps", ["eapig_clean10_eval"], "EAP-IG-inputs_patching_edge"),
-    ("Stepless IG", ["eapig_mc_eval"], "EAP-IG-inputs-mc_patching_edge"),
+    ("Expected Gradients", ["eapig_mc_eval"], "EAP-IG-inputs-mc_patching_edge"),
 ]
 UGS_ACC = (M.UGS_DIR, "UGS_patching_edge")
 # EVERY EDGE DIR READS acc_auc STRAIGHT OUT OF ITS eval_mib PKL, like the EVALMIB_ACC node dirs

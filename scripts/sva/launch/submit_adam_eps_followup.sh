@@ -88,7 +88,7 @@ done
 sub "nodesgd-lr1.0" "$OUT/H_node/sgd_lr_1.0" "${COMMON[@]}" --task addition --nodes node \
     --optimizer sgd --lr 1.0
 
-# ---- 4. re-run the Stepless IG reference that arm E lost to a kwarg bug (now fixed)
+# ---- 4. re-run the Expected Gradients reference that arm E lost to a kwarg bug (now fixed)
 sub "steplessig" "$OUT/E_steplessig" --model llama3 --task addition --dataset arith \
     --nodes mlp --mode sufficient --method mc_ig --ig-steps 1 --seed 42 --loss logit_diff \
     --eval-examples 100

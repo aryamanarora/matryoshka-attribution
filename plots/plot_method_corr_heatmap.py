@@ -10,8 +10,9 @@ import pandas as pd
 from scipy.stats import spearmanr
 from plotnine import (ggplot, aes, geom_tile, geom_text, labs, facet_wrap,
                       scale_fill_gradient2, scale_x_discrete, scale_y_discrete,
+                      scale_color_identity, guides,
                       theme_bw, theme_set, theme,
-                      element_text, element_line, element_blank)
+                      element_text, element_line, element_blank, element_rect)
 
 R = Path("results")                                             # l2a: flat MAttr importances
 R_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")  # nested gradient baselines
@@ -19,6 +20,10 @@ OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 theme_set(
     theme_bw(base_size=8)
     + theme(
+        # Black panel frame, matching palette.SPINE_COLOR and figs/baseline_strongreject.
+        # theme_bw's own panel_border is grey20 and read lighter than the matplotlib figures
+        # beside it on the same page.
+        panel_border=element_rect(color="#000000", fill=None, size=0.5),
         text=element_text(color="#000", family="Inter"),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
@@ -93,8 +98,8 @@ METHODS = [
     # replicates and belong in an error bar, not a row here). Its interest is exactly a rank
     # question: on CPR AUC it ties the 30-step grid at a thirtieth of the cost, and only a
     # correlation says whether that is the same ranking recovered cheaply or a different one that
-    # scores alike. This is "Stepless IG" in mib_test_results.tex.
-    ("Stepless IG",       "napig_mc/EAP-IG-inputs-mc_patching_node",       "nested"),
+    # scores alike. This is "Expected Gradients" in mib_test_results.tex.
+    ("Expected Gradients",       "napig_mc/EAP-IG-inputs-mc_patching_node",       "nested"),
     ("Conductance",       "napig_local/EAP-IG-inputs-local_patching_node", "nested"),
     ("I$\\times$G",       "ig1/EAP-IG-inputs_patching_node",               "nested"),
     ("RelP",              "relp/RelP_patching_node",                       "nested"),
@@ -226,7 +231,7 @@ print("Saved method_corr_heatmap")
 # What went and why. RelP+QK and GIM are two more gradient baselines that land in the same block
 # as I$\times$G and IG-5, so between them and AttnLRP the panel restated one fact three times;
 # AttnLRP is kept as the non-IG gradient method (a propagation rule, not a path integral), which
-# is the one that could in principle rank differently. NAP-IG (10 steps) went too: Stepless IG
+# is the one that could in principle rank differently. NAP-IG (10 steps) went too: Expected Gradients
 # now carries the "does the integration budget change the RANKING" question on its own, and it
 # is the sharper version of it (one random draw vs a 5-point grid, rather than 5 vs 10).
 # "+hard (log)*" is a MAttr ablation whose row said the learned family agrees with itself.
@@ -234,7 +239,7 @@ print("Saved method_corr_heatmap")
 #
 # What each of the eight is here to answer:
 #   I$\times$G, IG-5    the gradient family, at the two budgets the test table leads with
-#   Stepless IG         same integral, one MC draw -- ties IG-30 on CPR, so: same ranking or not?
+#   Expected Gradients         same integral, one MC draw -- ties IG-30 on CPR, so: same ranking or not?
 #   AttnLRP             gradient attribution that is NOT a path integral, so the gradient block
 #                       is not just one estimator seen at three budgets
 #   DBM, NodePrune      outside mask learners: is "learned" the axis, or is it our parameterization?
@@ -244,9 +249,14 @@ print("Saved method_corr_heatmap")
 # LOG-k ONLY throughout: "MAttr SGD (unif)" is in METHODS and in the appendix figures, but a lone
 # uniform-k row here would be read against log-k rows and confound the two knobs.
 MAIN_LABELS = [
-    "MAttr SGD (log)", "MAttr (log)*",                           # learned, ours (2); * = lr 0.05
+    # ONE MAttr ARM (2026-09-08, requested): the SGD row is dropped and the Adam row is the
+    # unmarked "MAttr", matching what plot_mib_test_avg.py now does to the bar chart. Note that
+    # makes "MAttr" mean the ADAM dir here while tabs/mib_test_results.tex still uses the name
+    # for the SGD one -- same naming split the bar chart carries, and the fix is the same:
+    # flip the table to Adam-default rather than renaming further in the figures.
+    "MAttr (log)*",                                              # learned, ours (1); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
-    "NAP-IG (5 steps)", "Stepless IG", "AttnLRP", "I$\\times$G", # gradient (4)
+    "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP", "I$\\times$G", # gradient (4)
 ]
 SUBSETS = ["Attention heads", "MLPs"]
 # short display names for the main-text figure (identity labels above stay stable for lookups).
@@ -256,10 +266,7 @@ SUBSETS = ["Attention heads", "MLPs"]
 # SGD identity label now displays as bare "MAttr" and the Adam identity label as "+Adam" -- the
 # swap of make_mib_test_table.py's OUR_NODE_METHODS and make_mib_table.py's emit_ours, applied
 # to this figure's DISPLAY mapping instead of a results-dir list.
-DISPLAY = {"MAttr (log)*": "+Adam", "+hard (log)*": "+hard",
-           # matches the label the companion scatter uses for the same dir (softlog_sgd_lr_1.0),
-           # so the two subfigures of fig:mib-combined name one method one way
-           "MAttr SGD (log)": "MAttr",
+DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune"}
 
@@ -268,14 +275,14 @@ DISPLAY = {"MAttr (log)*": "+Adam", "+hard (log)*": "+hard",
 # table finds these seven methods in the same sequence, with the four the table lists between
 # them (RelP, RelP+QK, IG m=30, GIM, AttnLRP) simply absent rather than reshuffled.
 # Every row now has a table counterpart, which was not true of the eleven-method version.
-# Stepless IG and AttnLRP are adjacent because the table has them at 1.31 and 1.32 -- that near
+# Expected Gradients and AttnLRP are adjacent because the table has them at 1.31 and 1.32 -- that near
 # tie is the table's own, not a clustering result, and the order between them is the table's.
 # Within the Ours pair, SGD-default ("MAttr SGD (log)") leads (2026-08-24 flip, see DISPLAY).
 # If the table's row order changes, this list has to be updated by hand to match.
 ORDER_MAIN = [
-    "I$\\times$G", "NAP-IG (5 steps)", "Stepless IG", "AttnLRP",
+    "I$\\times$G", "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP",
     "DBM", "Node Pruning",
-    "MAttr SGD (log)", "MAttr (log)*",
+    "MAttr (log)*",
 ]
 assert set(ORDER_MAIN) == set(MAIN_LABELS), "ORDER_MAIN must be a permutation of MAIN_LABELS"
 print("main-text order (matches mib_test_results.tex):", ORDER_MAIN)
@@ -306,18 +313,84 @@ sd["b"] = pd.Categorical(sd["b"], categories=ORDER_MAIN_D[::-1], ordered=True)
 # (~10.8pt) fits and lands near the 6-7pt-in-the-compiled-PDF band the rest of the figures use.
 # The rule if the method count changes again: size ~= 3.6 * 11 / n_methods, then LOOK at it.
 sd["lab"] = sd["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
-# sized for display at 0.67*textwidth (5.5in) -> ~3.69in wide; fonts/height matched to the
-# companion mib_accauc_cpr_scatter (1.65in wide, same base_size) so the subfigures align.
+
+
+def text_color(v):
+    """Black on light tiles, white on dark ones -- decided from the TILE's own luminance.
+
+    The fill is scale_fill_gradient2 over [-1, 1], so the tile colour is the linear ramp from
+    the midpoint #f7f7f7 to #b2182b (rho -> -1) or #2166ac (rho -> +1). Reproducing that ramp
+    here and taking Rec.709 relative luminance is what makes the switch land where the tile
+    actually goes dark, rather than at a hand-picked |rho|.
+
+    THE TWO SIDES DO NOT FLIP AT THE SAME |rho|, which is the whole reason this is computed:
+    the red end is far darker than the blue at equal distance from the midpoint (its green
+    channel falls 223/255 against the blue end's 145), so red crosses the threshold near
+    |rho| = 0.57 and blue near 0.83. A single symmetric cutoff would leave the darkest red
+    tiles with black text or wash out mid blues with white.
+
+    plotnine interpolates gradient2 in Lab rather than RGB, so this is an approximation of its
+    ramp, not a reproduction -- it is accurate near the ends (where the decision matters) and
+    the borderline tiles are the ones to LOOK at after changing the palette.
+    """
+    if pd.isna(v):
+        return "#000000"
+    mid = (247, 247, 247)
+    end = (178, 24, 43) if v < 0 else (33, 102, 172)
+    t = min(abs(v), 1.0)
+    r, g, b = (m + t * (e - m) for m, e in zip(mid, end))
+    lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+    return "#ffffff" if lum < 0.5 else "#000000"
+
+
+sd["txt"] = sd["rho"].map(text_color)
+# SIZED FOR THE THREE-PANEL ROW of the paper's fig:task-transfer, authored at its FINAL page
+# size so LaTeX scales nothing and every font here is the font on the page.
+#
+# EVERY PLOT RECTANGLE IN THAT ROW IS SQUARE (aspect_ratio=1 here, set_box_aspect(1) in
+# plot_transfer_vs_corr): the two facets below and the single panel of each neighbour. Sizes
+# were solved together from the measured chrome (y labels, rotated x labels, facet strips) at
+# one common figure height H:
+#   h1 = H-0.537, h2 = H-0.333, h3 = H-0.330  (panel height = panel width, square)
+#   W1 = 0.479+2*h1, W2 = 0.373+h2, W3 = 0.391+h3, sum = 0.97*5.5  =>  H = 1.457in
+#   heatmap 2.319 x 1.457 | transfer 1.497 x 1.457 | scatter 1.518 x 1.457
+# LaTeX subfigure widths: 0.4216 / 0.2722 / 0.2760 of \textwidth.
+# These facets come out the SMALLEST square of the four (0.93in against 1.12in) and that is
+# forced, not a choice: equal aspect at equal figure height gives the panel with the most
+# chrome the least room, and this one pays for both a facet strip and 45-degree x labels.
+# CHANGING ANY PANEL IN THE ROW MEANS RESOLVING ALL THREE.
+#
+# THE COLOURBAR IS GONE, and that is what buys the tile width back. It was ~20% of the old
+# figure's width. Every tile is labelled, so the fill is redundant encoding here -- it groups
+# the eye, it is not the data -- and the caption carries the scale. Restoring the guide means
+# losing about a glyph of tile width; do not simply turn it back on.
+# Text size 4.3: at 7 methods the tile is ~9.6pt across and the widest label ("-.20") is ~8.2pt
+# at this size. It was 3.9 at 8 methods in the same square facet, where adjacent negative values
+# in the MLP row touched. Rule of thumb: size ~= 3.6 * 11 / n_methods, then LOOK at the MLPs
+# facet's first row -- it is the densest and fails first.
 p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
-       + geom_text(aes(label="lab"), size=4.5)
+       # colour is the PER-TILE text colour computed above, passed through untouched by
+       # scale_color_identity -- not a scale to be read, hence guides(color=None).
+       + geom_text(aes(label="lab", color="txt"), size=4.3)
        + facet_wrap("subset", ncol=2)
        + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
-                              midpoint=0, limits=[-1, 1], na_value="#eeeeee")
+                              midpoint=0, limits=[-1, 1], na_value="#eeeeee", guide=None)
+       + scale_color_identity()
+       # guide=None ON THE SCALE, not guides(fill=None): the latter is silently ignored by
+       # this plotnine version (the colourbar still drew, and dropping labs(fill=) only
+       # retitled it "rho"), which is exactly the kind of no-op that ships.
+       + guides(color=None)
        + scale_x_discrete(expand=(0, 0)) + scale_y_discrete(expand=(0, 0))
-       + labs(x="", y="", fill="avg ρ")
-       + theme(figure_size=(3.69, 2.0), panel_grid=element_blank(),
-               axis_text_x=element_text(rotation=45, ha="right", size=6),
-               axis_text_y=element_text(size=6)))
+       + labs(x="", y="")
+       # plot_margin_top, because at figure_size exactly 1.412in the facet strips
+       # ("Attention heads" / "MLPs") sat flush on row 0 of the raster and their ascenders
+       # were clipped. Margin rather than a taller box: the box IS the layout -- the three
+       # subfigure widths in the paper are derived from this PDF's aspect ratio, so growing
+       # the height silently unmatches the row.
+       + theme(figure_size=(2.319, 1.457), aspect_ratio=1, plot_margin_top=0.025,
+               panel_grid=element_blank(),
+               axis_text_x=element_text(rotation=45, ha="right", size=5),
+               axis_text_y=element_text(size=5)))
 p1b.save(OUT / "method_corr_heatmap_bytype.pdf", dpi=300)
 p1b.save(OUT / "method_corr_heatmap_bytype.png", dpi=150)
 print("Saved method_corr_heatmap_bytype")

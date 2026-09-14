@@ -32,11 +32,11 @@ printed with its score and no rank, because a control that scores 0.02 is not co
 it is the thing whose absence would let the zero-ablation half (see SOURCES_PATCHED) be
 misread.
 
-WHY EIGHT METHODS. These are exactly the ones with complete coverage. Stepless IG (patched
+WHY EIGHT METHODS. These are exactly the ones with complete coverage. Expected Gradients (patched
 -input SVA only) and MAttr+Adam at eps=1e-2 (logit-diff only) are deliberately absent rather
 than drawn with holes -- a row with gaps, in a grid whose whole message is the uniformity of a
 row, is unreadable in the exact way the figure is trying to exploit. Both belong in the text:
-Stepless IG matches IG where it ran (0.675 vs 0.682 on the matched SVA subset), and the eps arm
+Expected Gradients matches IG where it ran (0.675 vs 0.682 on the matched SVA subset), and the eps arm
 is the fix for the MAttr+Adam dip, at 0.602 vs 0.501 on MLP.
 
 Run:  uv run python plots/plot_sva_robustness_grid.py               -> patched (the paper figure)

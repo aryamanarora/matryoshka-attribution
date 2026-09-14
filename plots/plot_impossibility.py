@@ -65,7 +65,7 @@ SERIES = [
     ("SHAP",          "I×G",           "shap"),
     ("IG (min)",      "IG",            "ig_min"),
     ("Gradient",      "AttnLRP",       "grad"),
-    ("SmoothGrad",    "Stepless IG",   "smoothgrad"),
+    ("SmoothGrad",    "Expected Gradients",   "smoothgrad"),
     ("Random",        "Random",        "random"),
 ]
 COLORS = {name: palette.METHOD[key] for name, key, _ in SERIES}

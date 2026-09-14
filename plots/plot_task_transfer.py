@@ -37,9 +37,9 @@ from pathlib import Path
 
 import pandas as pd
 from plotnine import (ggplot, aes, geom_tile, geom_text, geom_vline, geom_hline, labs,
-                      scale_color_identity,
+                      scale_color_identity, scale_x_discrete, scale_y_discrete,
                       scale_fill_gradient, theme_bw, theme_set, theme,
-                      element_text, element_blank)
+                      element_text, element_blank, element_rect)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "transfer"))
 from collect_transfer import TASKS, MIB_TASKS, load_row   # single source for files + metric map
@@ -47,10 +47,25 @@ from collect_transfer import TASKS, MIB_TASKS, load_row   # single source for fi
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 
 # Display names and groups, matching plot_task_corr_heatmap.TASKS order exactly.
-LABEL = {"ioi": "IOI", "arithmetic_subtraction": "Arith. (sub.)", "mcqa": "MCQA",
+# "Arith." for arithmetic_subtraction, not "Arith. (sub.)" (2026-09-08, requested): MIB ships
+# an addition task too, but it is not a column of any table here and never appears in these
+# figures, so the qualifier distinguished nothing a reader could see. NOTE the string now
+# collides with the GROUP name "Arith." (addition/months/weekdays/hours) -- that is only a
+# collision in the stdout block-means below, where one is a row label and the other a task;
+# the figure never prints group names.
+LABEL = {"ioi": "IOI", "arithmetic_subtraction": "Arith.", "mcqa": "MCQA",
          "arc_easy": "ARC-E", "arc_challenge": "ARC-C", "simple": "Simple",
          "nounpp": "Noun PP", "rc": "RC", "within_rc": "Within RC", "addition": "Addition",
          "months": "Months", "weekdays": "Weekdays", "hours": "Hours"}
+# Task subset for the THIRD-width panel only (2026-09-08, requested). 13x13 tiles in a 1.45in
+# box is ~7pt per tile and forced the in-cell numbers down to 2.9pt; at 7x7 the tile roughly
+# doubles and the values are legible at the size the rest of this row uses. Two or three of
+# each family are kept (MIB: IOI/Arith./MCQA, SVA: Simple/Noun PP, Arith.: Addition/Months), so
+# every within-family block the figure is about still has off-diagonal cells.
+# --half, --facet and the full-size variants are UNCHANGED and still draw all 13 tasks.
+THIRD_TASKS = ["ioi", "arithmetic_subtraction", "mcqa", "simple", "nounpp",
+               "addition", "months"]
+
 GROUP = {**{t: "MIB" for t in MIB_TASKS},
          **{t: "SVA" for t in ("simple", "nounpp", "rc", "within_rc")},
          **{t: "Arith." for t in ("addition", "months", "weekdays", "hours")}}
@@ -59,6 +74,10 @@ SEP = dict(color="#555555", size=0.35)
 theme_set(
     theme_bw(base_size=8)
     + theme(
+        # Black panel frame, matching palette.SPINE_COLOR and figs/baseline_strongreject.
+        # theme_bw's own panel_border is grey20 and read lighter than the matplotlib figures
+        # beside it on the same page.
+        panel_border=element_rect(color="#000000", fill=None, size=0.5),
         text=element_text(color="#000", family="Inter"),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
@@ -88,7 +107,7 @@ def main():
                          "transfer_{mib,sva}_<m>). Empty = the headline MAttr(SGD) round. "
                          "Output filename gets the same suffix.")
     sz.add_argument("--facet", action="store_true",
-                    help="full-width row: one panel per method (MAttr / +Adam / Stepless IG / "
+                    help="full-width row: one panel per method (MAttr / +Adam / Expected Gradients / "
                          "IxG), shared fill scale, no cell text (pattern comparison, not "
                          "value lookup). Partial rounds show as grey NA tiles.")
     sz.add_argument("--third", action="store_true",
@@ -102,7 +121,7 @@ def main():
     methods = [(args.method, None)]
     if args.facet:
         methods = [("", "MAttr"), ("adam", "MAttr + Adam"),
-                   ("mc_ig", "Stepless IG"), ("ixg", "I×G")]
+                   ("mc_ig", "Expected Gradients"), ("ixg", "I×G")]
     rows = []
     for meth, mlabel in methods:
       for tgt in TASKS:
@@ -123,13 +142,27 @@ def main():
         keep = [l for _m, l in methods if done.get(l, 0) > 0]   # a method with no round yet
         df = df[df.method.isin(keep)]                            # gets no (empty) panel
         df["method"] = pd.Categorical(df["method"], ordered=True, categories=keep)
-    labels = [LABEL[t] for t in TASKS]
+    # The --third panel draws a SUBSET; every other variant keeps all 13. Narrowed here, above
+    # the labels/categories/cuts, so the group separators and the caption block-means below are
+    # all computed on the tasks actually drawn rather than on the full grid.
+    tasks = TASKS
+    if args.third:
+        missing = [t for t in THIRD_TASKS if t not in TASKS]
+        if missing:
+            raise SystemExit(f"THIRD_TASKS not in collect_transfer.TASKS: {missing}")
+        tasks = [t for t in TASKS if t in set(THIRD_TASKS)]
+        keep = {LABEL[t] for t in tasks}
+        df = df[df.src.isin(keep) & df.tgt.isin(keep)]
+        print(f"third panel: {len(tasks)} tasks, {len(df)} cells")
+    TASKS_D = tasks
+    labels = [LABEL[t] for t in TASKS_D]
     df["src"] = pd.Categorical(df["src"], categories=labels, ordered=True)
     df["tgt"] = pd.Categorical(df["tgt"], categories=labels[::-1], ordered=True)
 
     # Group boundaries, same construction as the correlation heatmap's separators().
-    cuts = [i + 0.5 for i in range(1, len(TASKS)) if GROUP[TASKS[i]] != GROUP[TASKS[i - 1]]]
-    hcuts = [len(TASKS) - c + 1 for c in cuts]
+    cuts = [i + 0.5 for i in range(1, len(TASKS_D))
+            if GROUP[TASKS_D[i]] != GROUP[TASKS_D[i - 1]]]
+    hcuts = [len(TASKS_D) - c + 1 for c in cuts]
 
     # Relative: ceiling just past 1 covers the rare foreign-beats-own cells (ARC-C <- ARC-E at
     # 1.10 on CPR, ARC-C <- MCQA at 1.03 on acc). Raw acc-AUC: [0, 0.65] spans the diagonals
@@ -149,7 +182,10 @@ def main():
     d2["ink"] = (d2.rel > lim[1] / 2).map({True: "#ffffff", False: "#000000"})
     p = (ggplot(df, aes("src", "tgt", fill="rel")) + geom_tile(color="white", size=0.2)
          + geom_text(d2, aes(label="txt", color="ink"),
-                     size=2.9 if args.third else 3.4 if args.half else 4.5, show_legend=False)
+                     # 4.4 at --third, not 2.9: the subset halves the column count, so the
+                     # tile goes from ~7pt to ~13pt and a 3-glyph ".47" at 4.4 (~7.5pt) clears
+                     # its gutters. Retune with the column count if THIRD_TASKS changes.
+                     size=4.4 if args.third else 3.4 if args.half else 4.5, show_legend=False)
          + scale_color_identity()
          + geom_vline(xintercept=cuts, **SEP) + geom_hline(yintercept=hcuts, **SEP)
          # Sequential, not the correlation figures' diverging scale: this quantity is a fraction
@@ -157,6 +193,9 @@ def main():
          # the two figures share units. High end is the same #2166ac so "dark blue = strong" at
          # least rhymes across the pair.
          + scale_fill_gradient(low="#f7f7f7", high="#2166ac", limits=lim, na_value="#eeeeee")
+         # Flush tiles: discrete scales default to 0.6 of a category of padding per side, which
+         # on a 7-column panel is ~17% of the width spent on blank strip inside the frame.
+         + scale_x_discrete(expand=(0, 0)) + scale_y_discrete(expand=(0, 0))
          + labs(x="Source task (whose ranking)", y="Target task (whose eval)",
                 fill="Rel. transfer" if relative else "acc-AUC")
          + theme(figure_size=(3.6, 2.9),
@@ -176,14 +215,18 @@ def main():
         # (1.8 x 2.1) matches plot_task_score_corr --third so a 3-subfigure row sits equal;
         # the axis TITLES are dropped there -- at 1.8in they cost a tile-row each and the
         # caption already says which side is source and which is target.
-        fs = (1.45, 1.5) if args.third else (2.7, 3.15)
+        # Three-panel row of fig:task-transfer: square plot rectangle, authored at final page
+        # size. The full solve and the LaTeX subfigure widths live in
+        # plots/plot_method_corr_heatmap.py above its p1b spec -- one copy, since changing any
+        # panel means resolving all three.
+        fs = (1.497, 1.457) if args.third else (2.7, 3.15)
         p = p + theme(figure_size=fs, legend_position="top",
                       legend_direction="horizontal", legend_box_margin=0)
         if args.third:
             p = p + labs(x="", y="") \
-                  + theme(legend_position="none",
-                          axis_text_x=element_text(rotation=90, ha="center", va="top", size=4.5),
-                          axis_text_y=element_text(size=4.5))
+                  + theme(legend_position="none", aspect_ratio=1,
+                          axis_text_x=element_text(rotation=45, ha="right", size=5.5),
+                          axis_text_y=element_text(size=5.5))
     suffix = ("_methods" if args.facet else (f"_{args.method}" if args.method else "")) \
         + {"cpr": "", "acc": "_acc"}[args.metric] + ("_raw" if args.raw else "") \
         + ("_half" if args.half else "_third" if args.third else "")
@@ -193,9 +236,13 @@ def main():
 
     # Caption numbers: mean relative transfer per (target-group, source-group) block,
     # diagonal excluded. Directional, so all 9 ordered pairs print (rows = target group).
-    d = df.dropna()
+    # subset=["rel"], not a bare dropna(): df carries columns that are NaN by construction
+    # outside --facet (e.g. `method`), so dropna() over every column emptied `d` and printed
+    # nine "--" for every variant of this figure. Pre-existing; the figure itself was fine
+    # because its text layer already used dropna(subset=["rel"]).
+    d = df.dropna(subset=["rel"])
     d = d[d.src.astype(str) != d.tgt.astype(str)].copy()
-    g = {LABEL[t]: GROUP[t] for t in TASKS}
+    g = {LABEL[t]: GROUP[t] for t in TASKS_D}
     # bracket access throughout: `gt` as an attribute is DataFrame.gt (greater-than), not a column
     d["sgrp"], d["tgrp"] = d.src.astype(str).map(g), d.tgt.astype(str).map(g)
     if args.facet:

@@ -214,10 +214,10 @@ COST = {
         "I$\\times$G": _R(_M.COST_GRAD_IG1), "RelP": _R(_M.COST_GRAD_IG1),
         "RelP$+$QK": _R(_M.COST_GRAD_IG1), "GIM": _R(_M.COST_GRAD_IG1),
         "AttnLRP": _R(_M.COST_GRAD_IG1),
-        # Stepless IG is m=1 -- alpha ~ U(0,1) drawn per example instead of a fixed grid -- so
+        # Expected Gradients is m=1 -- alpha ~ U(0,1) drawn per example instead of a fixed grid -- so
         # it costs exactly what I x G costs. That it lands with IG-10 at a 10th of IG-10's cost
         # is the whole reason the row is interesting, and it is invisible without this column.
-        "Stepless IG": _R(_M.COST_GRAD_IG1),
+        "Expected Gradients": _R(_M.COST_GRAD_IG1),
         "IG ($m{=}5$)": _R(_M.COST_GRAD_IG5),
         # The 10- and 30-step rows declare their own cost with the rows themselves.
         "IG ($m{=}10$)": _R(dict((d, c) for d, _, c in _M.NAPIG_STEP_ROWS)["$+$ 10 IG steps"]),

@@ -1,4 +1,4 @@
-"""MAttr's optimizer, learning rate and Adam-eps on the ViT teaser, against Stepless IG.
+"""MAttr's optimizer, learning rate and Adam-eps on the ViT teaser, against Expected Gradients.
 
 Data from `scripts/vit/vit_teaser_optim.py`, one directory per seed (`results/vit_optim/seed*`).
 Every number is the held-out hard-top-k sufficiency AUC of a patch ranking (log-spaced area of
@@ -9,8 +9,8 @@ Layout (raw matplotlib: a tile grid, a line panel with reference rules, a trace 
 of 14x14 score maps do not share one grammar):
 
   (a) Adam, AUC over learning rate x eps -- the eps question at 196 units.
-  (b) AUC over learning rate: SGD, Adam at torch's default eps, Adam at its best eps; Stepless
-      IG, the teaser's KernelSHAP / AttnLRP, and a random ranking as horizontal rules.
+  (b) AUC over learning rate: SGD, Adam at torch's default eps, Adam at its best eps; Expected
+      Gradients, the teaser's KernelSHAP / AttnLRP, and a random ranking as horizontal rules.
   (c) Probe AUC during training for the best cell of each arm.
   (d) The rankings themselves, as the teaser draws them.
 
@@ -36,7 +36,7 @@ SERIES = {   # arm -> (label, colour); per palette's optimizer rule
     "sgd": ("MAttr (SGD)", METHOD["MAttr (SGD)"]),
     "adam_best": ("MAttr (Adam, best ε)", METHOD["MAttr"]),
     "adam_default": ("MAttr (Adam, ε = 10⁻⁸)", METHOD["MAttr (Adam, default eps)"]),
-    "ig": ("Stepless IG", METHOD["Stepless IG"]),
+    "ig": ("Expected Gradients", METHOD["Expected Gradients"]),
     "ref_kernelshap": ("KernelSHAP", METHOD["Node Pruning"]),
     "ref_attnlrp": ("AttnLRP", METHOD["AttnLRP"]),
     "random": ("random", "#888888"),
@@ -110,7 +110,7 @@ def main():
     top_h, gap, lm, rm = 1.45, 0.62, 0.38, 0.06
     pw = (W - lm - rm - 2 * gap) / 3
     strip = [("ref_mattr", "MAttr (teaser)"), (best_adam, "Adam, best"),
-             (best_default, "Adam, ε = 10⁻⁸"), (best_sgd, "SGD"), ("ig", "Stepless IG"),
+             (best_default, "Adam, ε = 10⁻⁸"), (best_sgd, "SGD"), ("ig", "Expected Gradients"),
              ("ref_kernelshap", "KernelSHAP")]
     strip = [(k, lab) for k, lab in strip if k in arms and arms[k]["scores"]]
     n_s = len(strip)
@@ -171,15 +171,20 @@ def main():
     # reference rules, labelled in the clear region right of the MAttr optima. The random
     # floor (~0.6) is left off the axis: drawing it would spend half the panel on empty space
     # below every real method; it is reported in the printed table instead.
+    # "Expected Gradients" is too wide for that region (it ran off the frame at lr 8 and
+    # collides with SGD's collapse at lr 100 if right-anchored), so its rule is labelled at the
+    # LEFT edge, where nothing sits below AUC ~4.3.
+    xlo, xhi = min(sgd_lrs + lrs) / 1.6, max(sgd_lrs + lrs) * 1.6
     for k in ("ref_kernelshap", "ref_attnlrp", "ig"):
         if k not in mean:
             continue
         lab, col = SERIES[k]
         ax.axhline(mean[k], color=col, lw=0.8, ls="dashed", zorder=2)
-        ax.text(8.0, mean[k] + 0.04, lab, size=5.5, color=col, ha="left", va="bottom")
+        x = xlo * 1.15 if k == "ig" else 8.0
+        ax.text(x, mean[k] + 0.04, lab, size=5.5, color=col, ha="left", va="bottom")
     ax.set_xscale("log")
     logticks(ax, sgd_lrs + lrs)
-    ax.set_xlim(min(sgd_lrs + lrs) / 1.6, max(sgd_lrs + lrs) * 1.6)
+    ax.set_xlim(xlo, xhi)
     floor = min(mean[k] for k in ("ig", "ref_attnlrp") if k in mean)
     ax.set_ylim(min(floor, min(lo[k] for k in list(key_s.values()) + list(key_a.values()))) - 0.15,
                 max(hi[k] for k in list(key_s.values()) + list(key_a.values())) + 0.1)
@@ -268,14 +273,14 @@ def main():
     print("\nSGD: " + "  ".join(f"lr {lr:g}: {mean[key_s[lr]]:.2f}" for lr in sgd_lrs))
     print("\nbest per arm (mean [min, max] over seeds):")
     for lab, k in [("Adam best", best_adam), ("Adam default-eps best", best_default),
-                   ("SGD best", best_sgd), ("Stepless IG", "ig"), ("teaser MAttr", "ref_mattr"),
+                   ("SGD best", best_sgd), ("Expected Gradients", "ig"), ("teaser MAttr", "ref_mattr"),
                    ("KernelSHAP", "ref_kernelshap"), ("AttnLRP", "ref_attnlrp"),
                    ("random", "random")]:
         if k in mean:
             print(f"  {lab:<22} {k:<24} {mean[k]:.3f} [{lo[k]:.3f}, {hi[k]:.3f}]")
     # the eps mechanism: does the score distribution flatten at small eps, as at neuron scale?
     print("\nAdam score-distribution diagnostics at the best-eps lr, by eps "
-          "(|s| p99/p50, top-20 overlap with Stepless IG):")
+          "(|s| p99/p50, top-20 overlap with Expected Gradients):")
     if "ig" in arms:
         ig_top = [set(np.argsort(-s.ravel())[:20]) for s in arms["ig"]["scores"]]
     for e in epss:

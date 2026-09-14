@@ -82,7 +82,7 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
         "${common[@]}" --method "$gm" --loss "$loss" "${ge[@]}"; done
     want conductance && sub "${PFX}_${task}_cond_${loss}" "conductance${ls}" \
         "${common[@]}" --method conductance --loss "$loss" --ig-steps 10 "${ge[@]}"
-    # "Stepless IG": alpha ~ U(0,1) per example instead of IG's fixed grid. Not folded into the
+    # "Expected Gradients": alpha ~ U(0,1) per example instead of IG's fixed grid. Not folded into the
     # `gm` loop above because its identity carries the draw count and seed -- eval_sva.run_tag
     # writes `mc_ig_m${draws}_s${seed}`, so the predicted filename (and hence the skip-if-exists
     # check) needs both. --ig-steps IS ALWAYS PASSED: eval_sva.py defaults it to 10, which for

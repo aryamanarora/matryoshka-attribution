@@ -1,4 +1,4 @@
-"""Optimizer x learning-rate x Adam-eps grid for MAttr on the ViT teaser, against Stepless IG.
+"""Optimizer x learning-rate x Adam-eps grid for MAttr on the ViT teaser, against Expected Gradients.
 
 The teaser (`vit_teaser_attr.py`) runs ONE MAttr configuration -- soft top-k, log-k, Adam at
 lr 0.05 with the library-default eps 1e-8, the pre-2026-08-24 headline. Since then the paper's
@@ -12,9 +12,9 @@ loaded once, every arm on the same image / corruption family / explained scalar:
   adam    lr in --adam-lrs  x  eps in --adam-eps       (the paper's LR grid, the eps bracket)
   sgd     lr in --sgd-lrs                              (zero init, no momentum: LR-invariant
                                                         ranking up to the soft top-k's T)
-  ig      Stepless IG, alpha ~ U(0,1) per draw, along the patch-embedding path from a freshly
+  ig      Expected Gradients, alpha ~ U(0,1) per draw, along the patch-embedding path from a freshly
           sampled corruption to the clean image; compute-matched at one forward+backward per
-          step, same step count as MAttr. `learning_to_attribute.trainer.stepless_ig`, called
+          step, same step count as MAttr. `learning_to_attribute.trainer.expected_gradients`, called
           in chunks so the running mean can be probed at the same cadence as MAttr's scores.
 
 Every arm is probed every `--probe-every` steps with the hard top-k sufficiency AUC of its
@@ -42,7 +42,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from learning_to_attribute.losses import attribution_loss   # noqa: E402
-from learning_to_attribute.trainer import learn_scores, stepless_ig   # noqa: E402
+from learning_to_attribute.trainer import learn_scores, expected_gradients   # noqa: E402
 from vit_teaser_attr import (CAT_IDX, DOG_IDX, FRACS, GRID, N_PATCH, _LOG,   # noqa: E402
                              forward_from_patches, load_model, make_auc_probe,
                              make_corrupt_image_sampler, make_target_fn)
@@ -103,7 +103,7 @@ def main():
                     help="brackets the node optimum (1.0), the edge one (3.0) and the "
                          "global-KL one (100)")
     ap.add_argument("--ig-schedules", default="uniform",
-                    help="alpha schedules for stepless IG; 'uniform' is canonical")
+                    help="alpha schedules for Expected Gradients; 'uniform' is canonical")
     # MAttr knobs shared by every arm (the teaser's)
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--T", type=float, default=0.5)
@@ -212,7 +212,7 @@ def main():
         record(name, res.scores.numpy(), trace, res.loss_log, time.time() - t0,
                arm=optimizer, optimizer=optimizer, lr=lr, eps=eps if optimizer == "adam" else None)
 
-    # ---------------------------------------------------------------- Stepless IG
+    # ---------------------------------------------------------------- Expected Gradients
     def run_ig(name, schedule):
         torch.manual_seed(args.seed)
         sample_image = train_sampler()
@@ -241,7 +241,7 @@ def main():
         # of the same integral, so the size-weighted average of chunks IS the full-run mean
         for start in range(0, args.steps, args.probe_every):
             n_chunk = min(args.probe_every, args.steps - start)
-            r = stepless_ig(total, grad_fn, steps=n_chunk, k_schedule=schedule)
+            r = expected_gradients(total, grad_fn, steps=n_chunk, k_schedule=schedule)
             acc += r.scores.double() * n_chunk
             n += n_chunk
             trace.append((n - 1, probe((acc / n).float().to(device))[0]))

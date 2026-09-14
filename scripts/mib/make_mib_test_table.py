@@ -146,7 +146,8 @@ OUR_EDGE_METHODS = [
 #  3. Only the best budget appears (make_mib_table.EPRUN_BEST_SPARSITY); the validation tables
 #     carry the full budget sweep and the logit-diff objective ablation. Note this row trains
 #     on Edge Pruning's KL, not MAttr's logit-diff -- see EPRUN_SPARSITIES on that confound.
-import make_mib_table as _M   # noqa: E402  (label/dir are defined there, one source of truth)
+import make_mib_table as _M
+import dbm_multisparsity as _DBMMS   # the own-L0 frontier; one reader, shared with the plots   # noqa: E402  (label/dir are defined there, one source of truth)
 
 # Plain "Node Pruning", NOT eprun_label()'s "Node Pruning (s=0.5, logit-diff)". That parenthetical
 # earns its place in the validation table, where several budgets and both objectives appear as
@@ -222,11 +223,11 @@ NODE_PRUNING = (_M.EPRUN_NAME["node"],
 #                 methods, and do not quietly drop one: the gap is a reproduction finding.
 #   m=5 grid   -- Hanna et al.'s defended default (COLM'24 App. C), 5x cost.
 #   m=30 grid  -- converged reference, 30x cost.
-#   "Stepless" -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral at every m,
-#                 here at m=1. Same cost as the I x G row. Was labelled "MC alpha" until
-#                 2026-08-24; "stepless" says the useful thing (there is no step count to pick)
-#                 where "MC alpha" only named the mechanism, and only to a reader who already
-#                 knew alpha was the interpolation coefficient.
+#   "Expected Gradients" -- alpha ~ U(0,1) drawn PER EXAMPLE, unbiased for the same integral
+#                 at every m, here at m=1. Same cost as the I x G row. Was labelled "MC alpha"
+#                 until 2026-08-24 and "Stepless IG" until 2026-09-14; now carries the name
+#                 Erion et al. (2021) gave the same estimator (there is no step count to pick,
+#                 alpha is the interpolation coefficient drawn per example).
 #
 # So the honest reading of these four rows is a cost-vs-quality ladder in which the first and
 # last are free and the middle two are not. Do NOT reorder them by score; the ordering is the
@@ -266,7 +267,12 @@ GRAD_NODE_BASELINES = [
     # wave submitted as ARMS=m10; the row fills itself when the 11 cells land.
     ("IG ($m{=}10$)",         "napig10_test",    "EAP-IG-inputs_patching_node"),
     ("IG ($m{=}30$)",         "napig30_test",    "EAP-IG-inputs_patching_node"),
-    ("Stepless IG",           "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
+    ("Expected Gradients",           "napig_mc_test",   "EAP-IG-inputs-mc_patching_node"),
+    # Conductance (EAP-IG-inputs-local at --ig-steps 5) is deliberately ABSENT. Its test wave was
+    # launched on 2026-09-08 and cancelled at 8/11 cells; MIB-circuit-track/run_conductance_test.sh
+    # still exists and the 8 landed cells are still in results/napig_local_test, so re-listing this
+    # line and rerunning that script is all it takes to finish. It stays out rather than sitting
+    # here skipped, so nothing downstream has to carry a permanently-pending row.
 ]
 
 # DBM, the other mask-learning baseline (pyvene's SigmoidMaskIntervention). Same loader and
@@ -469,6 +475,26 @@ def collect():
             continue
         mask_nodes[name] = data
 
+    # DBM's lambda ladder scored at each run's OWN converged L0 rather than on MIB's fixed
+    # grid (scripts/mib/eval_dbm_multisparsity.py -> results/dbm_multisparsity). TEST split:
+    # the masks are fitted on `train` (eval_mib_edge_pruning's separate --train-split), so
+    # scoring them on test is eval-only and no retraining is involved.
+    #
+    # *** NOT THE SAME OBJECT AS THE ROWS AROUND IT. *** Eight trained masks, each read only at
+    # the sparsity it was trained for, against every other row's single ranking that serves every
+    # budget -- make_mib_table.DBM_MULTI_COST puts that at 24k against the other mask rows' 3k.
+    # THIS TABLE HAS NO COST COLUMN to carry it (method + 11 cells + Avg, no lr/cost pair), and
+    # the validation tables have no such row at all, so THE CAPTION IS THE ONLY PLACE A READER
+    # CAN LEARN IT. Say it there.
+    _DBMMS.check_consistent("test")     # loud if the ladder differs across cells
+    ms = {}
+    for task, model, _ in COLUMNS:
+        got = _DBMMS.cell(task, model, "test")
+        if got:
+            ms[(task, model)] = round(got[0], 2)
+    if baseline_or_skip(_M.DBM_MULTI_ROW, "dbm_multisparsity (test)", ms):
+        mask_nodes[_M.DBM_MULTI_ROW] = ms
+
     # GIM / RelP+QK, same loader and same rule.
     grad_nodes = {}
     for name, d, sub in GRAD_NODE_BASELINES:
@@ -611,12 +637,12 @@ def main():
     # the partial gradient rows are the case at node level.
     #
     # *** THIS DESTROYS TWO ORDERINGS THAT USED TO CARRY MEANING. Both were deliberate. ***
-    #  1. The gradient family's I×G / IG m=5 / IG m=30 / Stepless IG rows were in COST order
+    #  1. The gradient family's I×G / IG m=5 / IG m=30 / Expected Gradients rows were in COST order
     #     (1x, 5x, 30x, 1x), and the paragraph above GRAD_NODE_BASELINES still says "Do NOT
     #     reorder them by score; the ordering is the cost ordering and that is the point."
     #     Sorted by Avg they interleave with AttnLRP, GIM and RelP, and the ladder is no longer
-    #     readable off the table -- in particular the one fact it existed to show, that Stepless
-    #     IG matches IG m=30 at 1/30 the cost, now has to come from the prose.
+    #     readable off the table -- in particular the one fact it existed to show, that Expected
+    #     Gradients matches IG m=30 at 1/30 the cost, now has to come from the prose.
     #  2. The \ourmethod{} block was a 2x2 over {Adam, SGD} x {log k, unif k} with the headline
     #     row first and its ablations under it. By Avg the headline lands third of four, so the
     #     "+" rows now read as siblings of whatever precedes them rather than ablations OF the

@@ -215,7 +215,7 @@ def learn_scores(
     return result
 
 
-def stepless_ig(
+def expected_gradients(
     total: int,
     grad_fn: Callable,
     *,
@@ -224,7 +224,7 @@ def stepless_ig(
     log_every: int = 0,
     logger=None,
 ) -> TrainResult:
-    """Stepless IG sharing MAttr's schedules and loop conventions: the gradient-only sibling
+    """Expected Gradients sharing MAttr's schedules and loop conventions: the gradient-only sibling
     of ``learn_scores``.
 
     ``grad_fn(draw_alphas) -> (dloss, loss_val) | None`` is the environment, mirroring
@@ -240,7 +240,7 @@ def stepless_ig(
     accumulated in float64 on ``grad_fn``'s device and returned on CPU.
 
     Each alpha is an independent ``sample_k(total, k_schedule) / total`` draw from the shared
-    schedule; ``"uniform"`` is canonical stepless IG (alpha ~ U(0,1) up to the 1/total floor
+    schedule; ``"uniform"`` is canonical Expected Gradients (alpha ~ U(0,1) up to the 1/total floor
     ``sample_k`` puts on k -- negligible at real node counts, visible in small-``total``
     tests), anything else a p(alpha)-weighted path integral (e.g. "log" weights the
     near-baseline end by ~1/alpha).
