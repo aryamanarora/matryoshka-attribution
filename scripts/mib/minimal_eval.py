@@ -6,15 +6,16 @@ import argparse, sys
 from functools import partial
 from pathlib import Path
 import torch
+from learning_to_attribute.deps import find_mib_path
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--importances", default="results/topklog_lr_0.05/arc_easy_gemma2_importances.json")
 ap.add_argument("--eval-examples", type=int, default=200)
 ap.add_argument("--batch-size", type=int, default=4)
-ap.add_argument("--mib-path", default="./MIB-circuit-track")
+ap.add_argument("--mib-path", default=None)
 args = ap.parse_args()
 
-mib = Path(args.mib_path).resolve()
+mib = find_mib_path(args.mib_path)
 sys.path.insert(0, str(mib)); sys.path.insert(0, str(mib / "EAP-IG" / "src"))
 import transformer_lens, importlib.metadata as M
 from transformer_lens import HookedTransformer

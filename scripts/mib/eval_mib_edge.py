@@ -22,6 +22,7 @@ import yaml
 from torch.utils.checkpoint import checkpoint
 
 from learning_to_attribute import wandb_util
+from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,7 +55,7 @@ def sample_k(total, schedule="uniform"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track")
+    parser.add_argument("--mib-path", type=str, default=None)
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True, choices=list(TASKS_TO_HF.keys()))
     parser.add_argument("--steps", type=int, default=500)
@@ -96,7 +97,7 @@ def main():
                          vars(args), project=args.wandb_project, entity=args.wandb_entity,
                          enabled=args.wandb, group=f"{args.task}/{args.model}", job_type="edge")
 
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 

@@ -13,8 +13,9 @@ import sys
 from functools import partial
 from pathlib import Path
 import torch
+from learning_to_attribute.deps import find_mib_path
 
-mib = Path("./MIB-circuit-track").resolve()
+mib = find_mib_path()
 sys.path.insert(0, str(mib)); sys.path.insert(0, str(mib / "EAP-IG" / "src"))
 import importlib.metadata as M
 from transformer_lens import HookedTransformer

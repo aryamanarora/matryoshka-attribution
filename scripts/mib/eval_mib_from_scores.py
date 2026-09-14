@@ -17,6 +17,7 @@ from pathlib import Path
 import torch
 
 from eval_mib import MODEL_TL_NAMES, TASKS_TO_HF
+from learning_to_attribute.deps import find_mib_path
 
 
 def main():
@@ -27,10 +28,10 @@ def main():
     ap.add_argument("--split", default="validation")
     ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--eval-examples", type=int, default=None)
-    ap.add_argument("--mib-path", default="./MIB-circuit-track")
+    ap.add_argument("--mib-path", default=None)
     args = ap.parse_args()
 
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
     from transformer_lens import HookedTransformer

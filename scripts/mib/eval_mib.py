@@ -27,6 +27,7 @@ from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
 )
+from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,7 +80,7 @@ def get_hooks_class(model):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=None)
-    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track",
+    parser.add_argument("--mib-path", type=str, default=None,
                         help="Path to cloned MIB-circuit-track repo")
     parser.add_argument("--model", type=str, default=None,
                         choices=list(MODEL_FULLNAMES.keys()))
@@ -174,7 +175,7 @@ def main():
         enabled=args.wandb, group=f"{args.task}/{args.model}", job_type="node")
 
     # Add MIB to path
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 

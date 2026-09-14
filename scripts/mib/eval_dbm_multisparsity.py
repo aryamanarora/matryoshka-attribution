@@ -39,6 +39,7 @@ from pathlib import Path
 
 import math
 import torch
+from learning_to_attribute.deps import find_mib_path
 
 # Default ladder: submit_dbm_l1.sh's original five plus the 2026-09-08 extension. A rung with no
 # graph on disk is skipped and named in the output, so a partial ladder is visible rather than
@@ -82,7 +83,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=20)
     ap.add_argument("--head", type=int, default=None,
                     help="cap the eval set; MIB caps llama3 VALIDATION at 200, test uncapped")
-    ap.add_argument("--mib-path", default="./MIB-circuit-track")
+    ap.add_argument("--mib-path", default=None)
     ap.add_argument("--output", default="results/dbm_multisparsity")
     ap.add_argument("--absolute", action="store_true",
                     help="rank by |score| instead of score. MIB's run_evaluation.py defaults "
@@ -94,6 +95,7 @@ def main():
                          "reproduces run_evaluation.py before any own-L0 number is trusted.")
     a = ap.parse_args()
 
+    a.mib_path = str(find_mib_path(a.mib_path))
     sys.path.insert(0, a.mib_path)
     sys.path.insert(0, os.path.join(a.mib_path, "EAP-IG", "src"))
     from transformer_lens import HookedTransformer

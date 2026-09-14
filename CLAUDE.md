@@ -160,16 +160,16 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
   `-c 4`. Mismatch triggers `srun: fatal: cpus-per-task set by two different env vars`.
 - `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/mib/`; task
   names in configs must use underscores (`arc_easy`, not `arc-easy`).
-- `mib-path` defaults to `./MIB-circuit-track` (gitignored symlink to the cloned repo).
-  **It must be OUR FORK, with submodules**: `git clone --recurse-submodules
-  https://github.com/aryamanarora/MIB-circuit-track.git` at fork `main` >= `f329461` (EAP-IG
-  submodule at `41e9b9c`). Upstream MIB's `evaluate_area_under_curve` returns 5 values; ours
-  returns 7 (`accuracies`, `acc_auc`) and `eval_mib.py` / `eval_mib_edge.py` unpack 7, so an
-  upstream or stale clone trains for hours and then dies with `ValueError: not enough values to
-  unpack (expected 7, got 5)` AFTER eval, before `scores.pt` is written (2026-09-14, sc, lost a
-  1.5 h llama3 node eval + a 25 min edge run). Both scripts import that function at startup, so
-  fixing the clone does not rescue a running job -- cancel and resubmit. Until 2026-09-14 the
-  7-value patch and the EAP-IG pin existed only as uncommitted state on Tilde; both are pushed now.
+- `--mib-path` is resolved by `src/learning_to_attribute/deps.py:find_mib_path()`: explicit flag,
+  `$L2A_MIB_PATH`, `deps/MIB-circuit-track` (what `bash scripts/setup.sh` clones), then the older
+  gitignored symlink `./MIB-circuit-track`. **It must be OUR FORK with submodules**
+  (`aryamanarora/MIB-circuit-track`, pinned in `scripts/setup.sh`; EAP-IG submodule `41e9b9c`).
+  Upstream's `evaluate_area_under_curve` returns 5 values, ours 7 (`accuracies`, `acc_auc`), and
+  `eval_mib.py` / `eval_mib_edge.py` unpack 7 -- an upstream or stale clone trains for hours and
+  dies with `ValueError: not enough values to unpack (expected 7, got 5)` AFTER eval, before
+  `scores.pt` is written (2026-09-14, sc: lost a 1.5 h llama3 node eval + a 25 min edge run). Both
+  scripts import that function at startup, so fixing the clone does not rescue a running job --
+  cancel and resubmit. `setup.sh`'s smoke check asserts the 7-value return without loading a model.
 
 ## ViT teaser: optimizer / LR / Adam-eps grid (2026-09-02)
 

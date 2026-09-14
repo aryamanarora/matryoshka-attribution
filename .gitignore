@@ -2,6 +2,8 @@
 *.pyc
 __pycache__/
 MIB-circuit-track/
+# scripts/setup.sh clones our MIB fork here at a pinned commit (see src/learning_to_attribute/deps.py)
+deps/MIB-circuit-track/
 results/
 logs/
 logs_*/

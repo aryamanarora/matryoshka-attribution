@@ -23,6 +23,7 @@ from pathlib import Path
 import torch
 
 from eval_mib import MODEL_TL_NAMES, TASKS_TO_HF  # reuse the exact name maps
+from learning_to_attribute.deps import find_mib_path
 
 
 def main():
@@ -34,12 +35,12 @@ def main():
     ap.add_argument("--eval-examples", type=int, default=None,
                     help="Cap eval set (match a capped run's n so B,C align with its faithfulness)")
     ap.add_argument("--include-input", action="store_true")
-    ap.add_argument("--mib-path", default="./MIB-circuit-track")
+    ap.add_argument("--mib-path", default=None)
     ap.add_argument("--output", default="results/anchors")
     args = ap.parse_args()
 
     # put MIB + EAP-IG on the path (mirror eval_mib.py)
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 

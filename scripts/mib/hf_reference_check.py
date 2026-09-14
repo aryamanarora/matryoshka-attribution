@@ -6,8 +6,9 @@ Whichever HF agrees with is the correct Gemma-2 forward.
 import sys
 from pathlib import Path
 import torch
+from learning_to_attribute.deps import find_mib_path
 
-mib = Path("./MIB-circuit-track").resolve()
+mib = find_mib_path()
 sys.path.insert(0, str(mib)); sys.path.insert(0, str(mib / "EAP-IG" / "src"))
 import importlib.metadata as M
 from transformers import AutoModelForCausalLM, AutoTokenizer

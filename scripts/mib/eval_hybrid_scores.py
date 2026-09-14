@@ -15,6 +15,7 @@ from functools import partial
 from pathlib import Path
 
 import torch
+from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def load_node_scores(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track")
+    parser.add_argument("--mib-path", type=str, default=None)
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--split", type=str, default="validation")
@@ -45,7 +46,7 @@ def main():
     parser.add_argument("--output", type=str, default="results/hybrid_eval")
     args = parser.parse_args()
 
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 

@@ -38,6 +38,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +65,7 @@ TASKS_TO_HF = {
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mib-path", type=str, default="MIB-circuit-track")
+    parser.add_argument("--mib-path", type=str, default=None)
     parser.add_argument("--model", type=str, required=True, choices=list(MODEL_FULLNAMES.keys()))
     parser.add_argument("--task", type=str, required=True, choices=list(TASKS_TO_HF.keys()))
     parser.add_argument("--level", type=str, default="edge", choices=["edge", "node"])
@@ -163,7 +164,7 @@ def main():
     if args.output is None:
         args.output = f"results/edge_pruning_{args.level}"
 
-    mib_path = Path(args.mib_path).resolve()
+    mib_path = find_mib_path(args.mib_path)
     sys.path.insert(0, str(mib_path))
     sys.path.insert(0, str(mib_path / "EAP-IG" / "src"))
 
