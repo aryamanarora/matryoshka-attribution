@@ -18,8 +18,10 @@ Then:
      Localization", ONE submission per level with the DIRECTORY url:
        https://huggingface.co/aryaman/mattr-mib-circuits/tree/main/node   level "Node (submodule)"
        https://huggingface.co/aryaman/mattr-mib-circuits/tree/main/edge   level "Edge"
-     The validator warns that arithmetic-addition / interpbench are missing (we never ran
-     them; >=2 tasks and >=2 models is the requirement) -> "Proceed Anyway". Save the
+     The validator warns that interpbench is missing (we never ran it; >=2 tasks and >=2
+     models is the requirement) -> "Proceed Anyway". arithmetic-addition was added for the
+     submission only (scripts/mib/launch/submit_arith_add_headline.sh) and is not in the
+     paper's 11-cell tables. Save the
      submission IDs; they are the only way to withdraw. Rate limit: 2 valid submissions /
      user / week, so node + edge is the whole week.
 
@@ -54,7 +56,7 @@ from eap.graph import Graph  # noqa: E402
 CELLS = [
     "ioi_gpt2", "ioi_qwen2.5", "ioi_gemma2", "ioi_llama3",
     "mcqa_qwen2.5", "mcqa_gemma2", "mcqa_llama3",
-    "arithmetic_subtraction_llama3",
+    "arithmetic_subtraction_llama3", "arithmetic_addition_llama3",
     "arc_easy_gemma2", "arc_easy_llama3", "arc_challenge_llama3",
 ]
 
