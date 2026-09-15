@@ -20,6 +20,7 @@ set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
 OUT=results/sva_sweep
 LOSSES=${LOSSES:-"logit_diff ce acc"}
+TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours arc_easy ioi"}
 DRY=${DRY:-0}
 declare -A CFG=(
   [nounpp]="llama3 sva" [rc]="llama3 sva" [simple]="llama3 sva" [within_rc]="llama3 sva"
@@ -30,7 +31,7 @@ COMMON="--nodes node --method mattr --variant topk --mode sufficient --optimizer
 --k-schedule uniform --steps 2000 --lr 0.05 --T 0.5 --train-batch-size 1 --eval-examples 100 \
 --train-eval-every 200 --train-eval-examples 20 --seed 42 --output $OUT"
 n=0; skip=0
-for task in nounpp rc simple within_rc addition months weekdays hours arc_easy ioi; do
+for task in $TASKS; do
   read -r model ds <<< "${CFG[$task]}"
   for loss in $LOSSES; do
     ls=""; [ "$loss" != logit_diff ] && ls="_$loss"

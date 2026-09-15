@@ -79,7 +79,25 @@ def _span_last(tokenizer, content_spans):
     return last
 
 
-ARITH_DIR = "/home/guests/aryaman/arithmetic-wild/datasets/Llama-3.1-8B"
+# goodfire-ai/arithmetic-wild's generated datasets. Resolved like deps.find_mib_path: $L2A_ARITH_DIR,
+# then deps/arithmetic-wild (where scripts/setup.sh-era checkouts keep outside repos; the 7 MB
+# `datasets/` tree was copied there from Tilde on 2026-09-15), then the Tilde path that was
+# hardcoded here until then -- so the older machines keep working and a fresh clone gets a
+# clear error naming the fix instead of a Tilde path.
+def _arith_dir():
+    root = Path(__file__).resolve().parents[2]
+    cands = [os.environ.get("L2A_ARITH_DIR"),
+             root / "deps" / "arithmetic-wild" / "datasets" / "Llama-3.1-8B",
+             "/home/guests/aryaman/arithmetic-wild/datasets/Llama-3.1-8B"]
+    for c in cands:
+        if c and Path(c).is_dir():
+            return str(c)
+    # Not found: return the deps/ location so a later open() fails with THAT path in the error
+    # (non-arithmetic tasks never touch it, so this must not raise at import time).
+    return str(cands[1])
+
+
+ARITH_DIR = _arith_dir()
 
 
 class ArithDataset:
@@ -1000,8 +1018,10 @@ def main():
     elif args.dataset == "mib":
         # MIB tasks (arc_easy, ...) via HFEAPDataset: (clean, corrupted, [base_id, source_id]),
         # length-matched per example but variable across examples -> node substrate only.
-        import sys as _sys
-        _sys.path.insert(0, "MIB-circuit-track")
+        # The MIB fork is found the way every scripts/mib runner finds it (deps/MIB-circuit-track
+        # first, then the legacy ./MIB-circuit-track symlink), not by a CWD-relative name.
+        from learning_to_attribute.deps import add_mib_to_sys_path
+        add_mib_to_sys_path()
         from MIB_circuit_track.dataset import HFEAPDataset
         hf_task, name_full = f"mib-bench/{args.task}", MODEL_FULLNAMES[args.model]
         train = HFEAPDataset(hf_task, tok, split="train", task=args.task, model_name=name_full)
