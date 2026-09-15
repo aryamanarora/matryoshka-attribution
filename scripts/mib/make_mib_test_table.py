@@ -33,25 +33,35 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama"),
 ]
 
-# MIB paper baselines (from Table 1, test set)
+# MIB paper baselines, public test set: Table 14 of arXiv:2504.13151 (CPR per task/model). Its
+# single "Arithmetic" column is the MEAN over addition and subtraction; the two operators are
+# reported separately in its Table 17 (Llama-3.1, public test), which is where the two
+# arithmetic cells below come from since 2026-09-15. Before that the averaged Table-14 value
+# stood in as the subtraction cell (NAP-IG 0.39 = mean of 0.43 / 0.34; EAP-IG-inputs 0.99 =
+# mean of 0.96 / 1.03). Table 17's Random row prints 0.25 / 0.25 / 0.75 / 0.75 where every
+# other row reads CPR(+), CMD(+), CPR(-), CMD(-) -- a swapped pair in the paper; Random's CPR is
+# 0.25 in every column of Tables 14 and 16, so 0.25 is used for both operators.
 NODE_BASELINES = {
     "Random": {
         ("ioi", "gpt2"): 0.25, ("ioi", "qwen2.5"): 0.28, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
+        ("ioi", "llama3"): 0.25,
+        ("arithmetic_addition", "llama3"): 0.25, ("arithmetic_subtraction", "llama3"): 0.25,
         ("mcqa", "qwen2.5"): 0.27, ("mcqa", "gemma2"): 0.32, ("mcqa", "llama3"): 0.26,
         ("arc_easy", "gemma2"): 0.32, ("arc_easy", "llama3"): 0.26,
         ("arc_challenge", "llama3"): 0.25,
     },
     "NAP (CF)": {
         ("ioi", "gpt2"): 0.28, ("ioi", "qwen2.5"): 0.30, ("ioi", "gemma2"): 0.30,
-        ("ioi", "llama3"): 0.26, ("arithmetic_subtraction", "llama3"): 0.27,
+        ("ioi", "llama3"): 0.26,
+        ("arithmetic_addition", "llama3"): 0.26, ("arithmetic_subtraction", "llama3"): 0.27,
         ("mcqa", "qwen2.5"): 0.38, ("mcqa", "gemma2"): 1.47, ("mcqa", "llama3"): 1.69,
         ("arc_easy", "gemma2"): 1.01, ("arc_easy", "llama3"): 0.26,
         ("arc_challenge", "llama3"): 0.26,
     },
     "NAP-IG (CF)": {
         ("ioi", "gpt2"): 0.76, ("ioi", "qwen2.5"): 0.29, ("ioi", "gemma2"): 1.52,
-        ("ioi", "llama3"): 0.42, ("arithmetic_subtraction", "llama3"): 0.39,
+        ("ioi", "llama3"): 0.42,
+        ("arithmetic_addition", "llama3"): 0.43, ("arithmetic_subtraction", "llama3"): 0.34,
         ("mcqa", "qwen2.5"): 0.77, ("mcqa", "gemma2"): 1.71, ("mcqa", "llama3"): 1.87,
         ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 0.26,
         ("arc_challenge", "llama3"): 0.26,
@@ -61,7 +71,8 @@ NODE_BASELINES = {
 EDGE_BASELINES = {
     "EAP-IG-inp (CF)": {
         ("ioi", "gpt2"): 1.85, ("ioi", "qwen2.5"): 1.63, ("ioi", "gemma2"): 3.20,
-        ("ioi", "llama3"): 2.08, ("arithmetic_subtraction", "llama3"): 0.99,
+        ("ioi", "llama3"): 2.08,
+        ("arithmetic_addition", "llama3"): 0.96, ("arithmetic_subtraction", "llama3"): 1.03,
         ("mcqa", "qwen2.5"): 1.16, ("mcqa", "gemma2"): 1.64, ("mcqa", "llama3"): 1.05,
         ("arc_easy", "gemma2"): 1.53, ("arc_easy", "llama3"): 1.04,
         ("arc_challenge", "llama3"): 0.98,
