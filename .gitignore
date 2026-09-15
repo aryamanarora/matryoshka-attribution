@@ -4,6 +4,9 @@ __pycache__/
 MIB-circuit-track/
 # scripts/setup.sh clones our MIB fork here at a pinned commit (see src/learning_to_attribute/deps.py)
 deps/MIB-circuit-track/
+# goodfire-ai/arithmetic-wild's generated datasets (7 MB), read by scripts/sva/eval_sva.py via
+# $L2A_ARITH_DIR or this path; copied here from Tilde on 2026-09-15, not vendored.
+deps/arithmetic-wild/
 results/
 logs/
 logs_*/
