@@ -44,7 +44,9 @@ submit() {  # name res cmd
 }
 launch() {  # tag suffix train-extra-args
   local tag=$1 suf=$2 extra=$3
-  local out=results/eprun_node$suf evaldir=results/eprun_eval$suf graph=$out/graph_${TASK}_${MODEL}.json
+  local out=results/eprun_node$suf
+  local evaldir=results/eprun_eval$suf
+  local graph=$out/graph_${TASK}_${MODEL}.json   # separate statements: set -u + one `local` line expands $out before assigning it
   if [ -f "$evaldir/EdgePruning_patching_node/${HT}_${MODEL}_validation_abs-False.pkl" ]; then echo "SKIP $evaldir"; skip=$((skip+1)); return; fi
   local ev; ev=$(evalcmd "$graph" "$evaldir")
   if [ -f "$graph" ]; then submit "aas-$tag" "$EVAL_RES" "$ev"; else
