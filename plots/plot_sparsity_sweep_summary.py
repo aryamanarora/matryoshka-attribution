@@ -13,8 +13,12 @@ THE KNOB, in the same direction for every series.
                                acc-AUC  climbs 0.09 -> 0.38 at s=0.99, then falls (0.36, 0.30)
     Node Pruning (KL)          CPR AUC  strictly lower (~0.91--1.00) at every shared setting
                                acc-AUC  strictly HIGHER (~0.40--0.46), above logit-diff's best
-    DBM                        CPR AUC  peaks at lambda=6 (1.50), falls at 20
-                               acc-AUC  rises MONOTONICALLY, 0.19 -> 0.35
+    DBM                        CPR AUC  peaks at lambda=6 (1.50), then 1.36 / 1.25 / 1.22 at
+                                        20 / 40 / 60 and collapses to 0.75 at 200
+                               acc-AUC  rises 0.19 -> 0.41 at lambda=60, turns over at 200
+    (DBM's ladder was extended 2026-09-15 from {0..20} to {0..200}, so both of its turnovers
+    are now bracketed; before that acc-AUC read as "monotonic to 0.35 at 20" because the grid
+    stopped one point after the CPR peak.)
 
 That is the cpr-auc-is-dense-end-dominated fact made visible: MIB's `area_under` is a linear
 trapezoid over 0.001--1.0 sparsity, so ~90% of it comes from k>=20% where a denser circuit simply
@@ -90,8 +94,9 @@ and DBM's over ~0.19, and that difference in leverage is real, not a scaling cho
 X SCALES DIFFER PER BLOCK for the same reason. s is plotted LINEARLY: it is a fraction, its
 grid is not geometric, and the CPR turnover at 0.5 sits mid-axis where it reads. lambda is
 plotted on a SYMLOG axis with linthresh below the smallest nonzero point, because its grid IS
-geometric (0.2/0.6/2/6/20, x3 apart) and because lambda=0 is a real swept point -- the
-unpenalised control -- that a log axis cannot place at all.
+geometric (0.2/0.6/2/6/20, x3 apart, then 40/60/200 -- the 2026-09-15 extension is x1.5-3
+apart, still a log-spaced tail) and because lambda=0 is a real swept point -- the unpenalised
+control -- that a log axis cannot place at all.
 
 COLOURS MATCH plot_lr_sweep_summary.py cell-for-cell (indigo Node Pruning, pink DBM, both from
 palette.py), so the two sweep figures read as one pair, and linetype separates the two Node
