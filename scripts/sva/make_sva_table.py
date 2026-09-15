@@ -76,7 +76,7 @@ BLOCKS = [
         ("stopk-log-eps1e-2",  MV.label(k="log", eps="1e-2")),        # $+$ log $k$
         ("stopk-log",          MV.label(k="log", eps="1e-8")),        # $+$ log $k$, eps=1e-8 (Adam default)
         ("softsgd-log",        MV.label(k="log", opt="sgd")),         # $+$ log $k$, $+$ SGD
-        ("soft-log",           MV.label(k="log", fwd="hard")),        # $+$ log $k$, $+$ hard
+        ("soft-log",           MV.label(k="log", fwd="hard", eps="1e-8")),   # hard STE fwd, Adam default eps
     ]),
 ]
 REFERENCE = ("Random", "Random")
