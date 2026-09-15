@@ -150,6 +150,19 @@ The natural-k comparison scripts (`plot_cpr_curves_naturalk.py`,
 
 ## Cluster (Stanford NLP `sc`) submission gotchas
 
+**Canonical checkout since 2026-09-14: `/juice3/scr3/nlp/interp/learning-to-attribute`** (1 TB
+volume). `results/` (all 435 dirs, 145 GB), `logs/`, `wandb/` and the MIB fork's own
+`results/` (the `/home/guests/aryaman/MIB-circuit-track/results` the table scripts hardcode;
+now `deps/MIB-circuit-track/results`) were rsync'd there from Tilde that day, plus the
+arithmetic_addition cells that only ever ran on sc. The older sc clone at
+`/nlp/scr/aryaman/learning-to-attribute` (juice2, 200 GB quota, chronically near full) and the
+Tilde checkout at `/home/guests/aryaman/learning-to-attribute` are superseded — do not write new
+results into either. Launchers with a hardcoded `ABS=` should point at the juice3 path
+(`submit_arith_add_headline_sc.sh` does; the `/home/guests/...` sbatch scripts are Tilde-era).
+On sc, submit with `nlprun` inside tmux and use `uv run python` in the job command: the login
+node's NFS makes even a torch import crawl (nfs_wait_bit_killable for 20+ min), while the
+compute nodes sync the env in seconds.
+
 MIB eval reloads the model for the eval phase (peak host RAM ≈ 2× model), and the
 averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmux):
 - Small (gpt2, qwen2.5-0.5B): defaults are fine.
