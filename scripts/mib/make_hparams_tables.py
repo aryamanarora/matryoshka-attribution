@@ -1,0 +1,250 @@
+"""Generate the two hyperparameter tables of paper/sections/hparams.tex:
+
+    uv run python scripts/mib/make_hparams_tables.py
+        -> paper/tabs/hparams_mib.tex   (tab:hparams-mib, the MIB methods of fig:cpr-mib-test)
+        -> paper/tabs/hparams_sva.tex   (tab:hparams-sva, the SVA+ methods of fig:acc-faith)
+
+Both tables carry the SAME MAttr rows as the results tables they sit next to, in the same order
+and with the same labels, because the rows come from the same lists:
+  MIB  -> make_mib_test_table.OUR_NODE_METHODS / OUR_EDGE_METHODS (label, results dir), and the
+          optimizer / LR / steps / k-schedule / Adam-eps of each row are READ FROM THE RUN
+          (the `args` dict saved in results/<dir>/<cell>_scores.pt), not typed here.
+  SVA+ -> make_sva_table.BLOCKS' \\ourmethod{} block (V.METHODS key, label); optimizer and
+          k-schedule are read from a representative run's JSON, eps and steps from its filename
+          tag (`_eps1e-2`, `_s5000`), and the LR from SVA_LR below, which mirrors the sweep
+          launchers (scripts/sva/launch/*.sh: 0.05 on the neuron/node substrates, 0.5 on SAE
+          latents, SGD 1.0) -- the one value the runs do not record.
+The headline (bare \\ourmethod{}) and every relative label come from scripts/mib/mattr_variants.py,
+so flipping the headline there flips these tables with the results tables.
+
+The non-MAttr rows (Node Pruning, DBM, the gradient methods, the leaderboard rows) are fixed
+specs kept in this file, next to the run they describe; they change when a recipe changes, not
+when the headline does.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+import torch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts" / "mib"))
+sys.path.insert(0, str(ROOT / "scripts" / "sva"))
+import mattr_variants as MV            # noqa: E402
+import make_mib_test_table as T        # noqa: E402  (OUR_*_METHODS: label -> results dir)
+import make_sva_table as S             # noqa: E402  (BLOCKS: V.METHODS key -> label)
+V = S.V                                # plots/plot_accauc_vs_faithauc: parse_method, SUBSTRATE_RES
+
+TABS = ROOT / "paper" / "tabs"
+RESULTS = ROOT / "results"
+
+# SVA+ learning rates by (optimizer, substrate family). Not recorded in the run JSONs; these are
+# the values the launchers pass (scripts/sva/launch/submit_adam_eps_followup.sh etc.).
+SVA_LR = {("adam", "neuron"): "0.05", ("adam", "sae"): "0.5", ("sgd", "neuron"): "1", ("sgd", "sae"): "1"}
+
+HEADER = [
+    "\\begin{adjustbox}{max width=\\textwidth}",
+    "\\begin{tabular}{lllll}",
+    "\\toprule",
+    "\\multirow{2}{*}{\\textbf{Method}} & \\multicolumn{2}{c}{\\textbf{Scores}} & "
+    "\\multirow{2}{*}{\\textbf{Path point / $k$-schedule}} & \\multirow{2}{*}{\\textbf{Coverage}} \\\\",
+    "\\cmidrule(lr){2-3}",
+    "& \\textbf{Optimiser} & \\textbf{LR} & & \\\\",
+    "\\midrule",
+]
+FOOTER = ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
+
+
+def num(x):
+    """0.05 -> $0.05$, 3.0 -> $3$, 1.0 -> $1$."""
+    s = f"{float(x):g}"
+    return f"${s}$"
+
+
+def thousands(n):
+    return f"{int(n):,}".replace(",", "{,}")
+
+
+def eps_tex(eps):
+    mant, exp = f"{float(eps):.0e}".split("e")
+    return f"$\\epsilon = 10^{{{int(exp)}}}$" if float(mant) == 1 else f"$\\epsilon = {mant}\\times 10^{{{int(exp)}}}$"
+
+
+def optimiser_cell(opt, eps):
+    return f"Adam, {eps_tex(eps)}" if opt == "adam" else "SGD"
+
+
+def schedule_cell(k):
+    return {"log": "$k$ log-uniform", "uniform": "$k$ uniform"}[k]
+
+
+def row(label, cells, indent):
+    return ("\\quad " if indent else "") + label + " & " + " & ".join(cells) + " \\\\"
+
+
+def mattr_rows(pairs, describe):
+    """(label, key) pairs -> table rows; the headline (bare \\ourmethod{}) is unindented."""
+    out = []
+    for label, key in pairs:
+        opt, lr, steps, k, eps, cov = describe(key)
+        out.append(row(label, [optimiser_cell(opt, eps), lr, schedule_cell(k), cov],
+                       indent=label != MV.OURMETHOD))
+    return out
+
+
+# ---------------------------------------------------------------- MIB (tab:hparams-mib)
+def mib_args(results_dir):
+    """The saved `args` of one cell of a MIB results dir (all cells share the recipe)."""
+    d = RESULTS / results_dir
+    cands = sorted(d.glob("*_scores.pt"))
+    if not cands:
+        raise SystemExit(f"no *_scores.pt in results/{results_dir} -- cannot read its hparams")
+    pref = [p for p in cands if p.name.startswith("ioi_gpt2")] or cands
+    a = torch.load(pref[0], map_location="cpu", weights_only=False)["args"]
+    return a, pref[0].name
+
+
+def describe_mib(results_dir):
+    a, src = mib_args(results_dir)
+    opt = a.get("optimizer") or "adam"        # pre-2026-08 dirs saved no key: Adam was the default
+    eps = a.get("adam_eps", 1e-8)
+    steps = a["steps"]
+    return (opt, num(a["lr"]), steps, a["k_schedule"], eps,
+            f"{thousands(steps)} ex.\\ $\\times$ 1 pass")
+
+
+MIB_FIXED_NODE = [
+    ("Node Pruning", ["Adam", "$0.8$", "hard-concrete, $s = 0.5$", "3{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("DBM", ["Adam", "$0.3$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
+             "3{,}000 ex.\\ $\\times$ 1 pass"]),
+    None,
+    ("Stepless IG", ["---", "---", "$\\alpha \\sim U(0,1)$, seed 0", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("IG ($m{=}30$)", ["---", "---", "$\\alpha = j/30$, $j = 1 \\dots 30$", "100--1{,}000 ex.\\ $\\times$ 30 path points"]),
+    ("IG ($m{=}10$)", ["---", "---", "$\\alpha = j/10$, $j = 1 \\dots 10$", "100--1{,}000 ex.\\ $\\times$ 10 path points"]),
+    ("IG ($m{=}5$)", ["---", "---", "$\\alpha = j/5$, $j = 1 \\dots 5$", "100--1{,}000 ex.\\ $\\times$ 5 path points"]),
+    ("I$\\times$G", ["---", "---", "$\\alpha = 0$", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("RelP, RelP$+$QK", ["---", "---", "--- (LRP rule)", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("AttnLRP, GIM", ["---", "---", "--- (LRP rule)", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("NAP (CF), NAP-IG (CF) & \\multicolumn{3}{l}{as published (MIB leaderboard, counterfactual)}", None),
+    ("Random (control) & \\multicolumn{3}{l}{as published (MIB leaderboard)}", None),
+]
+MIB_FIXED_EDGE = [
+    ("EAP-IG-inp (CF) & \\multicolumn{3}{l}{as published (MIB leaderboard, counterfactual)}", None),
+    ("UGS & \\multicolumn{3}{l}{as published} & 7.2k--114k seq.", None),
+]
+
+
+def fixed_rows(spec):
+    out = []
+    for item in spec:
+        if item is None:
+            out.append("\\midrule")
+        elif item[1] is None:
+            out.append(item[0] + " \\\\")
+        else:
+            out.append(row(item[0], item[1], indent=False))
+    return out
+
+
+def build_mib():
+    L = list(HEADER)
+    L.append("\\multicolumn{5}{l}{\\textit{Node-level}} \\\\")
+    L += mattr_rows(T.OUR_NODE_METHODS, describe_mib)
+    L.append("\\midrule")
+    L += fixed_rows(MIB_FIXED_NODE)
+    L.append("\\midrule")
+    L.append("\\multicolumn{5}{l}{\\textit{Edge-level}} \\\\")
+    L += mattr_rows(T.OUR_EDGE_METHODS, describe_mib)
+    L += fixed_rows(MIB_FIXED_EDGE)
+    L += FOOTER
+    return "\n".join(L) + "\n"
+
+
+# ---------------------------------------------------------------- SVA+ (tab:hparams-sva)
+SVA_TREES = [("node", "results/sva_sweep", "neuron"),
+             ("mlp", V.SUBSTRATE_RES["mlp"], "neuron"),
+             ("mlp_sae_span", V.SUBSTRATE_RES["mlp_sae_span"], "sae")]
+
+
+def sva_run(key, sub, res):
+    """One representative logit-diff run of V.METHODS key `key` on substrate `sub`: its JSON
+    dict and filename (any task; the recipe is per (method, substrate))."""
+    import json
+    for p in sorted((ROOT / res).glob(f"*_{sub.replace('+', '-')}_*.json")):
+        if p.name.endswith(("_ce.json", "_acc.json")) or ".scores" in p.name:
+            continue
+        try:
+            d = json.load(open(p))
+        except Exception:
+            continue
+        if d.get("nodes") != sub or d.get("loss", "logit_diff") != "logit_diff":
+            continue
+        if V.parse_method(p.name, d) == key:
+            return d, p.name
+    return None, None
+
+
+def describe_sva(key):
+    per = {}
+    for sub, res, fam in SVA_TREES:
+        d, fname = sva_run(key, sub, res)
+        if d is None:
+            continue
+        opt = d.get("optimizer", "adam")
+        m = re.search(r"_eps([0-9.e-]+?)_", fname)
+        eps = float(m.group(1)) if m else 1e-8
+        m = re.search(r"_s(\d{3,})", fname)
+        steps = int(m.group(1)) if m else 2000
+        per[sub] = (opt, SVA_LR[(opt, fam)], steps, d.get("k_schedule", "log"), eps)
+    if not per:
+        raise SystemExit(f"no logit-diff run found for SVA method key {key!r}")
+    node = per.get("node"); neuron = per.get("mlp") or per.get("mlp_sae_span")
+    ref = neuron or node
+    opt, _, _, k, eps = ref
+    lrs = sorted({v[1] for v in per.values()}, key=float)
+    lr = num(lrs[0]) if len(lrs) == 1 else " / ".join(num(x) for x in lrs) + " (SAE)" * 0
+    if len(lrs) > 1:
+        lr = f"{num(per['mlp'][1]) if 'mlp' in per else num(lrs[0])} ({num(per['mlp_sae_span'][1])} SAE)"
+    steps = sorted({v[2] for v in per.values()})
+    cov = (f"{thousands(steps[0])} ex.\\ $\\times$ 1 pass" if len(steps) == 1
+           else f"{thousands(node[2])} (node) / {thousands(max(steps))} ex.\\ $\\times$ 1 pass")
+    return opt, lr, steps, k, eps, cov
+
+
+SVA_FIXED = [
+    None,
+    ("Node Pruning", ["Adam", "$0.8$", "hard-concrete, $s = 0.9$", "2{,}000 (node) / 5{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("DBM", ["Adam", "$0.3$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
+             "2{,}000 (node) / 5{,}000 ex.\\ $\\times$ 1 pass"]),
+    None,
+    ("Stepless IG", ["---", "---", "$\\alpha \\sim U(0,1)$, seed 42", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
+    ("IG ($m{=}10$)", ["---", "---", "$\\alpha = j/10$, $j = 1 \\dots 10$", "200 / 500 ex.$^{*}$ $\\times$ 10 path points"]),
+    ("I$\\times$G", ["---", "---", "$\\alpha = 0$", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
+    ("AttnLRP", ["---", "---", "--- (LRP rule)", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
+    ("Random (control)", ["---", "---", "i.i.d.\\ uniform scores, seeds 42--44", "---"]),
+]
+SVA_FOOTNOTE = ("\\multicolumn{5}{l}{\\footnotesize $^{*}$node / neuron substrates; compute-matched "
+                "to \\ourmethod{}'s pass budget, capped at the full train pool (no repetition).} \\\\")
+
+
+def build_sva():
+    ours = [members for title, members in S.BLOCKS if title == MV.OURMETHOD][0]
+    L = list(HEADER)
+    L += mattr_rows([(disp, key) for key, disp in ours], describe_sva)
+    L += fixed_rows(SVA_FIXED)
+    L.append("\\bottomrule")
+    L.append(SVA_FOOTNOTE)
+    L += ["\\end{tabular}", "\\end{adjustbox}"]
+    return "\n".join(L) + "\n"
+
+
+def main():
+    for fname, build in (("hparams_mib.tex", build_mib), ("hparams_sva.tex", build_sva)):
+        tex = build()
+        (TABS / fname).write_text(tex)
+        print(f"-> {TABS / fname}  ({tex.count(chr(10))} lines)")
+
+
+if __name__ == "__main__":
+    main()
