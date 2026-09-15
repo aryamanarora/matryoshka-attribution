@@ -8,6 +8,8 @@ Run from the repo root:
 import pickle
 from pathlib import Path
 
+import mattr_variants as MV   # which MAttr variant is the unmarked headline, and the label grammar
+
 RESULTS_BASE = Path("results")
 OUTPUT = Path("paper/tabs/mib_test_results.tex")
 
@@ -96,11 +98,15 @@ EDGE_BASELINES = {
 # SGD is the default as of 2026-08-24 (LR-invariant by construction, matches/beats Adam at its
 # own optimum -- see make_mib_table.py's OUR_METHODS comments), so the SGD dirs are now the bare
 # "\ourmethod{}" / "+ unif k" rows and the Adam dirs are the "+ Adam" ablation.
+# LABELS COME FROM scripts/mib/mattr_variants.py (2026-09-15): the headline there is uniform k +
+# Adam, so that dir is the bare \ourmethod{} row and the other three are marked relative to it.
+# The paragraphs above about SGD being the unmarked default are the history of these dirs and
+# their LRs, not the current layout. Order: headline first, then one-attribute ablations.
 OUR_NODE_METHODS = [
-    ("\\ourmethod{}",          "test_node_softlog_sgd_lr_1.0"),
-    ("$+$ unif $k$",           "test_node_softuni_sgd_lr_3.0"),
-    ("$+$ Adam",               "test_node_topk_log_lr05"),
-    ("$+$ Adam, unif $k$",     "test_node_topk_uniform_lr05"),
+    (MV.label(),                     "test_node_topk_uniform_lr05"),
+    (MV.label(k="log"),              "test_node_topk_log_lr05"),
+    (MV.label(opt="sgd"),            "test_node_softuni_sgd_lr_3.0"),
+    (MV.label(k="log", opt="sgd"),   "test_node_softlog_sgd_lr_1.0"),
 ]
 # Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
 # the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which
@@ -130,11 +136,11 @@ OUR_NODE_METHODS = [
 # THE FIX IS NOT TO FLIP BACK, it is to repoint these two rows at lr=3.0 so they sit at their own
 # block-argmax like every other row here. Only 4/11 validation cells and 0 test cells exist at
 # lr=3.0 today; the esgd3-* jobs that would fill them are submitted and held.
-OUR_EDGE_METHODS = [
-    ("\\ourmethod{}",          "test_edge_softlog_sgd_lr_3.0"),
-    ("$+$ unif $k$",           "test_edge_softuni_sgd_lr_3.0"),
-    ("$+$ Adam",               "test_edge_topk_log_lr05"),
-    ("$+$ Adam, unif $k$",     "test_edge_topk_uniform_lr05"),
+OUR_EDGE_METHODS = [   # same labelling as the node block: mattr_variants decides the headline
+    (MV.label(),                     "test_edge_topk_uniform_lr05"),
+    (MV.label(k="log"),              "test_edge_topk_log_lr05"),
+    (MV.label(opt="sgd"),            "test_edge_softuni_sgd_lr_3.0"),
+    (MV.label(k="log", opt="sgd"),   "test_edge_softlog_sgd_lr_3.0"),
 ]
 
 

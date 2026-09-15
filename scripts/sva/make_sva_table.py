@@ -34,7 +34,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plots"))
+sys.path.insert(0, str(ROOT / "scripts" / "mib"))
 import plot_accauc_vs_faithauc as V  # noqa: E402
+import mattr_variants as MV  # the MIB tables' headline definition + label grammar  # noqa: E402
 
 TABS = ROOT / "paper" / "tabs"
 
@@ -54,8 +56,10 @@ SUBSTRATES = [
     ("mlp_sae_span", V.SUBSTRATE_RES["mlp_sae_span"], "SAE latents (MLP out)"),
 ]
 
-# (block title, [(method key in V.METHODS, display name)]). Labels follow the MIB tables'
-# convention: bare \ourmethod{} is SGD, Adam is the annotated arm.
+# (block title, [(method key in V.METHODS, display name)]). MAttr labels come from
+# scripts/mib/mattr_variants.py, the same definition the MIB tables use: the headline is
+# uniform k + Adam, and on these substrates (where Adam's epsilon is swept) eps = 1e-2; every
+# other arm is marked relative to it. Headline first, then one-attribute ablations.
 BLOCKS = [
     ("Gradient attribution", [
         ("IG", "IG"),
@@ -68,11 +72,11 @@ BLOCKS = [
         ("sig_lr0.3_l16.0", "DBM"),
     ]),
     ("\\ourmethod{}", [
-        ("softsgd-log", "\\ourmethod{}"),
-        ("stopk-log-eps1e-2", "$+$ Adam ($\\epsilon{=}10^{-2}$)"),
-        ("stopk-log", "$+$ Adam ($\\epsilon{=}10^{-8}$)"),
-        ("stopk-unif-eps1e-2", "$+$ Adam, unif $k$"),
-        ("soft-log", "$+$ hard"),
+        ("stopk-unif-eps1e-2", MV.label(eps="1e-2")),                 # headline: unif k, Adam, eps 1e-2
+        ("stopk-log-eps1e-2",  MV.label(k="log", eps="1e-2")),        # $+$ log $k$
+        ("stopk-log",          MV.label(k="log", eps="1e-8")),        # $+$ log $k$, eps=1e-8 (Adam default)
+        ("softsgd-log",        MV.label(k="log", opt="sgd")),         # $+$ log $k$, $+$ SGD
+        ("soft-log",           MV.label(k="log", fwd="hard")),        # $+$ log $k$, $+$ hard
     ]),
 ]
 REFERENCE = ("Random", "Random")

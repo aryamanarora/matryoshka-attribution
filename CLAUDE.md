@@ -23,38 +23,41 @@ wrong intervention, check this first.
 
 ## CRITICAL: which results dir is the "MAttr" / "Ours" headline
 
-**As of 2026-07-21 the headline MAttr is the SOFT top-k forward, log-k schedule variant**
-(best test CPR avg, best acc-AUC, no IOI/Qwen 0.25-floor collapse). The hard sigmoid-STE
-forward is the "$+$ hard" ablation; uniform-k rows are "+ unif k".
+**Defined in ONE place: `scripts/mib/mattr_variants.py`** (`HEADLINE`, `label()`, `mark_k()`,
+`OPT_ORDER`). Every MIB table (`make_mib_table.py`, `make_mib_accauc_table.py`,
+`make_mib_test_table.py`), the SVA+ tables (`scripts/sva/make_sva_table.py`), the bar chart
+(`plots/plot_mib_test_avg.py`) and the hparams tables import it. Change the headline there, not
+in a generator. The `OUR_METHODS` names are RELATIVE labels ("$+$ hard", "$-$ $c_k$"); the
+k-schedule mark and the optimizer header are added at emission.
 
-**As of 2026-08-24 SGD (at its own tuned LR) is the default OPTIMIZER for that headline, not
-Adam.** MAttr+SGD is LR-invariant by construction (zero init, no momentum) and matches Adam at
-its own optimum (node val CPR 1.886 vs 1.879) — the honest reading is "the optimizer doesn't
-matter once tuned, the LR it's tuned at does", so SGD is now the unmarked `\ourmethod{}` row
-and Adam is the labelled "$+$ Adam" ablation. This is a LABEL/ORDER change only, in
-`make_mib_table.py`, `make_mib_accauc_table.py`, `make_mib_test_table.py`,
-`plots/plot_method_corr_heatmap.py` and `plots/plot_mib_accauc_cpr_scatter.py` — no dirs
-were re-run or re-pointed, `topklog_lr_0.05` is unchanged Adam data, still on disk.
+**As of 2026-09-15 (user decision) the headline is SOFT top-k forward, UNIFORM k, ADAM.** On the
+SVA+ substrates, where Adam's epsilon is swept, the headline is eps = 1e-2 and the default-eps
+(1e-8) run is a marked variant. The bar chart had drawn this run as the plain method since
+2026-09-11; the tables now agree with it. Label grammar: `$+$ log $k$`, `$+$ SGD`, `$+$ hard`,
+`$\epsilon{=}10^{-8}$`, comma-joined in that order; bare `\ourmethod{}` = headline.
 
-| Results dir (`results/...`)              | Variant                      | Paper role         |
-|-------------------------------------------|------------------------------|---------------------|
-| `softlog_sgd_lr_1.0`                       | soft fwd, log k, SGD (node, val)  | **MAttr headline** |
-| `test_node_softlog_sgd_lr_1.0`             | soft fwd, log k, SGD (node, test) | **MAttr headline** |
-| `mib_edge_softlog_sgd_lr_3.0`              | soft fwd, log k, SGD (edge, val)  | **MAttr headline** (since 2026-09-04) |
-| `test_edge_softlog_sgd_lr_3.0`             | soft fwd, log k, SGD (edge, test) | **MAttr headline** (since 2026-09-04) |
-| `mib_edge_softlog_sgd_lr_1.0` / `test_edge_softlog_sgd_lr_1.0` | soft fwd, log k, SGD (edge) at the imported NODE lr | superseded, still on disk — do not quote |
-| `topklog_lr_0.05`                          | soft fwd, log k, Adam        | "$+$ Adam" ablation |
-| `test_node_topk_log_lr05`                  | soft fwd, log k, Adam (test) | "$+$ Adam" ablation |
-| `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam (edge) | "$+$ Adam" ablation |
-| `htklog_lr_0.05` (+test/edge twins)        | hard STE fwd, log k, Adam    | "$+$ hard" ablation |
-| `htk_lr_0.05`                              | hard STE fwd, uniform k      | "+ unif k, + hard"  |
-| `softuni_sgd_lr_3.0`                       | soft fwd, uniform k, SGD     | "+ unif k"          |
-| `final_node` / `topk_uniform_lr05`         | soft fwd, uniform k, Adam    | "+ unif k, + Adam"  |
+| Results dir (`results/...`)              | Variant                            | Paper role (2026-09-15) |
+|-------------------------------------------|------------------------------------|---------------------|
+| `mib_node_topk_uniform_lr05` / `test_node_topk_uniform_lr05` | soft fwd, uniform k, Adam (node) | **MAttr headline** |
+| `mib_edge_topk_uniform_lr05` / `test_edge_topk_uniform_lr05` | soft fwd, uniform k, Adam (edge) | **MAttr headline** |
+| `topklog_lr_0.05` / `test_node_topk_log_lr05`; `mib_edge_topk_log_lr05` / `test_edge_topk_log_lr05` | soft fwd, log k, Adam | "$+$ log $k$" |
+| `softuni_sgd_lr_3.0` / `test_node_softuni_sgd_lr_3.0`; `mib_edge_softuni_sgd_lr_3.0` / `test_edge_softuni_sgd_lr_3.0` | soft fwd, uniform k, SGD | "$+$ SGD" |
+| `softlog_sgd_lr_1.0` / `test_node_softlog_sgd_lr_1.0`; `mib_edge_softlog_sgd_lr_3.0` / `test_edge_softlog_sgd_lr_3.0` | soft fwd, log k, SGD | "$+$ log $k$, $+$ SGD" (headline 2026-08-24 to 2026-09-15) |
+| `mib_edge_softlog_sgd_lr_1.0` / `test_edge_softlog_sgd_lr_1.0` | edge SGD at the imported NODE lr | superseded, still on disk — do not quote |
+| `htk_lr_0.05` (+ edge twins)               | hard STE fwd, uniform k, Adam      | "$+$ hard" |
+| `htklog_lr_0.05` (+test/edge twins)        | hard STE fwd, log k, Adam          | "$+$ log $k$, $+$ hard" |
+| `final_node`                               | soft fwd, uniform k, Adam, lr 0.01 | superseded by the lr05 dir |
 
-**Bare `\ourmethod{}` means SGD at BOTH levels as of 2026-08-26** (user decision, flipping the
-Adam-default edge convention this note previously defended). One optimizer across both levels,
-Adam as the annotated ablation, in `make_mib_test_table.OUR_EDGE_METHODS`, `make_mib_table
-.emit_ours()`, and `plots/plot_mib_test_avg.py` (which reads `collect()`, so it follows).
+History of the headline, for reading old tables: 2026-06-17 uniform k Adam (hard fwd era);
+2026-07-21 soft fwd log k Adam; 2026-08-24 soft fwd log k SGD (edge lr 3.0 from 2026-09-04);
+2026-09-15 soft fwd uniform k Adam. The SGD-vs-Adam reasoning below is kept as the record of why
+each dir sits at the LR it does; it no longer describes the layout.
+
+**Not flipped (2026-09-15): `plots/plot_mib_accauc_cpr_scatter.py`.** Its main-text panel is a
+hand-curated set keyed on the SGD rows' exact labels (`(G_MSGD, "MAttr")`, LR_ANCHOR paths) and
+its guards raise on any relabel, so it still draws the SGD log-k point as "MAttr". It needs its
+own curation pass before it goes next to the flipped tables; `plot_method_corr_heatmap.py` uses
+descriptive names ("MAttr SGD (log)") and is unaffected.
 
 **Know what this costs before you quote it.** `submit_mib_edge_lr_sweep.sh` brackets BOTH
 optimizers at edge scale; paired over its 4 cells (ioi/gpt2, ioi/llama3, mcqa/llama3,

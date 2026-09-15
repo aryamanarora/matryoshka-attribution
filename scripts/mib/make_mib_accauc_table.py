@@ -239,10 +239,10 @@ def row_avg(data):
     return round(sum(vs) / len(vs), 2) if vs else None
 
 
-def unifk(name):
-    """log k is the default (unmarked); uniform k is the marked ablation, exactly as in
-    make_mib_table.main()'s nested unifk."""
-    return "$+$ unif $k$" if name.startswith("\\ourmethod") else "$+$ unif $k$, " + name
+def mark_k(name, group):
+    """k-schedule mark for a row of OUR_METHODS group `group`, from the shared headline
+    definition (scripts/mib/mattr_variants.py) -- the headline schedule's rows stay unmarked."""
+    return M.MV.mark_k(name, M.MV.GROUP_K[group])
 
 
 def collect(level):
@@ -354,16 +354,18 @@ def main():
 
         llama_ioi = {("ioi", "llama3")}
         edge_llama = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
-        # SGD is the default (see make_mib_table.emit_ours); same header/order flip mirrored.
-        for opt, label in [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]:
-            ours = [(n, d) for n, d, g in methods if g == "ours" and opt_of(d) == opt]
-            unif = [(n, d) for n, d, g in methods if g == "uniform" and opt_of(d) == opt]
-            if not ours and not unif:
+        # Headline optimizer block first and unmarked, headline k-schedule rows first and
+        # unmarked within it -- the same order make_mib_table.emit_ours takes from
+        # scripts/mib/mattr_variants.py, so the two tables cannot disagree about the headline.
+        for opt, label in M.MV.OPT_ORDER:
+            by_group = {grp: [(n, d) for n, d, g in methods if g == grp and opt_of(d) == opt]
+                        for grp in M.MV.GROUP_K}
+            if not any(by_group.values()):
                 continue
             L.append(f"\\textbf{{{label}}} \\\\")
-            for name, rows_ in (("ours", ours), ("unif", unif)):
-                for n, d in rows_:
-                    disp = n if name == "ours" else unifk(n)
+            for grp in M.MV.GROUP_ORDER:
+                for n, d in by_group[grp]:
+                    disp = mark_k(n, grp)
                     if not any(v is not None for v in mattr[d].values()):
                         # Same rule as make_mib_table's emit_ours: a row of 12 "---" claims a run
                         # that was scored and produced nothing, which is a wrong statement rather

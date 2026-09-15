@@ -125,7 +125,10 @@ LEGEND = [(lab, c) for c, lab in reversed(LEGEND)]
 # $k$", "$+$ Adam, unif $k$"). Matched rather than hardcoded per name so an Adam/SGD relabel
 # does not silently drop the recolour; UNI_PER_LEVEL then asserts the match still finds them,
 # so a rename to something without "unif" raises instead of quietly turning the bars blue.
-UNI_MARK, UNI_PER_LEVEL = "unif", 1
+# 0 since 2026-09-15: the one surviving MAttr row per level IS the uniform-k run and is drawn
+# as the plain method, so no drawn row carries the "unif" mark any more (the log-k arms are the
+# marked ones now, and both are dropped). The hook stays so a split can be restored.
+UNI_MARK, UNI_PER_LEVEL = "unif", 0
 # Baseline rows the table keeps and this figure does not -- see the docstring for each. Matched
 # against NODE_BASELINES / EDGE_BASELINES keys, and a name here that matches nothing raises
 # rather than silently doing nothing, so a rename in the table cannot quietly un-drop a row.
@@ -151,7 +154,11 @@ DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
 # is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
 # row string like RENAME_OURS, and guarded the same way: a name here that matches no row raises.
-DROP_OURS_NAMES = ("$+$ Adam",)
+# 2026-09-15: the tables now follow scripts/mib/mattr_variants.py (headline = uniform k, Adam),
+# so the log-k Adam arm is labelled "$+$ log $k$" and the surviving uniform-k Adam row is
+# ALREADY the bare \ourmethod{} -- the RENAME_OURS patch below is therefore empty, and the
+# "MAttr means a different run here than in the table" defect described above is closed.
+DROP_OURS_NAMES = (T.MV.label(k="log"),)
 OURS_DROPPED_PER_LEVEL = 3
 # Display names for the two survivors (2026-09-08, requested). With no non-Adam MAttr left in
 # the figure, "$+$ Adam" is an ablation marker pointing at nothing, so the rows are drawn as
@@ -166,7 +173,7 @@ OURS_DROPPED_PER_LEVEL = 3
 # is keyed on the table's current strings and will raise the moment they change.
 # 2026-09-11 (requested): uniform-k IS the figure's MAttr. The log-k arm is gone (see
 # DROP_OURS_NAMES), so the surviving uniform-k Adam row is drawn as the plain method name.
-RENAME_OURS = {"$+$ Adam, unif $k$": "\\ourmethod{}"}
+RENAME_OURS = {}   # the headline row is bare \ourmethod{} in the table itself since 2026-09-15
 # Baseline rows relabelled for the figure only (2026-09-11, requested). The table keeps MIB's
 # own name for its published edge row; here it is drawn under the node panel's naming, since
 # it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"

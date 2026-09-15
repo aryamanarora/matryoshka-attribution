@@ -9,6 +9,8 @@ import pickle
 import math
 from pathlib import Path
 
+import mattr_variants as MV   # which MAttr variant is the unmarked headline, and the label grammar
+
 import torch
 
 RESULTS_BASE = Path("results")
@@ -60,12 +62,16 @@ COLUMNS = [
     ("arc_challenge", "llama3", "Llama"),
 ]
 
-# Our method + ablations: (display_name, results_subdir, level, is_ours)
-# (display_name, results_subdir, level, group)
-# group: "ours" = default, "uniform" = uniform k ablation
+# Our method + ablations: (display_name, results_subdir, level, group)
+# group: "ours" = LOG k-schedule, "uniform" = UNIFORM k-schedule (mattr_variants.GROUP_K).
+# Names are RELATIVE to the row's (k-schedule, optimizer) block: the k mark and the optimizer
+# header are added at emission from scripts/mib/mattr_variants.py, which is where the headline
+# (uniform k, Adam, soft forward since 2026-09-15) is defined. The comments below that say
+# "log k = default" or "SGD is the unmarked default" describe earlier conventions and the
+# reasoning behind each dir's LR; they are kept as the record, not as the current layout.
 OUR_METHODS = [
-    # Node level (log k-schedule = default). Swept methods use lr=0.05 (best); llama/ioi capped 200.
-    # MAttr headline = SOFT top-k forward, log k. "+ hard" = sigmoid-STE hard forward.
+    # Node level, log k-schedule. Swept methods use lr=0.05 (best); llama/ioi capped 200.
+    # SOFT top-k forward; "+ hard" = sigmoid-STE hard forward.
     ("\\ourmethod{}", "topklog_lr_0.05", "node", "ours"),
     # Optimizer ablation: identical forward and backward to the row above, Adam -> SGD, EACH AT
     # ITS OWN BEST LR. This was pinned to lr=0.05 (matched to the headline, a single-knob
@@ -787,12 +793,8 @@ def main():
         "EAP-IG-inp (CF, repro)": {("arc_challenge", "llama3")},
     }
 
-    def unifk(name):
-        # log k is the default (unmarked); uniform k is the marked ablation. "+ unif k"
-        # precedes other attributes, comma-separated; main row drops \ourmethod.
-        if name.startswith("\\ourmethod"):
-            return "$+$ unif $k$"
-        return "$+$ unif $k$, " + name
+    # The k-schedule mark ("$+$ log $k$" / "$+$ unif $k$") is added by mattr_variants.mark_k,
+    # which knows which schedule is the headline; the OUR_METHODS names are RELATIVE labels.
 
     def row_avg(data):
         vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
@@ -896,14 +898,20 @@ def main():
         # THE FIX IS NOT TO FLIP BACK. It is to finish the held esgd3-* wave (lr=3.0) so the edge
         # SGD rows sit at their own optimum like every other row in this table; only 4/11
         # validation cells and 0 test cells exist there today. Repoint the dirs when it lands.
-        # Within a set: log-k = main rows (default, unmarked), then annotated uniform-k variants.
-        order = [("sgd", "\\ourmethod{}"), ("adam", "\\ourmethod{}$+$Adam")]
-        for opt, label in order:
+        # HEADLINE AND ORDER COME FROM scripts/mib/mattr_variants.py (2026-09-15): the block of
+        # the headline optimizer is emitted first and unmarked, and within a block the headline
+        # k-schedule's rows come first and unmarked while the other schedule's rows carry its
+        # mark. Everything above this line about SGD-as-default is history the module records.
+        for opt, label in MV.OPT_ORDER:
             rows_u = [(n, r, g) for n, r, _, g in uniform_list if opt_of(r) == opt]
             rows_o = [(n, r, g) for n, r, _, g in ours_list if opt_of(r) == opt]
             if not rows_u and not rows_o:
                 continue
             lines.append(f"\\textbf{{{label}}} \\\\")
+            blocks = {"ours": rows_o, "uniform": rows_u}
+            rows_o = []   # emitted below via `blocks`, in MV.GROUP_ORDER, each with its k mark
+            rows_u = [(MV.mark_k(n, MV.GROUP_K[grp]), r, g)
+                      for grp in MV.GROUP_ORDER for n, r, g in blocks[grp]]
             # suppress_avg on partial rows, same rule the mask-baseline rows already use. An Avg
             # over whatever cells happen to be present is not comparable to the full-coverage row
             # above it, and the bias is not zero-mean: the cells that go missing are the gemma
@@ -928,7 +936,10 @@ def main():
             for n, r, g in rows_u:
                 dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
-                lines.append(make_row(unifk(n), d, best, second,
+                if not d:
+                    print(f"SKIP row {n!r} ({r}, {level}/{g}): no results yet")
+                    continue
+                lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
                                       cost=COST_OURS[level], lr=ours_lr(r), crange=crange))
