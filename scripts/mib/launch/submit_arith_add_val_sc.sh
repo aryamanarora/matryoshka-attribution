@@ -37,7 +37,9 @@ NODE=(
   "mib_node_topk_uniform_lr05|topk|uniform|adam|0.05|2"
   "softuni_sgd_lr_3.0|topk|uniform|sgd|3.0|2"
   "htk_lr_0.05|hard_topk|uniform|adam|0.05|2"
-  "mib_node_hard_topk_gumbel|hard_topk_gumbel|uniform|adam|0.01|2"
+  # mib_node_hard_topk_gumbel ("$+$ hard, $+$ Gum.") is NOT here: its masking variant
+  # `hard_topk_gumbel` no longer exists in eval_mib.py (only hard_topk_identity_gumbel survives),
+  # so that row cannot get an addition cell and keeps a suppressed Avg in mib_results.tex.
   "mib_node_detached_tau|topk_detached|uniform|adam|0.01|2"
   "mib_node_bernoulli_reinforce|bernoulli_reinforce|uniform|adam|0.1|2"
   "mib_node_identity_sgd|hard_topk_identity|uniform|sgd|0.01|4"
