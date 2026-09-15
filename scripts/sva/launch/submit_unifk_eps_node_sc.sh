@@ -38,7 +38,9 @@ for task in $TASKS; do
     f="$OUT/${task}_${model}_node_sufficient_topk_adam_eps1e-2${ls}_uniformk_bs1.json"
     if [ -f "$f" ]; then echo "SKIP $(basename $f)"; skip=$((skip+1)); continue; fi
     name="unifeps-node-${task}-${loss}"
-    [ "$model" = qwen2.5 ] && res="-q jag -c 2 -r 32G" || res="-q jag -d a6000 -c 4 -r 96G"
+    # -d a6000 on BOTH: an unpinned jag job can land on a GPU too old for this torch build
+    # ("no kernel image is available for execution on the device" -- the ioi/ce arm did, 2026-09-15).
+    [ "$model" = qwen2.5 ] && res="-q jag -d a6000 -c 2 -r 32G" || res="-q jag -d a6000 -c 4 -r 96G"
     cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/sva/eval_sva.py \
 --model $model --task $task --dataset $ds --loss $loss $COMMON"
     n=$((n+1))
