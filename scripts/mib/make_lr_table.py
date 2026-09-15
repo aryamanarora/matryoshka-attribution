@@ -216,6 +216,14 @@ SPARSITY_METHODS = [
         ("2.0 (Boundless DAS)", "eprun_eval_ld_sig_lr0.3_l12.0"),
         ("6.0", "eprun_eval_ld_sig_lr0.3_l16.0"),
         ("20.0", "eprun_eval_ld_sig_lr0.3_l120.0"),
+        # Extended 2026-09-08/09 (the L1 ladder eval_dbm_multisparsity.L1S walks): three more
+        # rungs past the CPR peak at 6, each x1.5-3 apart, so the sparse end of the knob is
+        # bracketed instead of stopping one point after the turnover. All 11 validation cells
+        # of each are on disk; wired into this table and plots/plot_sparsity_sweep_summary.py
+        # (which imports this block) on 2026-09-15.
+        ("40.0", "eprun_eval_ld_sig_lr0.3_l140.0"),
+        ("60.0", "eprun_eval_ld_sig_lr0.3_l160.0"),
+        ("200.0", "eprun_eval_ld_sig_lr0.3_l1200.0"),
     ], "$\\lambda_{\\mathrm{L1}}{=}$"),
     # --- DCM: PULLED FROM THE PAPER 2026-08-13. Do not re-add without reading this. ---
     #
