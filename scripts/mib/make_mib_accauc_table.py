@@ -288,9 +288,9 @@ def main():
          # so a right-aligned number sits hard against the right edge of its own swatch. Same
          # change and same reason as make_mib_table's column spec.
          "\\begin{tabular}{l" + "c" * ncols + "@{\\quad}c}", "\\toprule",
-         "& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & "
+         "& \\multicolumn{4}{c}{IOI} & \\multicolumn{2}{c}{Arithmetic} & \\multicolumn{3}{c}{MCQA} & "
          "\\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\",
-         "\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}",
+         "\\cmidrule(lr){2-5} \\cmidrule(lr){6-7} \\cmidrule(lr){8-10} \\cmidrule(lr){11-12} \\cmidrule(lr){13-13}",
          "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"]
 
     for li, (level, title, methods) in enumerate(

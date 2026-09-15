@@ -16,7 +16,13 @@ COLUMNS = [
     ("ioi", "qwen2.5", "Qwen"),
     ("ioi", "gemma2", "Gemma"),
     ("ioi", "llama3", "Llama"),
-    ("arithmetic_subtraction", "llama3", "Llama"),
+    # arithmetic_addition joined 2026-09-15 (scripts/mib/launch/submit_arith_add_fill_sc.sh fills
+    # every loaded row; the literal MIB-Table-1 baselines below have no addition cell and are
+    # governed by MIN_BASELINE_FRAC like any other partial row). A loaded row without its
+    # addition cell is SKIPPED by baseline_or_skip until it lands -- by design, so an 11-cell
+    # average never sits in a 12-cell column.
+    ("arithmetic_addition", "llama3", "Llama ($+$)"),
+    ("arithmetic_subtraction", "llama3", "Llama ($-$)"),
     ("mcqa", "qwen2.5", "Qwen"),
     ("mcqa", "gemma2", "Gemma"),
     ("mcqa", "llama3", "Llama"),
@@ -584,8 +590,8 @@ def main():
     lines.append("\\begin{adjustbox}{max width=\\textwidth}")
     lines.append("\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}")
     lines.append("\\toprule")
-    lines.append("& \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
-    lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-11} \\cmidrule(lr){12-12}")
+    lines.append("& \\multicolumn{4}{c}{IOI} & \\multicolumn{2}{c}{Arithmetic} & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
+    lines.append("\\cmidrule(lr){2-5} \\cmidrule(lr){6-7} \\cmidrule(lr){8-10} \\cmidrule(lr){11-12} \\cmidrule(lr){13-13}")
     header = "\\textbf{Method} & " + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\"
     lines.append(header)
 

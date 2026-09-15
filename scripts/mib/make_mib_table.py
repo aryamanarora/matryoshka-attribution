@@ -46,7 +46,12 @@ COLUMNS = [
     ("ioi", "qwen2.5", "Qwen"),
     ("ioi", "gemma2", "Gemma"),
     ("ioi", "llama3", "Llama"),
-    ("arithmetic_subtraction", "llama3", "Llama"),
+    # Both arithmetic tasks are llama3-only in MIB. Addition joined on 2026-09-15 (the paper's
+    # grid was 11 cells; the leaderboard needs 12). A row whose addition cell has not landed is
+    # treated exactly like any other partial row: Avg suppressed, excluded from section best/avg,
+    # and a NOTE printed -- so the tables never silently mix 11- and 12-cell averages.
+    ("arithmetic_addition", "llama3", "Llama ($+$)"),
+    ("arithmetic_subtraction", "llama3", "Llama ($-$)"),
     ("mcqa", "qwen2.5", "Qwen"),
     ("mcqa", "gemma2", "Gemma"),
     ("mcqa", "llama3", "Llama"),
@@ -941,8 +946,8 @@ def main():
     # decimal points still line up; centring costs nothing and the swatches become a grid.
     lines.append("\\begin{tabular}{lcc@{\\quad}" + "c" * ncols + "@{\\quad}c}")
     lines.append("\\toprule")
-    lines.append("& & & \\multicolumn{4}{c}{IOI} & Arithmetic & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
-    lines.append("\\cmidrule(lr){4-7} \\cmidrule(lr){8-8} \\cmidrule(lr){9-11} \\cmidrule(lr){12-13} \\cmidrule(lr){14-14}")
+    lines.append("& & & \\multicolumn{4}{c}{IOI} & \\multicolumn{2}{c}{Arithmetic} & \\multicolumn{3}{c}{MCQA} & \\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\")
+    lines.append("\\cmidrule(lr){4-7} \\cmidrule(lr){8-9} \\cmidrule(lr){10-12} \\cmidrule(lr){13-14} \\cmidrule(lr){15-15}")
     header = ("\\textbf{Method} & \\textbf{LR} & \\textbf{Bwd.} & "
               + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\")
     lines.append(header)
