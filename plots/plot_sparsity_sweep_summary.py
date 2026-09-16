@@ -165,8 +165,9 @@ def series_of(block):
 def load():
     """{block: [(label, dash, [(knob, {metric: mean or None})])]}, plus the exclusion log.
 
-    Per-metric completeness over make_lr_table.COLUMNS, the same rule and the same 11 MIB
-    validation cells as plot_lr_sweep_summary.load(). The table's own rows are all 11/11; the KL
+    Per-metric completeness over make_lr_table.SPARSITY_COLUMNS: the 12 MIB validation cells
+    of mib_results.tex (the LR table's 11 plus arithmetic_addition/llama3), the same rule as
+    plot_lr_sweep_summary.load() over its 11. The table's own rows are all 12/12; the KL
     series is where this bites, since its sparsest budgets were trained before the others.
     """
     out, skipped = {}, []
@@ -184,11 +185,11 @@ def load():
                     continue
                 rec, miss = {}, []
                 for key, _ in METRICS:
-                    got = [v for v in (M.cpr(dirn, t, m, key) for t, m, _ in M.COLUMNS)
+                    got = [v for v in (M.cpr(dirn, t, m, key) for t, m, _ in M.SPARSITY_COLUMNS)
                            if v is not None]
-                    rec[key] = float(np.mean(got)) if len(got) == len(M.COLUMNS) else None
+                    rec[key] = float(np.mean(got)) if len(got) == len(M.SPARSITY_COLUMNS) else None
                     if rec[key] is None:
-                        miss.append(f"{key} {len(got)}/{len(M.COLUMNS)}")
+                        miss.append(f"{key} {len(got)}/{len(M.SPARSITY_COLUMNS)}")
                 if miss:
                     skipped.append(f"  {name} / {label} {lab} ({dirn}): {', '.join(miss)} -- "
                                    f"dropped from "
@@ -297,10 +298,10 @@ def main():
     print("wrote", a.out)
 
     if skipped:
-        print(f"\nexcluded ({len(M.COLUMNS)} MIB validation cells required per metric):")
+        print(f"\nexcluded ({len(M.SPARSITY_COLUMNS)} MIB validation cells required per metric):")
         print("\n".join(skipped))
     else:
-        print(f"\nno exclusions: every series is {len(M.COLUMNS)}/{len(M.COLUMNS)} everywhere")
+        print(f"\nno exclusions: every series is {len(M.SPARSITY_COLUMNS)}/{len(M.SPARSITY_COLUMNS)} everywhere")
     print("\nbest knob per series:")
     for name in blocks:
         for label, _, pts in data[name]:

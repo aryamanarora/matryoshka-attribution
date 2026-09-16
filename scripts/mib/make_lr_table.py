@@ -29,6 +29,10 @@ SPARSITY_OUTPUT = Path("paper/tabs/sparsity_sweep.tex")
 # (see the cpr-auc-is-dense-end-dominated note: ~90% of a CPR AUC is k>=20%, where they tie).
 LR_ACCAUC_OUTPUT = Path("paper/tabs/lr_sweep_accauc.tex")
 
+# The LR table's 11 MIB validation cells. The LR sweeps were run before arithmetic_addition
+# was wired in (2026-09) and none of their dirs has that cell, so adding the column here would
+# suppress the Avg of every LR row (render() prints no Avg below full coverage). It stays at
+# 11 until the LR sweeps are rerun on addition; the sparsity table is at 12, below.
 COLUMNS = [
     ("ioi", "gpt2", "GPT"), ("ioi", "qwen2.5", "Qwen"), ("ioi", "gemma2", "Gemma"),
     ("ioi", "llama3", "Llama"), ("arithmetic_subtraction", "llama3", "Llama"),
@@ -36,6 +40,44 @@ COLUMNS = [
     ("arc_easy", "gemma2", "Gemma"), ("arc_easy", "llama3", "Llama"),
     ("arc_challenge", "llama3", "Llama"),
 ]
+# The sparsity table's 12 cells: the same 11 plus arithmetic_addition/llama3, which both
+# sparsity ladders (Node Pruning s, DBM L1) were run on in 2026-09
+# (scripts/mib/launch/submit_arith_add_sweep_sc.sh). This is the column set of
+# mib_results.tex, so the sweep figure (plots/plot_sparsity_sweep_summary.py) averages over
+# the same cells as the headline table.
+SPARSITY_COLUMNS = (COLUMNS[:4]
+                    + [("arithmetic_addition", "llama3", "Llama ($+$)"),
+                       ("arithmetic_subtraction", "llama3", "Llama ($-$)")]
+                    + COLUMNS[5:])
+assert [c[:2] for c in SPARSITY_COLUMNS if c[0] != "arithmetic_addition"] == [c[:2] for c in COLUMNS]
+
+# Task -> header group label. Consecutive columns with the same group share one
+# \multicolumn and one \cmidrule, so both column sets render from the same code.
+TASK_GROUP = {"ioi": "IOI", "arithmetic_addition": "Arithmetic",
+              "arithmetic_subtraction": "Arithmetic", "mcqa": "MCQA",
+              "arc_easy": "ARC (E)", "arc_challenge": "ARC (C)"}
+
+
+def header_lines(columns, stub):
+    r"""\toprule through \midrule for `columns`. Task columns start at 2 (col 1 is the row
+    label) and Avg is the rightmost column, matching mib_results.tex / mib_test_results.tex /
+    mib_accauc_results.tex, so a reader moving between tables finds the summary in the same
+    place. Arithmetic's group spans one column in the LR table and two in the sparsity table;
+    a lone column gets a plain header cell, not a 1-wide \multicolumn."""
+    groups = []  # [group, first_col, last_col]
+    for i, (t, _, _) in enumerate(columns, start=2):
+        g = TASK_GROUP[t]
+        if groups and groups[-1][0] == g:
+            groups[-1][2] = i
+        else:
+            groups.append([g, i, i])
+    cells = [f"\\multicolumn{{{b - a + 1}}}{{c}}{{{g}}}" if b > a else g for g, a, b in groups]
+    rules = " ".join(f"\\cmidrule(lr){{{a}-{b}}}" for _, a, b in groups)
+    return ["\\toprule",
+            "& " + " & ".join(cells) + " & \\\\",
+            rules,
+            f"\\textbf{{{stub}}} & " + " & ".join(h for _, _, h in columns) + " & \\textbf{Avg} \\\\",
+            "\\midrule"]
 
 # method -> list of (lr-label, results-dir), optionally followed by the row-label prefix for
 # blocks that sweep something other than the learning rate (default "LR$=$").
@@ -192,7 +234,7 @@ SPARSITY_METHODS = [
         ("1.25", "eprun_eval_s1.25_ld"),
         # 8/11 as of 2026-08-25 (ioi/gemma2, arc_easy/llama3, arc_challenge/llama3 still
         # training), so its Avg renders suppressed here and the point is DROPPED entirely from
-        # plot_sparsity_sweep_summary.py, which requires 11/11 per metric. Listed anyway so the
+        # plot_sparsity_sweep_summary.py, which requires 12/12 per metric. Listed anyway so the
         # row appears the moment the cells land; do not read its per-cell numbers as a mean.
         ("2.0", "eprun_eval_s2.0_ld"),
     ], "$s{=}$"),
@@ -397,7 +439,7 @@ def fmt(v, bold=False, dagger=False, empty=False):
     return ("$^{\\dagger}$" + s) if dagger else s
 
 
-def render(methods, output, stub, key="area_under"):
+def render(methods, output, stub, key="area_under", columns=COLUMNS):
     """Emit one adjustbox+tabular fragment, to be \\input inside a table float.
 
     No float, no caption, no \\label here: this file is overwritten on every run, so anything
@@ -409,8 +451,11 @@ def render(methods, output, stub, key="area_under"):
 
     `key` is the pkl metric (see cpr): the CPR and acc-AUC tables are the SAME blocks,
     the same bolding and the same daggers, read from the same pkls at a different key.
+
+    `columns` is the cell set (COLUMNS for the LR tables, SPARSITY_COLUMNS for the sparsity
+    one); full coverage of it is what gates the Avg column.
     """
-    ncols = len(COLUMNS)
+    ncols = len(columns)
     # Both tables render the same blocks, so every SKIP/WARNING below fires twice per run
     # with identical text. Tag them or the acc-AUC table's coverage holes read as duplicates
     # of the CPR table's, which they are not -- acc_auc is missing from strictly more cells.
@@ -421,28 +466,16 @@ def render(methods, output, stub, key="area_under"):
     # these two tables fits on one page -- adjustbox typesets into a single box, and a box
     # cannot break across pages, which is why the combined 12-block version had to be a
     # longtable and could not be scaled at all.
-    # Avg is the RIGHTMOST column, matching mib_results.tex / mib_test_results.tex /
-    # mib_accauc_results.tex, so a reader moving between tables finds the summary in the same
-    # place. Task columns therefore start at 2, not 3; the cmidrule indices below are the one
-    # place that offset is hardcoded (the edge table has the same offset in header_lines()).
-    header = ["\\toprule",
-              "& \\multicolumn{4}{c}{IOI} & Arith & \\multicolumn{3}{c}{MCQA} & "
-              "\\multicolumn{2}{c}{ARC (E)} & ARC (C) & \\\\",
-              "\\cmidrule(lr){2-5} \\cmidrule(lr){6-6} \\cmidrule(lr){7-9} "
-              "\\cmidrule(lr){10-11} \\cmidrule(lr){12-12}",
-              f"\\textbf{{{stub}}} & "
-              + " & ".join(h for _, _, h in COLUMNS) + " & \\textbf{Avg} \\\\",
-              "\\midrule"]
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
              "\\begin{tabular}{l" + "r" * ncols + "@{\\quad}r}"]
-    lines += header
+    lines += header_lines(columns, stub)
 
     emitted = 0
     for entry in methods:
         method, lrs = entry[0], entry[1]
         prefix = entry[2] if len(entry) > 2 else "LR$=$"
-        data = {lr: {(t, m): cpr(d, t, m, key) for t, m, _ in COLUMNS} for lr, d in lrs}
-        empty = {lr: {(t, m): empty_circuit(d, t, m) for t, m, _ in COLUMNS} for lr, d in lrs}
+        data = {lr: {(t, m): cpr(d, t, m, key) for t, m, _ in columns} for lr, d in lrs}
+        empty = {lr: {(t, m): empty_circuit(d, t, m) for t, m, _ in columns} for lr, d in lrs}
         # A block whose only populated row is the control (an existing run reused as the
         # sweep's zero point) is not yet a sweep -- it would render as one row of numbers
         # over four rows of "---". Skip it until a second point lands; it then appears on
@@ -454,7 +487,7 @@ def render(methods, output, stub, key="area_under"):
             lines.append("\\midrule")
         emitted += 1
         best = {}
-        for t, m, _ in COLUMNS:
+        for t, m, _ in columns:
             # Collapsed DCM runs are excluded here, not just marked: they routinely score
             # above the runs that hit their pin, so leaving them in would bold an empty
             # circuit as the block's best learning rate.
@@ -467,7 +500,7 @@ def render(methods, output, stub, key="area_under"):
         lines.append(f"\\multicolumn{{{ncols + 2}}}{{l}}{{\\textit{{{method}}}"
                      f"{steps_note(method)}}} \\\\")
         for lr, _ in lrs:
-            present = [data[lr][(t, m)] for t, m, _ in COLUMNS if data[lr][(t, m)] is not None]
+            present = [data[lr][(t, m)] for t, m, _ in columns if data[lr][(t, m)] is not None]
             # Same rule as the block-level skip above, one level down: a row with no populated
             # cells renders as 12 "---" and reads as an LR that was run and scored nothing,
             # which is a wrong claim rather than a gap. Drop it until its first cell lands; it
@@ -480,24 +513,24 @@ def render(methods, output, stub, key="area_under"):
             # go missing are the slow llama3 ones, which are also the high-CPR ones, so a partial
             # row reads as a worse LR than it is. Suppress it until the row is complete rather than
             # print a number that invites exactly the comparison it cannot support.
-            if len(present) == len(COLUMNS):
+            if len(present) == len(columns):
                 avg = f"{sum(present) / len(present):.2f}"
             else:
                 avg = "---"
                 if present:
-                    print(f"[{tag}] WARNING: {method} {prefix}{lr} has {len(present)}/{len(COLUMNS)} cells; "
+                    print(f"[{tag}] WARNING: {method} {prefix}{lr} has {len(present)}/{len(columns)} cells; "
                           f"Avg suppressed (missing "
-                          f"{[f'{t}/{m}' for t, m, _ in COLUMNS if data[lr][(t, m)] is None]})")
+                          f"{[f'{t}/{m}' for t, m, _ in columns if data[lr][(t, m)] is None]})")
             cells = [fmt(data[lr][(t, m)],
                          bold=(data[lr][(t, m)] is not None and not empty[lr][(t, m)]
                                and data[lr][(t, m)] == best[(t, m)]),
                          dagger=(is_capped and (t, m) in DAGGER_CELLS and data[lr][(t, m)] is not None),
                          empty=empty[lr][(t, m)])
-                     for t, m, _ in COLUMNS]
+                     for t, m, _ in columns]
             # An Avg over cells that are all empty circuits is an average of trajectory
             # rankings; mark it so the block-level number carries the same warning as the
             # cells it came from, rather than laundering it into a clean-looking mean.
-            n_empty = sum(1 for t, m, _ in COLUMNS
+            n_empty = sum(1 for t, m, _ in columns
                           if empty[lr][(t, m)] and data[lr][(t, m)] is not None)
             if n_empty:
                 print(f"[{tag}] WARNING: {method} {prefix}{lr} has {n_empty}/{len(present)} cells whose "
@@ -516,7 +549,7 @@ def render(methods, output, stub, key="area_under"):
 
 def main():
     render(LR_METHODS, LR_OUTPUT, "Method / LR")
-    render(SPARSITY_METHODS, SPARSITY_OUTPUT, "Method / sparsity")
+    render(SPARSITY_METHODS, SPARSITY_OUTPUT, "Method / sparsity", columns=SPARSITY_COLUMNS)
     render(LR_METHODS, LR_ACCAUC_OUTPUT, "Method / LR", key="acc_auc")
 
 
