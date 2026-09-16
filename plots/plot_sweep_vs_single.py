@@ -49,7 +49,7 @@ DBM_SINGLE = next(d for name, d, _ in T.MASK_NODE_BASELINES if name == "DBM")
 NP_SINGLE = T.NODE_PRUNING[1]
 MATTR = next(d for name, d in T.OUR_NODE_METHODS if name == MV.OURMETHOD)   # the bare headline row
 COLOUR = {"np": P.METHOD["Node Pruning"], "dbm": P.METHOD["DBM"], "ours": P.METHOD["MAttr"]}
-METRICS = [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")]
+METRICS = [(0, "CPR (↑)"), (1, "Compactness (↑)")]
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
 BAR_W = 0.2

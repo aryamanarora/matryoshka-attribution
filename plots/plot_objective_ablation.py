@@ -54,8 +54,9 @@ MODEL_SHORT = {"gpt2": "GPT-2", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": 
 # (reader name, index into the reader's tuple, y label), top to bottom. "den" is
 # summarize_mode_ablation.read -> (area_under, acc_auc); "noi" is read_noising below ->
 # (area_from_1, flip_acc_auc).
-PANELS = [("den", 0, "CPR AUC (↑)"), ("den", 1, "Compactness (↑)"),
-          ("noi", 0, "Noising\narea from 1 (↑)"), ("noi", 1, "Noising\nflip acc-AUC (↑)")]
+# Labels (user's naming, 2026-09-16): the noising pair is "Cause-" + the denoising name.
+PANELS = [("den", 0, "CPR (↑)"), ("den", 1, "Compactness (↑)"),
+          ("noi", 0, "Cause-CPR (↑)"), ("noi", 1, "Cause-Comp. (↑)")]
 
 
 def read_noising(d, task, model, split):
