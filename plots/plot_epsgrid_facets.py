@@ -161,9 +161,45 @@ def baselines(refs, key):
     return tuple(out)
 
 
+# --tag unifk (2026-09-16): the UNIFORM-k twin of the grid -- scripts/sva/launch/
+# submit_epslr_unifk_sc.sh, same four substrates and the same 6 x 4 grid with only the
+# k-schedule changed (uniform is the headline schedule since 2026-09-15). Trees are the log-k
+# ones suffixed _unifk (the Llama MLP row's log-k tree is results/adamsgd_mlp/A_eps; its twin is
+# results/epslr_mlpn_unifk). The IG references are k-independent and reused; the SGD reference
+# must be uniform-k too, so it is the <tree>/refs run the launcher adds, found by glob -- when
+# it has not landed the log-k SGD reference is used and named on stdout.
+UNIFK_TREE = {"results/epslr_node": "results/epslr_node_unifk",
+              "results/epslr_mlpn_gemma2": "results/epslr_mlpn_gemma2_unifk",
+              "results/adamsgd_mlp/A_eps": "results/epslr_mlpn_unifk",
+              "results/saefrozen_epslr": "results/saefrozen_epslr_unifk"}
+
+
+def unifk_rows():
+    import glob as _glob
+    out = []
+    for rlab, res, refs in ROWS:
+        tree = UNIFK_TREE[res]
+        r = dict(refs)
+        sgd = sorted(_glob.glob(os.path.join(ROOT, tree, "refs", "*sgd*.scores.pt")))
+        if sgd:
+            r["rho_sgd"] = os.path.relpath(sgd[0], ROOT)
+        else:
+            print(f"  NOTE {rlab}: no uniform-k SGD reference in {tree}/refs yet; using the log-k one")
+        out.append((rlab, tree, r))
+    return out
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default=None, choices=[None, "unifk"],
+                    help="unifk: the uniform-k twin (separate trees, separate output file)")
+    a = ap.parse_args()
+    rows, out_path = ROWS, "plots/epsgrid_facets.pdf"
+    if a.tag == "unifk":
+        rows, out_path = unifk_rows(), "plots/epsgrid_facets_unifk.pdf"
     M = {}
-    for ri, (rlab, res, refs) in enumerate(ROWS):
+    for ri, (rlab, res, refs) in enumerate(rows):
         for key, _t, _c, _lo, _hi, tf in COLS:
             m = D.eps_grid_matrix(res, key, refs=refs, epss=EPSS, lrs=LRS)
             if m is None:
@@ -173,15 +209,15 @@ def main():
                 M[(ri, key)] = tf(m) if tf is not None else m
 
     base = {(ri, k): baselines(refs, k)
-            for ri, (_, _, refs) in enumerate(ROWS) for k in MARK_KEYS}
+            for ri, (_, _, refs) in enumerate(rows) for k in MARK_KEYS}
 
     underline = []
     plt.rcParams.update(P.RC)
-    fh = PANEL_H * len(ROWS) + HEAD + FOOT
-    fig, axes = plt.subplots(len(ROWS), len(COLS), figsize=(FIG_W, fh),
+    fh = PANEL_H * len(rows) + HEAD + FOOT
+    fig, axes = plt.subplots(len(rows), len(COLS), figsize=(FIG_W, fh),
                              squeeze=False)
     for ci, (key, title, cmap, vmin, vmax, tf) in enumerate(COLS):
-        for ri, (rlab, _, _) in enumerate(ROWS):
+        for ri, (rlab, _, _) in enumerate(rows):
             ax = axes[ri][ci]
             m = M[(ri, key)]
             norm = (TwoSlopeNorm(vcenter=1.0, vmin=vmin, vmax=vmax)
@@ -216,14 +252,14 @@ def main():
                             underline.append(t)
             ax.set_xticks(range(len(LRS)))
             ax.set_yticks(range(len(EPSS)))
-            ax.set_xticklabels(LRS if ri == len(ROWS) - 1 else [])
+            ax.set_xticklabels(LRS if ri == len(rows) - 1 else [])
             ax.set_yticklabels(EPS_LAB if ci == 0 else [])
             ax.tick_params(labelsize=FS_TICK, length=1.2, pad=1.0)
             for sp in ax.spines.values():
                 sp.set_linewidth(0.5)
             if ci == 0:
                 ax.set_ylabel("Adam $\\epsilon$", fontsize=FS_LAB, labelpad=1.5)
-            if ri == len(ROWS) - 1:
+            if ri == len(rows) - 1:
                 ax.set_xlabel("Learning rate", fontsize=FS_LAB, labelpad=1.5)
             if ci == len(COLS) - 1:
                 # Facet strip on the right, ggplot-style: the substrate name is ~0.6in at 6pt
@@ -269,14 +305,14 @@ def main():
         fig.add_artist(Line2D([x0, x1], [y0 - UNDERLINE_PAD] * 2, lw=UNDERLINE_LW,
                               color=t.get_color(), transform=fig.transFigure, zorder=5))
 
-    out = "plots/epsgrid_facets.pdf"
+    out = out_path
     fig.savefig(out)
     fig.savefig(out.replace(".pdf", ".png"), dpi=200)
-    print(f"wrote {out}   {len(ROWS)} substrates x {len(COLS)} metrics\n")
+    print(f"wrote {out}   {len(rows)} substrates x {len(COLS)} metrics\n")
     # The figure marks only "beats BOTH". These counts keep the one-baseline cases available
     # without spending ink on them -- and they are what the docstring's claim rests on.
     print(f"{'substrate':<16}{'metric':<11}{'>IG':>6}{'>SGD':>7}{'>both':>7}{'cells':>7}")
-    for ri, (rlab, _, refs) in enumerate(ROWS):
+    for ri, (rlab, _, refs) in enumerate(rows):
         for key in MARK_KEYS:
             m = M[(ri, key)]
             ig_v, sgd_v = base[(ri, key)]
@@ -286,7 +322,7 @@ def main():
                   f"{int(np.isfinite(m).sum()):>7}")
     print()
     print(f"{'substrate':<16}" + "".join(f"{c[0]:>22}" for c in COLS))
-    for ri, (rlab, _, _) in enumerate(ROWS):
+    for ri, (rlab, _, _) in enumerate(rows):
         print(f"{rlab:<16}" + "".join(
             f"{np.nanmin(M[(ri, k)]):>10.3f}..{np.nanmax(M[(ri, k)]):<11.3f}"
             for k, *_ in COLS))
