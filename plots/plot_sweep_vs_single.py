@@ -4,9 +4,11 @@ the headline \\ourmethod{} beside them.
     uv run python plots/plot_sweep_vs_single.py [--split test]
     -> plots/sweep_vs_single.pdf (+ .png); copied to figs/ next to the sparsity sweep figure.
 
-FIVE BARS PER CELL. First the headline \\ourmethod{} (make_mib_test_table.OUR_NODE_METHODS' bare
-row, i.e. mattr_variants.HEADLINE -- one 500-step run, the reference the sweeps are trying to
-reach). Then, for each of the two mask learners, the single configuration the test table
+FOUR BARS PER CELL AND A RULE. The rule across each group is the headline \\ourmethod{}
+(make_mib_test_table.OUR_NODE_METHODS' bare row, i.e. mattr_variants.HEADLINE -- one 500-step
+run, the reference the sweeps are trying to reach); a rule rather than a fifth bar so the
+eye compares the four mask-learner bars against it instead of among five. The bars, for each
+of the two mask learners, the single configuration the test table
 reports (make_mib_test_table.NODE_PRUNING -- Node Pruning at make_mib_table.EPRUN_BEST_SPARSITY,
 s=0.5 logit-diff -- and MASK_NODE_BASELINES' DBM at lr 0.3, lambda 6) beside the same method's
 sparsity LADDER read as a frontier (scripts/mib/eval_dbm_multisparsity.py: every rung evaluated
@@ -30,6 +32,7 @@ import pickle
 import sys
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -49,7 +52,8 @@ COLOUR = {"np": P.METHOD["Node Pruning"], "dbm": P.METHOD["DBM"], "ours": P.METH
 METRICS = [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")]
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
-BAR_W = 0.17
+BAR_W = 0.2
+REF_LW = 1.0
 
 
 def single(dirn, task, model, split):
@@ -83,7 +87,6 @@ def main():
     ap.add_argument("--out", default="plots/sweep_vs_single.pdf")
     a = ap.parse_args()
     series = [
-        ("ours", "MAttr", False, lambda t, m: mattr(t, m, a.split)),
         ("np", "Node Pruning", False, lambda t, m: single(NP_SINGLE, t, m, a.split)),
         ("np", "Node Pruning (sweep)", True, lambda t, m: ladder(_DBMMS.NP_RESULTS, t, m, a.split)),
         ("dbm", "DBM", False, lambda t, m: single(DBM_SINGLE, t, m, a.split)),
@@ -91,12 +94,14 @@ def main():
     ]
     cols = [(t, m) for t, m, _ in M.COLUMNS]
     data = {lab: {c: f(*c) for c in cols} for _, lab, _, f in series}
-    shared = [c for c in cols if all(data[lab][c] is not None for _, lab, _, _ in series)]   # all five
+    ref = {c: mattr(*c, a.split) for c in cols}
+    shared = [c for c in cols
+              if all(data[lab][c] is not None for _, lab, _, _ in series) and ref[c] is not None]
     for _, lab, _, _ in series:
         miss = [f"{t}/{m}" for t, m in cols if data[lab][(t, m)] is None]
         if miss:
             print(f"  NOTE {lab} ({a.split}): missing {miss}")
-    print(f"  Avg over {len(shared)}/{len(cols)} cells present in all five series")
+    print(f"  Avg over {len(shared)}/{len(cols)} cells present in all four series and the reference")
 
     plt.rcParams.update(P.RC)
     fh = HEAD + len(METRICS) * PANEL_H + FOOT
@@ -122,9 +127,21 @@ def main():
                     ax.annotate(f"{v:.2f}", (x + off, v), textcoords="offset points",
                                 xytext=(0, 1.2), ha="center", va="bottom", fontsize=FS_ANNOT,
                                 rotation=90, zorder=6)
+        # The headline rule, spanning the group's four bars; Avg over the shared cells.
+        half = len(series) * BAR_W / 2
+        for x, g in zip(xs, groups):
+            if g == "avg":
+                v = [ref[c][key] for c in shared if ref[c][key] is not None]
+                rv = sum(v) / len(v) if v else None
+            else:
+                rv = None if ref[g] is None else ref[g][key]
+            if rv is not None:
+                ax.plot([x - half, x + half], [rv, rv], color=COLOUR["ours"], lw=REF_LW,
+                        solid_capstyle="butt", zorder=5)
         ax.axvline(len(cols) - 0.5, color="#999999", lw=0.5, ls=(0, (2, 2)), zorder=1)
         ax.set_ylabel(ylab, fontsize=FS_AXIS)
-        top = max(v[key] for lab in data for v in data[lab].values() if v is not None and v[key] is not None)
+        top = max([v[key] for lab in data for v in data[lab].values() if v is not None and v[key] is not None]
+                  + [v[key] for v in ref.values() if v is not None and v[key] is not None])
         ax.set_ylim(0, top * 1.28)
         ax.grid(True, lw=0.25, color="#dddddd"); ax.set_axisbelow(True); ax.grid(False, axis="x")
         for side in ("top", "right"):
@@ -142,7 +159,8 @@ def main():
     plt.rcParams["hatch.linewidth"] = 0.5
     fig.legend(handles=[Patch(facecolor=COLOUR[fam], hatch="////" if h else None,
                               edgecolor="white" if h else COLOUR[fam], label=lab)
-                        for fam, lab, h, _ in series],
+                        for fam, lab, h, _ in series]
+               + [Line2D([0], [0], color=COLOUR["ours"], lw=REF_LW, label="MAttr")],
                fontsize=FS_LEG, ncol=5, loc="upper center", bbox_to_anchor=(0.5, 0.998),
                frameon=False, handlelength=1.4, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
