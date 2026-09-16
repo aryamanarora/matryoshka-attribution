@@ -123,6 +123,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import palette as P                                     # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                 # RC only  # noqa: E402
 import make_lr_table as M                               # SPARSITY_METHODS + cpr()  # noqa: E402
+import dbm_multisparsity as _DBMMS                      # the ladders on MIB's grid  # noqa: E402
 # The row-label parser is IMPORTED, not restated. Both sweep tables write their knob values as
 # "<number>" or "<number> (<note>)" and both figures have to strip the note the same way; two
 # copies of that regex is how the two figures would come to disagree about which rows are
@@ -137,15 +138,34 @@ UNLABELLED_TICKS = {40.0}
 
 # block name (verbatim from make_lr_table.SPARSITY_METHODS) -> column style. `extra` lists series
 # that are NOT rows of that table (none since the KL series was dropped; the mechanism stays).
+# `ladder`: the results dir of the same rungs read as a FRONTIER (eval_dbm_multisparsity.py,
+# scored on MIB's grid by dbm_multisparsity.cell), drawn as a horizontal reference line at its
+# average over the same cells (2026-09-16, requested). *** IT IS THE TEST SPLIT. *** The sweep
+# curves are validation; the ladders were evaluated on test only (the validation DBM ladder
+# was declined as GPU time not worth spending, see make_mib_table.DBM_MULTI_ROW), so the line
+# is labelled with its split and is a reference, not a point of the curve. It is drawn only
+# when every cell of SPARSITY_COLUMNS has a ladder JSON; a partial wave prints a note instead.
+LADDER_SPLIT = "test"
 STYLE = {
     "Node Pruning (logit-diff, LR $=$ 0.8)": dict(
         title="Node Pruning (lr 0.8)", xlabel="target sparsity $s$",
         colour=P.METHOD["Node Pruning"], xscale="linear",
-        label="logit-diff loss", dash="solid", extra=[]),
+        label="logit-diff loss", dash="solid", extra=[], ladder=_DBMMS.NP_RESULTS),
     "DBM $+$ L1 (lr $=$ 0.3)": dict(
         title="DBM (logit-diff, lr 0.3)", xlabel=r"L1 coefficient $\lambda$",
-        colour=P.METHOD["DBM"], xscale="symlog", label="logit-diff loss", dash="solid", extra=[]),
+        colour=P.METHOD["DBM"], xscale="symlog", label="logit-diff loss", dash="solid", extra=[],
+        ladder=_DBMMS.RESULTS),
 }
+
+
+def ladder_mean(base, metric):
+    """Mean of the ladder's CPR (metric index 0) or IIA (1) over SPARSITY_COLUMNS, or None."""
+    got = [_DBMMS.cell(t, m, LADDER_SPLIT, base=base) for t, m, _ in M.SPARSITY_COLUMNS]
+    if not all(got):
+        print(f"  ladder {base}: {sum(1 for g in got if g)}/{len(got)} {LADDER_SPLIT} cells -- "
+              f"no reference line")
+        return None
+    return float(np.mean([g[metric] for g in got]))
 # (metric key, y label, output stem). "CPR", not "CPR AUC": the table and the bar chart call the
 # same quantity CPR, and the AUC is implicit in every MIB number the paper prints.
 METRICS = [("area_under", "CPR (↑)", "sparsity_sweep_cpr"),
@@ -279,6 +299,14 @@ def main():
                 if bi is not None:
                     ax.plot([x[bi]], [y[bi]], "o", ms=6.5, mfc="none", mec=st["colour"],
                             mew=0.8, zorder=4)
+            ref = ladder_mean(st["ladder"], 0 if metric == "area_under" else 1) if st.get("ladder") else None
+            if ref is not None:
+                ax.axhline(ref, ls=DASH, lw=0.9, color=st["colour"], alpha=0.9, zorder=1,
+                           label=f"multi-sparsity ({LADDER_SPLIT})")
+                # axhline does not autoscale; keep the line inside the (shared) y range.
+                lo, hi = ax.get_ylim()
+                pad = 0.06 * (hi - lo)
+                ax.set_ylim(min(lo, ref - pad), max(hi, ref + pad))
             style_axis(ax, st["xscale"], ticks)
             ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
             ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
@@ -287,10 +315,10 @@ def main():
             else:
                 # AFTER style_axis, which resets labelsize but not visibility.
                 ax.tick_params(labelleft=False)
-            # A legend only when a panel draws more than one series (none do since the KL
-            # series was dropped); first panel, where the curves leave the corner free.
-            if i == 0 and len(ser) > 1:
-                ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
+            # A legend wherever a panel draws more than its one curve: the ladder's
+            # reference line (or an `extra` series, none since KL was dropped).
+            if len(ser) > 1 or ref is not None:
+                ax.legend(fontsize=FS_ANNOT, loc="best", frameon=True,
                           framealpha=0.9, borderpad=0.3, handlelength=2.0,
                           handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
         fig.tight_layout(pad=0.35, w_pad=0.6)
