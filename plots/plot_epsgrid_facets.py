@@ -180,9 +180,9 @@ def unifk_rows():
     for rlab, res, refs in ROWS:
         tree = UNIFK_TREE[res]
         r = dict(refs)
-        sgd = sorted(_glob.glob(os.path.join(ROOT, tree, "refs", "*sgd*.scores.pt")))
+        sgd = sorted(_glob.glob(os.path.join(D.ROOT, tree, "refs", "*sgd*.scores.pt")))
         if sgd:
-            r["rho_sgd"] = os.path.relpath(sgd[0], ROOT)
+            r["rho_sgd"] = os.path.relpath(sgd[0], D.ROOT)
         else:
             print(f"  NOTE {rlab}: no uniform-k SGD reference in {tree}/refs yet; using the log-k one")
         out.append((rlab, tree, r))
