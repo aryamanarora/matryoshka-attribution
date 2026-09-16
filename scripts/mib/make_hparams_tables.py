@@ -1,7 +1,8 @@
 """Generate the two hyperparameter tables of paper/sections/hparams.tex:
 
     uv run python scripts/mib/make_hparams_tables.py
-        -> paper/tabs/hparams_mib.tex   (tab:hparams-mib, the MIB methods of fig:cpr-mib-test)
+        -> paper/tabs/hparams_mib.tex        (tab:hparams-mib, node-level MIB methods of fig:cpr-mib-test)
+        -> paper/tabs/hparams_mib_edge.tex   (tab:hparams-mib-edge, edge-level MIB methods of the same figure)
         -> paper/tabs/hparams_sva.tex   (tab:hparams-sva, the SVA+ methods of fig:acc-faith)
 
 Both tables carry the SAME MAttr rows as the results tables they sit next to, in the same order
@@ -159,14 +160,20 @@ def fixed_rows(spec):
 
 
 def build_mib():
+    """Node-level table."""
     L = list(HEADER)
-    L.append("\\multicolumn{7}{l}{\\textit{Node-level}} \\\\")
     L += mattr_rows(T.OUR_NODE_METHODS, describe_mib)
     L.append("\\midrule")
     L += fixed_rows(MIB_FIXED_NODE)
-    L.append("\\midrule")
-    L.append("\\multicolumn{7}{l}{\\textit{Edge-level}} \\\\")
+    L += FOOTER
+    return "\n".join(L) + "\n"
+
+
+def build_mib_edge():
+    """Edge-level table."""
+    L = list(HEADER)
     L += mattr_rows(T.OUR_EDGE_METHODS, describe_mib)
+    L.append("\\midrule")
     L += fixed_rows(MIB_FIXED_EDGE)
     L += FOOTER
     return "\n".join(L) + "\n"
@@ -249,7 +256,8 @@ def build_sva():
 
 
 def main():
-    for fname, build in (("hparams_mib.tex", build_mib), ("hparams_sva.tex", build_sva)):
+    for fname, build in (("hparams_mib.tex", build_mib), ("hparams_mib_edge.tex", build_mib_edge),
+                         ("hparams_sva.tex", build_sva)):
         tex = build()
         (TABS / fname).write_text(tex)
         print(f"-> {TABS / fname}  ({tex.count(chr(10))} lines)")
