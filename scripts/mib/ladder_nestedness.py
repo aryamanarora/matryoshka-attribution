@@ -69,8 +69,8 @@ def write_tex(path, ladders, table):
     means = []
     for l in ladders:
         rs = [r for r in table[l].values() if r is not None]
-        means.append("& --- & ---" if not rs else
-                     f"& {sum(r[1] for r in rs) / len(rs):.2f} & {sum(r[2] for r in rs) / len(rs):.2f}")
+        means.append("& & --- & ---" if not rs else
+                     f"& & {sum(r[1] for r in rs) / len(rs):.2f} & {sum(r[2] for r in rs) / len(rs):.2f}")
     lines.append("\\textbf{Mean} " + " ".join(means) + " \\\\")
     lines += ["\\bottomrule", "\\end{tabular}"]
     Path(path).parent.mkdir(parents=True, exist_ok=True)
