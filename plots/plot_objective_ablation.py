@@ -23,13 +23,13 @@ alone (0.59 vs 2.06) cannot say that.
 Two panels stacked, sharing x, separate y (CPR AUC is unbounded and ~1 at chance, acc-AUC is in
 [0, 1]); they are not to be compared by bar height across panels.
 
---direction noising (2026-09-16) draws the same three runs under the FLIPPED intervention
+PANELS 3 AND 4 (2026-09-16) are the same three runs under the FLIPPED intervention
 (scripts/mib/eval_mib_noising.py -> <dir>/<task>_<model>_<split>_noising.pkl: the top-k are
-corrupted, the rest clean -- the direction cause and joint were trained for). Its two panels are
-the noising analogues: `area_from_1` (area between 1 and the faithfulness curve; the top-k break
-the behaviour sooner -> higher) and `flip_acc_auc` (log-weighted fraction of examples whose
-answer flips to the counterfactual -- the reverse IIA). Validation only; -> objective_ablation_
-noising.pdf.
+corrupted, the rest clean -- the direction cause and joint were trained for): `area_from_1`
+(area between 1 and the faithfulness curve; the top-k break the behaviour sooner -> higher) and
+`flip_acc_auc` (log-weighted fraction of examples whose answer flips to the counterfactual --
+the reverse IIA). Each panel averages over the cells it has for all three runs and draws no bar
+where a cell is missing, so a partial noising wave shows as gaps, not zeros; stdout names them.
 """
 import argparse
 import os
@@ -51,11 +51,11 @@ LABEL = {"iso": "iso (headline)", "cause": "cause", "joint": "joint"}
 TASK_SHORT = {"ioi": "IOI", "arithmetic_addition": "Arith ($+$)", "arithmetic_subtraction": "Arith ($-$)",
               "mcqa": "MCQA", "arc_easy": "ARC-E", "arc_challenge": "ARC-C"}
 MODEL_SHORT = {"gpt2": "GPT-2", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": "Llama"}
-# (metric index into summarize_mode_ablation.read's tuple, y label) per direction. The noising
-# reader below returns (area_from_1, flip_acc_auc) in the same positions.
-METRICS = {"denoising": [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")],
-           "noising": [(0, "Noising CPR: area from 1 (↑)"), (1, "Flip acc-AUC (↑)")]}
-OUT = {"denoising": "plots/objective_ablation.pdf", "noising": "plots/objective_ablation_noising.pdf"}
+# (reader name, index into the reader's tuple, y label), top to bottom. "den" is
+# summarize_mode_ablation.read -> (area_under, acc_auc); "noi" is read_noising below ->
+# (area_from_1, flip_acc_auc).
+PANELS = [("den", 0, "CPR AUC (↑)"), ("den", 1, "Compactness (↑)"),
+          ("noi", 0, "Noising: area from 1 (↑)"), ("noi", 1, "Noising: flip acc-AUC (↑)")]
 
 
 def read_noising(d, task, model, split):
@@ -68,7 +68,7 @@ def read_noising(d, task, model, split):
         r = pickle.load(f)
     return r.get("area_from_1"), r.get("flip_acc_auc")
 
-FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
+FIG_W, PANEL_H, FOOT, HEAD = 5.5, 0.95, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
 BAR_W = 0.26
 
@@ -76,36 +76,37 @@ BAR_W = 0.26
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="validation", choices=["validation", "test"])
-    ap.add_argument("--direction", default="denoising", choices=sorted(METRICS))
-    ap.add_argument("--out", default=None, help="default: OUT[direction]")
+    ap.add_argument("--out", default="plots/objective_ablation.pdf")
     a = ap.parse_args()
-    metrics = METRICS[a.direction]
-    out = a.out or OUT[a.direction]
-    read = A.read if a.direction == "denoising" else read_noising
 
     cols = [(t, m) for t, m, _ in M.COLUMNS]
     objs = [(name.split(" ")[0], d) for name, d in A.DIRS[a.split]]      # "iso (headline)" -> iso
-    data = {o: {c: read(d, *c, a.split) for c in cols} for o, d in objs}
-    shared = [c for c in cols if all(data[o][c] is not None for o in data)]
-    missing = [f"{t}/{m}" for t, m in cols if (t, m) not in shared]
-    if missing:
-        print(f"  NOTE {a.split}: {len(shared)}/{len(cols)} cells in every objective; missing {missing}")
+    readers = {"den": A.read, "noi": read_noising}
+    # data[reader][objective][cell] -> tuple or None; shared[reader] = cells every objective has
+    data = {r: {o: {c: f(d, *c, a.split) for c in cols} for o, d in objs} for r, f in readers.items()}
+    shared = {r: [c for c in cols if all(data[r][o][c] is not None for o in data[r])] for r in readers}
+    for r in readers:
+        missing = [f"{t}/{m}" for t, m in cols if (t, m) not in shared[r]]
+        if missing:
+            print(f"  NOTE {r} ({a.split}): {len(shared[r])}/{len(cols)} cells in every objective; "
+                  f"missing {missing}")
 
     plt.rcParams.update(P.RC)
-    fh = HEAD + len(metrics) * PANEL_H + FOOT
-    fig, axes = plt.subplots(len(metrics), 1, figsize=(FIG_W, fh), sharex=True)
+    fh = HEAD + len(PANELS) * PANEL_H + FOOT
+    fig, axes = plt.subplots(len(PANELS), 1, figsize=(FIG_W, fh), sharex=True)
     groups = cols + ["avg"]
     xs = list(range(len(groups)))
-    for ax, (key, ylab) in zip(axes, metrics):
+    for ax, (rd, key, ylab) in zip(axes, PANELS):
+        dd, sh = data[rd], shared[rd]
         for j, (o, _) in enumerate(objs):
             vals = []
             for g in groups:
                 if g == "avg":
-                    v = [data[o][c][key] for c in shared if data[o][c][key] is not None]
+                    v = [dd[o][c][key] for c in sh if dd[o][c][key] is not None]
                     vals.append(sum(v) / len(v) if v else None)
                 else:
-                    r = data[o][g]
-                    vals.append(None if r is None else r[key])
+                    r = dd[o][g]
+                    vals.append(None if r is None or r[key] is None else r[key])
             off = (j - (len(objs) - 1) / 2) * BAR_W
             ax.bar([x + off for x in xs], [0 if v is None else v for v in vals], width=BAR_W,
                    color=COLOUR[o], lw=0, zorder=2, label=LABEL[o])
@@ -116,7 +117,7 @@ def main():
                                 rotation=90, zorder=6)
         ax.axvline(len(cols) - 0.5, color="#999999", lw=0.5, ls=(0, (2, 2)), zorder=1)
         ax.set_ylabel(ylab, fontsize=FS_AXIS)
-        top = max(v[key] for o in data for v in data[o].values() if v is not None and v[key] is not None)
+        top = max([v[key] for o in dd for v in dd[o].values() if v is not None and v[key] is not None] or [1.0])
         ax.set_ylim(0, top * 1.28)
         ax.grid(True, lw=0.25, color="#dddddd"); ax.set_axisbelow(True); ax.grid(False, axis="x")
         for side in ("top", "right"):
@@ -135,9 +136,10 @@ def main():
                fontsize=FS_LEG, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 0.998),
                frameon=False, handlelength=1.2, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
-    fig.savefig(out)
-    fig.savefig(out.replace(".pdf", ".png"), dpi=200)
-    print(f"wrote {out} ({a.direction}, {a.split}, {len(shared)}/{len(cols)} complete cells)")
+    fig.savefig(a.out)
+    fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
+    print(f"wrote {a.out} ({a.split}; complete cells: denoising {len(shared['den'])}/{len(cols)}, "
+          f"noising {len(shared['noi'])}/{len(cols)})")
 
 
 if __name__ == "__main__":
