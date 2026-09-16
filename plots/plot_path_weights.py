@@ -78,7 +78,7 @@ rows = []
 for sched, p in SCHEDULES.items():
     for regime, gate in REGIMES.items():
         w = p(t) * gate(t)
-        w = w / np.trapz(w, t)
+        w = w / np.trapezoid(w, t)
         rows.append(pd.DataFrame({"t": t, "rho": w, "schedule": sched, "regime": regime}))
 df = pd.concat(rows)
 df["schedule"] = pd.Categorical(df["schedule"], list(SCHEDULES))
