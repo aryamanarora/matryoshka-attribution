@@ -22,6 +22,14 @@ alone (0.59 vs 2.06) cannot say that.
 
 Two panels stacked, sharing x, separate y (CPR AUC is unbounded and ~1 at chance, acc-AUC is in
 [0, 1]); they are not to be compared by bar height across panels.
+
+--direction noising (2026-09-16) draws the same three runs under the FLIPPED intervention
+(scripts/mib/eval_mib_noising.py -> <dir>/<task>_<model>_<split>_noising.pkl: the top-k are
+corrupted, the rest clean -- the direction cause and joint were trained for). Its two panels are
+the noising analogues: `area_from_1` (area between 1 and the faithfulness curve; the top-k break
+the behaviour sooner -> higher) and `flip_acc_auc` (log-weighted fraction of examples whose
+answer flips to the counterfactual -- the reverse IIA). Validation only; -> objective_ablation_
+noising.pdf.
 """
 import argparse
 import os
@@ -43,7 +51,22 @@ LABEL = {"iso": "iso (headline)", "cause": "cause", "joint": "joint"}
 TASK_SHORT = {"ioi": "IOI", "arithmetic_addition": "Arith ($+$)", "arithmetic_subtraction": "Arith ($-$)",
               "mcqa": "MCQA", "arc_easy": "ARC-E", "arc_challenge": "ARC-C"}
 MODEL_SHORT = {"gpt2": "GPT-2", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": "Llama"}
-METRICS = [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")]
+# (metric index into summarize_mode_ablation.read's tuple, y label) per direction. The noising
+# reader below returns (area_from_1, flip_acc_auc) in the same positions.
+METRICS = {"denoising": [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")],
+           "noising": [(0, "Noising CPR: area from 1 (↑)"), (1, "Flip acc-AUC (↑)")]}
+OUT = {"denoising": "plots/objective_ablation.pdf", "noising": "plots/objective_ablation_noising.pdf"}
+
+
+def read_noising(d, task, model, split):
+    """(area_from_1, flip_acc_auc) from eval_mib_noising.py's pkl, or None if absent."""
+    import pickle
+    p = M.RESULTS_BASE / d / f"{task}_{model}_{split}_noising.pkl"
+    if not p.exists():
+        return None
+    with open(p, "rb") as f:
+        r = pickle.load(f)
+    return r.get("area_from_1"), r.get("flip_acc_auc")
 
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
@@ -53,23 +76,27 @@ BAR_W = 0.26
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="validation", choices=["validation", "test"])
-    ap.add_argument("--out", default="plots/objective_ablation.pdf")
+    ap.add_argument("--direction", default="denoising", choices=sorted(METRICS))
+    ap.add_argument("--out", default=None, help="default: OUT[direction]")
     a = ap.parse_args()
+    metrics = METRICS[a.direction]
+    out = a.out or OUT[a.direction]
+    read = A.read if a.direction == "denoising" else read_noising
 
     cols = [(t, m) for t, m, _ in M.COLUMNS]
     objs = [(name.split(" ")[0], d) for name, d in A.DIRS[a.split]]      # "iso (headline)" -> iso
-    data = {o: {c: A.read(d, *c, a.split) for c in cols} for o, d in objs}
+    data = {o: {c: read(d, *c, a.split) for c in cols} for o, d in objs}
     shared = [c for c in cols if all(data[o][c] is not None for o in data)]
     missing = [f"{t}/{m}" for t, m in cols if (t, m) not in shared]
     if missing:
         print(f"  NOTE {a.split}: {len(shared)}/{len(cols)} cells in every objective; missing {missing}")
 
     plt.rcParams.update(P.RC)
-    fh = HEAD + len(METRICS) * PANEL_H + FOOT
-    fig, axes = plt.subplots(len(METRICS), 1, figsize=(FIG_W, fh), sharex=True)
+    fh = HEAD + len(metrics) * PANEL_H + FOOT
+    fig, axes = plt.subplots(len(metrics), 1, figsize=(FIG_W, fh), sharex=True)
     groups = cols + ["avg"]
     xs = list(range(len(groups)))
-    for ax, (key, ylab) in zip(axes, METRICS):
+    for ax, (key, ylab) in zip(axes, metrics):
         for j, (o, _) in enumerate(objs):
             vals = []
             for g in groups:
@@ -108,9 +135,9 @@ def main():
                fontsize=FS_LEG, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 0.998),
                frameon=False, handlelength=1.2, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
-    fig.savefig(a.out)
-    fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
-    print(f"wrote {a.out} ({a.split}, {len(shared)}/{len(cols)} complete cells)")
+    fig.savefig(out)
+    fig.savefig(out.replace(".pdf", ".png"), dpi=200)
+    print(f"wrote {out} ({a.direction}, {a.split}, {len(shared)}/{len(cols)} complete cells)")
 
 
 if __name__ == "__main__":
