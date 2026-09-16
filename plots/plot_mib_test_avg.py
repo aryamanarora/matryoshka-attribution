@@ -183,7 +183,9 @@ RENAME_BASELINES = {
     # The L1 ladder of 8 DBM runs (make_mib_table.DBM_MULTI_COST); "sweep" says what it is
     # in one word, and the cost row beneath shows what the sweep costs.
     "DBM (multi-sparsity)": "DBM (sweep)",
-    "Node Pruning (multi-sparsity)": "Node Pruning (sweep)",
+    # "NP" (2026-09-16, requested): the full name is the widest tick of the node panel.
+    "Node Pruning": "NP",
+    "Node Pruning (multi-sparsity)": "NP (sweep)",
     # Rotated tick; the full name is twice the width of any other and pushes the axis down.
     # "EG" is the abbreviation plot_mib_accauc_cpr_scatter.py already uses for the same row.
     "Expected Gradients": "EG",
