@@ -259,6 +259,11 @@ def style_axis(ax, xscale, ticks):
         ax.set_xticks(ticks)
         ax.set_xticklabels(["" if k in UNLABELLED_TICKS else f"{k:g}" for k in ticks])
         ax.set_xticks([], minor=True)
+        # Explicit limits: matplotlib's default 5% margin is applied in the transformed
+        # coordinate, and on a symlog axis the linear leg around 0 plus that margin put the
+        # lambda=0 rung a third of the way into the panel with nothing to its left. Left edge
+        # just below 0, right edge one part in eight past the last rung.
+        ax.set_xlim(-SYMLOG_LINTHRESH * 0.4, max(ticks) * 1.35)
     ax.grid(True, lw=0.25, color="#dddddd")
     ax.set_axisbelow(True)
     for sp in ax.spines.values():
