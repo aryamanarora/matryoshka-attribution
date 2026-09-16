@@ -15,8 +15,12 @@ Run from repo root:  uv run python scripts/mib/make_mib_accauc_table.py  ->  pap
 import pickle
 from pathlib import Path
 import make_mib_table as M   # reuse COLUMNS + node OUR_METHODS + unifk/opt_of conventions
+from learning_to_attribute.deps import mib_results_dir
 
-MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
+# The MIB fork's results tree (deps/MIB-circuit-track/results on the juice3 checkout, the
+# legacy Tilde path elsewhere). Was hardcoded to Tilde until 2026-09-16, which on sc made every
+# row read from here (all gradient baselines, the 10 legacy MAttr ablations) silently vanish.
+MIB = mib_results_dir()
 L2A = Path("results")
 MATTR_ACC = MIB / "mattr_accauc"       # lr01 ablations (acc_auc already computed)
 MATTR_REEVAL = MIB / "mattr_accauc_val"  # htk_lr_0.05, final_node (re-eval)
@@ -214,7 +218,14 @@ def acc_mattr(dir_, t, m):
     if dir_ in EVALMIB_ACC or dir_ in EDGE_DIRS:       # acc_auc straight from the eval_mib pkl
         return _acc(L2A / dir_ / f"{t}_{m}_validation.pkl")
     base = MATTR_REEVAL if dir_ in REEVAL_DIRS else MATTR_ACC
-    return _acc(base / f"{dir_}_patching_node" / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+    v = _acc(base / f"{dir_}_patching_node" / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+    if v is None:
+        # Cells evaluated after evaluation.py started returning acc_auc carry it in their own
+        # eval_mib pkl and were never mirrored into the re-eval folders (the arithmetic_addition
+        # cells of 2026-09-15, the gemma2 cells of the TL 2.15.4 re-eval). Same value, same
+        # protocol; the mirror is just where the OLDER cells of these dirs had to be re-scored.
+        v = _acc(L2A / dir_ / f"{t}_{m}_validation.pkl")
+    return v
 
 
 def fmt(v, bold=False, underline=False, dagger=False, color=None):

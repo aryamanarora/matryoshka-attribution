@@ -55,6 +55,20 @@ def find_mib_path(explicit: str | os.PathLike | None = None) -> Path:
         "/ set $L2A_MIB_PATH. Looked in: " + ", ".join(str(p) for _, p in candidates))
 
 
+def mib_results_dir(explicit: str | os.PathLike | None = None) -> Path:
+    """The MIB fork's own `results/` tree (run_attribution / run_evaluation outputs, the
+    `*_accauc` re-eval mirrors, `mattr_accauc*`), which the table generators read baseline
+    rows from. Resolved through find_mib_path(), with the Tilde path that the generators
+    hardcoded until 2026-09-16 as a last resort so that checkout keeps working."""
+    try:
+        return find_mib_path(explicit) / "results"
+    except FileNotFoundError:
+        legacy = Path("/home/guests/aryaman/MIB-circuit-track/results")
+        if legacy.is_dir():
+            return legacy
+        raise
+
+
 def add_mib_to_sys_path(explicit: str | os.PathLike | None = None) -> Path:
     """find_mib_path() + the two sys.path entries every MIB-calling script needs."""
     p = find_mib_path(explicit)

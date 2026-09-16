@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 
 import mattr_variants as MV   # which MAttr variant is the unmarked headline, and the label grammar
+from learning_to_attribute import deps as MV_DEPS   # find_mib_path / mib_results_dir
 
 import torch
 
@@ -214,7 +215,10 @@ NAPIG_STEP_ROWS = [
 # napig_ref_eval, which was). Read them where they actually are rather than snapshotting: jobs
 # are still landing, and a stale copy would silently under-report a row as partial forever.
 # Same dual-root idea as make_mib_accauc_table.ROOTS, L2A first so a local copy wins if made.
-MIB_RESULTS = Path("/home/guests/aryaman/MIB-circuit-track/results")
+# Resolved through deps.find_mib_path (deps/MIB-circuit-track/results on juice3; the Tilde path
+# above as the last resort). Hardcoded to Tilde until 2026-09-16, which on sc dropped every row
+# read from here ("0/12 cells -- not started; row omitted") from the generated table.
+MIB_RESULTS = MV_DEPS.mib_results_dir()
 
 # NOT eapig_repro_accauc: that dir is clean but was attributed with --num-examples 1000 on every
 # cell, off-convention for arc/arithmetic (100) and mcqa (full). It stays the acc-AUC source;
