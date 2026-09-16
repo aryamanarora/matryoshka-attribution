@@ -234,13 +234,15 @@ COST = {
         "IG ($m{=}30$)": _R(dict((d, c) for d, _, c in _M.NAPIG_STEP_ROWS)["$+$ 30 IG steps"]),
         "DBM": _M.COST_EPRUN, "Node Pruning": _M.COST_EPRUN,
         "DBM (multi-sparsity)": _M.DBM_MULTI_COST,
-        "$+$ Adam": _M.COST_OURS["node"], "$+$ Adam, unif $k$": _M.COST_OURS["node"],
+        # Every MAttr row costs the same 500 steps; keyed on the table's own row list so a relabel
+        # (2026-09-15: headline is now the bare \ourmethod{}) cannot strand a row without a cost.
+        **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
         # carries in the validation table.
         "EAP-IG-inp (CF)": _R(_M.COST_GRAD_IG5),
-        "$+$ Adam": _M.COST_OURS["edge"], "$+$ Adam, unif $k$": _M.COST_OURS["edge"],
+        **{name: _M.COST_OURS["edge"] for name, _ in T.OUR_EDGE_METHODS},
     },
 }
 
