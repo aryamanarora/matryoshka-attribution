@@ -54,7 +54,17 @@ import make_mib_test_table as T                         # noqa: E402
 import plot_mib_test_avg as V                           # the parent figure -- shared structure  # noqa: E402
 
 # Table names with no acc AUC anywhere: MIB Table 1 transcriptions, CPR-only by construction.
-NO_ACC = {"Random", "EAP-IG-inp (CF)"}
+#
+# "DBM (multi-sparsity)" is here on purpose and NOT because it lacks a number. Its JSON carries an
+# `iia`, but that is a log-trapezoid over the LADDER'S OWN x-points (0.001, each rung's achieved
+# L0 fraction, 1.0), so between 0.001 and the sparsest trained rung it interpolates the
+# accuracy instead of measuring it. Where that rung is already at accuracy 1.0 (arc_easy/llama3:
+# first rung at 3.4%) the unmeasured sparse decade is credited 0.5 and the row reads 0.75
+# against MAttr's 0.50, which measures 0 at 0.1-2% on MIB's fixed grid. CPR is unaffected (the
+# sparse end has ~no weight in a linear trapezoid), so the CPR chart keeps the row. Found
+# 2026-09-16, the first time this chart rendered the row. Comparable would be the ladder's
+# frontier evaluated on MIB's fixed grid; until that exists, the row is CPR-only here.
+NO_ACC = {"Random", "EAP-IG-inp (CF)", T._M.DBM_MULTI_ROW}
 
 # name -> how to load its acc_auc, per level. Built from the same constants collect() reads,
 # so a repoint there moves the acc row too. Literals are absent on purpose (-> NO_ACC check).
@@ -63,10 +73,10 @@ ACC_DIRS = {
              **{name: ("runeval", d, sub)
                 for name, d, sub in list(T.GRAD_NODE_BASELINES)
                 + list(T.MASK_NODE_BASELINES) + [T.NODE_PRUNING]},
-             # The L1-ladder row: eval_dbm_multisparsity.py writes one JSON per cell with the
-             # ladder's CPR (`cpr`, what the test table reads) and its IIA log-AUC (`iia`), the
-             # same log-sparsity-weighted accuracy AUC the other rows store as acc_auc.
-             T._M.DBM_MULTI_ROW: ("multi", "dbm_multisparsity")},
+             # The L1-ladder row is deliberately NOT routed to its JSON's `iia` -- see NO_ACC.
+             # load_acc keeps a ("multi", <dir>) loader for the day the ladder is scored on
+             # MIB's fixed grid and the row becomes comparable.
+             },
     "edge": {name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
 }
 
