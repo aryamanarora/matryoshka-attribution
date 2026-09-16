@@ -71,6 +71,10 @@ import math
 from pathlib import Path
 
 RESULTS = Path("results/dbm_multisparsity")
+# Node Pruning's target-s ladder, same eval script (--ladder np), same protocol, same reader:
+# every function below takes `base`, so "Node Pruning (multi-sparsity)" is this module read at
+# NP_RESULTS. Its knob is s, stored under the JSON's `l1`/`knob` keys alike.
+NP_RESULTS = Path("results/np_multisparsity")
 PCT = (.001, .002, .005, .01, .02, .05, .1, .2, .5, 1.)
 
 
@@ -173,7 +177,7 @@ def check_consistent(split="test", base=RESULTS):
     landed = rung_sets(split, base, attempted=False)
     distinct = sorted({v for v in tried.values()})
     if len(distinct) > 1:
-        print(f"  WARNING DBM (multi-sparsity): {len(distinct)} different ATTEMPTED ladders "
+        print(f"  WARNING {Path(base).name}: {len(distinct)} different ATTEMPTED ladders "
               f"across {len(tried)} cells -- re-run the eval so every cell uses the same one:",
               file=_s.stderr)
         for v in distinct:

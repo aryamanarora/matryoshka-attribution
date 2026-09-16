@@ -69,7 +69,8 @@ ACC_DIRS = {
                 + list(T.MASK_NODE_BASELINES) + [T.NODE_PRUNING]},
              # The L1-ladder row goes through scripts/mib/dbm_multisparsity.cell, the ONE reader
              # the test table also uses, which scores the ladder on MIB's grid (see load_acc).
-             T._M.DBM_MULTI_ROW: ("multi", "dbm_multisparsity")},
+             T._M.DBM_MULTI_ROW: ("multi", _DBMMS.RESULTS),
+             T._M.NP_MULTI_ROW: ("multi", _DBMMS.NP_RESULTS)},
     "edge": {name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
 }
 
@@ -82,7 +83,7 @@ def load_acc(src, task, model):
         # rung, the full circuit at p = 1) -- the same integral as every other row's acc_auc.
         # NOT the JSON's own `iia`, which integrates over the rungs' own x-points and credits
         # the unmeasured sparse decade (0.75 vs the honest 0.5-ish on arc_easy/llama3).
-        got = _DBMMS.cell(task, model, "test")
+        got = _DBMMS.cell(task, model, "test", base=src[1])
         return round(got[1], 2) if got else None
     if src[0] == "mib":                                  # eval_mib layout (our runs)
         p = T.RESULTS_BASE / src[1] / f"{task}_{model}_test.pkl"

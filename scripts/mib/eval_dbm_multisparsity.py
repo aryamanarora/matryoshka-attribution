@@ -1,4 +1,4 @@
-"""Evaluate a DBM sparsity ladder at each run's OWN empirical L0, not on MIB's fixed grid.
+"""Evaluate a sparsity ladder (DBM's L1, or Node Pruning's target s) at each run's OWN L0.
 
 WHY THIS EXISTS. MIB scores a method by sweeping ONE score vector over ten fixed proportions
 (.001 ... 1). That is the right question for a ranking, and the wrong one for a mask trained at a
@@ -29,6 +29,15 @@ venv's TL 3.x. See scripts/mib/launch/submit_dbm_multisparsity.sh.
         --model gpt2 --task ioi --split validation
 
 Out: results/dbm_multisparsity/{task}_{model}_{split}.json
+
+--ladder np (2026-09-16) runs the SAME protocol over Node Pruning's target-sparsity ladder
+(make_lr_table.SPARSITY_METHODS' first block, results/eprun_node_s<S>_ld): nine hard-concrete
+masks, each read at the size of the mask it emits. Its L0 is the DETERMINISTIC eval-time gate
+count (edge_pruning.deterministic_z_from_log_alpha, Edge Pruning's own binariser), not k_log[-1],
+which for a hard-concrete gate is one stochastic sample of the training-time mask. The graph's
+node scores are the log-alphas and the deterministic gate is monotone in them, so top-L0 by score
+is exactly the emitted mask, as for DBM. Out: results/np_multisparsity/... The JSON keeps the
+`l1` / `l1s_requested` keys (they hold the knob whatever it is) and adds `knob` / `ladder`.
 """
 import argparse
 import json
@@ -72,6 +81,25 @@ from learning_to_attribute.deps import find_mib_path
 # reaches -- and per the above, coverage below 200 was never the binding constraint anyway.
 L1S = ["0.2", "0.6", "2.0", "6.0", "20.0", "40.0", "60.0", "200.0"]
 NODE_DIR = "results/eprun_node_ld_sig_lr0.3_l1{l1}"
+# Node Pruning's ladder: the nine target sparsities of tabs/sparsity_sweep.tex (logit-diff, lr
+# 0.8, 3000 steps). s > 1 is a legal, unreachable target -- see make_lr_table.SPARSITY_METHODS.
+# 0.9 / 0.95 / 0.99 converge to nearly the same size (0.80-0.86 achieved), so on most cells two
+# of them COLLIDE on one proportion and only the first is kept -- expected, not a failed rung.
+SS = ["0.1", "0.25", "0.5", "0.8", "0.9", "0.95", "0.99", "1.25", "2.0"]
+LADDERS = {
+    "dbm": dict(knobs=L1S, dir="results/eprun_node_ld_sig_lr0.3_l1{k}", out="results/dbm_multisparsity"),
+    "np": dict(knobs=SS, dir="results/eprun_node_s{k}_ld", out="results/np_multisparsity"),
+}
+
+
+def own_l0(ladder, sd):
+    """The size of the mask this run EMITS, from its scores .pt."""
+    if ladder == "dbm":
+        # k_log[-1] is the EXPECTED open-gate count at the last step -- the run's own L0. Not
+        # args.target_sparsity, which the sigmoid gate ignores entirely.
+        return float(sd["k_log"][-1])
+    from learning_to_attribute.edge_pruning import deterministic_z_from_log_alpha
+    return float((deterministic_z_from_log_alpha(sd["scores"].float()) > 0).sum().item())
 
 
 def main():
@@ -79,12 +107,15 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--task", required=True)
     ap.add_argument("--split", default="validation", choices=["train", "validation", "test"])
-    ap.add_argument("--l1s", nargs="+", default=L1S)
+    ap.add_argument("--ladder", default="dbm", choices=sorted(LADDERS),
+                    help="which ladder: DBM's L1 coefficients or Node Pruning's target s")
+    ap.add_argument("--l1s", nargs="+", default=None,
+                    help="knob values to walk (default: the ladder's full list)")
     ap.add_argument("--batch-size", type=int, default=20)
     ap.add_argument("--head", type=int, default=None,
                     help="cap the eval set; MIB caps llama3 VALIDATION at 200, test uncapped")
     ap.add_argument("--mib-path", default=None)
-    ap.add_argument("--output", default="results/dbm_multisparsity")
+    ap.add_argument("--output", default=None, help="default: the ladder's own results dir")
     ap.add_argument("--absolute", action="store_true",
                     help="rank by |score| instead of score. MIB's run_evaluation.py defaults "
                          "this OFF and encodes it in the pkl name (`abs-False`), so the default "
@@ -94,6 +125,11 @@ def main():
                          "machinery and print them beside the stored pkl. Proves the pipeline "
                          "reproduces run_evaluation.py before any own-L0 number is trusted.")
     a = ap.parse_args()
+    lad = LADDERS[a.ladder]
+    if a.l1s is None:
+        a.l1s = lad["knobs"]
+    if a.output is None:
+        a.output = lad["out"]
 
     a.mib_path = str(find_mib_path(a.mib_path))
     sys.path.insert(0, a.mib_path)
@@ -109,18 +145,16 @@ def main():
     # after an 8B checkpoint is resident.
     rungs = []
     for l1 in a.l1s:
-        d = NODE_DIR.format(l1=l1)
+        d = lad["dir"].format(k=l1)
         g = f"{d}/graph_{a.task}_{a.model}.json"
         s = f"{d}/{a.task}_{a.model}_scores.pt"
         if not (os.path.exists(g) and os.path.exists(s)):
             print(f"SKIP l1={l1}: no graph/scores at {d}")
             continue
         sd = torch.load(s, map_location="cpu")
-        # k_log[-1] is the EXPECTED open-gate count at the last step -- the run's own L0. Not
-        # args.target_sparsity, which the sigmoid gate ignores entirely.
-        rungs.append((l1, float(sd["k_log"][-1]), g, len(sd["scores"])))
+        rungs.append((l1, own_l0(a.ladder, sd), g, len(sd["scores"])))
     if not rungs:
-        raise SystemExit(f"no DBM rungs on disk for {a.task}/{a.model}")
+        raise SystemExit(f"no {a.ladder} rungs on disk for {a.task}/{a.model}")
 
     if a.model in ("qwen2.5", "gemma2", "llama3"):
         model = HookedTransformer.from_pretrained(
@@ -207,7 +241,7 @@ def main():
     for p in ps:
         l1, L0, k, gpath = grid[p][0]
         _, _, _, _, faiths, accs, _ = run_grid(gpath, (p,))
-        points.append(dict(l1=float(l1), L0=L0, k=k, p=p,
+        points.append(dict(l1=float(l1), knob=float(l1), L0=L0, k=k, p=p,
                            faithfulness=faiths[0], accuracy=accs[0]))
         print(f"  l1={l1:>5}  L0={L0:8.2f} -> k={k:4d} (p={p:.4f})  "
               f"faith={faiths[0]:+.3f}  acc={accs[0]:.3f}")
@@ -238,7 +272,8 @@ def main():
     out = Path(a.output); out.mkdir(parents=True, exist_ok=True)
     fn = out / f"{a.task}_{a.model}_{a.split}.json"
     json.dump(dict(task=a.task, model=a.model, split=a.split, n_nodes=n_nodes, head=a.head,
-                   absolute=a.absolute, l1s_requested=list(a.l1s), n_gates=n_gates,
+                   absolute=a.absolute, ladder=a.ladder, l1s_requested=list(a.l1s),
+                   knobs_requested=list(a.l1s), n_gates=n_gates,
                    unmasked=unmasked, percentages=list(percentages),
                    faith_curve=faith_curve, acc_curve=acc_curve, cpr=cpr, iia=iia,
                    verify=verify, points=points),

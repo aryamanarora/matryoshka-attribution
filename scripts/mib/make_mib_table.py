@@ -455,6 +455,12 @@ DBM_MULTI_ROW = "DBM (multi-sparsity)"
 # -- 8 training runs against every other row's 1 -- and deriving it again from L1S at writing
 # time is how it would end up stated as 21k in the paper.
 DBM_MULTI_COST = "24k"
+# The same frontier reading of NODE PRUNING (2026-09-16): its nine target-s runs from
+# tabs/sparsity_sweep.tex, each read at the size of the mask it emits, through the same reader
+# (dbm_multisparsity.cell at NP_RESULTS). 9 rungs x 3k = 27k, counted like DBM's: the attempted
+# ladder, whether or not a rung lands on the frontier (0.9/0.95/0.99 collide on most cells).
+NP_MULTI_ROW = "Node Pruning (multi-sparsity)"
+NP_MULTI_COST = "27k"
 
 
 # === Training-cost column ===

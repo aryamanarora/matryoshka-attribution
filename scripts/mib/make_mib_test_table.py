@@ -517,6 +517,16 @@ def collect():
             ms[(task, model)] = round(got[0], 2)
     if baseline_or_skip(_M.DBM_MULTI_ROW, "dbm_multisparsity (test)", ms):
         mask_nodes[_M.DBM_MULTI_ROW] = ms
+    # Node Pruning read the same way over its target-s ladder (eval_dbm_multisparsity.py
+    # --ladder np -> results/np_multisparsity); the s-sweep's graphs, no retraining.
+    _DBMMS.check_consistent("test", base=_DBMMS.NP_RESULTS)
+    ms = {}
+    for task, model, _ in COLUMNS:
+        got = _DBMMS.cell(task, model, "test", base=_DBMMS.NP_RESULTS)
+        if got:
+            ms[(task, model)] = round(got[0], 2)
+    if baseline_or_skip(_M.NP_MULTI_ROW, "np_multisparsity (test)", ms):
+        mask_nodes[_M.NP_MULTI_ROW] = ms
 
     # GIM / RelP+QK, same loader and same rule.
     grad_nodes = {}

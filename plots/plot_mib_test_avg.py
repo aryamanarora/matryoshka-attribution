@@ -183,6 +183,7 @@ RENAME_BASELINES = {
     # The L1 ladder of 8 DBM runs (make_mib_table.DBM_MULTI_COST); "sweep" says what it is
     # in one word, and the cost row beneath shows what the sweep costs.
     "DBM (multi-sparsity)": "DBM (sweep)",
+    "Node Pruning (multi-sparsity)": "Node Pruning (sweep)",
     # Rotated tick; the full name is twice the width of any other and pushes the axis down.
     # "EG" is the abbreviation plot_mib_accauc_cpr_scatter.py already uses for the same row.
     "Expected Gradients": "EG",
@@ -234,6 +235,7 @@ COST = {
         "IG ($m{=}30$)": _R(dict((d, c) for d, _, c in _M.NAPIG_STEP_ROWS)["$+$ 30 IG steps"]),
         "DBM": _M.COST_EPRUN, "Node Pruning": _M.COST_EPRUN,
         "DBM (multi-sparsity)": _M.DBM_MULTI_COST,
+        "Node Pruning (multi-sparsity)": _M.NP_MULTI_COST,
         # Every MAttr row costs the same 500 steps; keyed on the table's own row list so a relabel
         # (2026-09-15: headline is now the bare \ourmethod{}) cannot strand a row without a cost.
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
