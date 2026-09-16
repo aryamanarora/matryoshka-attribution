@@ -109,6 +109,14 @@ def main():
     groups = cols + ["avg"]
     xs = list(range(len(groups)))
     for ax, (key, ylab) in zip(axes, METRICS):
+        # The headline rule per group, computed first so the value labels can clear it.
+        rule = {}
+        for x, g in zip(xs, groups):
+            if g == "avg":
+                v = [ref[c][key] for c in shared if ref[c][key] is not None]
+                rule[x] = sum(v) / len(v) if v else None
+            else:
+                rule[x] = None if ref[g] is None else ref[g][key]
         for j, (fam, lab, hatched, _) in enumerate(series):
             vals = []
             for g in groups:
@@ -124,19 +132,18 @@ def main():
                    edgecolor="white" if hatched else COLOUR[fam], lw=0, zorder=2, label=lab)
             for x, v in zip(xs, vals):
                 if v is not None:
-                    ax.annotate(f"{v:.2f}", (x + off, v), textcoords="offset points",
+                    # Anchored above the bar OR the group's rule, whichever is higher (as in
+                    # plot_ablation_bars.py): the printed number is the bar's, only its
+                    # position moves, so a rule never strikes through a label.
+                    top_y = v if rule[x] is None else max(v, rule[x])
+                    ax.annotate(f"{v:.2f}", (x + off, top_y), textcoords="offset points",
                                 xytext=(0, 1.2), ha="center", va="bottom", fontsize=FS_ANNOT,
                                 rotation=90, zorder=6)
         # The headline rule, spanning the group's four bars; Avg over the shared cells.
         half = len(series) * BAR_W / 2
-        for x, g in zip(xs, groups):
-            if g == "avg":
-                v = [ref[c][key] for c in shared if ref[c][key] is not None]
-                rv = sum(v) / len(v) if v else None
-            else:
-                rv = None if ref[g] is None else ref[g][key]
-            if rv is not None:
-                ax.plot([x - half, x + half], [rv, rv], color=COLOUR["ours"], lw=REF_LW,
+        for x in xs:
+            if rule[x] is not None:
+                ax.plot([x - half, x + half], [rule[x], rule[x]], color=COLOUR["ours"], lw=REF_LW,
                         solid_capstyle="butt", zorder=5)
         ax.axvline(len(cols) - 0.5, color="#999999", lw=0.5, ls=(0, (2, 2)), zorder=1)
         ax.set_ylabel(ylab, fontsize=FS_AXIS)
