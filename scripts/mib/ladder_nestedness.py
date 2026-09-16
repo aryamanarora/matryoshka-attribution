@@ -1,6 +1,6 @@
 """Are a sparsity ladder's masks nested? Containment of each sparser rung's mask in each denser one.
 
-    uv run python scripts/mib/ladder_nestedness.py [--ladders dbm np] [--split test]
+    uv run python scripts/mib/ladder_nestedness.py [--ladders dbm np] [--tex paper/tabs/ladder_nestedness.tex]
 
 Per (ladder, cell): every rung's EMITTED mask is its top-L0 nodes by graph score, with L0 the
 same own-L0 rule eval_dbm_multisparsity.py uses (DBM: k_log[-1]; Node Pruning: the deterministic
@@ -44,11 +44,47 @@ def mask_of(ladder, knob, task, model):
     return frozenset(top)
 
 
+TASK_TEX = {"ioi": "IOI", "arithmetic_addition": "Arith.\\ ($+$)", "arithmetic_subtraction": "Arith.\\ ($-$)",
+            "mcqa": "MCQA", "arc_easy": "ARC (E)", "arc_challenge": "ARC (C)"}
+MODEL_TEX = {"gpt2": "GPT-2", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": "Llama"}
+LADDER_TEX = {"dbm": "DBM ($\\lambda$ ladder)", "np": "Node Pruning ($s$ ladder)"}
+
+
+def write_tex(path, ladders, table):
+    """table[ladder][cell] = (n_rungs, all_pairs, consecutive) or None; one tabular fragment."""
+    cols = [(t, m) for t, m, _ in M.COLUMNS]
+    L = len(ladders)
+    lines = ["\\begin{tabular}{l" + "rrr" * L + "}", "\\toprule",
+             "& " + " & ".join(f"\\multicolumn{{3}}{{c}}{{{LADDER_TEX[l]}}}" for l in ladders) + " \\\\",
+             " ".join(f"\\cmidrule(lr){{{2 + 3 * i}-{4 + 3 * i}}}" for i in range(L)),
+             "\\textbf{Task / model} & " + " & ".join("rungs & all pairs & consec." for _ in ladders) + " \\\\",
+             "\\midrule"]
+    for t, m in cols:
+        cells = []
+        for l in ladders:
+            r = table[l].get((t, m))
+            cells.append("--- & --- & ---" if r is None else f"{r[0]} & {r[1]:.2f} & {r[2]:.2f}")
+        lines.append(f"{TASK_TEX[t]} / {MODEL_TEX[m]} & " + " & ".join(cells) + " \\\\")
+    lines.append("\\midrule")
+    means = []
+    for l in ladders:
+        rs = [r for r in table[l].values() if r is not None]
+        means.append("& --- & ---" if not rs else
+                     f"& {sum(r[1] for r in rs) / len(rs):.2f} & {sum(r[2] for r in rs) / len(rs):.2f}")
+    lines.append("\\textbf{Mean} " + " ".join(means) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n".join(lines) + "\n")
+    print(f"wrote {path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ladders", nargs="+", default=["dbm", "np"])
+    ap.add_argument("--tex", default=None, help="also write a tabular fragment here")
     a = ap.parse_args()
     cols = [(t, m) for t, m, _ in M.COLUMNS]
+    table = {l: {} for l in a.ladders}
     for ladder in a.ladders:
         print(f"\n=== {ladder} ladder ({', '.join(LADDERS[ladder]['knobs'])}) ===")
         print(f"{'cell':<32}{'rungs':>6}{'all pairs':>11}{'consecutive':>13}{'sizes (k)':>12}")
@@ -69,13 +105,17 @@ def main():
             cons = [len(uniq[i][1] & uniq[i + 1][1]) / len(uniq[i][1]) for i in range(len(uniq) - 1)]
             if not pairs:
                 print(f"{task + '/' + model:<32}{len(uniq):>6}{'---':>11}{'---':>13}")
+                table[ladder][(task, model)] = None
                 continue
             all_pairs.append(sum(pairs) / len(pairs)); all_cons.append(sum(cons) / len(cons))
+            table[ladder][(task, model)] = (len(uniq), all_pairs[-1], all_cons[-1])
             sizes = " ".join(str(len(mk)) for _, mk in uniq)
             print(f"{task + '/' + model:<32}{len(uniq):>6}{all_pairs[-1]:>11.3f}{all_cons[-1]:>13.3f}  {sizes}")
         if all_pairs:
             print(f"{'mean over cells':<32}{'':>6}{sum(all_pairs) / len(all_pairs):>11.3f}"
                   f"{sum(all_cons) / len(all_cons):>13.3f}")
+    if a.tex:
+        write_tex(a.tex, a.ladders, table)
 
 
 if __name__ == "__main__":
