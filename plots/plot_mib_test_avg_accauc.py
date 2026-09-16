@@ -39,7 +39,6 @@ Run:  uv run python plots/plot_mib_test_avg_accauc.py
 Out:  plots/mib_test_avg_accauc.pdf  (plots/*.pdf is gitignored -- regenerate, don't commit)
 """
 import argparse
-import json
 import os
 import pickle
 import sys
@@ -51,20 +50,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "mib"))
 import palette as P                                     # noqa: E402
 import make_mib_test_table as T                         # noqa: E402
+import dbm_multisparsity as _DBMMS                      # the ladder on MIB's grid; same reader as the table  # noqa: E402
 import plot_mib_test_avg as V                           # the parent figure -- shared structure  # noqa: E402
 
 # Table names with no acc AUC anywhere: MIB Table 1 transcriptions, CPR-only by construction.
-#
-# "DBM (multi-sparsity)" is here on purpose and NOT because it lacks a number. Its JSON carries an
-# `iia`, but that is a log-trapezoid over the LADDER'S OWN x-points (0.001, each rung's achieved
-# L0 fraction, 1.0), so between 0.001 and the sparsest trained rung it interpolates the
-# accuracy instead of measuring it. Where that rung is already at accuracy 1.0 (arc_easy/llama3:
-# first rung at 3.4%) the unmeasured sparse decade is credited 0.5 and the row reads 0.75
-# against MAttr's 0.50, which measures 0 at 0.1-2% on MIB's fixed grid. CPR is unaffected (the
-# sparse end has ~no weight in a linear trapezoid), so the CPR chart keeps the row. Found
-# 2026-09-16, the first time this chart rendered the row. Comparable would be the ladder's
-# frontier evaluated on MIB's fixed grid; until that exists, the row is CPR-only here.
-NO_ACC = {"Random", "EAP-IG-inp (CF)", T._M.DBM_MULTI_ROW}
+# (The DBM ladder row was here for a few hours on 2026-09-16, when its `iia` was still integrated
+# over the ladder's own x-points and credited the unmeasured sparse decade -- 0.75 vs MAttr's
+# 0.50 on arc_easy/llama3. eval_dbm_multisparsity.grid_frontier now reports it on MIB's grid
+# with score 0 below the sparsest rung, so it is comparable and drawn again.)
+NO_ACC = {"Random", "EAP-IG-inp (CF)"}
 
 # name -> how to load its acc_auc, per level. Built from the same constants collect() reads,
 # so a repoint there moves the acc row too. Literals are absent on purpose (-> NO_ACC check).
@@ -73,26 +67,23 @@ ACC_DIRS = {
              **{name: ("runeval", d, sub)
                 for name, d, sub in list(T.GRAD_NODE_BASELINES)
                 + list(T.MASK_NODE_BASELINES) + [T.NODE_PRUNING]},
-             # The L1-ladder row is deliberately NOT routed to its JSON's `iia` -- see NO_ACC.
-             # load_acc keeps a ("multi", <dir>) loader for the day the ladder is scored on
-             # MIB's fixed grid and the row becomes comparable.
-             },
+             # The L1-ladder row goes through scripts/mib/dbm_multisparsity.cell, the ONE reader
+             # the test table also uses, which scores the ladder on MIB's grid (see load_acc).
+             T._M.DBM_MULTI_ROW: ("multi", "dbm_multisparsity")},
     "edge": {name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
 }
 
 
 def load_acc(src, task, model):
     """acc_auc for one test cell, from the same pkl the CPR row reads. None if absent."""
-    if src[0] == "multi":                                # eval_dbm_multisparsity.py JSON
-        p = T.RESULTS_BASE / src[1] / f"{task}_{model}_test.json"
-        if not p.exists():
-            return None
-        try:
-            with open(p) as f:
-                v = json.load(f).get("iia")
-            return round(v, 2) if v is not None else None
-        except Exception:
-            return None
+    if src[0] == "multi":                                # the DBM ladder, via the shared reader
+        # dbm_multisparsity.cell scores the ladder ON MIB'S TEN PROPORTIONS (hold protocol: the
+        # densest rung that fits each budget, the measured empty circuit below the sparsest
+        # rung, the full circuit at p = 1) -- the same integral as every other row's acc_auc.
+        # NOT the JSON's own `iia`, which integrates over the rungs' own x-points and credits
+        # the unmeasured sparse decade (0.75 vs the honest 0.5-ish on arc_easy/llama3).
+        got = _DBMMS.cell(task, model, "test")
+        return round(got[1], 2) if got else None
     if src[0] == "mib":                                  # eval_mib layout (our runs)
         p = T.RESULTS_BASE / src[1] / f"{task}_{model}_test.pkl"
     else:                                                # run_evaluation.py layout (baselines)
