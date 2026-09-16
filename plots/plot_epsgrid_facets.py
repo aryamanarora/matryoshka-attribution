@@ -94,7 +94,9 @@ COLS = [
     # A plain linear 0-3.5 would move the diverging map's white point to 1.75, which means
     # nothing -- so this column alone uses TwoSlopeNorm pinned at 1.0 (exact full-model
     # recovery), keeping white where the semantics put it while the red arm stretches.
-    ("faith_auc", "Faith log-AUC", "RdBu_r", 0.0, 3.5, None),
+    # "CPR": what tabs/sva_results.tex calls this same key (faith_auc, the log-sparsity-weighted
+    # faithfulness AUC) -- renamed 2026-09-16 to match the tables.
+    ("faith_auc", "CPR", "RdBu_r", 0.0, 3.5, None),
     ("rho_ig", "Spearman $\\rho$ vs. IG", "viridis", 0.0, 0.75, None),
     ("rho_sgd", "Spearman $\\rho$ vs. SGD", "viridis", 0.0, 0.90, None),
     # SPREAD OF THE LEARNED SCORE VECTOR -- the only column that measures the optimiser's OUTPUT
