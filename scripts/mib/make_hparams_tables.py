@@ -48,8 +48,8 @@ HEADER = [
     "\\begin{tabular}{lllllll}",
     "\\toprule",
     "\\multirow{2}{*}{\\textbf{Method}} & \\multicolumn{3}{c}{\\textbf{Scores}} & "
-    "\\multirow{2}{*}{\\textbf{HParams}} & \\multirow{2}{*}{\\textbf{\\# Examples}} & "
-    "\\multirow{2}{*}{\\textbf{Steps/Example}} \\\\",
+    "\\multirow{2}{*}{\\textbf{HParams}} & \\multirow{2}{*}{\\textbf{Data}} & "
+    "\\multirow{2}{*}{\\textbf{Bwd./Data}} \\\\",
     "\\cmidrule(lr){2-4}",
     "& \\textbf{Optimiser} & \\textbf{LR} & $\\boldsymbol{\\epsilon}$ & & & \\\\",
     "\\midrule",
