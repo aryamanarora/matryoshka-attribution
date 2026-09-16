@@ -22,7 +22,7 @@ import math
 from learning_to_attribute import (sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES,
                                    CFActivationCache)
 from learning_to_attribute import wandb_util
-from learning_to_attribute.losses import attribution_loss
+from learning_to_attribute.losses import attribution_loss, resolve_direction
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
 from learning_to_attribute.models import (
     LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
@@ -108,12 +108,14 @@ def main():
                         help="How to sample k: uniform, log-uniform, or logit-uniform "
                              "(logit cancels the sigmoid_topk gate slope, making zero-init "
                              "SGD's expected score exactly activation-path IG -- schedules.py)")
-    parser.add_argument("--mode", default="iso", choices=MODE_CHOICES,
+    parser.add_argument("--mode", default="iso", choices=MODE_CHOICES + ["joint"],
                         help="iso (=sufficient, denoising): top-k stay clean, complement "
                              "corrupted; maximize retained clean behavior (this is "
                              "what MIB CPR measures, and what all our runs use). "
                              "cause (=necessary, noising): top-k get CF; find what breaks "
-                             "behavior. (sufficient/necessary still accepted.)")
+                             "behavior. joint: a coin flip between the two every step "
+                             "(losses.resolve_direction, as in eval_sva.py). "
+                             "(sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
@@ -163,7 +165,9 @@ def main():
                 parser.error(f"config {config_path}: unknown key {key!r}")
 
     args = parser.parse_args()
-    args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
+    # iso/cause -> sufficient/necessary (both accepted); "joint" stays as is and is resolved to
+    # a direction per training step (losses.resolve_direction) below.
+    args.mode = args.mode if args.mode == "joint" else normalize_mode(args.mode)
     if args.model is None or args.task is None:
         parser.error("--model and --task are required (via CLI or config)")
 
@@ -297,6 +301,14 @@ def main():
         cf_cache.prepare([p[4] for p in picks], src_ids, src_lens.tolist())
 
         hooker.mask = mask
+        # Per-step intervention direction: the fixed one for iso/cause, a coin flip for joint
+        # (losses.resolve_direction, the same call eval_sva.py makes). The hooker reads its
+        # `sufficient` flag at hook time, so flipping it here flips which side gets the CF.
+        # For iso/cause this is a no-op (the flag was set at construction to the same value),
+        # so every existing run is bit-identical; joint additionally consumes one torch.rand
+        # per step, which is why it is a NEW mode and not a default.
+        step_cause = resolve_direction(args.mode, corrupt_topk)
+        hooker.sufficient = step_cause
         # NOTE logits stay in model dtype until after the last-token gather: .float() on the
         # full [B, P, vocab] tensor materialized ~50-160 MB fp32 in the autograd graph for a
         # gradient that is zero everywhere but last_pos. Cast-after-slice is grad-identical.
@@ -308,7 +320,7 @@ def main():
         # break (returns diff.mean()), sufficient/denoising minimizes -diff. Bit-identical to the
         # previous inline form.
         return attribution_loss("logit_diff", last_logits, correct_t, incorrect_t,
-                                corrupt_topk=corrupt_topk)
+                                corrupt_topk=step_cause)
 
     on_step = None
     if wandb:

@@ -103,6 +103,14 @@ OUR_METHODS = [
     # everywhere else, and than the test table's row of the same name. Repointed once
     # submit_softuni_lr05.sh produced the lr=0.05 run. final_node stays on disk.
     ("\\ourmethod{}", "mib_node_topk_uniform_lr05", "node", "uniform"),
+    # OBJECTIVE ablation of the headline (2026-09-16, submit_mib_node_mode_ablation_sc.sh):
+    # identical run with --mode cause (noising: top-k corrupted, complement clean) and with
+    # --mode joint (coin flip between iso and cause each step). Scored by MIB's CPR like every
+    # other row, i.e. on the DENOISING metric, so these ask whether a mask trained for
+    # necessity transfers to sufficiency. Never run on MIB before; the pre-2026-06-15 dirs
+    # whose args say `necessary` are iso runs under the old label (CLAUDE.md).
+    ("$+$ cause obj.", "mib_node_cause_topk_uniform_lr05", "node", "uniform"),
+    ("$+$ joint obj.", "mib_node_joint_topk_uniform_lr05", "node", "uniform"),
     # The uniform-k twin of the SGD row above, same own-best-LR policy. submit_softuni_sgd_lr.sh
     # completes the forward x k-schedule x optimizer square, and SGD peaks at lr=3.0 here rather
     # than 1.0: 0.05 -> 1.563, 0.1 -> 1.676, 0.3 -> 1.881, 1.0 -> 1.977, *3.0 -> 2.031*,
