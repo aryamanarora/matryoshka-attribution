@@ -57,7 +57,7 @@ METRICS = [(0, "CPR (↑)"), (1, "Compactness (↑)")]
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
 BAR_W = 0.2
-REF_LW = 1.0
+REF_LW, REF_ALPHA = 1.0, 0.55   # the rule sits behind the value labels; keep it quiet
 
 
 def single(dirn, task, model, split):
@@ -148,7 +148,7 @@ def main():
         for x in xs:
             if rule[x] is not None:
                 ax.plot([x - half, x + half], [rule[x], rule[x]], color=COLOUR["ours"], lw=REF_LW,
-                        solid_capstyle="butt", zorder=5)
+                        alpha=REF_ALPHA, solid_capstyle="butt", zorder=5)
         ax.axvline(len(cols) - 0.5, color="#999999", lw=0.5, ls=(0, (2, 2)), zorder=1)
         ax.set_ylabel(ylab, fontsize=FS_AXIS)
         top = max([v[key] for lab in data for v in data[lab].values() if v is not None and v[key] is not None]
@@ -171,7 +171,7 @@ def main():
     fig.legend(handles=[Patch(facecolor=COLOUR[fam], hatch="////" if h else None,
                               edgecolor="white" if h else COLOUR[fam], label=lab)
                         for fam, lab, h, _ in series]
-               + [Line2D([0], [0], color=COLOUR["ours"], lw=REF_LW, label="MAttr")],
+               + [Line2D([0], [0], color=COLOUR["ours"], lw=REF_LW, alpha=REF_ALPHA, label="MAttr")],
                fontsize=FS_LEG, ncol=5, loc="upper center", bbox_to_anchor=(0.5, 0.998),
                frameon=False, handlelength=1.4, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
