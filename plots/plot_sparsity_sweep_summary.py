@@ -188,7 +188,7 @@ def load():
                     skipped.append(f"  {name} / {label} row {lab!r}: not a knob row -- dropped")
                     continue
                 rec, miss = {}, []
-                for key, _ in METRICS:
+                for key, _, _ in METRICS:
                     got = [v for v in (M.cpr(dirn, t, m, key) for t, m, _ in M.SPARSITY_COLUMNS)
                            if v is not None]
                     rec[key] = float(np.mean(got)) if len(got) == len(M.SPARSITY_COLUMNS) else None
