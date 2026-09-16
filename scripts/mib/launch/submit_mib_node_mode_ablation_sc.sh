@@ -27,6 +27,7 @@ set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; MODES=${MODES:-"cause joint"}; SPLITS=${SPLITS:-"validation test"}
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}   # gemma2 is opt-in: MODELS=gemma2 (or add it to the list)
+TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}   # subset for resubmits
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 # gemma2 runs in the TL 2.15.4 environment, the `tl2` dependency group of pyproject.toml, synced
 # from uv.lock by the job itself (same arrangement as the ViT group). The fork's modules come in
@@ -44,6 +45,7 @@ for mode in $MODES; do for split in $SPLITS; do
   for p in "${PAIRS[@]}"; do
     read -r model task <<< "$p"
     case " $MODELS " in *" $model "*) ;; *) continue ;; esac
+    case " $TASKS " in *" $task "*) ;; *) continue ;; esac
     if [ -f "results/$out/${task}_${model}_scores.pt" ]; then echo "SKIP $out/${task}_${model}"; skip=$((skip+1)); continue; fi
     py="uv run python"; bs=""; ec=""
     case $model in
@@ -51,6 +53,9 @@ for mode in $MODES; do for split in $SPLITS; do
       gemma2)       res="-q jag -d a6000 -c 3 -r 64G"; bs="--batch-size 4"; py=$PY_GEMMA ;;
       llama3)       res="-q jag -d a6000 -c 4 -r 96G"; bs="--batch-size 2" ;;
     esac
+    # ARC prompts are long: llama3 ARC cells OOM in MIB's eval on the 48 GB a6000 (6 of 8 did on
+    # 2026-09-16, after training completed), so they take the 80 GB h100 like the edge jobs.
+    [ "$model" = llama3 ] && [[ "$task" == arc_* ]] && res="-q sphinx -d h100 -r 128G"
     [ "$split" = validation ] && [ "$model" = llama3 ] && [ "$task" = ioi ] && ec="--eval-examples 200"
     name="mode-${mode}-${split:0:3}-${task}-${model}"
     cmd="$EXP $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform \
