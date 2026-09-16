@@ -134,7 +134,13 @@ from plot_lr_sweep_summary import lr_of as knob_of      # noqa: E402
 # linewidth, and at lw=0.9 they collapse toward solid inside a short legend handle. See the
 # comment in plot_lr_sweep_summary.py, which this figure is styled to match.
 DASH = (0, (3.2, 1.4))
-UNLABELLED_TICKS = {40.0}
+# Unlabelled but ticked rungs of the DBM axis. At the per-metric figure's 1.35in panel the
+# eight swept-value labels cannot all be resolved by 6pt type: 0.2 collides with 0.6, and 40/60
+# with 20/200. The surviving labels (0, 0.6, 2, 6, 20, 200) still bracket every rung.
+UNLABELLED_TICKS = {0.2, 40.0, 60.0}
+# Legend corner per metric: the CPR curves leave the lower-left empty (DBM sits at ~1.3 from
+# lambda=0.2 on), the compactness curves the upper-left (they climb from the bottom-left).
+LEGEND_LOC = {"area_under": "lower left", "acc_auc": "upper left"}
 
 # block name (verbatim from make_lr_table.SPARSITY_METHODS) -> column style. `extra` lists series
 # that are NOT rows of that table (none since the KL series was dropped; the mechanism stays).
@@ -248,9 +254,7 @@ def style_axis(ax, xscale, ticks):
         # continuum that was sampled at those points. These ticks are exactly the rows of the
         # table's DBM block, so every label has a square sitting on it and gaps in the grid are
         # gaps in the sweep. Minor ticks off for the same reason.
-        # The 2026-09 rungs 40 and 60 sit 0.18 decades apart and 0.3 from 20, which the 6pt
-        # labels cannot resolve ("204060"). 40 keeps its tick mark and its square but not its
-        # label; 20 / 60 / 200 are then as far apart as 6 / 20 were.
+        # UNLABELLED_TICKS keep their tick mark and their square but not their label.
         ax.set_xticks(ticks)
         ax.set_xticklabels(["" if k in UNLABELLED_TICKS else f"{k:g}" for k in ticks])
         ax.set_xticks([], minor=True)
@@ -318,7 +322,7 @@ def main():
             # A legend wherever a panel draws more than its one curve: the ladder's
             # reference line (or an `extra` series, none since KL was dropped).
             if len(ser) > 1 or ref is not None:
-                ax.legend(fontsize=FS_ANNOT, loc="best", frameon=True,
+                ax.legend(fontsize=FS_ANNOT, loc=LEGEND_LOC[metric], frameon=True,
                           framealpha=0.9, borderpad=0.3, handlelength=2.0,
                           handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
         fig.tight_layout(pad=0.35, w_pad=0.6)
