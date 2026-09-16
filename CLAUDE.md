@@ -110,10 +110,19 @@ both used the same eval. Eval was changed to average over `n_eval` examples (com
 
 ### Never evaluate a gemma2 cell in the L2A venv (TL 3.2.1 Gemma-2 forward bug)
 `.venv` (TL 3.2.1) computes a **wrong Gemma-2 forward** — proved against an HF reference in
-`525673a`; patching itself is faithful, the forward is not. Use
-`MIB-circuit-track/.venv` (TL 2.15.4) for any gemma2 evaluation, training or scoring.
-The L2A venv is fine for gpt2/qwen2.5/llama3 (the bug is Gemma-2-specific), though that
-scoping rests on `525673a`'s diagnosis rather than a per-model cross-check.
+`525673a`; patching itself is faithful, the forward is not. Any gemma2 evaluation, training or
+scoring runs in the TL 2.15.4 stack, which since 2026-09-16 is the **`tl2` dependency group**
+of `pyproject.toml` (torch 2.5.1, transformers 4.46.3, transformer-lens 2.15.4 — the exact pins
+of the Tilde venv every gemma2 number was produced with), locked in `uv.lock` and synced by the
+job into its own env, like the ViT group:
+
+    UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python scripts/mib/eval_mib.py --model gemma2 ...
+
+No venv inside the fork checkout and no `PYTHONPATH` (the fork's modules come in via
+`deps.find_mib_path`); `submit_mib_node_mode_ablation_sc.sh` is the reference launcher. The
+older `MIB-circuit-track/.venv` on Tilde is the same stack, hand-built. The L2A venv is fine for
+gpt2/qwen2.5/llama3 (the bug is Gemma-2-specific), though that scoping rests on `525673a`'s
+diagnosis rather than a per-model cross-check.
 
 All gemma2 cells of the LR sweep + MAttr node dirs were re-evaluated under TL 2.15.4 on
 2026-07-24 by `scripts/mib/reeval_gemma_mib.py` (which asserts TL 2.x and overwrites the pkls

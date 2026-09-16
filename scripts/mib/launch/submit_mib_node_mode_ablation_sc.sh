@@ -16,16 +16,22 @@
 #   mib_node_{cause,joint}_topk_uniform_lr05     (validation)   -> make_mib_table OUR_METHODS
 #   test_node_{cause,joint}_topk_uniform_lr05    (test)
 #
-# gemma2 cells must run under TL 2.15.4 (the MIB fork venv, CLAUDE.md), which does not exist on
-# sc yet: they are submitted only with GEMMA=1 and use deps/MIB-circuit-track/.venv. 2 modes x 2
-# splits x 9 non-gemma cells = 36 jobs (48 with gemma2). sc / nlprun, run INSIDE tmux.
+# gemma2 cells must run under TL 2.15.4 (CLAUDE.md): the `tl2` dependency group, in its own
+# uv-managed env (.venv-tl2) that the job syncs from uv.lock. They are opt-in via MODELS so the
+# two stacks can be submitted separately: 2 modes x 2 splits x 9 cells = 36 jobs by default,
+# 12 more with MODELS=gemma2. sc / nlprun, run INSIDE tmux.
 #   bash scripts/mib/launch/submit_mib_node_mode_ablation_sc.sh
+#   MODELS=gemma2 bash scripts/mib/launch/submit_mib_node_mode_ablation_sc.sh
 #   MODES=cause SPLITS=validation DRYRUN=1 bash ...
 set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
-DRYRUN=${DRYRUN:-0}; MODES=${MODES:-"cause joint"}; SPLITS=${SPLITS:-"validation test"}; GEMMA=${GEMMA:-0}
+DRYRUN=${DRYRUN:-0}; MODES=${MODES:-"cause joint"}; SPLITS=${SPLITS:-"validation test"}
+MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}   # gemma2 is opt-in: MODELS=gemma2 (or add it to the list)
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
-PY_GEMMA="PYTHONPATH=$ABS/src:$ABS/deps/MIB-circuit-track:$ABS/deps/MIB-circuit-track/EAP-IG/src $ABS/deps/MIB-circuit-track/.venv/bin/python"
+# gemma2 runs in the TL 2.15.4 environment, the `tl2` dependency group of pyproject.toml, synced
+# from uv.lock by the job itself (same arrangement as the ViT group). The fork's modules come in
+# through deps.find_mib_path, so no PYTHONPATH and no venv inside the fork checkout.
+PY_GEMMA="UV_PROJECT_ENVIRONMENT=$ABS/.venv-tl2 uv run --no-default-groups --group tl2 python"
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi"
   "llama3 arithmetic_addition" "llama3 arithmetic_subtraction"
@@ -37,7 +43,7 @@ for mode in $MODES; do for split in $SPLITS; do
   [ "$split" = validation ] && out="mib_node_${mode}_topk_uniform_lr05" || out="test_node_${mode}_topk_uniform_lr05"
   for p in "${PAIRS[@]}"; do
     read -r model task <<< "$p"
-    if [ "$model" = gemma2 ] && [ "$GEMMA" != 1 ]; then continue; fi
+    case " $MODELS " in *" $model "*) ;; *) continue ;; esac
     if [ -f "results/$out/${task}_${model}_scores.pt" ]; then echo "SKIP $out/${task}_${model}"; skip=$((skip+1)); continue; fi
     py="uv run python"; bs=""; ec=""
     case $model in
