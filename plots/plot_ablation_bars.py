@@ -22,7 +22,9 @@ their CPR rank, and `+ unif k, + id-STE` far lower.
 
 COLOUR IS THE OPTIMIZER, per palette.py's paper-wide rule (SGD black, Adam blue), because it is
 the one property of each row that its label does not already carry: the k-schedule is spelled by
-the "$+$ unif $k$" prefix and the LR by the parenthetical.
+the "$+$ log $k$" mark (uniform k is the unmarked headline schedule since 2026-09-15, see
+scripts/mib/mattr_variants.py -- the labels here are that module's, via mark_k) and the LR by
+the header row.
 
 NUMBERS COME FROM plot_mib_accauc_cpr_scatter.build_lr_rows, the same loader the LR figures use,
 so these bars cannot disagree with them -- and it applies the same "11/11 cells on BOTH metrics
@@ -48,11 +50,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import palette as P                                    # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                # build_lr_rows, RC, delatex  # noqa: E402
 import make_mib_table as M                             # OUR_METHODS, ours_lr, opt_of  # noqa: E402
+import mattr_variants as MV                            # HEADLINE, mark_k, OPT_ORDER  # noqa: E402
 
-# The paper's headline \ourmethod{} row at node level, pinned by DIR rather than by display name
-# -- "\ourmethod{}" legitimately labels one row per optimizer, so a name match would take
-# whichever came last. See make_mib_table.OUR_METHODS.
-HEADLINE = "topklog_lr_0.05"
+
+def headline_dir():
+    r"""The paper's headline \ourmethod{} row at node level, pinned by DIR rather than by display
+    name -- "\ourmethod{}" legitimately labels one row per optimizer and per k-schedule, so a
+    name match would take whichever came last. Resolved from mattr_variants.HEADLINE against
+    make_mib_table.OUR_METHODS, so a headline flip there flips this figure with no edit here."""
+    hits = [d for name, d, level, grp in M.OUR_METHODS
+            if level == "node" and name == MV.OURMETHOD
+            and MV.GROUP_K[grp] == MV.HEADLINE["k"] and M.opt_of(d) == MV.HEADLINE["opt"]]
+    if len(hits) != 1:
+        raise SystemExit(f"headline dir: expected exactly one node row matching {MV.HEADLINE}, got {hits}")
+    return hits[0]
+
+
+HEADLINE = headline_dir()
 
 # The single MIB cell drawn as a rule across each bar, against the 11-cell mean the bar height
 # is. (task, model) -- COLUMNS' own spelling.
@@ -84,10 +98,10 @@ METRICS = [("cpr", "CPR AUC (↑)"), ("acc", "Compactness (↑)")]
 def rows():
     """[(label, optimizer, cpr, acc)] in the figure's bar order.
 
-    ORDER: the headline \\ourmethod{}+Adam row first, then the remaining Adam ablations, then the
-    SGD ones, each block sorted by CPR descending. The two dashed rules main() draws sit at those
-    two boundaries, so the reference is separated from the ablations and the optimizers do not
-    interleave.
+    ORDER: the headline \\ourmethod{} row first, then the remaining rows of the headline
+    optimizer, then the other optimizer's (mattr_variants.OPT_ORDER), each block sorted by CPR
+    descending. The two dashed rules main() draws sit at those two boundaries, so the reference
+    is separated from the ablations and the optimizers do not interleave.
 
     SORTED BY CPR IN BOTH PANELS, not by each panel's own metric. Sorting each panel
     independently would put a different row at position 1 in each and destroy the one comparison
@@ -102,10 +116,9 @@ def rows():
         lr = M.ours_lr(dirn) or ""
         if not lr:
             continue
-        # unifk() is the table's own rule: log k is the unmarked default, uniform k the marked
-        # ablation. Reused rather than restated so the bars carry the table's labels exactly.
-        disp = "$+$ unif $k$" if grp == "uniform" and name.startswith("\\ourmethod") else (
-            f"$+$ unif $k$, {name}" if grp == "uniform" else name)
+        # mark_k is the tables' own rule (uniform k unmarked, log k marked "$+$ log $k$"),
+        # reused rather than restated so the bars carry the table's labels exactly.
+        disp = MV.mark_k(name, MV.GROUP_K[grp])
         spec.append((disp, dirn, lr, M.opt_of(dirn)))
     # build_lr_rows keys on the path label; the DIR is the only unique key here, because the same
     # display name legitimately appears under both optimizers.
@@ -128,11 +141,11 @@ def rows():
                     cell[1], cell[0]))
     head = [r for r in out if r[4] == HEADLINE]
     rest = [r for r in out if r[4] != HEADLINE]
-    adam = sorted((r for r in rest if r[1] == "adam"), key=lambda r: -r[2])
-    sgd = sorted((r for r in rest if r[1] == "sgd"), key=lambda r: -r[2])
+    blocks = [sorted((r for r in rest if r[1] == opt), key=lambda r: -r[2])
+              for opt, _ in MV.OPT_ORDER]
     # Boundaries are returned with the rows so main() cannot draw a rule in the wrong place if
     # the headline dir is ever repointed or an arm changes optimizer.
-    return head + adam + sgd, [len(head) - 0.5, len(head) + len(adam) - 0.5]
+    return head + blocks[0] + blocks[1], [len(head) - 0.5, len(head) + len(blocks[0]) - 0.5]
 
 
 def main():
