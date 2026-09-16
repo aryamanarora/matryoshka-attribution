@@ -1,9 +1,12 @@
-"""Multi-sparsity ladders against the best single reported config, per MIB cell: NP and DBM.
+"""Multi-sparsity ladders against the best single reported config, per MIB cell: NP and DBM, with
+the headline \\ourmethod{} beside them.
 
     uv run python plots/plot_sweep_vs_single.py [--split test]
     -> plots/sweep_vs_single.pdf (+ .png); copied to figs/ next to the sparsity sweep figure.
 
-FOUR BARS PER CELL. For each of the two mask learners, the single configuration the test table
+FIVE BARS PER CELL. First the headline \\ourmethod{} (make_mib_test_table.OUR_NODE_METHODS' bare
+row, i.e. mattr_variants.HEADLINE -- one 500-step run, the reference the sweeps are trying to
+reach). Then, for each of the two mask learners, the single configuration the test table
 reports (make_mib_test_table.NODE_PRUNING -- Node Pruning at make_mib_table.EPRUN_BEST_SPARSITY,
 s=0.5 logit-diff -- and MASK_NODE_BASELINES' DBM at lr 0.3, lambda 6) beside the same method's
 sparsity LADDER read as a frontier (scripts/mib/eval_dbm_multisparsity.py: every rung evaluated
@@ -35,21 +38,33 @@ import palette as P                                    # noqa: E402
 import make_mib_table as M                             # COLUMNS, EPRUN_NAME  # noqa: E402
 import make_mib_test_table as T                        # NODE_PRUNING, MASK_NODE_BASELINES  # noqa: E402
 import dbm_multisparsity as _DBMMS                     # cell(), RESULTS, NP_RESULTS  # noqa: E402
+import mattr_variants as MV                            # OURMETHOD  # noqa: E402
 from plot_objective_ablation import TASK_SHORT, MODEL_SHORT   # noqa: E402
 
 # (label, colour, hatch, loader). Loaders return (cpr, acc) or None.
 DBM_SINGLE = next(d for name, d, _ in T.MASK_NODE_BASELINES if name == "DBM")
 NP_SINGLE = T.NODE_PRUNING[1]
-COLOUR = {"np": P.METHOD["Node Pruning"], "dbm": P.METHOD["DBM"]}
+MATTR = next(d for name, d in T.OUR_NODE_METHODS if name == MV.OURMETHOD)   # the bare headline row
+COLOUR = {"np": P.METHOD["Node Pruning"], "dbm": P.METHOD["DBM"], "ours": P.METHOD["MAttr"]}
 METRICS = [(0, "CPR AUC (↑)"), (1, "Compactness (↑)")]
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.42, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
-BAR_W = 0.2
+BAR_W = 0.17
 
 
 def single(dirn, task, model, split):
     p = (T.RESULTS_BASE / dirn / "EdgePruning_patching_node"
          / f"{task.replace('_', '-')}_{model}_{split}_abs-False.pkl")
+    if not p.exists():
+        return None
+    with open(p, "rb") as f:
+        r = pickle.load(f)
+    return r.get("area_under"), r.get("acc_auc")
+
+
+def mattr(task, model, split):
+    """eval_mib layout: results/<dir>/<task>_<model>_<split>.pkl, same keys."""
+    p = T.RESULTS_BASE / MATTR / f"{task}_{model}_{split}.pkl"
     if not p.exists():
         return None
     with open(p, "rb") as f:
@@ -68,6 +83,7 @@ def main():
     ap.add_argument("--out", default="plots/sweep_vs_single.pdf")
     a = ap.parse_args()
     series = [
+        ("ours", "MAttr", False, lambda t, m: mattr(t, m, a.split)),
         ("np", "Node Pruning", False, lambda t, m: single(NP_SINGLE, t, m, a.split)),
         ("np", "Node Pruning (sweep)", True, lambda t, m: ladder(_DBMMS.NP_RESULTS, t, m, a.split)),
         ("dbm", "DBM", False, lambda t, m: single(DBM_SINGLE, t, m, a.split)),
@@ -75,12 +91,12 @@ def main():
     ]
     cols = [(t, m) for t, m, _ in M.COLUMNS]
     data = {lab: {c: f(*c) for c in cols} for _, lab, _, f in series}
-    shared = [c for c in cols if all(data[lab][c] is not None for _, lab, _, _ in series)]
+    shared = [c for c in cols if all(data[lab][c] is not None for _, lab, _, _ in series)]   # all five
     for _, lab, _, _ in series:
         miss = [f"{t}/{m}" for t, m in cols if data[lab][(t, m)] is None]
         if miss:
             print(f"  NOTE {lab} ({a.split}): missing {miss}")
-    print(f"  Avg over {len(shared)}/{len(cols)} cells present in all four series")
+    print(f"  Avg over {len(shared)}/{len(cols)} cells present in all five series")
 
     plt.rcParams.update(P.RC)
     fh = HEAD + len(METRICS) * PANEL_H + FOOT
@@ -127,7 +143,7 @@ def main():
     fig.legend(handles=[Patch(facecolor=COLOUR[fam], hatch="////" if h else None,
                               edgecolor="white" if h else COLOUR[fam], label=lab)
                         for fam, lab, h, _ in series],
-               fontsize=FS_LEG, ncol=4, loc="upper center", bbox_to_anchor=(0.5, 0.998),
+               fontsize=FS_LEG, ncol=5, loc="upper center", bbox_to_anchor=(0.5, 0.998),
                frameon=False, handlelength=1.4, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
     fig.savefig(a.out)
