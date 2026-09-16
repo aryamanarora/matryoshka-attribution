@@ -21,20 +21,24 @@
 # so a machine provisioned before deps/ existed keeps working and this script will not clone a
 # second copy next to it.
 #
-# NOT HANDLED HERE: the gemma2 venv. Gemma-2 cells must run under TL 2.15.4 (CLAUDE.md), which
-# lives in a separate environment inside the MIB checkout (`deps/MIB-circuit-track/.venv`); build
-# it from that repo's own environment.yml / pyproject when you need a gemma2 cell.
+# THE GEMMA2 VENV is optional and built with --gemma-venv: Gemma-2 cells must run under TL 2.15.4
+# (CLAUDE.md), which lives in a separate environment inside the MIB checkout
+# (`deps/MIB-circuit-track/.venv`, Python 3.11). scripts/mib/mib_venv_requirements.txt is the
+# exact freeze of the Tilde venv every gemma2 number was produced with; torch is the cu124 build,
+# hence the PyTorch extra index. On sc run this step as a cluster job -- installs on the login
+# node crawl on NFS.
 set -euo pipefail
 
 MIB_SHA=f329461         # aryamanarora/MIB-circuit-track main, 2026-09-14: 7-value evaluate + refs/percentages kwargs
                         # (its .gitmodules pins EAP-IG at 41e9b9c "Add EAP-IG-inputs-mc at edge level")
 MIB_URL="${MIB_URL:-https://github.com/aryamanarora/MIB-circuit-track.git}"
 
-PIN=1; SYNC=1
+PIN=1; SYNC=1; GEMMA_VENV=0
 for arg in "$@"; do
   case "$arg" in
     --latest) PIN=0 ;;
     --no-sync) SYNC=0 ;;
+    --gemma-venv) GEMMA_VENV=1 ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
@@ -79,10 +83,20 @@ print(f"  OK  {p}  (7-value evaluate_area_under_curve, EAP-IG importable)")
 PY
 fi
 
+if [ "$GEMMA_VENV" = 1 ]; then
+  echo; echo "gemma2 venv (TL 2.15.4, Python 3.11) at $DEST/.venv from scripts/mib/mib_venv_requirements.txt:"
+  [ -f "$DEST/run_evaluation.py" ] || { echo "  $DEST is not a checkout (run without --no-sync first?)"; exit 1; }
+  uv venv "$DEST/.venv" --python 3.11 --quiet
+  uv pip install --quiet --python "$DEST/.venv/bin/python" \
+      --extra-index-url https://download.pytorch.org/whl/cu124 -r scripts/mib/mib_venv_requirements.txt
+  uv pip install --quiet --python "$DEST/.venv/bin/python" --no-deps -e "$DEST/EAP-IG"
+  "$DEST/.venv/bin/python" -c "import transformer_lens as t, transformers as h, torch; print(f'  OK  TL {t.__version__}, transformers {h.__version__}, torch {torch.__version__}')"
+fi
+
 cat <<'EOF2'
 
 Done. Not covered here, and each optional:
   HF_TOKEN            meta-llama/* and google/gemma-2* are gated.
-  gemma2 cells        need TL 2.15.4 in deps/MIB-circuit-track/.venv (CLAUDE.md), built from that repo.
+  gemma2 cells        need TL 2.15.4 in deps/MIB-circuit-track/.venv (CLAUDE.md): `bash scripts/setup.sh --gemma-venv`.
   results/            the paper's results dirs live on the clusters (CLAUDE.md's table); not in git.
 EOF2
