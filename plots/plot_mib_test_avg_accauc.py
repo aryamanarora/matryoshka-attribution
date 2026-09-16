@@ -39,6 +39,7 @@ Run:  uv run python plots/plot_mib_test_avg_accauc.py
 Out:  plots/mib_test_avg_accauc.pdf  (plots/*.pdf is gitignored -- regenerate, don't commit)
 """
 import argparse
+import json
 import os
 import pickle
 import sys
@@ -61,13 +62,27 @@ ACC_DIRS = {
     "node": {**{name: ("mib", d) for name, d in T.OUR_NODE_METHODS},
              **{name: ("runeval", d, sub)
                 for name, d, sub in list(T.GRAD_NODE_BASELINES)
-                + list(T.MASK_NODE_BASELINES) + [T.NODE_PRUNING]}},
+                + list(T.MASK_NODE_BASELINES) + [T.NODE_PRUNING]},
+             # The L1-ladder row: eval_dbm_multisparsity.py writes one JSON per cell with the
+             # ladder's CPR (`cpr`, what the test table reads) and its IIA log-AUC (`iia`), the
+             # same log-sparsity-weighted accuracy AUC the other rows store as acc_auc.
+             T._M.DBM_MULTI_ROW: ("multi", "dbm_multisparsity")},
     "edge": {name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
 }
 
 
 def load_acc(src, task, model):
     """acc_auc for one test cell, from the same pkl the CPR row reads. None if absent."""
+    if src[0] == "multi":                                # eval_dbm_multisparsity.py JSON
+        p = T.RESULTS_BASE / src[1] / f"{task}_{model}_test.json"
+        if not p.exists():
+            return None
+        try:
+            with open(p) as f:
+                v = json.load(f).get("iia")
+            return round(v, 2) if v is not None else None
+        except Exception:
+            return None
     if src[0] == "mib":                                  # eval_mib layout (our runs)
         p = T.RESULTS_BASE / src[1] / f"{task}_{model}_test.pkl"
     else:                                                # run_evaluation.py layout (baselines)
