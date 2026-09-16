@@ -131,6 +131,7 @@ from plot_achieved_sparsity import KL_ROWS              # noqa: E402
 # linewidth, and at lw=0.9 they collapse toward solid inside a short legend handle. See the
 # comment in plot_lr_sweep_summary.py, which this figure is styled to match.
 DASH = (0, (3.2, 1.4))
+UNLABELLED_TICKS = {40.0}
 
 # block name (verbatim from make_lr_table.SPARSITY_METHODS) -> column style. `extra` lists series
 # that are NOT rows of that table: sparsity_sweep.tex reports the logit-diff block only, and the
@@ -224,8 +225,11 @@ def style_axis(ax, xscale, ticks):
         # continuum that was sampled at those points. These ticks are exactly the rows of the
         # table's DBM block, so every label has a square sitting on it and gaps in the grid are
         # gaps in the sweep. Minor ticks off for the same reason.
+        # The 2026-09 rungs 40 and 60 sit 0.18 decades apart and 0.3 from 20, which the 6pt
+        # labels cannot resolve ("204060"). 40 keeps its tick mark and its square but not its
+        # label; 20 / 60 / 200 are then as far apart as 6 / 20 were.
         ax.set_xticks(ticks)
-        ax.set_xticklabels([f"{k:g}" for k in ticks])
+        ax.set_xticklabels(["" if k in UNLABELLED_TICKS else f"{k:g}" for k in ticks])
         ax.set_xticks([], minor=True)
     ax.grid(True, lw=0.25, color="#dddddd")
     ax.set_axisbelow(True)
