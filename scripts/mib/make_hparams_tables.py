@@ -93,7 +93,10 @@ def mattr_rows(pairs, describe):
     """(label, key) pairs -> table rows; the headline (bare \\ourmethod{}) is unindented."""
     out = []
     for label, key in pairs:
-        opt, lr, steps, k, eps, n_ex = describe(key)
+        d = describe(key)
+        if d is None:          # variant not run on the substrates this table covers
+            continue
+        opt, lr, steps, k, eps, n_ex = d
         out.append(row(label, [optimiser_cell(opt), lr, eps_cell(opt, eps), schedule_cell(k), n_ex, "1"],
                        indent=label != MV.OURMETHOD))
     return out
@@ -170,8 +173,9 @@ def build_mib():
 
 
 # ---------------------------------------------------------------- SVA+ (tab:hparams-sva)
-SVA_TREES = [("node", "results/sva_sweep", "neuron"),
-             ("mlp", V.SUBSTRATE_RES["mlp"], "neuron"),
+# Neuron and SAE substrates only: the table does not describe the node-level runs, and
+# node-only variants are dropped from it.
+SVA_TREES = [("mlp", V.SUBSTRATE_RES["mlp"], "neuron"),
              ("mlp_sae_span", V.SUBSTRATE_RES["mlp_sae_span"], "sae")]
 
 
@@ -206,33 +210,30 @@ def describe_sva(key):
         steps = int(m.group(1)) if m else 2000
         per[sub] = (opt, SVA_LR[(opt, fam)], steps, d.get("k_schedule", "log"), eps)
     if not per:
-        raise SystemExit(f"no logit-diff run found for SVA method key {key!r}")
-    node = per.get("node"); neuron = per.get("mlp") or per.get("mlp_sae_span")
-    ref = neuron or node
-    opt, _, _, k, eps = ref
+        return None
+    opt, _, _, k, eps = per.get("mlp") or per["mlp_sae_span"]
     lrs = sorted({v[1] for v in per.values()}, key=float)
     lr = num(lrs[0]) if len(lrs) == 1 else " / ".join(num(x) for x in lrs) + " (SAE)" * 0
     if len(lrs) > 1:
         lr = f"{num(per['mlp'][1]) if 'mlp' in per else num(lrs[0])} ({num(per['mlp_sae_span'][1])} SAE)"
     steps = sorted({v[2] for v in per.values()})
-    n_ex = (thousands(steps[0]) if len(steps) == 1
-            else f"{thousands(node[2])} (node) / {thousands(max(steps))}")
+    n_ex = " / ".join(thousands(x) for x in steps)
     return opt, lr, steps, k, eps, n_ex
 
 
 SVA_FIXED = [
     None,
-    ("Node Pruning", ["Adam", "$0.8$", "$10^{-8}$", "hard-concrete, $s = 0.9$", "2{,}000 (node) / 5{,}000", "1"]),
+    ("Node Pruning", ["Adam", "$0.8$", "$10^{-8}$", "hard-concrete, $s = 0.9$", "5{,}000", "1"]),
     ("DBM", ["Adam", "$0.3$", "$10^{-8}$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
-             "2{,}000 (node) / 5{,}000", "1"]),
+             "5{,}000", "1"]),
     None,
-    ("Stepless IG", NONE3 + ["$\\alpha \\sim U(0,1)$, seed 42", "2{,}000 / 5{,}000$^{*}$", "1"]),
-    ("IG ($m{=}10$)", NONE3 + ["$\\alpha = j/10$, $j = 1 \\dots 10$", "200 / 500$^{*}$", "10"]),
-    ("I$\\times$G", NONE3 + ["$\\alpha = 0$", "2{,}000 / 5{,}000$^{*}$", "1"]),
-    ("AttnLRP", NONE3 + ["--- (LRP rule)", "2{,}000 / 5{,}000$^{*}$", "1"]),
+    ("Stepless IG", NONE3 + ["$\\alpha \\sim U(0,1)$, seed 42", "5{,}000$^{*}$", "1"]),
+    ("IG ($m{=}10$)", NONE3 + ["$\\alpha = j/10$, $j = 1 \\dots 10$", "500$^{*}$", "10"]),
+    ("I$\\times$G", NONE3 + ["$\\alpha = 0$", "5{,}000$^{*}$", "1"]),
+    ("AttnLRP", NONE3 + ["--- (LRP rule)", "5{,}000$^{*}$", "1"]),
     ("Random (control)", NONE3 + ["i.i.d.\\ uniform scores, seeds 42--44", "---", "---"]),
 ]
-SVA_FOOTNOTE = ("\\multicolumn{7}{l}{\\footnotesize $^{*}$node / neuron substrates; compute-matched "
+SVA_FOOTNOTE = ("\\multicolumn{7}{l}{\\footnotesize $^{*}$compute-matched "
                 "to \\ourmethod{}'s pass budget, capped at the full train pool (no repetition).} \\\\")
 
 
