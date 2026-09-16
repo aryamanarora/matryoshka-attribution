@@ -45,12 +45,13 @@ SVA_LR = {("adam", "neuron"): "0.05", ("adam", "sae"): "0.5", ("sgd", "neuron"):
 
 HEADER = [
     "\\begin{adjustbox}{max width=\\textwidth}",
-    "\\begin{tabular}{lllll}",
+    "\\begin{tabular}{lllllll}",
     "\\toprule",
-    "\\multirow{2}{*}{\\textbf{Method}} & \\multicolumn{2}{c}{\\textbf{Scores}} & "
-    "\\multirow{2}{*}{\\textbf{Path point / $k$-schedule}} & \\multirow{2}{*}{\\textbf{Coverage}} \\\\",
-    "\\cmidrule(lr){2-3}",
-    "& \\textbf{Optimiser} & \\textbf{LR} & & \\\\",
+    "\\multirow{2}{*}{\\textbf{Method}} & \\multicolumn{3}{c}{\\textbf{Scores}} & "
+    "\\multirow{2}{*}{\\textbf{Path}} & \\multirow{2}{*}{\\textbf{\\# Examples}} & "
+    "\\multirow{2}{*}{\\textbf{Steps/Example}} \\\\",
+    "\\cmidrule(lr){2-4}",
+    "& \\textbf{Optimiser} & \\textbf{LR} & $\\boldsymbol{\\epsilon}$ & & & \\\\",
     "\\midrule",
 ]
 FOOTER = ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
@@ -68,11 +69,16 @@ def thousands(n):
 
 def eps_tex(eps):
     mant, exp = f"{float(eps):.0e}".split("e")
-    return f"$\\epsilon = 10^{{{int(exp)}}}$" if float(mant) == 1 else f"$\\epsilon = {mant}\\times 10^{{{int(exp)}}}$"
+    return f"$10^{{{int(exp)}}}$" if float(mant) == 1 else f"${mant}\\times 10^{{{int(exp)}}}$"
 
 
-def optimiser_cell(opt, eps):
-    return f"Adam, {eps_tex(eps)}" if opt == "adam" else "SGD"
+def optimiser_cell(opt):
+    return "Adam" if opt == "adam" else "SGD"
+
+
+def eps_cell(opt, eps):
+    """Adam's epsilon; SGD has none."""
+    return eps_tex(eps) if opt == "adam" else "---"
 
 
 def schedule_cell(k):
@@ -87,8 +93,8 @@ def mattr_rows(pairs, describe):
     """(label, key) pairs -> table rows; the headline (bare \\ourmethod{}) is unindented."""
     out = []
     for label, key in pairs:
-        opt, lr, steps, k, eps, cov = describe(key)
-        out.append(row(label, [optimiser_cell(opt, eps), lr, schedule_cell(k), cov],
+        opt, lr, steps, k, eps, n_ex = describe(key)
+        out.append(row(label, [optimiser_cell(opt), lr, eps_cell(opt, eps), schedule_cell(k), n_ex, "1"],
                        indent=label != MV.OURMETHOD))
     return out
 
@@ -110,28 +116,30 @@ def describe_mib(results_dir):
     opt = a.get("optimizer") or "adam"        # pre-2026-08 dirs saved no key: Adam was the default
     eps = a.get("adam_eps", 1e-8)
     steps = a["steps"]
-    return (opt, num(a["lr"]), steps, a["k_schedule"], eps,
-            f"{thousands(steps)} ex.\\ $\\times$ 1 pass")
+    return opt, num(a["lr"]), steps, a["k_schedule"], eps, thousands(steps)
 
 
+# cells: optimiser, LR, eps, path, # examples, steps/example. Node Pruning and DBM use torch's
+# default Adam eps (src/learning_to_attribute/edge_pruning.py constructs the optimiser without one).
+NONE3 = ["---", "---", "---"]
 MIB_FIXED_NODE = [
-    ("Node Pruning", ["Adam", "$0.8$", "hard-concrete, $s = 0.5$", "3{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("DBM", ["Adam", "$0.3$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
-             "3{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("Node Pruning", ["Adam", "$0.8$", "$10^{-8}$", "hard-concrete, $s = 0.5$", "3{,}000", "1"]),
+    ("DBM", ["Adam", "$0.3$", "$10^{-8}$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
+             "3{,}000", "1"]),
     None,
-    ("Stepless IG", ["---", "---", "$\\alpha \\sim U(0,1)$, seed 0", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("IG ($m{=}30$)", ["---", "---", "$\\alpha = j/30$, $j = 1 \\dots 30$", "100--1{,}000 ex.\\ $\\times$ 30 path points"]),
-    ("IG ($m{=}10$)", ["---", "---", "$\\alpha = j/10$, $j = 1 \\dots 10$", "100--1{,}000 ex.\\ $\\times$ 10 path points"]),
-    ("IG ($m{=}5$)", ["---", "---", "$\\alpha = j/5$, $j = 1 \\dots 5$", "100--1{,}000 ex.\\ $\\times$ 5 path points"]),
-    ("I$\\times$G", ["---", "---", "$\\alpha = 0$", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("RelP, RelP$+$QK", ["---", "---", "--- (LRP rule)", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("AttnLRP, GIM", ["---", "---", "--- (LRP rule)", "100--1{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("NAP (CF), NAP-IG (CF) & \\multicolumn{3}{l}{as published (MIB leaderboard, counterfactual)}", None),
-    ("Random (control) & \\multicolumn{3}{l}{as published (MIB leaderboard)}", None),
+    ("Stepless IG", NONE3 + ["$\\alpha \\sim U(0,1)$, seed 0", "100--1{,}000", "1"]),
+    ("IG ($m{=}30$)", NONE3 + ["$\\alpha = j/30$, $j = 1 \\dots 30$", "100--1{,}000", "30"]),
+    ("IG ($m{=}10$)", NONE3 + ["$\\alpha = j/10$, $j = 1 \\dots 10$", "100--1{,}000", "10"]),
+    ("IG ($m{=}5$)", NONE3 + ["$\\alpha = j/5$, $j = 1 \\dots 5$", "100--1{,}000", "5"]),
+    ("I$\\times$G", NONE3 + ["$\\alpha = 0$", "100--1{,}000", "1"]),
+    ("RelP, RelP$+$QK", NONE3 + ["--- (LRP rule)", "100--1{,}000", "1"]),
+    ("AttnLRP, GIM", NONE3 + ["--- (LRP rule)", "100--1{,}000", "1"]),
+    ("NAP (CF), NAP-IG (CF) & \\multicolumn{6}{l}{as published (MIB leaderboard, counterfactual)}", None),
+    ("Random (control) & \\multicolumn{6}{l}{as published (MIB leaderboard)}", None),
 ]
 MIB_FIXED_EDGE = [
-    ("EAP-IG-inp (CF) & \\multicolumn{3}{l}{as published (MIB leaderboard, counterfactual)}", None),
-    ("UGS & \\multicolumn{3}{l}{as published} & 7.2k--114k seq.", None),
+    ("EAP-IG-inp (CF) & \\multicolumn{6}{l}{as published (MIB leaderboard, counterfactual)}", None),
+    ("UGS & \\multicolumn{4}{l}{as published} & 7.2k--114k seq. & ---", None),
 ]
 
 
@@ -207,24 +215,24 @@ def describe_sva(key):
     if len(lrs) > 1:
         lr = f"{num(per['mlp'][1]) if 'mlp' in per else num(lrs[0])} ({num(per['mlp_sae_span'][1])} SAE)"
     steps = sorted({v[2] for v in per.values()})
-    cov = (f"{thousands(steps[0])} ex.\\ $\\times$ 1 pass" if len(steps) == 1
-           else f"{thousands(node[2])} (node) / {thousands(max(steps))} ex.\\ $\\times$ 1 pass")
-    return opt, lr, steps, k, eps, cov
+    n_ex = (thousands(steps[0]) if len(steps) == 1
+            else f"{thousands(node[2])} (node) / {thousands(max(steps))}")
+    return opt, lr, steps, k, eps, n_ex
 
 
 SVA_FIXED = [
     None,
-    ("Node Pruning", ["Adam", "$0.8$", "hard-concrete, $s = 0.9$", "2{,}000 (node) / 5{,}000 ex.\\ $\\times$ 1 pass"]),
-    ("DBM", ["Adam", "$0.3$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
-             "2{,}000 (node) / 5{,}000 ex.\\ $\\times$ 1 pass"]),
+    ("Node Pruning", ["Adam", "$0.8$", "$10^{-8}$", "hard-concrete, $s = 0.9$", "2{,}000 (node) / 5{,}000", "1"]),
+    ("DBM", ["Adam", "$0.3$", "$10^{-8}$", "sigmoid, $\\tau\\!:\\,50\\!\\to\\!0.1$, $\\lambda_{L_1} = 6$",
+             "2{,}000 (node) / 5{,}000", "1"]),
     None,
-    ("Stepless IG", ["---", "---", "$\\alpha \\sim U(0,1)$, seed 42", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
-    ("IG ($m{=}10$)", ["---", "---", "$\\alpha = j/10$, $j = 1 \\dots 10$", "200 / 500 ex.$^{*}$ $\\times$ 10 path points"]),
-    ("I$\\times$G", ["---", "---", "$\\alpha = 0$", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
-    ("AttnLRP", ["---", "---", "--- (LRP rule)", "2{,}000 / 5{,}000 ex.$^{*}$ $\\times$ 1 pass"]),
-    ("Random (control)", ["---", "---", "i.i.d.\\ uniform scores, seeds 42--44", "---"]),
+    ("Stepless IG", NONE3 + ["$\\alpha \\sim U(0,1)$, seed 42", "2{,}000 / 5{,}000$^{*}$", "1"]),
+    ("IG ($m{=}10$)", NONE3 + ["$\\alpha = j/10$, $j = 1 \\dots 10$", "200 / 500$^{*}$", "10"]),
+    ("I$\\times$G", NONE3 + ["$\\alpha = 0$", "2{,}000 / 5{,}000$^{*}$", "1"]),
+    ("AttnLRP", NONE3 + ["--- (LRP rule)", "2{,}000 / 5{,}000$^{*}$", "1"]),
+    ("Random (control)", NONE3 + ["i.i.d.\\ uniform scores, seeds 42--44", "---", "---"]),
 ]
-SVA_FOOTNOTE = ("\\multicolumn{5}{l}{\\footnotesize $^{*}$node / neuron substrates; compute-matched "
+SVA_FOOTNOTE = ("\\multicolumn{7}{l}{\\footnotesize $^{*}$node / neuron substrates; compute-matched "
                 "to \\ourmethod{}'s pass budget, capped at the full train pool (no repetition).} \\\\")
 
 
