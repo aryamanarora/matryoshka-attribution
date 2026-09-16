@@ -1,10 +1,16 @@
-"""tabs/sparsity_sweep.tex as one figure: both metrics against each baseline's sparsity knob.
+"""tabs/sparsity_sweep.tex as TWO figures, one per metric, each a row of one panel per block.
 
-The sibling of plot_lr_sweep_summary.py, over the OTHER sweep table -- ONE ROW OF FOUR PANELS,
-the cross of the two metrics with the two blocks of make_lr_table.SPARSITY_METHODS (Node Pruning's
+The sibling of plot_lr_sweep_summary.py, over the OTHER sweep table. Since 2026-09-16 each metric
+is its own file -- plots/sparsity_sweep_cpr.pdf and plots/sparsity_sweep_compactness.pdf -- placed
+as side-by-side subfigures in sections/detailed-mib.tex; before that the four panels were one
+strip. Within a file the panels are the blocks of make_lr_table.SPARSITY_METHODS (Node Pruning's
 target sparsity s, DBM's L1 coefficient). Same import-the-table discipline: the blocks come from
 that module, so "the blocks of the table" and "the panels of this figure" are one list and an
 unstyled block RAISES rather than quietly vanishing.
+
+KL IS NOT DRAWN (2026-09-16, user decision): the KL-objective Node Pruning rows are out of the
+paper everywhere (make_mib_table.EPRUN_SHOW too). The paragraphs below that discuss the KL series
+are kept as the record of what it showed; plot_achieved_sparsity.py still draws it.
 
 WHAT IT SHOWS, and it is not what the CPR table alone suggests: THE TWO METRICS DISAGREE ABOUT
 THE KNOB, in the same direction for every series.
@@ -103,7 +109,7 @@ palette.py), so the two sweep figures read as one pair, and linetype separates t
 Pruning objectives the way it separates k-schedules there.
 
 Run:  uv run python plots/plot_sparsity_sweep_summary.py
-Out:  plots/sparsity_sweep_summary.pdf  (plots/*.pdf is gitignored -- regenerate, don't commit)
+Out:  plots/sparsity_sweep_cpr.pdf + plots/sparsity_sweep_compactness.pdf  (plots/*.pdf is gitignored)
 """
 import argparse
 import os
@@ -123,10 +129,6 @@ import make_lr_table as M                               # SPARSITY_METHODS + cpr
 # plottable. This is a pure function -- importing it cannot reshape the other figure the way
 # importing a layout CONSTANT can (see plot_train_curves.py's ROW_H warning).
 from plot_lr_sweep_summary import lr_of as knob_of      # noqa: E402
-# The KL series is shared with the achieved-sparsity figure and defined there, next to the
-# comment explaining why its s=0.9 dir is the unsuffixed one.
-from plot_achieved_sparsity import KL_ROWS              # noqa: E402
-
 # Explicit point tuples, not the named "dashed" -- matplotlib scales the named patterns by
 # linewidth, and at lw=0.9 they collapse toward solid inside a short legend handle. See the
 # comment in plot_lr_sweep_summary.py, which this figure is styled to match.
@@ -134,20 +136,21 @@ DASH = (0, (3.2, 1.4))
 UNLABELLED_TICKS = {40.0}
 
 # block name (verbatim from make_lr_table.SPARSITY_METHODS) -> column style. `extra` lists series
-# that are NOT rows of that table: sparsity_sweep.tex reports the logit-diff block only, and the
-# KL block is drawn here as a contrast without being claimed as part of it.
+# that are NOT rows of that table (none since the KL series was dropped; the mechanism stays).
 STYLE = {
     "Node Pruning (logit-diff, LR $=$ 0.8)": dict(
         title="Node Pruning (lr 0.8)", xlabel="target sparsity $s$",
         colour=P.METHOD["Node Pruning"], xscale="linear",
-        label="logit-diff loss", dash="solid",
-        extra=[dict(label="KL loss", rows=KL_ROWS, dash=DASH)]),
+        label="logit-diff loss", dash="solid", extra=[]),
     "DBM $+$ L1 (lr $=$ 0.3)": dict(
         title="DBM (logit-diff, lr 0.3)", xlabel=r"L1 coefficient $\lambda$",
         colour=P.METHOD["DBM"], xscale="symlog", label="logit-diff loss", dash="solid", extra=[]),
 }
-METRICS = [("area_under", "CPR AUC (↑)"), ("acc_auc", "Compactness (↑)")]
-FIG_W, ROW_H = 5.4, 1.62
+# (metric key, y label, output stem). "CPR", not "CPR AUC": the table and the bar chart call the
+# same quantity CPR, and the AUC is implicit in every MIB number the paper prints.
+METRICS = [("area_under", "CPR (↑)", "sparsity_sweep_cpr"),
+           ("acc_auc", "Compactness (↑)", "sparsity_sweep_compactness")]
+FIG_W, ROW_H = 2.7, 1.62   # per file: half the old 5.4in strip, two panels each
 # 6pt ticks, not the 7 the two-column layout used: at 1.3in per panel DBM's symlog axis has to
 # print six explicit swept-value labels (0/0.2/0.6/2/6/20) and they collide at 7.
 FS_LABEL, FS_TICK, FS_ANNOT = 7, 6, 5.5
@@ -240,66 +243,62 @@ def style_axis(ax, xscale, ticks):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="plots/sparsity_sweep_summary.pdf")
+    ap.add_argument("--out-dir", default="plots")
     a = ap.parse_args()
 
     data, skipped = load()
     blocks = [n for n, *_ in M.SPARSITY_METHODS]
     plt.rcParams.update(S.RC)
-    # ONE ROW, metric-major -- see the docstring. The pairs (0,1) and (2,3) share a y axis and are
-    # adjacent by construction; do not reorder this to block-major.
-    panels = [(mi, b) for mi in range(len(METRICS)) for b in blocks]
-    fh = ROW_H + TITLE_H
-    # DBM panels get 15% more width: their symlog axis prints six explicit swept-value labels
-    # (0/0.2/0.6/2/6/20) where s prints three, and 0.2 vs 0.6 is the pair that collides first.
-    fig, axes = plt.subplots(1, len(panels), figsize=(FIG_W, fh), squeeze=False,
-                             gridspec_kw=dict(width_ratios=[1.0 if STYLE[b]["xscale"] == "linear"
-                                                            else 1.15 for _, b in panels]))
-    axes = list(axes[0])
-    # sharey="row" is a no-op in a single row, so the metric pairs are tied by hand. sharex stays
-    # OFF -- neighbouring panels are different quantities in different units.
-    for lead in range(0, len(panels), len(blocks)):
-        for k in range(lead + 1, lead + len(blocks)):
-            axes[k].sharey(axes[lead])
-    for i, (mi, name) in enumerate(panels):
-        metric, ylab = METRICS[mi]
-        st = STYLE[name]
-        ser = data[name]
-        ticks = sorted({k for _, _, pts in ser for k, _ in pts})
-        ax = axes[i]
-        for label, dash, pts in ser:
-            xy = [(k, rec[metric]) for k, rec in pts if rec[metric] is not None]
-            if not xy:
-                continue
-            x, y = [p[0] for p in xy], [p[1] for p in xy]
-            ax.plot(x, y, ls=dash, lw=0.9, color=st["colour"], zorder=2, label=label)
-            ax.plot(x, y, "s", ms=2.6, color=st["colour"], mec="#000000", mew=0.35,
-                    ls="none", zorder=3)
-            bi = ringed(y)
-            if bi is not None:
-                ax.plot([x[bi]], [y[bi]], "o", ms=6.5, mfc="none", mec=st["colour"],
-                        mew=0.8, zorder=4)
-        style_axis(ax, st["xscale"], ticks)
-        ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
-        ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
-        if i % len(blocks) == 0:
-            ax.set_ylabel(ylab, fontsize=FS_LABEL)
-        else:
-            # AFTER style_axis, which resets labelsize but not visibility.
-            ax.tick_params(labelleft=False)
-        # The logit-diff/KL legend is the same in every Node Pruning panel; drawn once, in the
-        # first, where the curves leave the bottom-right corner free.
-        if i == 0 and len(ser) > 1:
-            ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
-                      framealpha=0.9, borderpad=0.3, handlelength=2.0,
-                      handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
-
-    # No subplots_adjust(top=...) any more: in the 2-row layout that reserved the header strip,
-    # but tight_layout already fits the titles, and in one row the reserve only shrinks the axes.
-    fig.tight_layout(pad=0.35, w_pad=0.6)
-    fig.savefig(a.out, dpi=300)
-    fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
-    print("wrote", a.out)
+    # ONE FILE PER METRIC, one panel per block inside it; the two blocks share the y axis so
+    # the two baselines are read on one scale. sharex stays OFF -- neighbouring panels are
+    # different knobs in different units.
+    for metric, ylab, stem in METRICS:
+        fh = ROW_H + TITLE_H
+        # DBM panels get 15% more width: their symlog axis prints the swept-value labels
+        # (0/0.2/0.6/2/6/20/60/200) where s prints three, and 0.2 vs 0.6 collides first.
+        fig, axes = plt.subplots(1, len(blocks), figsize=(FIG_W, fh), squeeze=False,
+                                 gridspec_kw=dict(width_ratios=[1.0 if STYLE[b]["xscale"] == "linear"
+                                                                else 1.15 for b in blocks]))
+        axes = list(axes[0])
+        for k in range(1, len(blocks)):
+            axes[k].sharey(axes[0])
+        for i, name in enumerate(blocks):
+            st = STYLE[name]
+            ser = data[name]
+            ticks = sorted({k for _, _, pts in ser for k, _ in pts})
+            ax = axes[i]
+            for label, dash, pts in ser:
+                xy = [(k, rec[metric]) for k, rec in pts if rec[metric] is not None]
+                if not xy:
+                    continue
+                x, y = [p[0] for p in xy], [p[1] for p in xy]
+                ax.plot(x, y, ls=dash, lw=0.9, color=st["colour"], zorder=2, label=label)
+                ax.plot(x, y, "s", ms=2.6, color=st["colour"], mec="#000000", mew=0.35,
+                        ls="none", zorder=3)
+                bi = ringed(y)
+                if bi is not None:
+                    ax.plot([x[bi]], [y[bi]], "o", ms=6.5, mfc="none", mec=st["colour"],
+                            mew=0.8, zorder=4)
+            style_axis(ax, st["xscale"], ticks)
+            ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
+            ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
+            if i == 0:
+                ax.set_ylabel(ylab, fontsize=FS_LABEL)
+            else:
+                # AFTER style_axis, which resets labelsize but not visibility.
+                ax.tick_params(labelleft=False)
+            # A legend only when a panel draws more than one series (none do since the KL
+            # series was dropped); first panel, where the curves leave the corner free.
+            if i == 0 and len(ser) > 1:
+                ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
+                          framealpha=0.9, borderpad=0.3, handlelength=2.0,
+                          handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
+        fig.tight_layout(pad=0.35, w_pad=0.6)
+        out = f"{a.out_dir}/{stem}.pdf"
+        fig.savefig(out, dpi=300)
+        fig.savefig(out.replace(".pdf", ".png"), dpi=200)
+        print("wrote", out)
+        plt.close(fig)
 
     if skipped:
         print(f"\nexcluded ({len(M.SPARSITY_COLUMNS)} MIB validation cells required per metric):")
@@ -309,7 +308,7 @@ def main():
     print("\nbest knob per series:")
     for name in blocks:
         for label, _, pts in data[name]:
-            for metric, _ in METRICS:
+            for metric, _, _ in METRICS:
                 xy = [(k, r[metric]) for k, r in pts if r[metric] is not None]
                 tag = f"{STYLE[name]['title']} / {label}"
                 if not xy:

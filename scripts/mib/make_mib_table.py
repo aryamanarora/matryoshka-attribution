@@ -361,7 +361,10 @@ EPRUN_SPARSITIES = [
 # That is the whole reason the budget could be dropped from the label at all. If you ever point
 # the two tables at different budgets again, put s= back in these strings first.
 # The caption should still name the budget, since no row does any more.
-EPRUN_SHOW = {"eprun_eval_s0.95": "KL", "eprun_eval_s0.95_ld": "LD"}
+# 2026-09-16 (user decision): the KL-objective row is dropped from the paper altogether -- the
+# sweep figure, this table and the acc-AUC table show the logit-diff run only, so the label
+# names the budget again (the objective no longer distinguishes anything).
+EPRUN_SHOW = {"eprun_eval_s0.95_ld": "$s{=}0.95$"}
 
 # The single config the test table and the figures show. Best by CPR AUC, which is the metric
 # the paper leads with -- validation row avg over 11 cells is 1.67 for logit-diff s=0.5 against

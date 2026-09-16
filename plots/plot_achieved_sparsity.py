@@ -73,7 +73,8 @@ import palette as P                                     # noqa: E402
 import plot_mib_accauc_cpr_scatter as S                 # RC only  # noqa: E402
 import make_lr_table as M                               # COLUMNS  # noqa: E402
 
-# The KL series' results dirs, imported by plot_sparsity_sweep_summary.py so the two figures
+# The KL series' results dirs (until 2026-09-16 also imported by plot_sparsity_sweep_summary.py, which
+# no longer draws KL -- the KL rows are out of the paper) so the two figures
 # cannot disagree about which dirs are the KL sweep. Listed explicitly rather than derived from
 # the logit-diff names because the layout is irregular: the s=0.9 KL runs sit in the UNSUFFIXED
 # results/eprun_eval, since run_edge_pruning.sbatch only appends _s<S> when a sparsity is passed
