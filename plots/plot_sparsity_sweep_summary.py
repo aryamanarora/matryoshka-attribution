@@ -138,9 +138,10 @@ DASH = (0, (3.2, 1.4))
 # eight swept-value labels cannot all be resolved by 6pt type: 0.2 collides with 0.6, and 40/60
 # with 20/200. The surviving labels (0, 0.6, 2, 6, 20, 200) still bracket every rung.
 UNLABELLED_TICKS = {0.2, 40.0, 60.0}
-# Legend corner per metric: the CPR curves leave the lower-left empty (DBM sits at ~1.3 from
-# lambda=0.2 on), the compactness curves the upper-left (they climb from the bottom-left).
-LEGEND_LOC = {"area_under": "lower left", "acc_auc": "upper left"}
+# The reference line is labelled by a text just under it at the left edge rather than a
+# legend: a legend entry reading "multi-sparsity (test)" at 5.5pt is as wide as the 1.35in
+# panel, so its corner is moot and it hides a third of the curve wherever it goes.
+REF_LABEL = "multi-sparsity ({split})"
 
 # block name (verbatim from make_lr_table.SPARSITY_METHODS) -> column style. `extra` lists series
 # that are NOT rows of that table (none since the KL series was dropped; the mechanism stays).
@@ -305,12 +306,16 @@ def main():
                             mew=0.8, zorder=4)
             ref = ladder_mean(st["ladder"], 0 if metric == "area_under" else 1) if st.get("ladder") else None
             if ref is not None:
-                ax.axhline(ref, ls=DASH, lw=0.9, color=st["colour"], alpha=0.9, zorder=1,
-                           label=f"multi-sparsity ({LADDER_SPLIT})")
+                ax.axhline(ref, ls=DASH, lw=0.9, color=st["colour"], alpha=0.9, zorder=1)
                 # axhline does not autoscale; keep the line inside the (shared) y range.
                 lo, hi = ax.get_ylim()
                 pad = 0.06 * (hi - lo)
                 ax.set_ylim(min(lo, ref - pad), max(hi, ref + pad))
+                # Below the line, left edge: both curves start low at the left, so that strip
+                # is empty in either metric; x in axes fraction, y in data.
+                ax.text(0.03, ref, REF_LABEL.format(split=LADDER_SPLIT), fontsize=FS_ANNOT,
+                        color=st["colour"], ha="left", va="top",
+                        transform=ax.get_yaxis_transform(), zorder=5)
             style_axis(ax, st["xscale"], ticks)
             ax.set_title(st["title"], fontsize=FS_LABEL, pad=3)
             ax.set_xlabel(st["xlabel"], fontsize=FS_LABEL)
@@ -319,10 +324,10 @@ def main():
             else:
                 # AFTER style_axis, which resets labelsize but not visibility.
                 ax.tick_params(labelleft=False)
-            # A legend wherever a panel draws more than its one curve: the ladder's
-            # reference line (or an `extra` series, none since KL was dropped).
-            if len(ser) > 1 or ref is not None:
-                ax.legend(fontsize=FS_ANNOT, loc=LEGEND_LOC[metric], frameon=True,
+            # A legend only when a panel draws more than one curve (an `extra` series; none
+            # since KL was dropped). The reference line is labelled in place, above.
+            if len(ser) > 1:
+                ax.legend(fontsize=FS_ANNOT, loc="lower right", frameon=True,
                           framealpha=0.9, borderpad=0.3, handlelength=2.0,
                           handletextpad=0.4, labelspacing=0.2).get_frame().set_linewidth(0.4)
         fig.tight_layout(pad=0.35, w_pad=0.6)
