@@ -157,12 +157,12 @@ def fixed_rows(spec):
 
 def build_mib():
     L = list(HEADER)
-    L.append("\\multicolumn{5}{l}{\\textit{Node-level}} \\\\")
+    L.append("\\multicolumn{7}{l}{\\textit{Node-level}} \\\\")
     L += mattr_rows(T.OUR_NODE_METHODS, describe_mib)
     L.append("\\midrule")
     L += fixed_rows(MIB_FIXED_NODE)
     L.append("\\midrule")
-    L.append("\\multicolumn{5}{l}{\\textit{Edge-level}} \\\\")
+    L.append("\\multicolumn{7}{l}{\\textit{Edge-level}} \\\\")
     L += mattr_rows(T.OUR_EDGE_METHODS, describe_mib)
     L += fixed_rows(MIB_FIXED_EDGE)
     L += FOOTER
