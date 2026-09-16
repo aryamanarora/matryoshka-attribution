@@ -18,9 +18,13 @@ test table and the bar charts use). Same pkl keys as everywhere: CPR = `area_und
 
 The ladder bars are hatched in the method's colour: same method, more training runs (9 for Node
 Pruning, 8 for DBM, against one -- make_mib_table.NP_MULTI_COST / DBM_MULTI_COST), which is the
-caveat the caption has to carry. A 13th "Avg" group after a rule averages over the cells all
-four bars have; a cell whose ladder has not landed is drawn without that bar and left out of
-the average, and named on stdout.
+caveat the caption has to carry. A 13th "Avg" group after a rule averages EACH series over the
+cells it has -- all 12 for the single runs, the headline and the DBM ladder; for the Node
+Pruning ladder, whatever has landed, with the count printed on stdout. (Averaging every series
+over only the cells all of them share put the 6-cell Avg over the IOI / small-MCQA cells, where
+DBM leads, and read as "Node Pruning loses to DBM" while the 12-cell table says the opposite,
+1.62 vs 1.47; a partial series is the exception, not the rule, and is complete once the ladder
+wave lands.)
 
 TEST split by default: the ladders were evaluated on test (validation was declined); the single
 configs have both splits. Full width, two stacked panels (CPR AUC unbounded, ~1 at chance;
@@ -95,13 +99,12 @@ def main():
     cols = [(t, m) for t, m, _ in M.COLUMNS]
     data = {lab: {c: f(*c) for c in cols} for _, lab, _, f in series}
     ref = {c: mattr(*c, a.split) for c in cols}
-    shared = [c for c in cols
-              if all(data[lab][c] is not None for _, lab, _, _ in series) and ref[c] is not None]
+    n_have = {}
     for _, lab, _, _ in series:
+        n_have[lab] = sum(1 for c in cols if data[lab][c] is not None)
         miss = [f"{t}/{m}" for t, m in cols if data[lab][(t, m)] is None]
-        if miss:
-            print(f"  NOTE {lab} ({a.split}): missing {miss}")
-    print(f"  Avg over {len(shared)}/{len(cols)} cells present in all four series and the reference")
+        print(f"  {lab}: Avg over {n_have[lab]}/{len(cols)} cells" + (f"; missing {miss}" if miss else ""))
+    print(f"  MAttr: Avg over {sum(1 for c in cols if ref[c] is not None)}/{len(cols)} cells")
 
     plt.rcParams.update(P.RC)
     fh = HEAD + len(METRICS) * PANEL_H + FOOT
@@ -113,7 +116,7 @@ def main():
         rule = {}
         for x, g in zip(xs, groups):
             if g == "avg":
-                v = [ref[c][key] for c in shared if ref[c][key] is not None]
+                v = [ref[c][key] for c in cols if ref[c] is not None and ref[c][key] is not None]
                 rule[x] = sum(v) / len(v) if v else None
             else:
                 rule[x] = None if ref[g] is None else ref[g][key]
@@ -121,7 +124,8 @@ def main():
             vals = []
             for g in groups:
                 if g == "avg":
-                    v = [data[lab][c][key] for c in shared if data[lab][c][key] is not None]
+                    v = [data[lab][c][key] for c in cols
+                         if data[lab][c] is not None and data[lab][c][key] is not None]
                     vals.append(sum(v) / len(v) if v else None)
                 else:
                     r = data[lab][g]
@@ -139,7 +143,7 @@ def main():
                     ax.annotate(f"{v:.2f}", (x + off, top_y), textcoords="offset points",
                                 xytext=(0, 1.2), ha="center", va="bottom", fontsize=FS_ANNOT,
                                 rotation=90, zorder=6)
-        # The headline rule, spanning the group's four bars; Avg over the shared cells.
+        # The headline rule, spanning the group's four bars; Avg over its own 12 cells.
         half = len(series) * BAR_W / 2
         for x in xs:
             if rule[x] is not None:
@@ -173,7 +177,8 @@ def main():
                columnspacing=1.4)
     fig.savefig(a.out)
     fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)
-    print(f"wrote {a.out} ({a.split}, {len(shared)}/{len(cols)} complete cells)")
+    print(f"wrote {a.out} ({a.split}; cells per series: "
+          + ", ".join(f"{lab} {n}" for lab, n in n_have.items()) + ")")
 
 
 if __name__ == "__main__":
