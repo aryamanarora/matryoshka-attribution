@@ -14,8 +14,11 @@ from plotnine import (ggplot, aes, geom_tile, geom_text, labs, facet_wrap,
                       theme_bw, theme_set, theme,
                       element_text, element_line, element_blank, element_rect)
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from learning_to_attribute.deps import mib_results_dir          # noqa: E402
 R = Path("results")                                             # l2a: flat MAttr importances
-R_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")  # nested gradient baselines
+R_MIB = mib_results_dir()                                       # nested gradient baselines (deps/MIB-circuit-track/results)
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 theme_set(
     theme_bw(base_size=8)
@@ -68,7 +71,13 @@ METHODS = [
     ("+hard (unif)*",     "htk_lr_0.05",                                   "flat"),   # hard-STE uniform-k (lr=0.05, best from sweep)
     ("+hard (log)*",      "htklog_lr_0.05",                                "flat"),   # hard-STE log-k (lr=0.05, best from sweep)
     ("+Gumbel",           "mib_node_hard_topk_gumbel",                     "flat"),
-    ("MAttr (unif)",      "final_node",                                    "flat"),   # soft-fwd uniform-k
+    # HEADLINE since 2026-09-15 (mattr_variants.HEADLINE): soft-fwd uniform-k Adam at lr 0.05 --
+    # the lr05 dir, not final_node (same variant at lr 0.01, superseded). The two OBJECTIVE
+    # ablations of exactly this run follow it: trained with --mode cause (noising) and --mode
+    # joint (coin flip per step); see plots/plot_objective_ablation.py for their scores.
+    ("MAttr (unif)*",     "mib_node_topk_uniform_lr05",                    "flat"),
+    ("+cause obj.",       "mib_node_cause_topk_uniform_lr05",              "flat"),
+    ("+joint obj.",       "mib_node_joint_topk_uniform_lr05",              "flat"),
     ("MAttr (log)*",      "topklog_lr_0.05",                               "flat"),   # HEADLINE: soft-fwd log-k (lr=0.05, best from sweep)
     # The optimizer ablation, each arm at ITS OWN best LR -- the same dirs make_mib_table's two
     # \ourmethod{}-SGD rows point at (log-k peaks at lr=1.0, uniform-k at 3.0; see OUR_METHODS).
@@ -394,6 +403,55 @@ p1b = (ggplot(sd, aes("a", "b", fill="rho")) + geom_tile(color="white")
 p1b.save(OUT / "method_corr_heatmap_bytype.pdf", dpi=300)
 p1b.save(OUT / "method_corr_heatmap_bytype.png", dpi=150)
 print("Saved method_corr_heatmap_bytype")
+
+# ---- (1c) OBJECTIVE figure: iso / cause / joint against the gradient and mask baselines ----
+# Requested 2026-09-16: does the cause-trained ranking behave like a gradient method (I x G in
+# particular)? Three facets -- all nodes, attention heads, MLPs -- because the m0 story
+# (plots/plot_objective_ablation.py, scripts/mib/top_nodes.py) is an MLP story. Its own file;
+# the main-text panel above is sized with its two neighbours and is not touched.
+OBJ_LABELS = ["MAttr (unif)*", "+cause obj.", "+joint obj.",
+              "Node Pruning", "DBM",
+              "I$\\times$G", "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP", "RelP", "GIM"]
+OBJ_DISPLAY = {"MAttr (unif)*": "MAttr (iso)", "+cause obj.": "+cause", "+joint obj.": "+joint",
+               "NAP-IG (5 steps)": "IG-5", "Node Pruning": "NodePrune", "Expected Gradients": "EG"}
+OBJ_SUBSETS = ["all", "Attention heads", "MLPs"]
+orows = []
+for sublab in OBJ_SUBSETS:
+    for a in OBJ_LABELS:
+        for b in OBJ_LABELS:
+            vals = [crho(a, b, tm, sublab) for tm in TASKS]
+            vals = [v for v in vals if not np.isnan(v)]
+            orows.append({"subset": "All nodes" if sublab == "all" else sublab, "a": a, "b": b,
+                          "rho": np.mean(vals) if vals else np.nan})
+od = pd.DataFrame(orows)
+od["a"] = od["a"].map(lambda x: OBJ_DISPLAY.get(x, x))
+od["b"] = od["b"].map(lambda x: OBJ_DISPLAY.get(x, x))
+OBJ_ORDER_D = [OBJ_DISPLAY.get(x, x) for x in OBJ_LABELS]
+od["subset"] = pd.Categorical(od["subset"], categories=["All nodes", "Attention heads", "MLPs"], ordered=True)
+od["a"] = pd.Categorical(od["a"], categories=OBJ_ORDER_D, ordered=True)
+od["b"] = pd.Categorical(od["b"], categories=OBJ_ORDER_D[::-1], ordered=True)
+od["lab"] = od["rho"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}".replace("0.", ".", 1))
+od["txt"] = od["rho"].map(text_color)
+p1c = (ggplot(od, aes("a", "b", fill="rho")) + geom_tile(color="white")
+       + geom_text(aes(label="lab", color="txt"), size=3.4)
+       + facet_wrap("subset", ncol=3)
+       + scale_fill_gradient2(low="#b2182b", mid="#f7f7f7", high="#2166ac",
+                              midpoint=0, limits=[-1, 1], na_value="#eeeeee", guide=None)
+       + scale_color_identity() + guides(color=None)
+       + scale_x_discrete(expand=(0, 0)) + scale_y_discrete(expand=(0, 0))
+       + labs(x="", y="")
+       + theme(figure_size=(5.5, 2.15), aspect_ratio=1, plot_margin_top=0.02,
+               panel_grid=element_blank(),
+               axis_text_x=element_text(rotation=45, ha="right", size=5),
+               axis_text_y=element_text(size=5)))
+p1c.save(OUT / "method_corr_heatmap_objective.pdf", dpi=300)
+p1c.save(OUT / "method_corr_heatmap_objective.png", dpi=150)
+print("Saved method_corr_heatmap_objective")
+for a in ["+cause obj.", "+joint obj.", "MAttr (unif)*"]:
+    for sublab in OBJ_SUBSETS:
+        best = sorted(((np.nanmean([crho(a, b, tm, sublab) for tm in TASKS]), b)
+                       for b in OBJ_LABELS if b != a), reverse=True)[:3]
+        print(f"  {a:<14} {sublab:<16} closest: " + ", ".join(f"{b} {v:+.2f}" for v, b in best))
 
 # ---- (2) faceted by task ----
 frows = []
