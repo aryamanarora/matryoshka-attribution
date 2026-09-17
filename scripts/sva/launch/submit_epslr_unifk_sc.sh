@@ -29,7 +29,9 @@ row_spec() {  # -> "model nodes errarg outbase prefix res"
     node)        echo "llama3 node - results/epslr_node_unifk ukn -q_jag_-d_a6000_-c_4_-r_96G" ;;
     mlpn_gemma2) echo "gemma2 mlp - results/epslr_mlpn_gemma2_unifk ukmg -q_jag_-d_a6000_-c_3_-r_64G" ;;
     mlpn)        echo "llama3 mlp - results/epslr_mlpn_unifk ukm -q_jag_-d_a6000_-c_4_-r_96G" ;;
-    sae)         echo "llama3 mlp_sae_span frozen results/saefrozen_epslr_unifk uks -q_jag_-d_a6000_-c_4_-r_96G" ;;
+    # sphinx h100, not jag a6000: Llama-8B + 32 Llama-Scope SAEs (5.2M mask logits) OOMs a 48 GB
+    # card at the first training step (2026-09-16); the log-k twin ran on Tilde's 80 GB H100s.
+    sae)         echo "llama3 mlp_sae_span frozen results/saefrozen_epslr_unifk uks -q_sphinx_-d_h100_-r_128G" ;;
     *) echo "bad row $1" >&2; exit 1 ;;
   esac
 }
