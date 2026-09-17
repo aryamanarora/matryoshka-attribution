@@ -472,6 +472,12 @@ def main():
             ns = {x.rsplit(" ", 1)[1] for x in v}
             if len(ns) == 1:
                 return f"n={ns.pop()}"
+            # Only some losses present (2026-09-17: the uniform-k eps=1e-2 arm exists for
+            # logit-diff alone on the MLP substrates): name the present ones, drop the zeros.
+            # The old "n tasks: CE 0, acc 0,\nlogit-diff 4" wrapped over the curves.
+            present = [x for x in v if not x.endswith(" 0")]
+            if present and len({x.rsplit(" ", 1)[1] for x in present}) == 1:
+                return f"n={present[0].rsplit(' ', 1)[1]} ({', '.join(x.rsplit(' ', 1)[0] for x in present)})"
             return "n tasks: " + ", ".join(v[:2]) + ",\n" + ", ".join(v[2:])
 
         nlab = pd.DataFrame([dict(substrate=s, label=note(v)) for s, v in agg.items()])
