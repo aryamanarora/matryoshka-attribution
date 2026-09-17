@@ -622,7 +622,9 @@ def draw_cost(sx, recs):
                         ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=COST_COLOR,
                         zorder=5)
     sx.set_ylim(0, top * STRIP_HEADROOM)
-    step = 10_000 if top >= 20_000 else 2_500
+    # ~3 ticks per strip whatever its range: the edge panel tops out at 10k (IG m=10) and the
+    # 2.5k step gave it six labels (0 .. 12.5k) on a 0.4in strip.
+    step = 10_000 if top >= 20_000 else 5_000 if top >= 10_000 else 2_500
     ticks = np.arange(0, top * STRIP_HEADROOM, step)
     sx.set_yticks(ticks)
     sx.set_yticklabels(["0" if v == 0 else f"{v / 1000:g}k" for v in ticks], fontsize=FS_TICK)
