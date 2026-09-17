@@ -167,9 +167,10 @@ DROP_OURS_OPT = "sgd"
 # so the log-k Adam arm is labelled "$+$ log $k$" and the surviving uniform-k Adam row is
 # ALREADY the bare \ourmethod{} -- the RENAME_OURS patch below is therefore empty, and the
 # "MAttr means a different run here than in the table" defect described above is closed.
-# "$+$ $10\\times$ steps" (node only, 2026-09-17): the figure keeps one MAttr bar per level, the
-# 500-step headline; the 10x row is the table's.
-DROP_OURS_NAMES = (T.MV.label(k="log"), "$+$ $10\\times$ steps")
+DROP_OURS_NAMES = (T.MV.label(k="log"),)
+# Extra MAttr rows drawn BESIDE the headline (2026-09-17, requested): the 10x-steps twin, as a
+# second "ours" bar. Node only (no test twin at edge). Keyed by the table's row string.
+KEEP_OURS_EXTRA = ("$+$ $10\\times$ steps",)
 # Display names for the two survivors (2026-09-08, requested). With no non-Adam MAttr left in
 # the figure, "$+$ Adam" is an ablation marker pointing at nothing, so the rows are drawn as
 # the plain method and its one k-schedule ablation.
@@ -183,7 +184,7 @@ DROP_OURS_NAMES = (T.MV.label(k="log"), "$+$ $10\\times$ steps")
 # is keyed on the table's current strings and will raise the moment they change.
 # 2026-09-11 (requested): uniform-k IS the figure's MAttr. The log-k arm is gone (see
 # DROP_OURS_NAMES), so the surviving uniform-k Adam row is drawn as the plain method name.
-RENAME_OURS = {}   # the headline row is bare \ourmethod{} in the table itself since 2026-09-15
+RENAME_OURS = {"$+$ $10\\times$ steps": "MAttr (10$\\times$)"}   # the headline row is bare \ourmethod{}
 # Baseline rows relabelled for the figure only (2026-09-11, requested). The table keeps MIB's
 # own name for its published edge row; here it is drawn under the node panel's naming, since
 # it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"
@@ -250,7 +251,7 @@ COST = {
         # Every MAttr row costs the same 500 steps; keyed on the table's own row list so a relabel
         # (2026-09-15: headline is now the bare \ourmethod{}) cannot strand a row without a cost.
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
-        "$+$ $10\\times$ steps": "5k",   # never drawn (DROP_OURS_NAMES); kept correct anyway
+        "$+$ $10\\times$ steps": "5k",   # KEEP_OURS_EXTRA: 5000 steps x batch 1
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
@@ -428,13 +429,15 @@ def ours_kept(level, rows):
                              f"{level.upper()}_METHODS -- cannot resolve its optimiser")
         drop = T._M.opt_of(dirs[name]) == DROP_OURS_OPT or name in DROP_OURS_NAMES
         (dropped if drop else kept).append(name)
-    # The invariant is ONE MAttr bar per level (the headline), not a fixed number of drops: a
-    # row collect() holds back while its wave lands (2026-09-17: the node 10x-steps row at 11/12)
-    # must not fail the figure, and a rename that lets a second row through still raises.
-    if len(kept) != 1:
+    # The invariant is the headline bar plus whichever KEEP_OURS_EXTRA rows are on disk, not a
+    # fixed number of drops: a row collect() holds back while its wave lands must not fail the
+    # figure, and a rename that lets any other row through still raises.
+    extra = [n for n in kept if n in KEEP_OURS_EXTRA]
+    if len(kept) != 1 + len(extra):
         raise SystemExit(f"{level}: {len(kept)} MAttr rows survive the drop rule ({kept}; dropped "
-                         f"{dropped}), expected exactly one -- repointed or renamed in "
-                         "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / DROP_OURS_NAMES")
+                         f"{dropped}), expected the headline plus {extra} -- repointed or renamed "
+                         "in make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / "
+                         "DROP_OURS_NAMES / KEEP_OURS_EXTRA")
     unknown = [n for n in DROP_OURS_NAMES if n not in dirs and level != "edge"]   # the 10x row is node-only
     if unknown:
         raise SystemExit(f"{level}: DROP_OURS_NAMES {unknown} match no row in "

@@ -222,6 +222,12 @@ SUBSTRATE_RES = {"mlp_sae_span": "results/sva_sweep_ferr5k",
                  # is not budget-limited.
                  "mlp": "results/sva_sweep_5k",
                  "mlp+attn_head": "results/sva_sweep_5k"}
+# The 10x-steps twin of the headline (scripts/sva/launch/submit_unifk_eps_50k_sc.sh, 2026-09-17):
+# 50k steps, everything else the headline's, in its own trees for the reason SUBSTRATE_RES gives.
+# Only these three substrates were run; the key is absent from the node column.
+TENX_KEY, TENX_BASE = "stopk-unif-eps1e-2-10x", "stopk-unif-eps1e-2"
+TENX_RES = {"mlp": "results/sva_sweep_50k", "mlp+attn_head": "results/sva_sweep_50k",
+            "mlp_sae_span": "results/sva_sweep_ferr50k"}
 # SAE (resid) WAS THE SECOND COLUMN HERE AND WAS DROPPED (2026-09-03, requested). It is still in
 # REQUIRED and in --all; only the default cut lost it. The old note read:
 #
@@ -261,6 +267,10 @@ METHODS = {
     # plot_mib_test_avg / plot_mib_accauc_cpr_scatter give uniform-k). Kept out of ALL_METHODS
     # like GIM so no other cut changes.
     "stopk-unif-eps1e-2": ("MAttr (Adam, unif k)", P.METHOD["+hard"]),
+    # The headline trained 10x longer (50k steps on the SVA+ substrates, 5k on MIB node): a
+    # SYNTHETIC key -- parse_method strips the budget suffix, so these runs parse as the
+    # headline key and are told apart by TREE (TENX_RES), not by tag. See tenx_for() in main.
+    "stopk-unif-eps1e-2-10x": ("MAttr (10×)", P.METHOD["+hard"]),
     "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
     # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
     # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
@@ -421,8 +431,10 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # swap is applied inside main()'s --cpr branch (CPR_STARS / CPR_POINT_LABEL) precisely so
 # the default cut does not move.
 CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
-               "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
-CPR_STARS = {"stopk-unif-eps1e-2"}
+               "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "stopk-unif-eps1e-2-10x", "Random"]
+# Both MAttr budgets are stars (same method, 1x and 10x the steps); the 10x one is labelled by
+# its step mark, like the table row, so the plain "MAttr" stays the 1x headline.
+CPR_STARS = {"stopk-unif-eps1e-2", "stopk-unif-eps1e-2-10x"}
 CPR_FILLED = {"stopk-log-eps1e-2"}
 # Labels anchored LEFT of their marker, key -> facet-label prefixes where it applies. The
 # MIB panels stack five points up the right side; at the reduced --cpr height the star's
@@ -431,13 +443,14 @@ CPR_FILLED = {"stopk-log-eps1e-2"}
 # the star's label needs. Set in main()'s --cpr branch via LABEL_LEFT; default cut untouched.
 CPR_LABEL_LEFT = {"stopk-unif-eps1e-2": ("MIB (node", "MIB (edge"), "eprun-s090": ("MIB (node",)}
 LABEL_LEFT = {}
-CPR_POINT_LABEL = {"stopk-unif-eps1e-2": "MAttr", "stopk-log-eps1e-2": "$+$log $k$"}
+CPR_POINT_LABEL = {"stopk-unif-eps1e-2": "MAttr", "stopk-log-eps1e-2": "$+$log $k$",
+                   "stopk-unif-eps1e-2-10x": "$+$10$\\times$ steps"}
 # Mask-learning methods draw as SQUARES (gradient = circles, MAttr = stars), the same
 # gradient/mask shape split plot_mib_accauc_cpr_scatter.FAMILY_SHAPE uses.
 MASK_KEYS = {"eprun-s090", "sig_lr0.3_l16.0", "dbm-multisp"}
 # The keys drawn as STARS in draw_labelled. Module-level so a cut can narrow it (the --cpr
 # branch sets it to CPR_STARS); everything not a star and not in MASK_KEYS is a circle.
-STAR_KEYS = {"stopk-log-eps1e-2", "softsgd-log", "stopk-unif-eps1e-2"}
+STAR_KEYS = {"stopk-log-eps1e-2", "softsgd-log", "stopk-unif-eps1e-2", "stopk-unif-eps1e-2-10x"}
 # When True, every NON-star marker is drawn as an outline in its method colour and only the
 # stars are filled -- the star is then the one filled thing on the panel (2026-09-11,
 # requested, --cpr cut only; set in main()'s --cpr branch). The "+log k" circle counts as
@@ -932,6 +945,7 @@ MIB_TEST = {
     "softsgd-log":       ("test_node_softlog_sgd_lr_1.0", None),
     # "+ Adam, unif k" of the test table. DEFAULT eps, like the Adam log-k row above.
     "stopk-unif-eps1e-2": ("test_node_topk_uniform_lr05", None),
+    "stopk-unif-eps1e-2-10x": ("test_node_topk_uniform_lr05_5k", None),   # 5000 steps; no edge twin
     # Our own random node ordering on the test split (MIB-circuit-track/run_random_test.sh,
     # U(0,1) node scores, seed 42+cell). It supplies the IIA log-AUC that MIB's Table 1 does
     # not report; until all 11 cells land, Random falls back to a reference line at the
@@ -958,7 +972,7 @@ FAMILY_COLOR = {
     # separate colour here would make one method two colours across two figures on one page.
     # The two are told apart by their labels, as they are in the bar chart.
     "stopk-log-eps1e-2": P.METHOD["MAttr"], "softsgd-log": P.METHOD["MAttr"],
-    "stopk-unif-eps1e-2": P.METHOD["MAttr"],
+    "stopk-unif-eps1e-2": P.METHOD["MAttr"], "stopk-unif-eps1e-2-10x": P.METHOD["MAttr"],
     "Random": P.METHOD["Random"],
 }
 
@@ -1154,6 +1168,16 @@ def main():
             cache[d] = load(d)
         return cache[d]
 
+    def tenx_for(sub):
+        """The 10x tree for `sub`, its headline-key runs re-keyed to TENX_KEY; {} off-substrate."""
+        d = TENX_RES.get(sub)
+        if d is None:
+            return {}
+        if d not in cache:
+            cache[d] = {(TENX_KEY, l, s, t): v for (m, l, s, t), v in load(d).items()
+                        if m == TENX_BASE}
+        return cache[d]
+
     for res, inp_label, abl in sources:
         for m in figure_methods:
             mlabel = METHODS[m][0]
@@ -1179,7 +1203,7 @@ def main():
                     facet = ((f"{abl}\n" if show_abl else "")
                              + (f"{slabel}, {inp_label}" if show_inp else slabel)
                              + f"\n{'·'.join(required[sub])}")
-                    raw = raw_for(res, sub)
+                    raw = tenx_for(sub) if m == TENX_KEY else raw_for(res, sub)
                     r = group_avg(raw, m, lkey, sub, required)
                     if r is None:
                         have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
