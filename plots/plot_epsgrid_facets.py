@@ -97,7 +97,9 @@ COLS = [
     # "CPR" is the LINEAR AUC of the faithfulness curve over the kept proportion (the loader's
     # computed "cpr" key, plot_adamsgd_mlp_diag.cpr_of; MIB's measure), as in tabs/sva_results.tex
     # since 2026-09-17. Until then this column was faith_auc, the log-weighted one.
-    ("cpr", "CPR", "RdBu_r", 0.0, 3.5, None),
+    # vmax 6.0: the linear CPR reaches 5.97 on the Gemma MLP row (gap-padding at small eps);
+    # the TwoSlopeNorm keeps white at 1.0, so only the red arm stretches.
+    ("cpr", "CPR", "RdBu_r", 0.0, 6.0, None),
     ("rho_ig", "Spearman $\\rho$ vs. IG", "viridis", 0.0, 0.75, None),
     ("rho_sgd", "Spearman $\\rho$ vs. SGD", "viridis", 0.0, 0.90, None),
     # SPREAD OF THE LEARNED SCORE VECTOR -- the only column that measures the optimiser's OUTPUT
