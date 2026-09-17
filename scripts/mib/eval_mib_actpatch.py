@@ -4,7 +4,7 @@ No learning: the score of every node is its own causal effect under an interchan
 intervention, averaged over training pairs. Both directions are computed in the same pass, since
 the second forward per node is the only extra cost:
 
-  denoise  score_i = mean[ LD(all CF, node i clean) - LD(all CF) ]      (sufficiency of i alone)
+  denoise  score_i = mean[ LD(input clean, all CF, i clean) - LD(input clean, all CF) ]  (sufficiency)
   noise    score_i = mean[ LD(all clean) - LD(all clean, node i CF) ]    (necessity of i alone)
 
 where LD is the logit difference correct - incorrect at the last position, exactly the training
@@ -111,6 +111,7 @@ def compute_scores(args, device):
     cf_cache = CFActivationCache(hooker, max_gb=args.cf_cache_gb, logger=logger)
     ones = torch.ones(total, device=device)
     zeros = torch.zeros(total, device=device)
+    e_in = torch.zeros(total, device=device); e_in[0] = 1.0   # input node (include_input=True)
     den_sum = torch.zeros(total, dtype=torch.float64)
     noi_sum = torch.zeros(total, dtype=torch.float64)
     n_seen = 0
@@ -133,12 +134,19 @@ def compute_scores(args, device):
         ld = partial(logit_diff, base_ids, base_attn, last_pos, correct_t, incorrect_t)
 
         ld_clean = ld(ones)
-        ld_corr = ld(zeros)
+        # Denoising baseline keeps the INPUT clean (mask e_0) with every component CF, as MIB's
+        # eval does (the input node is always in the circuit). With the input CF as well, every
+        # node's recomputed value already IS the source value, so restoring one changes nothing.
+        ld_corr = ld(e_in)
+        ld_allcf = ld(zeros)
         for i in range(total):
             e = torch.zeros(total, device=device)
             e[i] = 1.0
-            den_sum[i] += (ld(e) - ld_corr).sum().item()          # restore i alone
-            noi_sum[i] += (ld_clean - ld(ones - e)).sum().item()  # corrupt i alone
+            if i == 0:
+                den_sum[i] += (ld_corr - ld_allcf).sum().item()          # restore the input alone
+            else:
+                den_sum[i] += (ld(e_in + e) - ld_corr).sum().item()      # restore i alone (input clean)
+            noi_sum[i] += (ld_clean - ld(ones - e)).sum().item()         # corrupt i alone
         n_seen += len(picks)
         logger.info("batch %d/%d (%d ex, len %d): clean LD %.3f corr LD %.3f  [%.0fs]",
                     bi + 1, len(batches), len(picks), int(lens[0]),
