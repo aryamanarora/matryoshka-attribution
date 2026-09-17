@@ -93,8 +93,15 @@ TRAINED = [("stopk-log-eps1e-2", "MAttr (Adam)"), ("softsgd-log", "MAttr (SGD)")
 #: softsgd-unif -- so some cells will be missing one arm and drop out of the pairing entirely.
 #: The labels are the log panel's, so colour and legend keep one meaning across the two figures;
 #: which eps the Adam arm is stays in this comment and in the stdout banner, not on the canvas.
+# 2026-09-17: the uniform Adam arm is the eps=1e-2 key -- the SVA+ headline since 2026-09-15
+# (scripts/mib/mattr_variants.py: uniform k, Adam, eps 1e-2) -- so the two settings now differ in
+# the k-schedule ALONE and the paragraph above no longer applies to the uniform panel. Coverage:
+# node has all three losses at eps=1e-2 (submit_unifk_eps_node_sc.sh, 2000 steps); MLP and
+# MLP+Attn have logit-diff only (results/sva_sweep_5k, the _s5000 runs), so their CE/acc cells
+# drop out of the pairing. Uniform k is the DEFAULT here since 2026-09-17: the bare --overlay run
+# writes figs/train_curves_arith_overlay.pdf (fig:optimiser-curves); --arms log writes the _logk twin.
 ARMS = {"log": TRAINED,
-        "uniform": [("stopk-unif", "MAttr (Adam)"), ("softsgd-unif", "MAttr (SGD)")]}
+        "uniform": [("stopk-unif-eps1e-2", "MAttr (Adam)"), ("softsgd-unif", "MAttr (SGD)")]}
 REF = ("IG", "IG (untrained ref.)")
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
@@ -262,10 +269,16 @@ def render(a, out, mean, per, nlab, mrows, overlay, one):
         leg_h = (LEG_H_WIDE if a.wide else LEG_H) + TITLE_H
         nr = len(mrows)
         fig, axes = plt.subplots(nr, len(subs), figsize=(w, row_h * nr + leg_h),
-                                 sharex=True, sharey="row", squeeze=False)
+                                 sharex="col", sharey="row", squeeze=False)
+        # x is shared DOWN a column only: the node runs are 2000 steps and the MLP substrates
+        # 5000, and one shared axis stretched the node curves over an empty 2k-5k (2026-09-17).
+        xmax = {s: int(per[per.substrate == s].step.max()) + 1 for s in subs
+                if len(per[per.substrate == s])}
         for r, met in enumerate(mrows):
             for i, s in enumerate(subs):
                 ax = axes[r][i]
+                if s in xmax:
+                    ax.set_xlim(0, xmax[s])
                 nn = nlab[nlab.substrate == s]
                 # The n-per-loss note goes on the top row only; it is a property of the column,
                 # and repeating it under every metric is the clutter this layout is trying to cut.
@@ -351,8 +364,8 @@ def main():
     # of them, so --metric does nothing here. Colour stays the arm in both layouts, so a reader
     # moving between them does not have to relearn which line is Adam.
     ap.add_argument("--overlay", action="store_true")
-    ap.add_argument("--arms", choices=list(ARMS), default="log",
-                    help="k-schedule of the two trained arms (default: log); see ARMS")
+    ap.add_argument("--arms", choices=list(ARMS), default="uniform",
+                    help="k-schedule of the two trained arms (default: uniform, the headline); see ARMS")
     # The overlay layout is half-width by DEFAULT (see FIG_OVERLAY_W) because that is the size
     # the paper uses it at. Default rather than an opt-in flag so that re-running this script
     # bare reproduces the committed figs/train_curves_arith_overlay.pdf instead of silently
@@ -368,8 +381,7 @@ def main():
     global TRAINED
     TRAINED = ARMS[a.arms]
     if a.arms != "log":
-        print(f"arms={a.arms}: {[k for k, _ in TRAINED]} -- note the Adam arm here is DEFAULT eps "
-              "(1e-8), not the log panels' eps=1e-2, so a difference is not the k-schedule alone")
+        print(f"arms={a.arms}: {[k for k, _ in TRAINED]}")
     tasks = {"arith": ARITH, "sva": SVA, "all": ARITH + SVA}[a.tasks]
     one = a.substrate is not None
     overlay = a.overlay and not one     # a single panel has no row axis to spend on a metric
@@ -381,7 +393,7 @@ def main():
     # Re-add it by putting "kstar_pct" back here; kstar_axis() already handles the axis.
     mrows = ["acc_auc", "faith_auc"] if overlay else [a.metric]
     if overlay:
-        suffix = "" if a.arms == "log" else f"_{a.arms}k"
+        suffix = "" if a.arms == "uniform" else f"_{a.arms}k"
         out = a.out or f"plots/train_curves_{a.tasks}_overlay{suffix}.pdf"
     else:
         suf = (f"_{a.substrate.lower().replace('+', '')}_{a.loss.replace('-', '')}" if one else "")
