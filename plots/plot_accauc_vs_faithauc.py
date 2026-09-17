@@ -1096,7 +1096,15 @@ def main():
                          "log-weighted Faith AUC, plus a leading panel of the same methods on "
                          "MIB node-level validation read from the MIB pkls. Writes "
                          "accauc_vs_cpr.pdf; the paper figure is untouched.")
+    ap.add_argument("--y-cpr", action="store_true",
+                    help="THE PAPER'S DEFAULT CUT, unchanged in panels, methods and renderer, with "
+                         "the linear CPR on y instead of the log-weighted Faith AUC (CPR is the "
+                         "linear AUC always, 2026-09-17). Writes accauc_vs_cpr_sva.pdf, the file "
+                         "sections/sva+.tex includes since that day. Unlike --cpr it adds no MIB "
+                         "panels and drops no arm.")
     a = ap.parse_args()
+    if a.y_cpr and (a.cpr or a.draw_all or a.stepless or a.adam):
+        raise SystemExit("--y-cpr is a variant of the default cut only")
     figure_methods = (ALL_METHODS if a.draw_all
                       else STEPLESS_METHODS if a.stepless
                       else ADAM_METHODS if a.adam
@@ -1252,7 +1260,7 @@ def main():
     # one-row group -- a zero-length segment plus ggplot2's "each group consists of only one
     # observation" warning. Testing the precondition directly also covers the case a partial
     # sweep produces, where a normally-three-loss method is down to one landed cell in a panel.
-    out = f"plots/accauc_vs_{'cpr' if a.cpr else 'faithauc'}{suffix}.pdf"
+    out = f"plots/accauc_vs_{'cpr' if a.cpr else 'cpr_sva' if a.y_cpr else 'faithauc'}{suffix}.pdf"
     # The default cut leaves here: it is drawn by raw matplotlib (direct labels need measured
     # per-annotation geometry) and never touches the plotnine spec below. Returning BEFORE that
     # spec is built, rather than building and discarding it, keeps a plotnine change from being
@@ -1289,6 +1297,8 @@ def main():
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                           xlabel="Compactness (↑)", colors=fam, hlines=hl,
                           figsize=(LAB_FIG[0], 1.3))
+        elif a.y_cpr:
+            draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)")
         else:
             draw_labelled(df, figure_methods, out)
         print("wrote", out, f"({len(df)} points)")
