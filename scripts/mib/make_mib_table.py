@@ -108,6 +108,8 @@ OUR_METHODS = [
     # Labelled with the eps mark directly rather than through MV.label(eps=...), whose eps
     # grammar is the SVA one (1e-2 unmarked); on MIB the headline is 1e-8 and unmarked.
     (MV.eps_mark("1e-2"), "mib_node_topk_uniform_lr05_eps1e-2", "node", "uniform"),
+    # 10x the steps (5000; submit_node_unif_10x_sc.sh), node twin of the edge 50k row below.
+    ("$+$ $10\\times$ steps", "mib_node_topk_uniform_lr05_5k", "node", "uniform"),
     # The OBJECTIVE ablation of this headline (--mode cause / joint, 2026-09-16,
     # submit_mib_node_mode_ablation_sc.sh -> mib_node_{cause,joint}_topk_uniform_lr05 and the
     # test_node_ twins) is NOT a row here (user decision, same day): it has its own per-task
@@ -634,7 +636,8 @@ def opt_of(results_dir):
 # grid, so any dir from those sweeps belongs here whichever LR the table ends up pointing at.
 IOI_LLAMA_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05",
                     "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0",
-                    "mib_node_topk_uniform_lr05_eps1e-2"}   # submit_mib_node_eps_sc.sh caps it too
+                    "mib_node_topk_uniform_lr05_eps1e-2",   # submit_mib_node_eps_sc.sh caps it too
+                    "mib_node_topk_uniform_lr05_5k"}        # submit_node_unif_10x_sc.sh likewise
 IOI_LLAMA_DAGGER = {("ioi", "llama3")}
 
 
