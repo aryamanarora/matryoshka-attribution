@@ -740,7 +740,9 @@ def load(res):
     for f in glob.glob(res + "/*.json"):
         d = json.load(open(f))
         m = parse_method(os.path.basename(f), d)
-        if m is None or m not in METHODS:
+        # TENX_KEYS' base keys pass too: "stopk-unif" (default-eps uniform k) has no METHODS entry
+        # of its own, and load() of a 10x tree must keep it so tenx_for() can re-key it.
+        if m is None or (m not in METHODS and m not in TENX_KEYS):
             continue
         if not on_model(d):
             continue
