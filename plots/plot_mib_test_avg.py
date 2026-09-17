@@ -344,7 +344,11 @@ def tint(colour, frac):
 def bar_style(fam):
     """Fill/edge kwargs for a bar of family `fam`: full strength for FILLED, demoted otherwise."""
     colour = FAMILY[fam][1]
-    if fam in FILLED or BASELINE_STYLE == "solid":
+    if fam in FILLED:
+        # Our bars carry a white diagonal hatch (2026-09-16, requested) so they stand out from
+        # the solid baselines; the legend swatch goes through this same function.
+        return dict(facecolor=colour, edgecolor="white", hatch="///", lw=0)
+    if BASELINE_STYLE == "solid":
         return dict(color=colour, lw=0)
     if BASELINE_STYLE == "muted":
         return dict(color=tint(colour, MUTE), lw=0)
@@ -546,7 +550,7 @@ def draw(ax, recs, title):
     ax.set_xticklabels([])
     ax.set_xlim(-0.5 - BAR_W / 4, len(recs) - 0.5 + BAR_W / 4)
     # One line of annotation (the value) above each whisker; 1.14 clears it under the title.
-    ax.set_ylim(0, max(r[2] + (r[3] or 0.0) for r in recs) * 1.14)
+    ax.set_ylim(0, max(r[2] + (r[3] or 0.0) for r in recs) * 1.28)   # 1.14 -> 1.28 (2026-09-16): the tallest bar's label was tight against the frame
     ax.set_title(title, fontsize=FS_AXIS, pad=2)
     P.furnish(ax)
     ax.grid(False, axis="x")            # vertical rules behind bars are pure noise
