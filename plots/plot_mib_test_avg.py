@@ -154,7 +154,10 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)")
 # 2026-09-17: the four dir-backed edge baselines (make_mib_test_table.GRAD_EDGE_BASELINES /
 # MASK_EDGE_BASELINES) while their eval waves land. "IG ($m{=}5$)", "IG ($m{=}10$)" and
 # "Expected Gradients" also name COMPLETE node rows; the guard is per row, so those still draw.
-PENDING = ("IG ($m{=}5$)", "IG ($m{=}10$)", "Expected Gradients", T._M.EPRUN_NAME["edge"])
+# Keyed by (level, name): the first three names also label COMPLETE node rows, and a name-only
+# key read those as "the pending row has landed" the moment the edge rows were skipped entirely.
+PENDING = (("edge", "IG ($m{=}5$)"), ("edge", "IG ($m{=}10$)"), ("edge", "Expected Gradients"),
+           ("edge", T._M.EPRUN_NAME["edge"]))
 DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
 # is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
@@ -495,7 +498,7 @@ def bars():
         for fam, name, data in panel_rows(level, loaded):
             n = sum(1 for t, m, _ in T.COLUMNS if (t, m) in data)
             if n < len(T.COLUMNS):
-                if name in PENDING:
+                if (level, name) in PENDING:
                     print(f"PENDING {name} ({level}): {n}/{len(T.COLUMNS)} cells -- row skipped "
                           "until its eval wave finishes")
                     continue
@@ -527,12 +530,11 @@ def bars():
         raise SystemExit(f"RENAME keys match no drawn row: {unused} -- renamed in "
                          "make_mib_test_table.OUR_*_METHODS / EDGE_BASELINES? update RENAME_OURS "
                          "or RENAME_BASELINES")
-    stale = [n for n in PENDING
-             if all(sum(1 for t, m, _ in T.COLUMNS if (t, m) in d) == len(T.COLUMNS)
-                    for lvl, _, _ in LEVELS
-                    for f, nm, d in panel_rows(lvl, loaded) if nm == n)
-             and any(nm == n for lvl, _, _ in LEVELS
-                     for f, nm, d in panel_rows(lvl, loaded))]
+    # A pending (level, name) is stale once THAT level's row is drawn complete. A row that is not
+    # drawn at all (its dir has no cells yet, so the table's guard skipped it) is still pending.
+    stale = [(l, n) for l, n in PENDING
+             if any(nm == n and sum(1 for t, m, _ in T.COLUMNS if (t, m) in d) == len(T.COLUMNS)
+                    for f, nm, d in panel_rows(l, loaded))]
     if stale:
         raise SystemExit(f"PENDING rows are now complete: {stale} -- remove them from PENDING "
                          "so the completeness guard covers them again")
