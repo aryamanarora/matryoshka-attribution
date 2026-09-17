@@ -77,6 +77,13 @@ BLOCKS = [
         ("stopk-log",          MV.label(k="log", eps="1e-8")),        # $+$ log $k$, eps=1e-8 (Adam default)
         ("softsgd-log",        MV.label(k="log", opt="sgd")),         # $+$ log $k$, $+$ SGD
         ("soft-log",           MV.label(k="log", fwd="hard", eps="1e-8")),   # hard STE fwd, Adam default eps
+        # The headline trained 10x longer (50k steps; submit_unifk_eps_50k_sc.sh, 2026-09-17) at
+        # both Adam epsilons. Loaded from V.TENX_RES's own trees and re-keyed by V.TENX_KEYS --
+        # see build(). The eps=1e-8 twin has no 5k counterpart on these substrates (the default-eps
+        # uniform arm was only ever run at 2k on MLP / MLP+Attn and never on SAE), so its row is
+        # read against the eps=1e-2 headline, one row above the 10x pair.
+        ("stopk-unif-eps1e-2-10x", MV.label(eps="1e-2", extra=("$+$ $10\\times$ steps",))),
+        ("stopk-unif-10x",         MV.label(eps="1e-8", extra=("$+$ $10\\times$ steps",))),
     ]),
 ]
 REFERENCE = ("Random", "Random")
@@ -192,7 +199,14 @@ def build(idx, metric_label):
                  + f" & \\textbf{{Avg}} \\\\")
     cache = {}
     for sub, res, title in SUBSTRATES:
-        raw = cache.setdefault(res, V.load(res))
+        raw = dict(cache.setdefault(res, V.load(res)))
+        # The 10x-steps rows live in their own trees (one budget per tree, V.SUBSTRATE_RES's
+        # rule); merge them in under their synthetic keys, the same re-keying V's tenx_for does.
+        tenx = V.TENX_RES.get(sub)
+        if tenx:
+            raw.update({(V.TENX_KEYS[m], l, ss, t): v
+                        for (m, l, ss, t), v in cache.setdefault(tenx, V.load(tenx)).items()
+                        if m in V.TENX_KEYS})
         lines.append("\\midrule")
         lines += section(raw, sub, f"{title}, {metric_label}", idx)
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
