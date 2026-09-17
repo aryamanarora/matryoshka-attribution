@@ -156,8 +156,9 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)")
 # "Expected Gradients" also name COMPLETE node rows; the guard is per row, so those still draw.
 # Keyed by (level, name): the first three names also label COMPLETE node rows, and a name-only
 # key read those as "the pending row has landed" the moment the edge rows were skipped entirely.
-PENDING = (("edge", "IG ($m{=}5$)"), ("edge", "IG ($m{=}10$)"), ("edge", "Expected Gradients"),
-           ("edge", T._M.EPRUN_NAME["edge"]))
+# 2026-09-17 (later): the three EAP-IG-family edge test evals landed 12/12; only Edge Pruning's
+# validation-then-test wave is still mid-flight.
+PENDING = (("edge", T._M.EPRUN_NAME["edge"]),)
 DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
 # is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
