@@ -264,7 +264,7 @@ FIG_W = 5.5
 # PANEL_H gained 0.12 when the level moved from the y-axis label into a panel TITLE: a title
 # lives inside the axes bbox, so without this the bars would have paid for it and the two
 # figures' bar heights would no longer match across revisions.
-PANEL_H = 1.17
+PANEL_H = 0.85   # 1.17 -> 0.85 on 2026-09-16 (requested): the bar row was taller than its content needs
 # HEAD grew 0.22 -> 0.30 with the panel titles: the legend is anchored AT the axes top, so a
 # title (which lives inside the axes bbox) butts straight up against it. The extra head plus
 # the +0.03 offset on bbox_to_anchor below is what puts ~4pt of air between "Node-level" and
