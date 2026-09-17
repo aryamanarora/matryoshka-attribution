@@ -103,6 +103,11 @@ OUR_METHODS = [
     # everywhere else, and than the test table's row of the same name. Repointed once
     # submit_softuni_lr05.sh produced the lr=0.05 run. final_node stays on disk.
     ("\\ourmethod{}", "mib_node_topk_uniform_lr05", "node", "uniform"),
+    # The headline at Adam eps=1e-2 (submit_mib_node_eps_sc.sh, 2026-09-17): the eps the SVA+
+    # substrates ship with, run on MIB to ask whether one eps serves every section (reviewer W6).
+    # Labelled with the eps mark directly rather than through MV.label(eps=...), whose eps
+    # grammar is the SVA one (1e-2 unmarked); on MIB the headline is 1e-8 and unmarked.
+    (MV.eps_mark("1e-2"), "mib_node_topk_uniform_lr05_eps1e-2", "node", "uniform"),
     # The OBJECTIVE ablation of this headline (--mode cause / joint, 2026-09-16,
     # submit_mib_node_mode_ablation_sc.sh -> mib_node_{cause,joint}_topk_uniform_lr05 and the
     # test_node_ twins) is NOT a row here (user decision, same day): it has its own per-task
@@ -256,9 +261,17 @@ EDGE_BASELINES = {}
 # never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Node/Edge Pruning is not
 # tied to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
 UGS_DIR = "ugs_eval"
-PARTIAL_COVERAGE = {"UGS"}
+# Single-node activation patching (eval_mib_actpatch.py) exists only where it is affordable --
+# gpt2 and qwen2.5, the three small-model cells -- so, like UGS, its rows are partial by design
+# and print no Avg. Own header ("Activation patching"): it is neither a gradient nor a learned
+# mask but the causal quantity both approximate. denoise = restore one node in the corrupted
+# run (the quantity CPR integrates), noise = corrupt one node in the clean run.
+ACTPATCH_NODE_ROWS = [("Act. patching (denoise)", "mib_node_actpatch_denoise"),
+                      ("Act. patching (noise)", "mib_node_actpatch_noise")]
+PARTIAL_COVERAGE = {"UGS"} | {n for n, _ in ACTPATCH_NODE_ROWS}
 MASK_NODE_BASELINES = {}
 MASK_EDGE_BASELINES = {}
+CAUSAL_NODE_BASELINES = {}
 
 # A mask learner optimizes ONE operating point, and its target sparsity is the knob that
 # decides where the circuit switches on -- so each budget is a separate row rather than a
@@ -361,7 +374,11 @@ EPRUN_SPARSITIES = [
 # 2026-09-16 (user decision): the KL-objective row is dropped from the paper altogether -- the
 # sweep figure, this table and the acc-AUC table show the logit-diff run only, so the label
 # names the budget again (the objective no longer distinguishes anything).
-EPRUN_SHOW = {"eprun_eval_s0.95_ld": "$s{=}0.95$"}
+# PER LEVEL since 2026-09-17: edge-level Edge Pruning (submit_eprun_edge_sc.sh) runs at the
+# script's edge default s=0.99, so the node pick cannot be reused for it. Same dict shape per
+# level (dir -> label suffix); make_mib_accauc_table reads the level it renders.
+EPRUN_SHOW = {"node": {"eprun_eval_s0.95_ld": "$s{=}0.95$"},
+              "edge": {"eprun_eval_s0.99_ld": "$s{=}0.99$"}}
 
 # The single config the test table and the figures show. Best by CPR AUC, which is the metric
 # the paper leads with -- validation row avg over 11 cells is 1.67 for logit-diff s=0.5 against
@@ -490,6 +507,12 @@ NP_MULTI_COST = "27k"
 COST_GRAD_IG5 = "0.5--5k"    # 5 IG steps x 100--1000 examples
 COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
 COST_EPRUN = "3k"            # 3000 steps x batch 1
+COST_EPRUN_EDGE = "5k"       # edge-level Edge Pruning at MAttr's edge step count (submit_eprun_edge_sc.sh)
+# Single-node activation patching (scripts/mib/eval_mib_actpatch.py): 2 + 2N FORWARDS per batch
+# over 200 train pairs, N = 157 nodes on gpt2 / 361 on qwen2.5-0.5B, i.e. 63k / 144k sequences.
+# Forwards, not backwards, so cheaper per unit than the column's gradient rows -- but it is the
+# brute-force baseline and the count is the point: it only ever runs on the two small models.
+COST_ACTPATCH = "63--144k"
 COST_UGS = "7--114k"         # the 12 mask samples per step are what make this so large
 COST_OURS = {"node": "0.5k", "edge": "5k"}
 
@@ -607,7 +630,8 @@ def opt_of(results_dir):
 # submit_softuni_sgd_lr.sh:67 both apply `--eval-examples 200` to ioi/llama3 at EVERY lr in the
 # grid, so any dir from those sweeps belongs here whichever LR the table ends up pointing at.
 IOI_LLAMA_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05",
-                    "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0"}
+                    "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0",
+                    "mib_node_topk_uniform_lr05_eps1e-2"}   # submit_mib_node_eps_sc.sh caps it too
 IOI_LLAMA_DAGGER = {("ioi", "llama3")}
 
 
@@ -638,13 +662,14 @@ def eprun_rows(level):
     Avg column of a partial row averages only the cells present.
     """
     rows = []
+    show = EPRUN_SHOW.get(level) if EPRUN_SHOW is not None else None
     for suffix, dirn in EPRUN_SPARSITIES:
-        if EPRUN_SHOW is not None and dirn not in EPRUN_SHOW:
+        if show is not None and dirn not in show:
             continue
         data = load_run_eval(dirn, f"EdgePruning_patching_{level}")
         if not data:
             continue
-        label = eprun_label(level, EPRUN_SHOW[dirn] if EPRUN_SHOW else suffix)
+        label = eprun_label(level, show[dirn] if show else suffix)
         if len(data) < len(COLUMNS):
             print(f"  NOTE {label}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running")
         rows.append((label, data, dirn))
@@ -781,8 +806,8 @@ def main():
     edge_uniform = [(n, d, l, g) for n, d, l, g in OUR_METHODS if l == "edge" and g == "uniform"]
 
     def best_in_col(level):
-        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES} if level == "node" \
-            else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
+        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES, **CAUSAL_NODE_BASELINES} \
+            if level == "node" else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
         our = {mkey(d, l, g): all_results.get(mkey(d, l, g), {})
                for _, d, l, g in OUR_METHODS if l == level}
         best = {}
@@ -839,8 +864,8 @@ def main():
         is suppressed at render time, so including it would stretch the scale to fit a number
         the table never prints.
         """
-        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES} if level == "node" \
-            else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
+        baselines = {**NODE_BASELINES, **MASK_NODE_BASELINES, **CAUSAL_NODE_BASELINES} \
+            if level == "node" else {**EDGE_BASELINES, **MASK_EDGE_BASELINES}
         dicts = list(baselines.values()) + [all_results.get(mkey(d, l, g), {})
                                             for _, d, l, g in OUR_METHODS if l == level]
         rng = {}
@@ -892,7 +917,9 @@ def main():
         return COST_GRAD_IG5 if name in COST_IG5_ROWS else COST_GRAD_IG1
 
     def mask_cost(name):
-        return COST_UGS if name == "UGS" else COST_EPRUN
+        if name == "UGS":
+            return COST_UGS
+        return COST_EPRUN_EDGE if name.startswith(EPRUN_NAME["edge"]) else COST_EPRUN
 
     def emit_ours(uniform_list, ours_list, level, best, second, avb, avs, dagger=None,
                   crange=None):
@@ -1022,6 +1049,13 @@ def main():
         DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
     # Additional baselines fetched from Tilde (node-level); each dir has one method subfolder
+    # Expected Gradients (EAP-IG-inputs-mc, alpha ~ U(0,1) per example, one backward): MIB-side
+    # dir, same as the acc-AUC and test tables already carry. Cost is the I x G budget.
+    eg = load_eval_dual("napig_mc_eval", "EAP-IG-inputs-mc_patching_node")
+    if eg:
+        NODE_BASELINES["Expected Gradients"] = eg
+        DAGGER["Expected Gradients"] = TILDE_LLAMA3_DAGGER
+
     EXTRA_NODE_BASELINES = [
         ("Conductance", "napig_local_eval", "EAP-IG-inputs-local_patching_node"),
         ("I$\\times$G", "ig1_eval",         "EAP-IG-inputs_patching_node"),
@@ -1073,10 +1107,21 @@ def main():
         DAGGER[name] = TILDE_LLAMA3_DAGGER
         ROW_LR[name] = eprun_lr(dirn)
 
+    # Activation patching: eval_mib-format pkls (<task>_<model>_validation.pkl), 3 cells max.
+    for name, dirn in ACTPATCH_NODE_ROWS:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_cpr_auc(dirn, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        if data:
+            CAUSAL_NODE_BASELINES[name] = data
+
     # Recompute best after adding repro
     best_node, second_node = best_in_col("node")
     range_node = range_in_col("node")
     node_dicts = list(NODE_BASELINES.values()) + list(MASK_NODE_BASELINES.values()) \
+        + list(CAUSAL_NODE_BASELINES.values()) \
         + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_uniform] \
         + [all_results.get(mkey(d, "node", g), {}) for _, d, _, g in node_ours]
     avb, avs = section_avg_best(node_dicts)
@@ -1099,6 +1144,12 @@ def main():
                                   avg_best=avb, avg_second=avs,
                                   suppress_avg=len(data) < len(COLUMNS),
                                   cost=mask_cost(name), crange=range_node))
+    if CAUSAL_NODE_BASELINES:
+        lines.append("\\textbf{Activation patching} \\\\")
+        for name, data in CAUSAL_NODE_BASELINES.items():
+            lines.append(make_row(name, data, best_node, second_node, indent=True,
+                                  avg_best=avb, avg_second=avs, dagger=set(),
+                                  cost=COST_ACTPATCH, crange=range_node))
     emit_ours(node_uniform, node_ours, "node", best_node, second_node, avb, avs,
               crange=range_node)
 
@@ -1139,6 +1190,11 @@ def main():
         DAGGER[disp] = TILDE_LLAMA3_DAGGER
 
     # Mask learning at edge level: UGS (reg_lamb=0.001, gpt2/qwen only) + Edge Pruning
+    eg = load_eval_dual("eapig_mc_eval", "EAP-IG-inputs-mc_patching_edge")   # as at node level
+    if eg:
+        EDGE_BASELINES["Expected Gradients"] = eg
+        DAGGER["Expected Gradients"] = TILDE_LLAMA3_DAGGER
+
     ugs = load_run_eval(UGS_DIR, "UGS_patching_edge")
     if ugs:
         MASK_EDGE_BASELINES["UGS"] = ugs

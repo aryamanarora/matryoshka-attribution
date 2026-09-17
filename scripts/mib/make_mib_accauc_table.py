@@ -63,7 +63,8 @@ IOI_LLAMA_CAPPED = M.IOI_LLAMA_CAPPED
 # Renamed off "LR05_" because it no longer holds only lr=0.05 dirs -- see the same rename of
 # make_mib_table.IOI_LLAMA_CAPPED.
 EVALMIB_ACC = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05",
-               "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0"}
+               "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0",
+               "mib_node_topk_uniform_lr05_eps1e-2"}
 # htk_lr_0.05 predates evaluation.py returning acc_auc, so its eval_mib pkl has acc_auc=None
 # and it genuinely needs the re-eval folder. final_node is vestigial (see above); it is kept
 # only so the entry does not have to be re-derived if that row is ever restored.
@@ -161,8 +162,13 @@ EDGE_DIRS = {r for _, r, _ in EDGE_METHODS}
 # s=0.99) and 0.38 -> 0.36 (LD). CPR and acc-AUC rank the budgets in near-opposite orders --
 # CPR rewards a bigger circuit, the same gap-padding sensitivity that motivated reporting
 # acc-AUC in the first place -- so a shared budget is necessarily off-argmax under one of them.
-MASK_BASELINES = [(M.eprun_label("node", M.EPRUN_SHOW[d]), L2A / d, "EdgePruning_patching_node")
-                  for _, d in M.EPRUN_SPARSITIES if d in M.EPRUN_SHOW]
+MASK_BASELINES = [(M.eprun_label("node", M.EPRUN_SHOW["node"][d]), L2A / d, "EdgePruning_patching_node")
+                  for _, d in M.EPRUN_SPARSITIES if d in M.EPRUN_SHOW["node"]]
+# Edge-level Edge Pruning (submit_eprun_edge_sc.sh), the level's own pick from the same dict.
+EDGE_MASK_BASELINES = [(M.eprun_label("edge", M.EPRUN_SHOW["edge"][d]), L2A / d, "EdgePruning_patching_edge")
+                       for _, d in M.EPRUN_SPARSITIES if d in M.EPRUN_SHOW["edge"]]
+# Single-node activation patching (M.ACTPATCH_NODE_ROWS): eval_mib-format pkls, 3 cells by design.
+CAUSAL_BASELINES = M.ACTPATCH_NODE_ROWS
 # DBM (pyvene sigmoid mask) is in the CPR table's mask block via M.SIGMOID_MASK_ROWS but was
 # missing here, even though its eval pkls carry acc_auc like every other run -- so the acc-AUC
 # table was silently comparing MAttr against a smaller set of mask learners than the CPR table.
@@ -277,6 +283,11 @@ def collect(level):
                     for t, m, _ in COLUMNS}
             if any(v is not None for v in data.values()):
                 mask.append((disp, data, llama))
+        causal = []
+        for disp, d in CAUSAL_BASELINES:
+            data = {(t, m): _acc(L2A / d / f"{t}_{m}_validation.pkl") for t, m, _ in COLUMNS}
+            if any(v is not None for v in data.values()):
+                causal.append((disp, data, set()))
     else:
         grad = []
         for disp, dirs, sub in EDGE_BASELINES_ACC:
@@ -289,7 +300,13 @@ def collect(level):
         ugs = {(t, m): _acc(L2A / d / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
                for t, m, _ in COLUMNS}
         mask = [("UGS", ugs, llama)] if any(v is not None for v in ugs.values()) else []
-    return grad, mask
+        for disp, base, sub in EDGE_MASK_BASELINES:
+            data = {(t, m): _acc(base / sub / f"{t.replace('_', '-')}_{m}_validation_abs-False.pkl")
+                    for t, m, _ in COLUMNS}
+            if any(v is not None for v in data.values()):
+                mask.append((disp, data, llama))
+        causal = []
+    return grad, mask, causal
 
 
 def main():
@@ -307,9 +324,9 @@ def main():
     for li, (level, title, methods) in enumerate(
             [("node", "Node-level, acc-AUC", NODE_METHODS),
              ("edge", "Edge-level, acc-AUC", EDGE_METHODS)]):
-        grad, mask = collect(level)
+        grad, mask, causal = collect(level)
         mattr = {d: {(t, m): acc_mattr(d, t, m) for t, m, _ in COLUMNS} for _, d, _ in methods}
-        all_data = [dd for _, dd, _ in grad + mask] + list(mattr.values())
+        all_data = [dd for _, dd, _ in grad + mask + causal] + list(mattr.values())
         if not any(any(v is not None for v in dd.values()) for dd in all_data):
             print(f"SKIP {level} section: no acc_auc anywhere")
             continue
@@ -362,6 +379,9 @@ def main():
         if mask:
             L.append("\\textbf{Mask learning} \\\\")
             L += [emit(d, dd, dc) for d, dd, dc in mask]
+        if causal:
+            L.append("\\textbf{Activation patching} \\\\")
+            L += [emit(d, dd, dc) for d, dd, dc in causal]
 
         llama_ioi = {("ioi", "llama3")}
         edge_llama = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}

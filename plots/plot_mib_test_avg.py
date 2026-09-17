@@ -132,7 +132,10 @@ UNI_MARK, UNI_PER_LEVEL = "unif", 0
 # Baseline rows the table keeps and this figure does not -- see the docstring for each. Matched
 # against NODE_BASELINES / EDGE_BASELINES keys, and a name here that matches nothing raises
 # rather than silently doing nothing, so a rename in the table cannot quietly un-drop a row.
-DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
+# "EAP-IG-inp (CF)" dropped 2026-09-17: it is MIB's published number for the 5-step grid, and the
+# edge panel now draws our own re-run of that setting ("IG ($m{=}5$)", GRAD_EDGE_BASELINES),
+# named as the node panel names it. The table keeps both; the figure has one bar per method.
+DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)")
 # OUR rows to drop, by OPTIMISER (2026-09-08, requested): the figure shows Adam only, so the
 # SGD log-k and SGD uniform-k arms are dropped at BOTH levels -- 4 rows, 2 per level.
 #
@@ -148,8 +151,10 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS")
 # catches a dir silently losing cells, and a bare "skip anything incomplete" rule would let
 # that failure vanish into stdout. A name here is a promise to remove it once the cells land;
 # an entry that is already complete raises too, so the list cannot rot unnoticed.
-PENDING = ()   # nothing mid-flight; see make_mib_test_table.GRAD_NODE_BASELINES for the
-               # Conductance wave that was cancelled at 8/11 rather than left pending here
+# 2026-09-17: the four dir-backed edge baselines (make_mib_test_table.GRAD_EDGE_BASELINES /
+# MASK_EDGE_BASELINES) while their eval waves land. "IG ($m{=}5$)", "IG ($m{=}10$)" and
+# "Expected Gradients" also name COMPLETE node rows; the guard is per row, so those still draw.
+PENDING = ("IG ($m{=}5$)", "IG ($m{=}10$)", "Expected Gradients", T._M.EPRUN_NAME["edge"])
 DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
 # is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
@@ -179,7 +184,6 @@ RENAME_OURS = {}   # the headline row is bare \ourmethod{} in the table itself s
 # it IS the 5-step IG grid (see its COST entry) and "EAP-IG-inp (CF)" beside "IG ($m{=}5$)"
 # reads as two methods. Same guard as RENAME_OURS: a key that matches no drawn row raises.
 RENAME_BASELINES = {
-    "EAP-IG-inp (CF)": "IG ($m{=}5$)",
     # The L1 ladder of 8 DBM runs (make_mib_table.DBM_MULTI_COST); "sweep" says what it is
     # in one word, and the cost row beneath shows what the sweep costs.
     "DBM (multi-sparsity)": "DBM (sweep)",
@@ -246,6 +250,11 @@ COST = {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
         # carries in the validation table.
         "EAP-IG-inp (CF)": _R(_M.COST_GRAD_IG5),
+        # Our own edge runs (make_mib_test_table.GRAD_EDGE_BASELINES / MASK_EDGE_BASELINES).
+        "IG ($m{=}5$)": _R(_M.COST_GRAD_IG5),
+        "IG ($m{=}10$)": _R(dict((d, c) for d, _, c in _M.EAPIG_EDGE_STEP_ROWS)["$+$ 10 IG steps"]),
+        "Expected Gradients": _R(_M.COST_GRAD_IG1),
+        _M.EPRUN_NAME["edge"]: _M.COST_EPRUN_EDGE,
         **{name: _M.COST_OURS["edge"] for name, _ in T.OUR_EDGE_METHODS},
     },
 }
@@ -425,9 +434,23 @@ def ours_kept(level, rows):
     return [(n, d) for n, d in rows if n in set(kept)]
 
 
+_EXTRA = None
+
+
+def extra():
+    """make_mib_test_table.collect_extra(), loaded once: (causal_nodes, grad_edges, mask_edges).
+    The activation-patching rows are 3-cell by design and are never drawn (a bar cannot show 3/12),
+    so only the two edge groups are used here."""
+    global _EXTRA
+    if _EXTRA is None:
+        _EXTRA = T.collect_extra()
+    return _EXTRA
+
+
 def panel_rows(level, loaded):
     """[(family, name, data)] for one level, in table order, with DROP applied."""
     ours_nodes, mask_nodes, grad_nodes, ours_edges = loaded
+    _, grad_edges, mask_edges = extra()
     if level == "node":
         groups = [
             ("control", [(n, T.NODE_BASELINES[n])
@@ -440,8 +463,8 @@ def panel_rows(level, loaded):
         ]
     else:
         groups = [
-            ("gradient", T.classify(T.EDGE_BASELINES, "gradient"), False),
-            ("mask", T.classify(T.EDGE_BASELINES, "mask"), False),
+            ("gradient", T.classify(T.EDGE_BASELINES, "gradient") + list(grad_edges.items()), False),
+            ("mask", T.classify(T.EDGE_BASELINES, "mask") + list(mask_edges.items()), False),
             ("ours", ours_kept("edge", list(ours_edges.items())), False),
         ]
     out = []

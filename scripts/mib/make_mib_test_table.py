@@ -324,6 +324,35 @@ MASK_NODE_BASELINES = [
     ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node"),
 ]
 
+# Single-node activation patching (scripts/mib/eval_mib_actpatch.py, 2026-09-17): each node's
+# score is its own interchange effect averaged over 200 train pairs -- the causal quantity the
+# gradient rows approximate and the mask rows learn. eval_mib-format pkls, so load_cpr_auc.
+# Only the three small-model cells exist (2 + 2N forwards per batch is not affordable on 2B/8B),
+# so the rows are partial BY DESIGN: PARTIAL_COVERAGE lets them through baseline_or_skip's
+# half-the-columns gate, and their Avg is suppressed like any partial row.
+CAUSAL_NODE_BASELINES = [
+    ("Act. patching (denoise)", "test_node_actpatch_denoise"),
+    ("Act. patching (noise)",   "test_node_actpatch_noise"),
+]
+PARTIAL_COVERAGE = {n for n, _ in CAUSAL_NODE_BASELINES}
+
+# Edge-level baselines WE ran, the dir-backed twins of the EDGE_BASELINES literals above (which
+# are MIB's published Table-1 numbers). Same circuits as the validation table -- attribution is
+# on the train split, so the test pass is eval-only (submit_eapig_mc_edge_test_sc.sh with
+# CDIR/METHOD). Names follow the node block's ("IG ($m{=}5$)" is EAP-IG-inputs --ig-steps 5,
+# i.e. exactly the published row's setting, re-run by us). llama3 is --head 200 on both splits
+# here, matching the MAttr edge cells (EDGE_DAGGER), unlike the full-split literal row.
+GRAD_EDGE_BASELINES = [
+    ("IG ($m{=}5$)",      "eapig_clean_test",   "EAP-IG-inputs_patching_edge"),
+    ("IG ($m{=}10$)",     "eapig_clean10_test", "EAP-IG-inputs_patching_edge"),
+    ("Expected Gradients", "eapig_mc_test",     "EAP-IG-inputs-mc_patching_edge"),
+]
+# Edge Pruning at edge level (submit_eprun_edge_sc.sh: 5000 steps, logit-diff, s=0.99 -- the
+# edge pick of make_mib_table.EPRUN_SHOW). Plain name, same reasoning as NODE_PRUNING above.
+MASK_EDGE_BASELINES = [
+    (_M.EPRUN_NAME["edge"], next(iter(_M.EPRUN_SHOW["edge"])), "EdgePruning_patching_edge"),
+]
+
 
 # --- family assignment for the LITERAL baseline dicts -------------------------------------
 # NODE_BASELINES / EDGE_BASELINES are plain name->cells dicts with no family field, so the
@@ -443,6 +472,8 @@ MIN_BASELINE_FRAC = 0.5
 
 def baseline_or_skip(name, where, data):
     """Print/skip decision for a BASELINE row; warns about stragglers. False means skip."""
+    if name in PARTIAL_COVERAGE:      # partial by design (see CAUSAL_NODE_BASELINES): any cell prints
+        return bool(data)
     if len(data) < MIN_BASELINE_FRAC * len(COLUMNS):
         why = "no test cells" if not data else f"only {len(data)}/{len(COLUMNS)} test cells"
         print(f"SKIP {name}: {why} in results/{where} "
@@ -554,8 +585,35 @@ def collect():
     return ours_nodes, mask_nodes, grad_nodes, ours_edges
 
 
+def collect_extra():
+    """(causal_nodes, grad_edges, mask_edges): the 2026-09-17 baseline groups, same loaders and
+    guards as collect(). Separate so collect()'s 4-tuple -- unpacked by test_paired_tests.py and
+    three plots -- keeps its shape; a consumer opts into these groups by calling this."""
+    causal_nodes = {}
+    for name, d in CAUSAL_NODE_BASELINES:
+        data = {}
+        for task, model, _ in COLUMNS:
+            v = load_cpr_auc(d, task, model)
+            if v is not None:
+                data[(task, model)] = round(v, 2)
+        if baseline_or_skip(name, d, data):
+            causal_nodes[name] = data
+    grad_edges, mask_edges = {}, {}
+    for out, spec in ((grad_edges, GRAD_EDGE_BASELINES), (mask_edges, MASK_EDGE_BASELINES)):
+        for name, d, sub in spec:
+            data = {}
+            for task, model, _ in COLUMNS:
+                v = load_run_eval_cpr(d, sub, task, model)
+                if v is not None:
+                    data[(task, model)] = round(v, 2)
+            if baseline_or_skip(name, f"{d}/{sub}", data):
+                out[name] = data
+    return causal_nodes, grad_edges, mask_edges
+
+
 def main():
     ours_nodes, mask_nodes, grad_nodes, ours_edges = collect()
+    causal_nodes, grad_edges, mask_edges = collect_extra()
 
     # Best per column
     def find_best(baselines, ours_list):
@@ -578,8 +636,9 @@ def main():
 
     best_node, second_node = find_best(NODE_BASELINES,
                                        list(grad_nodes.values()) + list(mask_nodes.values())
-                                       + list(ours_nodes.values()))
-    best_edge, second_edge = find_best(EDGE_BASELINES, list(ours_edges.values()))
+                                       + list(causal_nodes.values()) + list(ours_nodes.values()))
+    best_edge, second_edge = find_best(EDGE_BASELINES, list(grad_edges.values())
+                                       + list(mask_edges.values()) + list(ours_edges.values()))
 
     def row_avg(data):
         vs = [v for v in (data.get((t, m)) for t, m, _ in COLUMNS) if v is not None]
@@ -657,6 +716,7 @@ def main():
     # them here (one line) rather than renaming the validation table's, which several captions
     # may refer to.
     GRAD_H, MASK_H = "\\textbf{Gradient-based}", "\\textbf{Mask-based}"
+    CAUSAL_H = "\\textbf{Activation patching}"
     OURS_H = "\\textbf{\\ourmethod{} (ours)}"
 
     # Rows are ordered WORST-TO-BEST by their Avg column inside every group (requested
@@ -693,22 +753,29 @@ def main():
             return (0, 0.0) if a is None else (1, -a if SORT_DESC else a)
         return sorted(rows, key=lambda it: (key(it)[0] == 0, key(it)[1]))
 
-    def emit(group, rows, best, second, avb, avs, dagger=None, suppress_partial=True):
-        """One group heading + its rows, ordered by Avg, indented one level under the heading."""
+    def emit(group, rows, best, second, avb, avs, dagger=None, suppress_partial=True,
+             indent=None):
+        """One group heading + its rows, ordered by Avg, indented one level under the heading.
+
+        `indent` overrides the heading-implied indent so a second batch of rows can be emitted
+        under a heading already printed (the edge section prints MIB's literal row and our
+        dir-backed rows under one heading but with different dagger sets)."""
         if not rows:
             return
         if group:
             lines.append(group_header(group))
+        indent = bool(group) if indent is None else indent
         for name, data in by_avg(rows, suppress_partial):
             lines.append(make_row(name, data, best, second, dagger=dagger,
-                                  avg_best=avb, avg_second=avs, indent=bool(group),
+                                  avg_best=avb, avg_second=avs, indent=indent,
                                   suppress_avg=suppress_partial and len(data) < len(COLUMNS)))
 
     # Node level
     lines.append("\\midrule")
     lines.append(level_header("Node-level"))
     navb, navs = section_avg_best(list(NODE_BASELINES.values()) + list(grad_nodes.values())
-                                  + list(mask_nodes.values()) + list(ours_nodes.values()))
+                                  + list(mask_nodes.values()) + list(causal_nodes.values())
+                                  + list(ours_nodes.values()))
     # Random is deliberately OUTSIDE the three families and unindented. It is a control, not a
     # method: filing it under "Gradient-based" would be false, and giving it its own heading
     # would imply a family with one member. It stays the first row of the section, which is also
@@ -722,6 +789,8 @@ def main():
          classify(NODE_BASELINES, "gradient") + list(grad_nodes.items()),
          best_node, second_node, navb, navs)
     emit(MASK_H, list(mask_nodes.items()), best_node, second_node, navb, navs)
+    # Partial by design (3 small-model cells), so suppress_partial stays True: no Avg, sorted last.
+    emit(CAUSAL_H, list(causal_nodes.items()), best_node, second_node, navb, navs)
     # Ours are held to completeness by complete_or_skip, so a partial one never reaches here and
     # suppress_partial has nothing to act on -- passed explicitly so the asymmetry is visible.
     emit(OURS_H, list(ours_nodes.items()), best_node, second_node, navb, navs,
@@ -733,13 +802,20 @@ def main():
     # and one mask method, and the flat version of this section did not say so.
     lines.append("\\midrule")
     lines.append(level_header("Edge-level"))
-    eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + list(ours_edges.values()))
+    eavb, eavs = section_avg_best(list(EDGE_BASELINES.values()) + list(grad_edges.values())
+                                  + list(mask_edges.values()) + list(ours_edges.values()))
+    # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger. So do the dir-backed
+    # baseline rows we ran (GRAD_EDGE_BASELINES / MASK_EDGE_BASELINES); the literal rows are
+    # MIB's full-split numbers and carry none, hence two emit() calls per heading.
+    EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
     emit(GRAD_H, classify(EDGE_BASELINES, "gradient"),
          best_edge, second_edge, eavb, eavs, suppress_partial=False)
+    emit(None, list(grad_edges.items()), best_edge, second_edge, eavb, eavs,
+         dagger=EDGE_DAGGER, indent=True)
     emit(MASK_H, classify(EDGE_BASELINES, "mask"),
          best_edge, second_edge, eavb, eavs, suppress_partial=False)
-    # MAttr edge llama3 cells use a reduced (200-example) subset -> dagger.
-    EDGE_DAGGER = {(t, m) for t, m, _ in COLUMNS if m == "llama3"}
+    emit(None, list(mask_edges.items()), best_edge, second_edge, eavb, eavs,
+         dagger=EDGE_DAGGER, indent=True)
     emit(OURS_H, list(ours_edges.items()), best_edge, second_edge, eavb, eavs,
          dagger=EDGE_DAGGER, suppress_partial=False)
 
