@@ -168,9 +168,8 @@ DROP_OURS_OPT = "sgd"
 # ALREADY the bare \ourmethod{} -- the RENAME_OURS patch below is therefore empty, and the
 # "MAttr means a different run here than in the table" defect described above is closed.
 # "$+$ $10\\times$ steps" (node only, 2026-09-17): the figure keeps one MAttr bar per level, the
-# 500-step headline; the 10x row is the table's. Node therefore drops 4 of its 5 rows, edge 3 of 4.
+# 500-step headline; the 10x row is the table's.
 DROP_OURS_NAMES = (T.MV.label(k="log"), "$+$ $10\\times$ steps")
-OURS_DROPPED_PER_LEVEL = {"node": 4, "edge": 3}
 # Display names for the two survivors (2026-09-08, requested). With no non-Adam MAttr left in
 # the figure, "$+$ Adam" is an ablation marker pointing at nothing, so the rows are drawn as
 # the plain method and its one k-schedule ablation.
@@ -429,11 +428,13 @@ def ours_kept(level, rows):
                              f"{level.upper()}_METHODS -- cannot resolve its optimiser")
         drop = T._M.opt_of(dirs[name]) == DROP_OURS_OPT or name in DROP_OURS_NAMES
         (dropped if drop else kept).append(name)
-    if len(dropped) != OURS_DROPPED_PER_LEVEL[level]:
-        raise SystemExit(f"{level}: dropped {len(dropped)} rows ({dropped}), expected "
-                         f"{OURS_DROPPED_PER_LEVEL[level]} -- repointed or renamed in "
-                         "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / "
-                         "DROP_OURS_NAMES")
+    # The invariant is ONE MAttr bar per level (the headline), not a fixed number of drops: a
+    # row collect() holds back while its wave lands (2026-09-17: the node 10x-steps row at 11/12)
+    # must not fail the figure, and a rename that lets a second row through still raises.
+    if len(kept) != 1:
+        raise SystemExit(f"{level}: {len(kept)} MAttr rows survive the drop rule ({kept}; dropped "
+                         f"{dropped}), expected exactly one -- repointed or renamed in "
+                         "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / DROP_OURS_NAMES")
     unknown = [n for n in DROP_OURS_NAMES if n not in dirs and level != "edge"]   # the 10x row is node-only
     if unknown:
         raise SystemExit(f"{level}: DROP_OURS_NAMES {unknown} match no row in "
