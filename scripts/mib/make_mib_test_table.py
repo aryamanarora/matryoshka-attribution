@@ -118,6 +118,10 @@ OUR_NODE_METHODS = [
     (MV.label(k="log"),              "test_node_topk_log_lr05"),
     (MV.label(opt="sgd"),            "test_node_softuni_sgd_lr_3.0"),
     (MV.label(k="log", opt="sgd"),   "test_node_softlog_sgd_lr_1.0"),
+    # The headline trained 10x longer (5000 steps; submit_node_unif_10x_sc.sh SPLITS=test,
+    # 2026-09-17). Every validation cell improved (llama3 ARC/MCQA by 0.5-1.1 CPR AUC), so the
+    # test twin is carried here as a marked variant; the label matches make_mib_table's row.
+    ("$+$ $10\\times$ steps",         "test_node_topk_uniform_lr05_5k"),
 ]
 # Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
 # the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which

@@ -167,8 +167,10 @@ DROP_OURS_OPT = "sgd"
 # so the log-k Adam arm is labelled "$+$ log $k$" and the surviving uniform-k Adam row is
 # ALREADY the bare \ourmethod{} -- the RENAME_OURS patch below is therefore empty, and the
 # "MAttr means a different run here than in the table" defect described above is closed.
-DROP_OURS_NAMES = (T.MV.label(k="log"),)
-OURS_DROPPED_PER_LEVEL = 3
+# "$+$ $10\\times$ steps" (node only, 2026-09-17): the figure keeps one MAttr bar per level, the
+# 500-step headline; the 10x row is the table's. Node therefore drops 4 of its 5 rows, edge 3 of 4.
+DROP_OURS_NAMES = (T.MV.label(k="log"), "$+$ $10\\times$ steps")
+OURS_DROPPED_PER_LEVEL = {"node": 4, "edge": 3}
 # Display names for the two survivors (2026-09-08, requested). With no non-Adam MAttr left in
 # the figure, "$+$ Adam" is an ablation marker pointing at nothing, so the rows are drawn as
 # the plain method and its one k-schedule ablation.
@@ -249,6 +251,7 @@ COST = {
         # Every MAttr row costs the same 500 steps; keyed on the table's own row list so a relabel
         # (2026-09-15: headline is now the bare \ourmethod{}) cannot strand a row without a cost.
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
+        "$+$ $10\\times$ steps": "5k",   # never drawn (DROP_OURS_NAMES); kept correct anyway
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
@@ -426,12 +429,12 @@ def ours_kept(level, rows):
                              f"{level.upper()}_METHODS -- cannot resolve its optimiser")
         drop = T._M.opt_of(dirs[name]) == DROP_OURS_OPT or name in DROP_OURS_NAMES
         (dropped if drop else kept).append(name)
-    if len(dropped) != OURS_DROPPED_PER_LEVEL:
+    if len(dropped) != OURS_DROPPED_PER_LEVEL[level]:
         raise SystemExit(f"{level}: dropped {len(dropped)} rows ({dropped}), expected "
-                         f"{OURS_DROPPED_PER_LEVEL} -- repointed or renamed in "
+                         f"{OURS_DROPPED_PER_LEVEL[level]} -- repointed or renamed in "
                          "make_mib_test_table.OUR_*_METHODS? update DROP_OURS_OPT / "
                          "DROP_OURS_NAMES")
-    unknown = [n for n in DROP_OURS_NAMES if n not in dirs]
+    unknown = [n for n in DROP_OURS_NAMES if n not in dirs and level != "edge"]   # the 10x row is node-only
     if unknown:
         raise SystemExit(f"{level}: DROP_OURS_NAMES {unknown} match no row in "
                          "make_mib_test_table.OUR_*_METHODS -- renamed? update DROP_OURS_NAMES")
