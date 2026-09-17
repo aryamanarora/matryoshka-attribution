@@ -269,7 +269,7 @@ PANEL_H = 0.85   # 1.17 -> 0.85 on 2026-09-16 (requested): the bar row was talle
 # title (which lives inside the axes bbox) butts straight up against it. The extra head plus
 # the +0.03 offset on bbox_to_anchor below is what puts ~4pt of air between "Node-level" and
 # the legend row; without it the two read as one line.
-HEAD, FOOT = 0.30, 0.70
+HEAD, FOOT = 0.30, 0.50   # FOOT 0.70 -> 0.50 (2026-09-16, requested): the 45-degree labels left ~0.2in of air under them
 # The cost row. Short: it carries one bar per method and its only job is the ratio between
 # them, which survives at this height; the 45-degree method names hang off ITS x axis, so FOOT
 # is measured from here, not from the CPR panel. Set beside PANEL_H so the two rows' shares
@@ -638,6 +638,7 @@ def main():
                frameon=False, handlelength=1.2, handleheight=1.0, handletextpad=0.4,
                columnspacing=1.4)
     fig.savefig(a.out)
+    fig.savefig(a.out.replace(".pdf", ".png"), dpi=200)   # eyeballing sibling
     print("wrote", a.out)
 
     for _, level_lab, _ in LEVELS:
