@@ -11,17 +11,22 @@
 #   results/sva_sweep_ferr50k  mlp_sae_span         (lr 0.5, --sae-error frozen)
 # The 5k runs took 7-10 min (MLP), 8-10 min (MLP+Attn), 15-35 min (SAE) on Tilde, so expect
 # ~1.5 h / ~1.5 h / 3-6 h per cell here. sc / nlprun, run INSIDE tmux.
+# EPS=1e-8 runs the same thing at Adam's default eps (the sign-normalised regime at this width,
+# scripts/sva/launch/submit_adam_eps_followup.sh); the tag then carries no eps mark, so the files
+# sit in the same trees under the `stopk-unif` key (parse_method) next to the eps=1e-2 ones.
 #   bash scripts/sva/launch/submit_unifk_eps_50k_sc.sh
+#   EPS=1e-8 bash scripts/sva/launch/submit_unifk_eps_50k_sc.sh
 #   NODES="mlp" DRY=1 bash scripts/sva/launch/submit_unifk_eps_50k_sc.sh
 set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
-DRY=${DRY:-0}; STEPS=${STEPS:-50000}
+DRY=${DRY:-0}; STEPS=${STEPS:-50000}; EPS=${EPS:-1e-2}
+[ "$EPS" = 1e-8 ] && epstag="" || epstag="_eps$EPS"
 TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours"}
 NODES=${NODES:-"mlp mlp+attn_head mlp_sae_span"}
 declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
                 [addition]=arith [months]=arith [weekdays]=arith [hours]=arith )
 COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode sufficient \
---loss logit_diff --optimizer adam --adam-eps 1e-2 --T 0.5 --steps $STEPS --train-batch-size 1 \
+--loss logit_diff --optimizer adam --adam-eps $EPS --T 0.5 --steps $STEPS --train-batch-size 1 \
 --eval-examples 100 --train-eval-every 1000 --train-eval-examples 20 --seed 42"
 # The SAE substrate does not fit a 48 GB a6000 (five of eight cells OOM'd in the encode within
 # minutes, 2026-09-17); the 5k headline ran on Tilde's 80 GB H100s. sphinx h100 for those.
@@ -31,13 +36,13 @@ for t in $TASKS; do
   for nodes in $NODES; do
     if [ "$nodes" = mlp_sae_span ]; then
       out=results/sva_sweep_ferr50k; extra="--lr 0.5 --sae-error frozen"
-      f="$out/${t}_llama3_mlp_sae_span_sufficient_topk_adam_eps1e-2_uniformk_ferr_bs1_s${STEPS}.json"
+      f="$out/${t}_llama3_mlp_sae_span_sufficient_topk_adam${epstag}_uniformk_ferr_bs1_s${STEPS}.json"
     else
       out=results/sva_sweep_50k; extra="--lr 0.05"
-      f="$out/${t}_llama3_${nodes//+/-}_sufficient_topk_adam_eps1e-2_uniformk_bs1_s${STEPS}.json"
+      f="$out/${t}_llama3_${nodes//+/-}_sufficient_topk_adam${epstag}_uniformk_bs1_s${STEPS}.json"
     fi
     if [ -f "$f" ]; then echo "SKIP $(basename $f)"; skip=$((skip+1)); continue; fi
-    name="u50k-${nodes//+/-}-${t}"
+    name="u50k${epstag}-${nodes//+/-}-${t}"
     cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/sva/eval_sva.py \
 --task $t --dataset ${DS[$t]} --nodes $nodes $extra $COMMON --output $out"
     res=$RES; [ "$nodes" = mlp_sae_span ] && res=$RES_SAE
@@ -47,4 +52,4 @@ for t in $TASKS; do
     fi
   done
 done
-echo "== $([ "$DRY" = 1 ] && echo 'DRY ')total $n SVA+ uniform-k eps=1e-2 ${STEPS}-step jobs, $skip skipped =="
+echo "== $([ "$DRY" = 1 ] && echo 'DRY ')total $n SVA+ uniform-k eps=$EPS ${STEPS}-step jobs, $skip skipped =="

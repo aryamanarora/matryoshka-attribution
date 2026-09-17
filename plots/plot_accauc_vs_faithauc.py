@@ -226,6 +226,7 @@ SUBSTRATE_RES = {"mlp_sae_span": "results/sva_sweep_ferr5k",
 # 50k steps, everything else the headline's, in its own trees for the reason SUBSTRATE_RES gives.
 # Only these three substrates were run; the key is absent from the node column.
 TENX_KEY, TENX_BASE = "stopk-unif-eps1e-2-10x", "stopk-unif-eps1e-2"
+TENX_KEYS = {"stopk-unif-eps1e-2": TENX_KEY, "stopk-unif": "stopk-unif-10x"}   # base key -> 10x key
 TENX_RES = {"mlp": "results/sva_sweep_50k", "mlp+attn_head": "results/sva_sweep_50k",
             "mlp_sae_span": "results/sva_sweep_ferr50k"}
 # SAE (resid) WAS THE SECOND COLUMN HERE AND WAS DROPPED (2026-09-03, requested). It is still in
@@ -271,6 +272,9 @@ METHODS = {
     # SYNTHETIC key -- parse_method strips the budget suffix, so these runs parse as the
     # headline key and are told apart by TREE (TENX_RES), not by tag. See tenx_for() in main.
     "stopk-unif-eps1e-2-10x": ("MAttr (10×)", P.METHOD["+hard"]),
+    # Same 50k budget at Adam's DEFAULT eps (EPS=1e-8 in the launcher). Registered so it is one
+    # list entry from any cut; not in CPR_METHODS.
+    "stopk-unif-10x": ("MAttr (10×, ε=10⁻⁸)", P.METHOD["MAttr (Adam, default eps)"]),
     "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
     # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
     # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
@@ -1169,13 +1173,13 @@ def main():
         return cache[d]
 
     def tenx_for(sub):
-        """The 10x tree for `sub`, its headline-key runs re-keyed to TENX_KEY; {} off-substrate."""
+        """The 10x tree for `sub`, its runs re-keyed base -> 10x key (TENX_KEYS); {} off-substrate."""
         d = TENX_RES.get(sub)
         if d is None:
             return {}
         if d not in cache:
-            cache[d] = {(TENX_KEY, l, s, t): v for (m, l, s, t), v in load(d).items()
-                        if m == TENX_BASE}
+            cache[d] = {(TENX_KEYS[m], l, s, t): v for (m, l, s, t), v in load(d).items()
+                        if m in TENX_KEYS}
         return cache[d]
 
     for res, inp_label, abl in sources:
@@ -1203,7 +1207,7 @@ def main():
                     facet = ((f"{abl}\n" if show_abl else "")
                              + (f"{slabel}, {inp_label}" if show_inp else slabel)
                              + f"\n{'·'.join(required[sub])}")
-                    raw = tenx_for(sub) if m == TENX_KEY else raw_for(res, sub)
+                    raw = tenx_for(sub) if m in TENX_KEYS.values() else raw_for(res, sub)
                     r = group_avg(raw, m, lkey, sub, required)
                     if r is None:
                         have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
