@@ -149,6 +149,9 @@ OUR_METHODS = [
     ("$+$ id-STE", "mib_edge_identity_sgd_log", "edge", "ours"),
     # Edge level (uniform k-schedule). Swept -> lr=0.05.
     ("\\ourmethod{}", "mib_edge_topk_uniform_lr05", "edge", "uniform"),
+    # 10x the steps (50000; submit_edge_unif_10x_sc.sh, 2026-09-17): does the dead sparse end of
+    # the uniform-k edge ranking (acc-AUC 0.74 vs log-k 0.96 on gpt2/ioi) come from under-training?
+    ("$+$ $10\\times$ steps", "mib_edge_topk_uniform_lr05_50k", "edge", "uniform"),
     # Uniform-k twin of the imported-LR edge SGD row above (lr=3.0). See that comment.
     ("\\ourmethod{}", "mib_edge_softuni_sgd_lr_3.0", "edge", "uniform"),
     ("$+$ hard", "mib_edge_hard_topk_uniform_lr05", "edge", "uniform"),
