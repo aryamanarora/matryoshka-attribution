@@ -23,7 +23,9 @@ declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
 COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode sufficient \
 --loss logit_diff --optimizer adam --adam-eps 1e-2 --T 0.5 --steps $STEPS --train-batch-size 1 \
 --eval-examples 100 --train-eval-every 1000 --train-eval-examples 20 --seed 42"
-RES="-q jag -d a6000 -c 4 -r 96G"
+# The SAE substrate does not fit a 48 GB a6000 (five of eight cells OOM'd in the encode within
+# minutes, 2026-09-17); the 5k headline ran on Tilde's 80 GB H100s. sphinx h100 for those.
+RES="-q jag -d a6000 -c 4 -r 96G"; RES_SAE="-q sphinx -d h100 -r 128G"
 n=0; skip=0
 for t in $TASKS; do
   for nodes in $NODES; do
@@ -38,9 +40,10 @@ for t in $TASKS; do
     name="u50k-${nodes//+/-}-${t}"
     cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/sva/eval_sva.py \
 --task $t --dataset ${DS[$t]} --nodes $nodes $extra $COMMON --output $out"
+    res=$RES; [ "$nodes" = mlp_sae_span ] && res=$RES_SAE
     n=$((n+1))
-    if [ "$DRY" = 1 ]; then echo "DRY nlprun -g 1 $RES -n $name"; echo "    $cmd"; else
-      nlprun -g 1 $RES -n "$name" -o "$ABS/logs/${name}.out" "$cmd" 2>&1 | grep -E 'Submitted batch job' | sed "s/^/$name: /"; sleep 1
+    if [ "$DRY" = 1 ]; then echo "DRY nlprun -g 1 $res -n $name"; echo "    $cmd"; else
+      nlprun -g 1 $res -n "$name" -o "$ABS/logs/${name}.out" "$cmd" 2>&1 | grep -E 'Submitted batch job' | sed "s/^/$name: /"; sleep 1
     fi
   done
 done
