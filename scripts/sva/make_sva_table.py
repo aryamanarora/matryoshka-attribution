@@ -5,7 +5,7 @@ granularity (variable set H): node, MLP neurons, MLP neurons + attention heads, 
                                                            #    paper/tabs/sva_accauc_results.tex
 
 Two files, mirroring the MIB pair:
-  sva_results.tex         CPR  -- `faith_auc`, the log-sparsity-weighted faithfulness AUC that
+  sva_results.tex         CPR  -- the LINEAR-p faithfulness AUC (V._cpr_of; MIB's measure), NOT faith_auc, the log-weighted one that
                           figs/accauc_vs_faithauc.pdf plots on y ("CPR" on the paper's axes)
   sva_accauc_results.tex  Compactness -- `acc_auc`, the IIA AUC the same figure plots on x
 
@@ -81,7 +81,10 @@ BLOCKS = [
 ]
 REFERENCE = ("Random", "Random")
 LOSS = "logit_diff"
-METRICS = {"cpr": (1, "sva_results.tex", "CPR"),
+# CPR IS THE LINEAR AUC, ALWAYS (user decision 2026-09-17): index 2 of V.load's tuple, the
+# MIB-style linear trapezoid over the kept proportion (V._cpr_of), not the log-weighted
+# faith_auc (index 1) this column carried until then. Same integrand as the curves figure.
+METRICS = {"cpr": (2, "sva_results.tex", "CPR"),
            "accauc": (0, "sva_accauc_results.tex", "Compactness")}
 
 # Cell styling mirrored from scripts/mib/make_mib_table.py (cell_color / fmt) so the two table

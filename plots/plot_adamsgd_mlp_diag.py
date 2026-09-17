@@ -80,6 +80,20 @@ def rd(pattern):
     return json.load(open(g[0])) if g else None
 
 
+def cpr_of(d):
+    """MIB-style CPR from a run json: LINEAR trapezoid of faithfulness over the kept proportion
+    p = n_nodes / total (same rule as plot_accauc_vs_faithauc._cpr_of, duplicated here so this
+    loader does not import the scatter module). CPR is always this linear AUC (2026-09-17)."""
+    p = np.asarray(d["n_nodes"], float) / float(d["total"])
+    f = np.asarray(d["faithfulness"], float)
+    return float(np.sum((p[1:] - p[:-1]) * (f[1:] + f[:-1]) / 2))
+
+
+def metric_of(d, key):
+    """`key` of a run json, with "cpr" computed from the curve rather than read."""
+    return cpr_of(d) if key == "cpr" else d[key]
+
+
 def auc_of(y):
     y = np.asarray(y, float)
     return float(np.sum((LX[1:] - LX[:-1]) * (y[1:] + y[:-1]) / 2) / (LX[-1] - LX[0]))
@@ -330,7 +344,7 @@ def eps_grid_matrix(res, key, refs=None, epss=None, lrs=None, gt=None):
                 continue
             d = rd(f"{res}/eps_{e}_lr_{lr}/*.json")
             if d:
-                M[i, j] = d[key]
+                M[i, j] = metric_of(d, key)
     return M
 
 

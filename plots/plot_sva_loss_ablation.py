@@ -10,7 +10,7 @@ offers -- `logit_diff` (the paper's default, base minus source logit), `ce` (cro
 the base answer) and `acc` (a soft accuracy, sigmoid of the margin at --acc-temp) -- on all ten
 SVA+ tasks (IOI on Qwen-2.5, the rest on Llama-3, as everywhere in this family). Scores come
 from plot_accauc_vs_faithauc.load, the loader behind the SVA tables, so a cell here is the
-table's cell: CPR is `faith_auc` (tabs/sva_results.tex), Compactness is `acc_auc`.
+table's cell: CPR is the linear-p AUC (tabs/sva_results.tex), Compactness is `acc_auc`.
 
 LAYOUT. One group per task in the table's order (SVA, Arith, ARC-E, IOI), three bars per group
 in the loss order above, a 13th "Avg" group after a rule with each loss's mean over the ten
@@ -38,7 +38,9 @@ TASKS = list(V.SVA) + list(V.ARITH) + ["arc_easy", "ioi"]
 TASK_LABEL = {"nounpp": "NounPP", "rc": "RC", "simple": "Simple", "within_rc": "Within RC",
               "addition": "Addition", "months": "Months", "weekdays": "Weekdays", "hours": "Hours",
               "arc_easy": "ARC-E", "ioi": "IOI"}
-METRICS = [(1, "CPR (↑)"), (0, "Compactness (↑)")]     # index into load()'s (acc_auc, faith_auc, cpr)
+# CPR is the LINEAR AUC (index 2, V._cpr_of), never the log-weighted faith_auc (index 1) --
+# user decision 2026-09-17, applied to tabs/sva_results.tex the same day.
+METRICS = [(2, "CPR (↑)"), (0, "Compactness (↑)")]     # index into load()'s (acc_auc, faith_auc, cpr)
 FIG_W, PANEL_H, FOOT, HEAD = 5.5, 1.05, 0.40, 0.22
 FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
 BAR_W = 0.26

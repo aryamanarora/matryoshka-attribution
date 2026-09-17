@@ -94,9 +94,10 @@ COLS = [
     # A plain linear 0-3.5 would move the diverging map's white point to 1.75, which means
     # nothing -- so this column alone uses TwoSlopeNorm pinned at 1.0 (exact full-model
     # recovery), keeping white where the semantics put it while the red arm stretches.
-    # "CPR": what tabs/sva_results.tex calls this same key (faith_auc, the log-sparsity-weighted
-    # faithfulness AUC) -- renamed 2026-09-16 to match the tables.
-    ("faith_auc", "CPR", "RdBu_r", 0.0, 3.5, None),
+    # "CPR" is the LINEAR AUC of the faithfulness curve over the kept proportion (the loader's
+    # computed "cpr" key, plot_adamsgd_mlp_diag.cpr_of; MIB's measure), as in tabs/sva_results.tex
+    # since 2026-09-17. Until then this column was faith_auc, the log-weighted one.
+    ("cpr", "CPR", "RdBu_r", 0.0, 3.5, None),
     ("rho_ig", "Spearman $\\rho$ vs. IG", "viridis", 0.0, 0.75, None),
     ("rho_sgd", "Spearman $\\rho$ vs. SGD", "viridis", 0.0, 0.90, None),
     # SPREAD OF THE LEARNED SCORE VECTOR -- the only column that measures the optimiser's OUTPUT
@@ -141,7 +142,7 @@ UNDERLINE_LW, UNDERLINE_PAD = 0.5, 0.0018
 # because they were asked for; read them on the IIA column and treat them as a warning sign
 # rather than a win wherever the cell is red. For "closest to 1" instead, compare
 # abs(M - 1) < abs(ref - 1) in beats().
-MARK_KEYS = ("acc_auc", "faith_auc")
+MARK_KEYS = ("acc_auc", "cpr")
 
 FIG_W = 5.5
 PANEL_H = 1.06
@@ -159,7 +160,7 @@ def baselines(refs, key):
     out = []
     for k in ("rho_ig", "rho_sgd"):
         p = os.path.join(D.ROOT, refs[k].replace(".scores.pt", ".json"))
-        out.append(json.load(open(p))[key] if os.path.exists(p) else None)
+        out.append(D.metric_of(json.load(open(p)), key) if os.path.exists(p) else None)
     return tuple(out)
 
 
@@ -223,7 +224,7 @@ def main():
             ax = axes[ri][ci]
             m = M[(ri, key)]
             norm = (TwoSlopeNorm(vcenter=1.0, vmin=vmin, vmax=vmax)
-                    if key == "faith_auc" else None)
+                    if key == "cpr" else None)
             im = (ax.imshow(m, cmap=cmap, aspect="auto", norm=norm) if norm is not None
                   else ax.imshow(m, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax))
             for i in range(len(EPSS)):
@@ -287,7 +288,7 @@ def main():
         cb.ax.xaxis.set_major_locator(MaxNLocator(4, prune="upper"))
         cb.outline.set_linewidth(0.5)
         cax.set_title(title, fontsize=FS_LAB, pad=2.5)
-        if key == "faith_auc":
+        if key == "cpr":
             # 1.0 = exact full-model recovery; "higher is better" is FALSE on this column, so
             # the centre of the diverging scale has to be findable. axvline, not axhline: the
             # bar is horizontal, so value runs along x.
