@@ -647,12 +647,12 @@ def draw_cost(sx, recs):
         if fam in COST_CLIP and lo > top:
             # Drawn at its TRUE height and left to run off the top of the strip (2026-09-18,
             # requested): the axis clips it at the frame, and a bar that leaves the page is the
-            # honest picture of a cost an order of magnitude past everything beside it. The
-            # string goes above the frame in the family colour so the value is still readable.
+            # honest picture of a cost an order of magnitude past everything beside it.
             sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
-            sx.annotate(cost, (x, top * STRIP_HEADROOM), textcoords="offset points", xytext=(0, 1.2),
-                        ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=colour,
-                        annotation_clip=False, zorder=5)
+            # the string goes INSIDE the bar (white, rotated): above the frame it lands in the
+            # gutter under the CPR panel's axis.
+            sx.text(x, top * 0.06, cost, rotation=90, ha="center", va="bottom",
+                    fontsize=FS_ANNOT - 0.7, color="white", zorder=5)
             continue
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
