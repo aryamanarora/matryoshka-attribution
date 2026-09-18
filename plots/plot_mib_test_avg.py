@@ -211,6 +211,9 @@ RENAME_BASELINES = {
     # Rotated tick; the full name is twice the width of any other and pushes the axis down.
     # "EG" is the abbreviation plot_mib_accauc_cpr_scatter.py already uses for the same row.
     "Expected Gradients": "EG",
+    # The denoise row is dropped (DROP), so the direction qualifier says nothing here
+    # (2026-09-18, requested). The table keeps both rows and both names.
+    "IntInv (noise)": "IntInv",
 }
 RENAME = {**RENAME_OURS, **RENAME_BASELINES}
 # Third element = families whose rows carry the llama3 dagger at that level. EMPTY at both levels
