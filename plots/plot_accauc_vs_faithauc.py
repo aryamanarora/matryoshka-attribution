@@ -443,7 +443,9 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # the default cut (accauc_vs_faithauc.pdf), where "MAttr" is still the log-k eps arm; the
 # swap is applied inside main()'s --cpr branch (CPR_STARS / CPR_POINT_LABEL) precisely so
 # the default cut does not move.
-CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
+# "mc_ig" (Expected Gradients) joined the cut 2026-09-18 with the edge-level EG test evals; it
+# has node, edge (test) and MLP / MLP+Attn points (no SAE runs), patched and zero.
+CPR_METHODS = ["IG", "IxG", "mc_ig", "eprun-s090", "sig_lr0.3_l16.0",
                "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
 # The 10x-steps twin ("stopk-unif-eps1e-2-10x") was in this cut 2026-09-17 and was dropped the
 # same day (requested): its row lives in the SVA+ / MIB tables and its bar in plot_mib_test_avg.
@@ -854,6 +856,14 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
 
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
+        if sub.empty:                       # a placeholder slot (no runs): title only
+            ax.set_title("\n".join(facet.split("\n")[:-1]), fontsize=6.2, pad=2.5)
+            ax.text(0.5, 0.5, "no edge-level\nzero-ablation runs", ha="center", va="center",
+                    fontsize=LAB_PT, color="#8a8a8a", transform=ax.transAxes)
+            ax.set_xticks([]); ax.set_yticks([])
+            for sp in ax.spines.values():
+                sp.set_visible(False)
+            continue
         for hf, hy, hlab, hc in hlines:
             if hf == facet:
                 ax.axhline(hy, ls=(0, (3, 2)), lw=0.7, color=hc, zorder=2)
@@ -914,6 +924,8 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
     # that is about to change.
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
+        if sub.empty:
+            continue
         lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub[ycol].values,
                                 label=[POINT_LABEL.get(m, METHODS[m][0])
                                        for m in sub["_key"]],
@@ -950,6 +962,27 @@ MIB_TEST_EDGE = {
     "stopk-log-eps1e-2": ("test_edge_topk_log_lr05", None),
     "softsgd-log":       ("test_edge_softlog_sgd_lr_3.0", None),   # SGD's own edge optimum
     "stopk-unif-eps1e-2": ("test_edge_topk_uniform_lr05", None),
+    # Our own edge-level test evals (2026-09-17, submit_eapig_mc_edge_test_sc.sh /
+    # submit_eprun_edge_sc.sh), replacing the "EAP-IG-inp" reference line (MIB's published
+    # number, no IIA). IG is m=10 as in the node panel; mib_rows holds a row to 12/12 cells.
+    "IG":                ("eapig_clean10_test", "EAP-IG-inputs_patching_edge"),
+    "mc_ig":             ("eapig_mc_test", "EAP-IG-inputs-mc_patching_edge"),
+    "eprun-s090":        ("eprun_eval_s0.99_ld", "EdgePruning_patching_edge"),
+}
+# ZERO ABLATION, node level, test split (submit_mib_zero_sc.sh, 2026-09-18): every method
+# attributed under zero and scored with intervention='zero'. Same keys as MIB_TEST.
+MIB_ZERO_FACET = "MIB (node, test), zero\nMIB"
+MIB_EDGE_ZERO_FACET = "MIB (edge, test), zero\nMIB"   # no edge-level zero runs: drawn blank
+MIB_TEST_ZERO = {
+    "IxG":               ("mib_zero_test/ixg", "EAP-IG-inputs_zero_node"),
+    "IG":                ("mib_zero_test/ig", "EAP-IG-inputs_zero_node"),
+    "mc_ig":             ("mib_zero_test/eg", "EAP-IG-inputs-mc_zero_node"),
+    "AttnLRP":           ("mib_zero_test/attnlrp", "AttnLRP_zero_node"),
+    "eprun-s090":        ("eprun_eval_s0.5_ld_zero", "EdgePruning_zero_node"),
+    "sig_lr0.3_l16.0":   ("eprun_eval_ld_sig_lr0.3_l16.0_zero", "EdgePruning_zero_node"),
+    "stopk-log-eps1e-2": ("test_node_topk_log_lr05_zero", None),
+    "stopk-unif-eps1e-2": ("test_node_topk_uniform_lr05_zero", None),
+    "Random":            ("mib_zero_test/random", "Random_zero_node"),
 }
 # registry key -> (results dir, subfolder or None). None = MAttr layout `{task}_{model}_test.pkl`;
 # a subfolder = run_evaluation.py layout `{task-dashed}_{model}_test_abs-False.pkl`.
@@ -1208,6 +1241,12 @@ def main():
                         if m in TENX_KEYS}
         return cache[d]
 
+    # --cpr (2026-09-18): a SECOND ROW of panels for zero ablation -- the SVA+ substrates from the
+    # 5k zero tree (results/sva_zeroabl_5k, submit_zero_5k_sc.sh) -- facet-suffixed ", zero".
+    # A source tagged ZERO_ROW is routed to that tree for every substrate (no SUBSTRATE_RES / 10x).
+    ZERO_ROW = "Zero-abl. (5k)"
+    if a.cpr and not a.zero:
+        sources = list(sources) + [("results/sva_zeroabl_5k", "−input", ZERO_ROW)]
     for res, inp_label, abl in sources:
         for m in figure_methods:
             mlabel = METHODS[m][0]
@@ -1230,8 +1269,10 @@ def main():
                     # is 26 characters and clipped past the right edge of the last panel at
                     # \textwidth/4. Stacked, the longest line is the group list (19), which
                     # already fit.
-                    facet = ((f"{abl}\n" if show_abl else "")
+                    zero_row = abl == ZERO_ROW
+                    facet = ((f"{abl}\n" if show_abl and not zero_row else "")
                              + (f"{slabel}, {inp_label}" if show_inp else slabel)
+                             + (", zero" if zero_row else "")
                              + f"\n{'·'.join(required[sub])}")
                     raw = (tenx_for(sub) if m in TENX_KEYS.values() and res == FIGURE_SOURCES[0][0]
                            else raw_for(res, sub))
@@ -1251,7 +1292,8 @@ def main():
                                      groups="+".join(r[2])))
     if a.cpr and not a.zero:
         rows = (mib_rows(figure_methods)
-                + mib_rows(figure_methods, MIB_TEST_EDGE, MIB_EDGE_FACET) + rows)
+                + mib_rows(figure_methods, MIB_TEST_EDGE, MIB_EDGE_FACET)
+                + mib_rows(figure_methods, MIB_TEST_ZERO, MIB_ZERO_FACET) + rows)
     df = pd.DataFrame(rows)
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
@@ -1275,12 +1317,17 @@ def main():
                    for inp in (["−input", "+input"] if show_inp else [None])
                    for sub, g in SUB_IN]
     if a.cpr:
-        facet_order = [MIB_FACET, MIB_EDGE_FACET] + facet_order   # MIB node, edge, then SVA+
+        # Row 1: MIB node, MIB edge, then SVA+; row 2 the same columns under zero ablation, with
+        # a BLANK edge slot (no edge-level zero runs) so the columns line up.
+        zero_facets = [f.replace("\n", ", zero\n", 1) for f in facet_order]
+        facet_order = ([MIB_FACET, MIB_EDGE_FACET] + facet_order
+                       + [MIB_ZERO_FACET, MIB_EDGE_ZERO_FACET] + zero_facets)
     # This list is the RENDER WHITELIST, not just a sort key: pd.Categorical maps anything absent
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
     # FIGURE_SUBSTRATES and REQUIRED is therefore NOT enough; it must be added here too.
-    df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in set(df["facet"])])
+    keep = set(df["facet"]) | ({MIB_EDGE_ZERO_FACET} if a.cpr and not a.zero else set())
+    df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in keep])
     df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
     # a plotnine setting. Sorting by facet/method too keeps each method's three rows contiguous.
@@ -1344,7 +1391,7 @@ def main():
                 print("wrote", out, f"({len(df)} points)")
                 report(df, figure_methods, losses, dropped)
                 return
-            hl = [(MIB_EDGE_FACET, mib_edge_eapig_cpr(), "EAP-IG-inp", P.METHOD["IG"])]
+            hl = []   # the EAP-IG-inp reference line is superseded by our own IG edge test point
             have_rnd = ((df["facet"] == MIB_FACET) & (df["_key"] == "Random")).any()
             if not have_rnd:
                 rnd = mib_random_cpr()
