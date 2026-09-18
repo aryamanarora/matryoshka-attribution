@@ -113,7 +113,7 @@ FAMILY = {
     # gradient rows approximate and the mask rows learn. Its own key and legend entry
     # (2026-09-18, requested): it is neither a gradient nor a learned mask. Node-only and
     # PARTIAL -- see PARTIAL_OK.
-    "causal":   ("Interchange intervention", P.METHOD["AttnLRP"]),
+    "causal":   ("Causal", P.METHOD["AttnLRP"]),
     "gradient": ("Gradient-based", P.METHOD["IG"]),
     "mask":     ("Mask-based", P.METHOD["Node Pruning"]),
     "ours":     ("\\ourmethod{} (ours)", P.METHOD["MAttr"]),
