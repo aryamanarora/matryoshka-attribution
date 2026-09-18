@@ -56,6 +56,12 @@ SUBSTRATES = [
     ("mlp+attn_head", V.SUBSTRATE_RES["mlp+attn_head"], "MLP neurons + attention heads"),
     ("mlp_sae_span", V.SUBSTRATE_RES["mlp_sae_span"], "SAE latents (MLP out)"),
 ]
+# --zero: the same four substrates under ZERO ablation, all from results/sva_zeroabl (2000 steps
+# for every trained method; the SAE cells carry the frozen error term and were launched by
+# submit_sae_zero_sc.sh, the uniform-k headline by submit_unifk_eps_zero_sc.sh, 2026-09-18).
+# The 10x-steps rows do not exist under zero, so build() passes no 10x tree in this mode.
+ZERO_RES = "results/sva_zeroabl"
+SUBSTRATES_ZERO = [(sub, ZERO_RES, title) for sub, _, title in SUBSTRATES]
 
 # (block title, [(method key in V.METHODS, display name)]). MAttr labels come from
 # scripts/mib/mattr_variants.py, the same definition the MIB tables use: the headline is
@@ -94,6 +100,8 @@ LOSS = "logit_diff"
 # faith_auc (index 1) this column carried until then. Same integrand as the curves figure.
 METRICS = {"cpr": (2, "sva_results.tex", "CPR"),
            "accauc": (0, "sva_accauc_results.tex", "Compactness")}
+METRICS_ZERO = {"cpr": (2, "sva_zero_results.tex", "CPR"),
+                "accauc": (0, "sva_zero_accauc_results.tex", "Compactness")}
 
 # === Bwd. column ============================================================================
 # Backward passes through the model, in sequences, to fit ONE cell -- the unit and the reading
@@ -240,7 +248,7 @@ def section(raw, sub, title, idx, cost):
     return out
 
 
-def build(idx, metric_label):
+def build(idx, metric_label, zero=False):
     ncols = len(COLUMNS)
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
              "\\begin{tabular}{lr" + "c" * ncols + "@{\\quad}c}",
@@ -255,11 +263,11 @@ def build(idx, metric_label):
     lines.append("\\textbf{Method} & \\textbf{Bwd.} & " + " & ".join(h for _, h in COLUMNS)
                  + f" & \\textbf{{Avg}} \\\\")
     cache = {}
-    for sub, res, title in SUBSTRATES:
+    for sub, res, title in (SUBSTRATES_ZERO if zero else SUBSTRATES):
         raw = dict(cache.setdefault(res, V.load(res)))
         # The 10x-steps rows live in their own trees (one budget per tree, V.SUBSTRATE_RES's
         # rule); merge them in under their synthetic keys, the same re-keying V's tenx_for does.
-        tenx = V.TENX_RES.get(sub)
+        tenx = None if zero else V.TENX_RES.get(sub)
         if tenx:
             raw.update({(V.TENX_KEYS[m], l, ss, t): v
                         for (m, l, ss, t), v in cache.setdefault(tenx, V.load(tenx)).items()
@@ -271,8 +279,13 @@ def build(idx, metric_label):
 
 
 def main():
-    for key, (idx, fname, label) in METRICS.items():
-        tex = build(idx, label)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--zero", action="store_true",
+                    help="the zero-ablation pair (sva_zero_results / sva_zero_accauc_results)")
+    a = ap.parse_args()
+    for key, (idx, fname, label) in (METRICS_ZERO if a.zero else METRICS).items():
+        tex = build(idx, label, zero=a.zero)
         (TABS / fname).write_text(tex)
         print(f"-> {TABS / fname}  ({tex.count(chr(10))} lines)")
 
