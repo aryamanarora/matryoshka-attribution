@@ -443,10 +443,16 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # the default cut (accauc_vs_faithauc.pdf), where "MAttr" is still the log-k eps arm; the
 # swap is applied inside main()'s --cpr branch (CPR_STARS / CPR_POINT_LABEL) precisely so
 # the default cut does not move.
-# "mc_ig" (Expected Gradients) joined the cut 2026-09-18 with the edge-level EG test evals; it
-# has node, edge (test) and MLP / MLP+Attn points (no SAE runs), patched and zero.
-CPR_METHODS = ["IG", "IxG", "mc_ig", "eprun-s090", "sig_lr0.3_l16.0",
+# EG ("mc_ig") was in this cut for a few hours on 2026-09-18 and was dropped (requested): it
+# sits on top of IG in every panel. One list entry to bring back.
+CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
                "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
+# Per-method markers for the --cpr cut (2026-09-18, requested): IG vs I x G and NP vs DBM
+# were the same glyph in the same family colour and needed point labels to tell apart; with
+# distinct glyphs the legend carries the names and only the two MAttr points keep labels.
+CPR_MARKERS = {"IG": "o", "IxG": "^", "eprun-s090": "s", "sig_lr0.3_l16.0": "D", "Random": "o",
+               "stopk-log-eps1e-2": "o"}
+CPR_LABELLED = {"stopk-unif-eps1e-2", "stopk-log-eps1e-2"}
 # The 10x-steps twin ("stopk-unif-eps1e-2-10x") was in this cut 2026-09-17 and was dropped the
 # same day (requested): its row lives in the SVA+ / MIB tables and its bar in plot_mib_test_avg.
 # Everything below still supports it -- one list entry to bring it back. Both budgets are stars.
@@ -803,7 +809,8 @@ def group_avg(raw, m, loss, sub, required=None):
 
 
 def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-AUC (↑)",
-                  xlabel="Compactness (↑)", colors=None, hlines=(), figsize=None):
+                  xlabel="Compactness (↑)", colors=None, hlines=(), figsize=None,
+                  markers=None, legend=False, free_lims=False, label_keys=None):
     """The default cut, raw matplotlib: uniform circles + direct point labels, no legend.
 
     `ycol`/`ylabel` select the y metric: the stored log-AUC (default) or the MIB-style CPR the
@@ -884,7 +891,19 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
             if hollow:
                 return dict(facecolor="none", edgecolor=cols, linewidth=OUTLINE_LW)
             return dict(c=cols, edgecolor="#000000", linewidth=0.3)
-        for hollow in (False, True):
+        if markers:
+            # Per-KEY markers (the --cpr cut, 2026-09-18): one glyph per method so a legend
+            # can carry the names and the point labels can be dropped for everything but ours.
+            # Hollow/filled follows the same outline rule as before; the star stays a star.
+            for key, mk in markers.items():
+                m = (sub["_key"] == key) & ~star
+                if not m.any():
+                    continue
+                hollow = bool(outline[m].iloc[0])
+                ax.scatter(sub["acc_auc"][m], sub[ycol][m], marker=mk, zorder=3,
+                           s=LAB_MSIZE * (0.85 if mk in "sD" else 1.0), **style(m, hollow))
+        else:
+          for hollow in (False, True):
             # A square packs more ink into its box than a circle of equal `s`; scale it down
             # a touch so the two read at the same weight.
             for mask, marker, size in ((circ, "o", LAB_MSIZE), (sq, "s", LAB_MSIZE * 0.85)):
@@ -899,8 +918,19 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
         # point is the floor and a panel that crops it loses the only absolute reference.
         # XPAD then adds room on the right for labels that hang off the last point.
         xs, ys = sub["acc_auc"], sub[ycol]
-        ax.set_xlim(0, max(xs) * (1 + LAB_XPAD))
-        ax.set_ylim(0, max([max(ys)] + [hy for hf, hy, _, _ in hlines if hf == facet]) * 1.12)
+        if free_lims:
+            # Axes fit the data (2026-09-18, requested): autoscale with a margin instead of
+            # anchoring both axes at 0 -- the chance-corrected zero row has negative
+            # compactness, and a fixed 0 floor hid the spread within a panel.
+            ax.margins(x=0.18, y=0.15)
+            ax.autoscale(enable=True, axis="both", tight=False)
+            for hf, hy, _, _ in hlines:
+                if hf == facet:
+                    lo, hi = ax.get_ylim()
+                    ax.set_ylim(min(lo, hy - 0.1 * (hi - lo)), hi)
+        else:
+            ax.set_xlim(0, max(xs) * (1 + LAB_XPAD))
+            ax.set_ylim(0, max([max(ys)] + [hy for hf, hy, _, _ in hlines if hf == facet]) * 1.12)
         # Title DROPS the strip's last line, which is the task-group list. The faceted cuts
         # keep it because there it stops the node and per-position column families being read
         # as the same average; here the panels are named on the figure and the datasets belong
@@ -918,12 +948,36 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
         ax.set_visible(False)
     fig.supxlabel(xlabel, fontsize=7, y=0.015)
     fig.supylabel(ylabel, fontsize=7, x=0.012)
-    fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1, 1))
+    if legend and markers:
+        # One legend at the right, in figure_methods order, with the marker each method draws.
+        from matplotlib.lines import Line2D
+        hs = []
+        for key in figure_methods:
+            if key not in df["_key"].values:
+                continue
+            name = METHODS[key][0]; col = colors[name]
+            if key in STAR_KEYS:
+                hs.append(Line2D([], [], marker="*", ls="", color=col, markeredgecolor="#000000",
+                                 markeredgewidth=0.3, markersize=8, label=POINT_LABEL.get(key, name)))
+            else:
+                hollow = OUTLINE_NON_STAR and key not in FILLED_KEYS
+                hs.append(Line2D([], [], marker=markers.get(key, "o"), ls="",
+                                 markerfacecolor="none" if hollow else col, color=col,
+                                 markeredgecolor=col if hollow else "#000000",
+                                 markeredgewidth=OUTLINE_LW if hollow else 0.3, markersize=5,
+                                 label=POINT_LABEL.get(key, name)))
+        fig.legend(handles=hs, loc="center right", fontsize=LAB_PT + 0.4, frameon=False,
+                   handletextpad=0.4, labelspacing=0.9, borderaxespad=0.2)
+        fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 0.905, 1))
+    else:
+        fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1, 1))
     # AFTER tight_layout: place_labels measures the marker half-extent and the label widths off
     # the laid-out panel, so calling it earlier would size every offset against a panel geometry
     # that is about to change.
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
+        if label_keys is not None:
+            sub = sub[sub["_key"].isin(label_keys)]
         if sub.empty:
             continue
         lab = pd.DataFrame(dict(acc=sub["acc_auc"].values, cpr=sub[ycol].values,
@@ -1287,7 +1341,12 @@ def main():
                     # `_key` is the registry key, kept alongside the display label so
                     # draw_labelled can look up POINT_LABEL without reverse-mapping a label
                     # string back to its method.
-                    rows.append(dict(acc_auc=r[0], faith_auc=r[1], cpr=r[3], method=mlabel,
+                    # The zero row's compactness is CHANCE-CORRECTED, 2 AUC - 1, exactly as
+                    # scripts/sva/make_sva_table.py --zero prints it (the lb > ls indicator has a
+                    # 0.5 floor under zeroing). The MIB zero panel is NOT corrected -- its accuracy
+                    # has no such floor -- again matching its table.
+                    acc = 2 * r[0] - 1 if zero_row else r[0]
+                    rows.append(dict(acc_auc=acc, faith_auc=r[1], cpr=r[3], method=mlabel,
                                      _key=m, loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
     if a.cpr and not a.zero:
@@ -1406,7 +1465,8 @@ def main():
             # printed below, before changing this.
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                           xlabel="Compactness (↑)", colors=fam, hlines=hl,
-                          figsize=(LAB_FIG[0], 1.3))
+                          figsize=(LAB_FIG[0] * 1.1, 1.3), markers=CPR_MARKERS, legend=True,
+                          free_lims=True, label_keys=CPR_LABELLED)
         elif a.y_cpr:
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)")
         else:
