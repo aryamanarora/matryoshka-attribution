@@ -109,6 +109,11 @@ import make_mib_table as _M   # cost constants only -- the table's own, so a re-
 # recolour it too rather than reverting this.
 FAMILY = {
     "control":  ("Random control", P.METHOD["Random"]),
+    # Single-node interchange intervention (IntInv): the brute-force causal reference the
+    # gradient rows approximate and the mask rows learn. Its own key and legend entry
+    # (2026-09-18, requested): it is neither a gradient nor a learned mask. Node-only and
+    # PARTIAL -- see PARTIAL_OK.
+    "causal":   ("Interchange intervention", P.METHOD["AttnLRP"]),
     "gradient": ("Gradient-based", P.METHOD["IG"]),
     "mask":     ("Mask-based", P.METHOD["Node Pruning"]),
     "ours":     ("\\ourmethod{} (ours)", P.METHOD["MAttr"]),
@@ -159,6 +164,12 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)")
 # 2026-09-17 (later): the three EAP-IG-family edge test evals landed 12/12; only Edge Pruning's
 # validation-then-test wave is still mid-flight.
 PENDING = (("edge", T._M.EPRUN_NAME["edge"]),)
+# Rows drawn from FEWER than all cells, on purpose. IntInv costs 2 + 2N forwards per batch and
+# only ever runs on the three small-model cells (make_mib_test_table.PARTIAL_COVERAGE), so its
+# bar is the mean over the cells it has. That mean is NOT comparable to the 12-cell means beside
+# it (the small cells are the easy ones), so the tick label carries the cell count as a
+# superscript and the caption must say so. Everything not listed here still hits the 12/12 gate.
+PARTIAL_OK = {("node", n) for n in T.PARTIAL_COVERAGE}
 DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
 # is the uniform-k Adam one, drawn as the plain method (see RENAME_OURS). Keyed on the table's
@@ -253,6 +264,11 @@ COST = {
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
         "$+$ $10\\times$ steps": "5k",   # KEEP_OURS_EXTRA: 5000 steps x batch 1
         "$-$ learning": _M.COST_OURS["node"],   # dropped by name; same 500 forward+backward
+        # IntInv: FORWARDS, not backward passes -- 2 + 2N per batch over 200 train pairs, N=157
+        # (gpt2) / 361 (qwen2.5) nodes = 63k / 144k sequences (make_mib_table.COST_ACTPATCH).
+        # The strip's unit is "passes through the model"; a forward is cheaper than a backward,
+        # so if anything this understates the gap. Clipped in draw_cost (COST_CLIP).
+        **{name: _R(_M.COST_ACTPATCH) for name, _ in T.CAUSAL_NODE_BASELINES},
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
@@ -320,6 +336,7 @@ LEFT = 0.095
 FS_AXIS, FS_TICK, FS_ANNOT = 7, 6.5, 6
 BAR_W = 0.72           # in category units, so bars are the same thickness in both panels
 COST_COLOR = "#8a8a8a"   # the tiny-bar cost label: secondary to the black CPR values above
+COST_CLIP = ("causal",)  # families whose cost bar is clipped at the strip ceiling (see draw_cost)
 
 
 def tex_to_mpl(s):
@@ -451,8 +468,8 @@ _EXTRA = None
 
 def extra():
     """make_mib_test_table.collect_extra(), loaded once: (causal_nodes, grad_edges, mask_edges).
-    The interchange-intervention (IntInv) rows are partial by design and are never drawn,
-    so only the two edge groups are used here."""
+    The interchange-intervention (IntInv) rows are partial by design; they are drawn under
+    PARTIAL_OK with their cell count in the label."""
     global _EXTRA
     if _EXTRA is None:
         _EXTRA = T.collect_extra()
@@ -462,11 +479,13 @@ def extra():
 def panel_rows(level, loaded):
     """[(family, name, data)] for one level, in table order, with DROP applied."""
     ours_nodes, mask_nodes, grad_nodes, ours_edges = loaded
-    _, grad_edges, mask_edges = extra()
+    causal_nodes, grad_edges, mask_edges = extra()
     if level == "node":
         groups = [
             ("control", [(n, T.NODE_BASELINES[n])
                          for n in T.CONTROL_NAMES if n in T.NODE_BASELINES], True),
+            # Partial by design, so not suppressed: ordered by their own (3-cell) mean.
+            ("causal", list(causal_nodes.items()), False),
             ("gradient", T.classify(T.NODE_BASELINES, "gradient") + list(grad_nodes.items()), True),
             ("mask", list(mask_nodes.items()), True),
             # complete_or_skip already held ours to 11/11, so suppress_partial has nothing to act
@@ -506,7 +525,8 @@ def bars():
         recs = []
         for fam, name, data in panel_rows(level, loaded):
             n = sum(1 for t, m, _ in T.COLUMNS if (t, m) in data)
-            if n < len(T.COLUMNS):
+            partial = (level, name) in PARTIAL_OK and n < len(T.COLUMNS)
+            if n < len(T.COLUMNS) and not partial:
                 if (level, name) in PENDING:
                     print(f"PENDING {name} ({level}): {n}/{len(T.COLUMNS)} cells -- row skipped "
                           "until its eval wave finishes")
@@ -529,7 +549,8 @@ def bars():
                     "rendered cost column in paper/tabs/mib_results.tex is the ground truth) "
                     "or the bar would claim a free method.")
             lab = tex_to_mpl(RENAME.get(name, name)) \
-                + ("$^{\\dagger}$" if fam in dagger else "")
+                + ("$^{\\dagger}$" if fam in dagger else "") \
+                + (f"$^{{({n}/{len(T.COLUMNS)})}}$" if partial else "")
             recs.append((fam, lab, avg(data), sem(data), COST[level][name]))
         out[level_lab] = recs
     seen = {name for _, lab, _ in LEVELS for _, name, _ in ()} | {
@@ -607,9 +628,21 @@ def draw_cost(sx, recs):
     """
     xs = list(range(len(recs)))
     ranges = [parse_cost(r[4]) for r in recs]
-    top = max(hi for _, hi in ranges)
+    # The strip's ceiling is set by the NON-clipped bars: a family in COST_CLIP (IntInv, 63-144k
+    # forwards) is drawn to the ceiling with a broken top and its string, so the 0.5k-24k bars it
+    # sits next to keep their ratios readable. The number, not the bar, carries its magnitude.
+    top = max(hi for (fam, *_), (_, hi) in zip(recs, ranges) if fam not in COST_CLIP)
     for x, (fam, _, _, _, cost), (lo, hi) in zip(xs, recs, ranges):
         colour = FAMILY[fam][1]
+        if fam in COST_CLIP and lo > top:
+            cap = top * STRIP_HEADROOM * 0.86
+            sx.bar(x, cap, width=BAR_W, zorder=2, **bar_style(fam))
+            # a white gap through the bar marks the break
+            sx.bar(x, cap * 0.05, bottom=cap * 0.62, width=BAR_W * 1.1, color="white", lw=0, zorder=3)
+            sx.annotate(cost, (x, cap), textcoords="offset points", xytext=(0, 1.2),
+                        ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=COST_COLOR,
+                        zorder=5)
+            continue
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
             if fam in FILLED or BASELINE_STYLE == "solid":
