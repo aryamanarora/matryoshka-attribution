@@ -339,7 +339,7 @@ LEFT = 0.095
 FS_AXIS, FS_TICK, FS_ANNOT = 7, 6.5, 6
 BAR_W = 0.72           # in category units, so bars are the same thickness in both panels
 COST_COLOR = "#8a8a8a"   # the tiny-bar cost label: secondary to the black CPR values above
-COST_CLIP = ("causal",)  # families whose cost bar is clipped at the strip ceiling (see draw_cost)
+COST_CLIP = ("causal",)  # families whose cost bar is excluded from the strip ceiling and runs off it (see draw_cost)
 
 
 def tex_to_mpl(s):
@@ -638,19 +638,21 @@ def draw_cost(sx, recs):
     """
     xs = list(range(len(recs)))
     ranges = [parse_cost(r[4]) for r in recs]
-    # The strip's ceiling is set by the NON-clipped bars: a family in COST_CLIP (IntInv, 63-144k
-    # forwards) is drawn to the ceiling with a broken top and its string, so the 0.5k-24k bars it
-    # sits next to keep their ratios readable. The number, not the bar, carries its magnitude.
+    # The strip's ceiling is set by the bars NOT in COST_CLIP: IntInv (63-423k forwards) is drawn
+    # at full height and runs off the top, so the 0.5k-24k bars it sits next to keep their
+    # ratios readable.
     top = max(hi for (fam, *_), (_, hi) in zip(recs, ranges) if fam not in COST_CLIP)
     for x, (fam, _, _, _, cost), (lo, hi) in zip(xs, recs, ranges):
         colour = FAMILY[fam][1]
         if fam in COST_CLIP and lo > top:
-            cap = top * STRIP_HEADROOM * 0.86
-            sx.bar(x, cap, width=BAR_W, zorder=2, **bar_style(fam))
-            # a white gap through the bar marks the break
-            sx.bar(x, cap * 0.05, bottom=cap * 0.86, width=BAR_W * 1.1, color="white", lw=0, zorder=3)
-            sx.text(x, cap * 0.06, cost, rotation=90, ha="center", va="bottom",
-                    fontsize=FS_ANNOT - 0.7, color="white", zorder=5)
+            # Drawn at its TRUE height and left to run off the top of the strip (2026-09-18,
+            # requested): the axis clips it at the frame, and a bar that leaves the page is the
+            # honest picture of a cost an order of magnitude past everything beside it. The
+            # string goes above the frame in the family colour so the value is still readable.
+            sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
+            sx.annotate(cost, (x, top * STRIP_HEADROOM), textcoords="offset points", xytext=(0, 1.2),
+                        ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=colour,
+                        annotation_clip=False, zorder=5)
             continue
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
