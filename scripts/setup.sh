@@ -27,8 +27,8 @@
 # ViT group. Nothing here to build.
 set -euo pipefail
 
-MIB_SHA=0c95fa1         # aryamanarora/MIB-circuit-track main, 2026-09-18: EAP-IG @ 3373509 (AtP / AtP-star node
-                        # methods); before that d7c76bd (EAP-IG c2dd06c, intervention=zero for EAP-IG-inputs /
+MIB_SHA=582fdbc         # aryamanarora/MIB-circuit-track main, 2026-09-18: EAP-IG @ 3fb341e (AtP / AtP-star node
+                        # methods, None-grad fix); before that d7c76bd (EAP-IG c2dd06c, intervention=zero for EAP-IG-inputs /
                         # -mc / AttnLRP) and 2324d9a (invert / extra[flip_accuracies])
 MIB_URL="${MIB_URL:-https://github.com/aryamanarora/MIB-circuit-track.git}"
 
