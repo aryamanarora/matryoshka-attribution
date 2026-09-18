@@ -69,7 +69,10 @@ for cell in "${CELLS[@]}"; do
              a="--gate sigmoid --lr 0.3 --l1-coeff 6.0 --l1-target gate --steps 3000"; fi
         [ -f "$ev/EdgePruning_zero_node/${tdash}_${model}_${SPLIT}_abs-False.pkl" ] && { skip=$((skip+1)); continue; }
         graph=$out/graph_${task}_${model}.json
-        sub "z-$m-$task-$model" "$res" "if [ -f $graph ]; then echo REUSING $graph; else $EXP $py scripts/mib/eval_mib_edge_pruning.py \
+        # The gate trainers keep the live activations of every node in the graph: llama3 OOMs a
+        # 48 GB a6000 (ioi cell, 2026-09-18), as the patching-side NP runs also needed the h100.
+        mres=$res; [ "$model" = llama3 ] && mres="-q sphinx -d h100 -r 128G"
+        sub "z-$m-$task-$model" "$mres" "if [ -f $graph ]; then echo REUSING $graph; else $EXP $py scripts/mib/eval_mib_edge_pruning.py \
 --model $model --task $task --level node --split $SPLIT --output $out --loss logit_diff --ablation zero $a --skip-eval; fi && \
 cd $MIB && PYTHONPATH=.:EAP-IG/src $EXP $pye run_evaluation.py --models $model --tasks $task --level node --ablation zero \
 --split $SPLIT --method EdgePruning --circuit-files $ABS/$graph --batch-size $ebs --output-dir $ABS/$ev" ;;
