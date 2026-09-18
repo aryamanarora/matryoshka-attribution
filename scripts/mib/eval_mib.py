@@ -125,6 +125,12 @@ def main():
                              "hard_concrete: Bernoulli(sigmoid) + L0 penalty (UGS-style).")
     parser.add_argument("--l0-lambda", type=float, default=1e-3,
                         help="L0 regularization weight for hard_concrete masking")
+    # ZERO ABLATION (2026-09-18): non-circuit nodes are set to 0 instead of their counterfactual
+    # activation, at TRAINING (LlamaAttributionHooks zero_ablation, the SVA+ zero runs' hook) and
+    # at EVAL (MIB's evaluate_area_under_curve intervention="zero", which drops the corrupted
+    # forward and subtracts the clean activations without adding anything back). The CF cache
+    # still runs the source forward; its activations are simply never blended in.
+    parser.add_argument("--ablation", default="patching", choices=["patching", "zero"])
     parser.add_argument("--include-input", action="store_true",
                         help="Learn a score for the input embedding node")
     parser.add_argument("--eval-examples", type=int, default=None,
@@ -237,7 +243,8 @@ def main():
     corrupt_topk = args.mode == "necessary"
     hooker = HooksCls(hf_model, "node", seq_len=1,
                        sufficient=corrupt_topk,
-                       include_input=args.include_input)
+                       include_input=args.include_input,
+                       zero_ablation=args.ablation == "zero")
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
 
@@ -437,7 +444,8 @@ def main():
     weighted_edge_counts, area_under, area_from_1, average, faithfulnesses, accuracies, acc_auc = \
         evaluate_area_under_curve(
             tl_model, graph, dataloader, attribution_metric,
-            level="node", absolute=False)
+            level="node", absolute=False,
+            intervention="zero" if args.ablation == "zero" else "patching")
 
     logger.info("MIB Results:")
     percentages = (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0)

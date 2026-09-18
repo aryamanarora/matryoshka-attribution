@@ -133,6 +133,9 @@ def main():
     parser.add_argument("--loss", type=str, default="kl", choices=["kl", "logit_diff"],
                         help="Task loss: KL to the unmasked model at the answer position "
                              "(Edge Pruning's objective) or -logit_diff (MAttr's)")
+    # ZERO ABLATION (2026-09-18), node level only: the gate blends each node toward 0 instead of
+    # its corrupted activation. Score with run_evaluation.py --ablation zero (the launcher does).
+    parser.add_argument("--ablation", default="patching", choices=["patching", "zero"])
     parser.add_argument("--include-input", action="store_true",
                         help="node level: also learn a gate for the input embedding node "
                              "(default: input always stays clean)")
@@ -154,6 +157,8 @@ def main():
     parser.add_argument("--skip-eval", action="store_true",
                         help="Train and dump the circuit only; leave scoring to run_evaluation.py")
     args = parser.parse_args()
+    if args.level == "edge" and args.ablation == "zero":
+        parser.error("--ablation zero is node-level only (the edge env blends corrupted-clean diffs)")
     if args.l1_coeff and args.gate != "sigmoid":
         parser.error("--l1-coeff applies to --gate sigmoid only; hard_concrete's Lagrangian "
                      "already owns sparsity via --target-sparsity")
@@ -403,6 +408,8 @@ def main():
             return None
         clean_tokens, corrupted_tokens, attention_mask, labels = pair
         corrupted_acts = cache_corrupted(corrupted_tokens, attention_mask)
+        if args.ablation == "zero":
+            corrupted_acts = {k: torch.zeros_like(v) for k, v in corrupted_acts.items()}
 
         # Gate vector over all forward nodes; unscored nodes (input by default) stay clean
         z_full = torch.ones(graph.n_forward, device=device)
@@ -512,7 +519,8 @@ def main():
 
     # cluster's patched MIB clone returns 7 values (+accuracies, acc_auc); stock returns 5
     ret = evaluate_area_under_curve(model, graph, dataloader, attribution_metric,
-                                    level=args.level, absolute=False)
+                                    level=args.level, absolute=False,
+                                    intervention="zero" if args.ablation == "zero" else "patching")
     if len(ret) == 7:
         weighted_edge_counts, area_under, area_from_1, average, faithfulnesses, accuracies, acc_auc = ret
     else:
