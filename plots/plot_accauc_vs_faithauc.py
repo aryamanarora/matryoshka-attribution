@@ -1443,8 +1443,11 @@ def main():
             STAR_KEYS = CPR_STARS
             OUTLINE_NON_STAR = True    # baselines hollow, ours filled (all-filled was tried and reverted)
             FILLED_KEYS = CPR_FILLED
-            LABEL_LEFT = {}   # was CPR_LABEL_LEFT; with two labels per panel and free x-limits
-                              # nothing needs the left anchor, and it put "MAttr" over the star
+            # Left anchors, 2026-09-18 (checked on the PNG): MIB node's "MAttr" otherwise gets a
+            # leader line down into the IG point because "+log k" sits just right of the star;
+            # "+log k" on MLP (patched) and MLP+Attn (zero) ran past the right frame.
+            LABEL_LEFT = {"stopk-unif-eps1e-2": ("MIB (node",),
+                          "stopk-log-eps1e-2": ("MLP\n", "MLP+Attn, zero")}
             POINT_LABEL.update(CPR_POINT_LABEL)
             # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
             # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
