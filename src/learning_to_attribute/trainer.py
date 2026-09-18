@@ -66,17 +66,26 @@ def learn_scores(
 
     Args mirror the knobs previously inlined in eval_mib.py / attribute.py / the toys:
     ``variant`` selects the masking ablation (see ``masks.VARIANTS``); ``k_schedule`` is a
-    ``schedules.sample_k`` schedule; ``optimizer`` in ``{adam, sgd}``; ``extra_params``/
+    ``schedules.sample_k`` schedule; ``optimizer`` in ``{adam, sgd, none}``; ``extra_params``/
     ``lr_extra`` add a second param group (e.g. DAS rotations). ``init_scores`` overrides
     the zero init. (Dropped 2026-08-26: ``lr_schedule``, the ``use_bias``/``natural_k_frac``
     bias-step, and ``k_schedule="natural"`` -- no headline result used them.)
+
+    ``optimizer="none"`` (2026-09-18) is MAttr WITHOUT LEARNING: the scores stay at their init
+    (zero) for every forward, and the returned scores are the mean over steps of the NEGATED
+    gradient at that point -- i.e. the first-step update of the paper's gradient appendix, estimated
+    by Monte Carlo over the k-schedule and the data: centred, path-reweighted IG in mask space
+    (rho = 6 t (1-t) under uniform k, 2t under log k, 1 under logit k), through the soft top-k
+    Jacobian and with the recomputation of intervened parents attached. Same per-step cost as
+    learning (one forward + backward); no learning rate.
     """
+    frozen = optimizer == "none"
     if init_scores is not None:
         scores = nn.Parameter(init_scores.to(device).clone())
     else:
         scores = nn.Parameter(torch.zeros(total, device=device))
     main_params = [scores]
-    opt_cls = torch.optim.SGD if optimizer == "sgd" else torch.optim.Adam
+    opt_cls = torch.optim.SGD if optimizer in ("sgd", "none") else torch.optim.Adam
     # Adam's eps is a real knob at neuron scale, not a numerical guard. With ~2.3M mask logits
     # most per-step gradients are far below the default 1e-8, so m_hat/(sqrt(v_hat)+eps) ~
     # sign(g) and the learned score degenerates to a signed COUNT of steps -- every trace of
@@ -86,8 +95,10 @@ def learn_scores(
     # SGD with EMA momentum (momentum=mu, dampening=mu in torch's parameterisation). Plain
     # heavy-ball (dampening=0) instead SUMS gradients with steady-state gain 1/(1-mu).
     adam_kw = ({"momentum": sgd_momentum, "dampening": sgd_dampening}
-               if optimizer == "sgd" else {"eps": adam_eps, "betas": tuple(adam_betas)})
-    groups = [{"params": main_params, "lr": lr, **adam_kw}]
+               if optimizer in ("sgd", "none") else {"eps": adam_eps, "betas": tuple(adam_betas)})
+    # frozen: lr 0 keeps the forward at the init while the loop below still computes .grad.
+    groups = [{"params": main_params, "lr": 0.0 if frozen else lr, **adam_kw}]
+    frozen_acc, frozen_n = (torch.zeros(total, dtype=torch.float64, device=device), 0) if frozen else (None, 0)
     extra_optimizer_ = None
     if extra_params:
         elr = lr_extra if lr_extra is not None else lr
@@ -194,6 +205,9 @@ def learn_scores(
         optimizer_.step()
         if extra_optimizer_ is not None:
             extra_optimizer_.step()
+        if frozen and scores.grad is not None:
+            frozen_acc -= scores.grad.detach().double()   # goodness = -loss, as SGD would subtract
+            frozen_n += 1
         k = sum(ks) / len(ks)                      # mean k for logging
         loss_val = sum(losses) / len(losses)
 
@@ -211,7 +225,8 @@ def learn_scores(
                         float(scores.data.abs().max()), k, total, rate)
 
     result.train_time_s = time.time() - t0
-    result.scores = scores.data.cpu()
+    result.scores = ((frozen_acc / max(frozen_n, 1)).float().cpu() if frozen
+                     else scores.data.cpu())
     return result
 
 

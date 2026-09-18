@@ -89,6 +89,11 @@ BLOCKS = [
         # see build(). The eps=1e-8 twin has no 5k counterpart on these substrates (the default-eps
         # uniform arm was only ever run at 2k on MLP / MLP+Attn and never on SAE), so its row is
         # read against the eps=1e-2 headline, one row above the 10x pair.
+        # No learning (--optimizer none, submit_sva_frozen_sc.sh, 2026-09-18): the mean negated
+        # gradient at zero scores over the run's k-draws -- the gradient appendix's first-step
+        # update, estimated rather than derived. Same budget as the row above it.
+        ("frozen-unif",            MV.label(eps="1e-2", extra=("$-$ learning",))),
+        ("frozen-log",             MV.label(k="log", eps="1e-2", extra=("$-$ learning",))),
         ("stopk-unif-eps1e-2-10x", MV.label(eps="1e-2", extra=("$+$ $10\\times$ steps",))),
         ("stopk-unif-10x",         MV.label(eps="1e-8", extra=("$+$ $10\\times$ steps",))),
     ]),

@@ -167,7 +167,7 @@ DROP_OURS_OPT = "sgd"
 # so the log-k Adam arm is labelled "$+$ log $k$" and the surviving uniform-k Adam row is
 # ALREADY the bare \ourmethod{} -- the RENAME_OURS patch below is therefore empty, and the
 # "MAttr means a different run here than in the table" defect described above is closed.
-DROP_OURS_NAMES = (T.MV.label(k="log"),)
+DROP_OURS_NAMES = (T.MV.label(k="log"), "$-$ learning")   # the no-learning row is the table's, not a bar
 # Extra MAttr rows drawn BESIDE the headline (2026-09-17, requested): the 10x-steps twin, as a
 # second "ours" bar. Node only (no test twin at edge). Keyed by the table's row string.
 KEEP_OURS_EXTRA = ("$+$ $10\\times$ steps",)
@@ -252,6 +252,7 @@ COST = {
         # (2026-09-15: headline is now the bare \ourmethod{}) cannot strand a row without a cost.
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
         "$+$ $10\\times$ steps": "5k",   # KEEP_OURS_EXTRA: 5000 steps x batch 1
+        "$-$ learning": _M.COST_OURS["node"],   # dropped by name; same 500 forward+backward
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row

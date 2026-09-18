@@ -64,7 +64,8 @@ IOI_LLAMA_CAPPED = M.IOI_LLAMA_CAPPED
 # make_mib_table.IOI_LLAMA_CAPPED.
 EVALMIB_ACC = {"htklog_lr_0.05", "topklog_lr_0.05", "mib_node_topk_uniform_lr05",
                "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0",
-               "mib_node_topk_uniform_lr05_eps1e-2", "mib_node_topk_uniform_lr05_5k"}
+               "mib_node_topk_uniform_lr05_eps1e-2", "mib_node_topk_uniform_lr05_5k",
+               "mib_node_topk_uniform_frozen", "mib_node_topk_log_frozen"}
 # htk_lr_0.05 predates evaluation.py returning acc_auc, so its eval_mib pkl has acc_auc=None
 # and it genuinely needs the re-eval folder. final_node is vestigial (see above); it is kept
 # only so the entry does not have to be re-derived if that row is ever restored.

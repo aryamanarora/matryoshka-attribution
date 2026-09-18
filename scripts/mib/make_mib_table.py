@@ -110,6 +110,11 @@ OUR_METHODS = [
     (MV.eps_mark("1e-2"), "mib_node_topk_uniform_lr05_eps1e-2", "node", "uniform"),
     # 10x the steps (5000; submit_node_unif_10x_sc.sh), node twin of the edge 50k row below.
     ("$+$ $10\\times$ steps", "mib_node_topk_uniform_lr05_5k", "node", "uniform"),
+    # No learning (submit_mib_node_frozen_sc.sh, 2026-09-18): --optimizer none, scores stay 0
+    # and the attribution is the mean negated gradient over the 500 k-draws (the gradient
+    # appendix's first-step update by Monte Carlo). No lr; the column prints the saved 0.05.
+    ("$-$ learning", "mib_node_topk_uniform_frozen", "node", "uniform"),
+    ("$-$ learning", "mib_node_topk_log_frozen", "node", "ours"),
     # The OBJECTIVE ablation of this headline (--mode cause / joint, 2026-09-16,
     # submit_mib_node_mode_ablation_sc.sh -> mib_node_{cause,joint}_topk_uniform_lr05 and the
     # test_node_ twins) is NOT a row here (user decision, same day): it has its own per-task
@@ -646,7 +651,8 @@ def opt_of(results_dir):
 IOI_LLAMA_CAPPED = {"htklog_lr_0.05", "topklog_lr_0.05", "htk_lr_0.05",
                     "softlog_sgd_lr_1.0", "softuni_sgd_lr_3.0",
                     "mib_node_topk_uniform_lr05_eps1e-2",   # submit_mib_node_eps_sc.sh caps it too
-                    "mib_node_topk_uniform_lr05_5k"}        # submit_node_unif_10x_sc.sh likewise
+                    "mib_node_topk_uniform_lr05_5k",        # submit_node_unif_10x_sc.sh likewise
+                    "mib_node_topk_uniform_frozen", "mib_node_topk_log_frozen"}   # frozen launcher too
 IOI_LLAMA_DAGGER = {("ioi", "llama3")}
 
 

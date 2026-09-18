@@ -122,6 +122,8 @@ OUR_NODE_METHODS = [
     # 2026-09-17). Every validation cell improved (llama3 ARC/MCQA by 0.5-1.1 CPR AUC), so the
     # test twin is carried here as a marked variant; the label matches make_mib_table's row.
     ("$+$ $10\\times$ steps",         "test_node_topk_uniform_lr05_5k"),
+    # No learning (see make_mib_table.OUR_METHODS): the k-averaged gradient at zero scores.
+    ("$-$ learning",                 "test_node_topk_uniform_frozen"),
 ]
 # Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
 # the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which

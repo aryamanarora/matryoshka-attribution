@@ -275,6 +275,10 @@ METHODS = {
     # Same 50k budget at Adam's DEFAULT eps (EPS=1e-8 in the launcher). Registered so it is one
     # list entry from any cut; not in CPR_METHODS.
     "stopk-unif-10x": ("MAttr (10×, ε=10⁻⁸)", P.METHOD["MAttr (Adam, default eps)"]),
+    # MAttr without learning (optimizer=none): the k-averaged gradient at zero scores, i.e. the
+    # first-step update of the gradient appendix by Monte Carlo. Uniform k = the headline twin.
+    "frozen-unif": ("MAttr (no learning)", P.METHOD["MAttr (Adam, default eps)"]),
+    "frozen-log":  ("MAttr (no learning, log k)", P.METHOD["MAttr (Adam, default eps)"]),
     "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
     # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
     # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
@@ -645,7 +649,10 @@ def parse_method(fname, d):
         # series by group_avg -- 36 SGD runs silently pooled with 78 Adam ones per key, in this
         # figure and in every consumer that imports parse_method. Same failure mode the strict
         # catch-all below was written to prevent, one branch up.
-        opt = "softsgd" if "_topk_sgd" in tag else "stopk"
+        # "_topk_none" = no learning (trainer.learn_scores optimizer="none", 2026-09-18): the
+        # mean negated gradient at zero scores. Its own family so it cannot collide with the
+        # default-eps Adam key (neither tag carries an eps mark).
+        opt = ("softsgd" if "_topk_sgd" in tag else "frozen" if "_topk_none" in tag else "stopk")
         # ADAM'S EPS TOO, and for the identical reason. `_eps1e-2` is an Adam run like the
         # default-eps one, shares the whole `sufficient_topk_adam` prefix, and at neuron scale is
         # a DIFFERENT ranking (acc-AUC 0.388 vs 0.490 on addition/mlp) -- so without this the

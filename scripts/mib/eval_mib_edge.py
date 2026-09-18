@@ -61,7 +61,7 @@ def main():
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--T", type=float, default=0.5)
     parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"],
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd", "none"],
                         help="Optimizer for the scores (adam or sgd)")
     parser.add_argument("--n_iters", type=int, default=30)
     parser.add_argument("--split", type=str, default="validation",

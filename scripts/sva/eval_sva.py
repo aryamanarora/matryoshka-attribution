@@ -948,7 +948,8 @@ def main():
     p.add_argument("--das-dim", type=int, default=None, help="DAS rotation subspace rank (default d_model)")
     p.add_argument("--das-lr", type=float, default=1e-3, help="lr for the DAS rotation params")
     p.add_argument("--das-optimizer", default="adam", choices=["adam", "sgd"], help="optimizer for the DAS rotation (separate from --optimizer for scores)")
-    p.add_argument("--optimizer", default="adam", choices=["adam", "sgd"])
+    p.add_argument("--optimizer", default="adam", choices=["adam", "sgd", "none"],
+                   help="none = no learning: scores stay 0 and the mean negated gradient is the attribution")
     p.add_argument("--cf-cache-gb", type=float, default=4.0,
                    help="device-memory budget for the per-example CF-activation cache "
                         "(train steps AND the sparsity sweep reuse it); 0 disables")

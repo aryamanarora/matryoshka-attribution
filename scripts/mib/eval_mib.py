@@ -94,7 +94,7 @@ def main():
                              "sign(g) regime at large substrates; 1e-2 restores magnitude "
                              "weighting (see scripts/sva/launch/submit_adam_eps_followup.sh). Encode a "
                              "non-default value in --output -- it is not in any filename.")
-    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd"],
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "sgd", "none"],
                         help="Mask-score optimizer (sgd accumulates raw g*delta; adam normalizes).")
     parser.add_argument("--n_iters", type=int, default=30)
     parser.add_argument("--split", type=str, default="validation",
