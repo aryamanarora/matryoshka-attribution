@@ -435,9 +435,10 @@ FIGURE_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # swap is applied inside main()'s --cpr branch (CPR_STARS / CPR_POINT_LABEL) precisely so
 # the default cut does not move.
 CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
-               "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "stopk-unif-eps1e-2-10x", "Random"]
-# Both MAttr budgets are stars (same method, 1x and 10x the steps); the 10x one is labelled by
-# its step mark, like the table row, so the plain "MAttr" stays the 1x headline.
+               "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
+# The 10x-steps twin ("stopk-unif-eps1e-2-10x") was in this cut 2026-09-17 and was dropped the
+# same day (requested): its row lives in the SVA+ / MIB tables and its bar in plot_mib_test_avg.
+# Everything below still supports it -- one list entry to bring it back. Both budgets are stars.
 CPR_STARS = {"stopk-unif-eps1e-2", "stopk-unif-eps1e-2-10x"}
 CPR_FILLED = {"stopk-log-eps1e-2"}
 # Labels anchored LEFT of their marker, key -> facet-label prefixes where it applies. The
