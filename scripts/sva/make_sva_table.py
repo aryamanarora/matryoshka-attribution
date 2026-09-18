@@ -92,10 +92,8 @@ BLOCKS = [
         # No learning (--optimizer none, submit_sva_frozen_sc.sh, 2026-09-18): the mean negated
         # gradient at zero scores over the run's k-draws -- the gradient appendix's first-step
         # update, estimated rather than derived. Same budget as the row above it.
+        # Uniform k only, identity backward (masks.py topk_identity), 2026-09-18 (requested).
         ("frozenid-unif",          MV.label(eps="1e-2", extra=("$-$ learning",))),
-        ("frozenid-log",           MV.label(k="log", eps="1e-2", extra=("$-$ learning",))),
-        ("frozen-unif",            MV.label(eps="1e-2", extra=("$-$ learning, soft bwd",))),
-        ("frozen-log",             MV.label(k="log", eps="1e-2", extra=("$-$ learning, soft bwd",))),
         ("stopk-unif-eps1e-2-10x", MV.label(eps="1e-2", extra=("$+$ $10\\times$ steps",))),
         ("stopk-unif-10x",         MV.label(eps="1e-8", extra=("$+$ $10\\times$ steps",))),
     ]),

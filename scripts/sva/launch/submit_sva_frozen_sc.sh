@@ -11,7 +11,7 @@
 #   NODES=node KS=uniform DRY=1 bash scripts/sva/launch/submit_sva_frozen_sc.sh
 set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
-DRY=${DRY:-0}; NODES=${NODES:-"node mlp mlp+attn_head mlp_sae_span"}; KS=${KS:-"uniform log"}
+DRY=${DRY:-0}; NODES=${NODES:-"node mlp mlp+attn_head mlp_sae_span"}; KS=${KS:-"uniform"}
 # MASK=topk_identity (default): identity backward = IG along the mask path; MASK=topk: soft Jacobian.
 MASK=${MASK:-topk_identity}
 declare -A CFG=(

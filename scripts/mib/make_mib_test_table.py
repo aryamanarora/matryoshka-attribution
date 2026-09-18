@@ -124,7 +124,6 @@ OUR_NODE_METHODS = [
     ("$+$ $10\\times$ steps",         "test_node_topk_uniform_lr05_5k"),
     # No learning (see make_mib_table.OUR_METHODS): the k-averaged gradient at zero scores.
     ("$-$ learning",                 "test_node_topkid_uniform_frozen"),
-    ("$-$ learning, soft bwd",       "test_node_topk_uniform_frozen"),
 ]
 # Edge level mirrors the node block, including the SGD arm, so the two levels of this table and
 # the edge section of the VALIDATION table (paper/tabs/mib_results.tex) all agree about which
