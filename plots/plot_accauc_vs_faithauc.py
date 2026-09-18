@@ -922,7 +922,7 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
             # Axes fit the data (2026-09-18, requested): autoscale with a margin instead of
             # anchoring both axes at 0 -- the chance-corrected zero row has negative
             # compactness, and a fixed 0 floor hid the spread within a panel.
-            ax.margins(x=0.18, y=0.15)
+            ax.margins(x=0.34, y=0.15)   # x room for the two MAttr labels off the rightmost point
             ax.autoscale(enable=True, axis="both", tight=False)
             for hf, hy, _, _ in hlines:
                 if hf == facet:
@@ -1436,7 +1436,8 @@ def main():
             STAR_KEYS = CPR_STARS
             OUTLINE_NON_STAR = True
             FILLED_KEYS = CPR_FILLED
-            LABEL_LEFT = CPR_LABEL_LEFT
+            LABEL_LEFT = {}   # was CPR_LABEL_LEFT; with two labels per panel and free x-limits
+                              # nothing needs the left anchor, and it put "MAttr" over the star
             POINT_LABEL.update(CPR_POINT_LABEL)
             # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
             # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
