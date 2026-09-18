@@ -101,7 +101,17 @@ LOSS = "logit_diff"
 METRICS = {"cpr": (2, "sva_results.tex", "CPR"),
            "accauc": (0, "sva_accauc_results.tex", "Compactness")}
 METRICS_ZERO = {"cpr": (2, "sva_zero_results.tex", "CPR"),
-                "accauc": (0, "sva_zero_accauc_results.tex", "Compactness")}
+                "accauc": (0, "sva_zero_accauc_results.tex", "Compactness (chance-corrected)")}
+# Compactness under ZERO ablation is CHANCE-CORRECTED: the per-example indicator is `lb > ls`,
+# and a zeroed model (logit diff ~ 0) satisfies it with probability 1/2, so the IIA log-AUC has
+# a floor of 0.5 (Random reads 0.47-0.52 across the four substrates) where the interchange
+# tables' floor is 0. The table prints (AUC - 1/2) / (1 - 1/2) = 2 AUC - 1: the SAME affine map
+# for every method in a cell, so orderings are untouched and Random lands at ~0, on the scale of
+# the interchange tables. The floor is the ANALYTIC one, not a per-run or per-cell measurement:
+# a destroyed model's preference is a coherent coin flip per run (plot_accauc_vs_faithauc.load's
+# note on the bimodal acc[0] under zeroing), so an empirical floor would divide each row by its
+# own noise draw. CPR is unaffected (its floor is ~0 either way).
+ZERO_CHANCE = {0: 0.5}   # metric index -> chance level under zero ablation
 
 # === Bwd. column ============================================================================
 # Backward passes through the model, in sequences, to fit ONE cell -- the unit and the reading
@@ -186,9 +196,13 @@ def fmt(v, bold=False, underline=False, color=None):
     return f"\\cellcolor[HTML]{{{color}}}{s}" if color else s
 
 
-def row_values(raw, m, sub, idx):
-    """{task: value} for one (method, substrate) under the figure's cut."""
-    return {t: raw[(m, LOSS, sub, t)][idx] for t, _ in COLUMNS if (m, LOSS, sub, t) in raw}
+def row_values(raw, m, sub, idx, chance=None):
+    """{task: value} for one (method, substrate) under the figure's cut; `chance` (a floor in
+    [0, 1)) rescales the value to (v - chance) / (1 - chance), see ZERO_CHANCE."""
+    vals = {t: raw[(m, LOSS, sub, t)][idx] for t, _ in COLUMNS if (m, LOSS, sub, t) in raw}
+    if chance:
+        vals = {t: (v - chance) / (1 - chance) for t, v in vals.items()}
+    return vals
 
 
 def row_avg(vals, sub):
@@ -204,14 +218,14 @@ def row_avg(vals, sub):
     return float(np.mean(gs)) if gs else None
 
 
-def section(raw, sub, title, idx, cost):
+def section(raw, sub, title, idx, cost, chance=None):
     rows = []   # (display, is_ref, {task: v}, avg)
     for _, members in BLOCKS:
         for m, disp in members:
-            vals = row_values(raw, m, sub, idx)
+            vals = row_values(raw, m, sub, idx, chance)
             if vals:
                 rows.append((m, disp, False, vals, row_avg(vals, sub)))
-    rv = row_values(raw, REFERENCE[0], sub, idx)
+    rv = row_values(raw, REFERENCE[0], sub, idx, chance)
     ref = (REFERENCE[0], REFERENCE[1], True, rv, row_avg(rv, sub)) if rv else None
 
     # best / second / colour range per column, competitors only
@@ -274,7 +288,8 @@ def build(idx, metric_label, zero=False):
                         for (m, l, ss, t), v in cache.setdefault(tenx, V.load(tenx)).items()
                         if m in V.TENX_KEYS})
         lines.append("\\midrule")
-        lines += section(raw, sub, f"{title}, {metric_label}", idx, costs(res, sub, tenx))
+        lines += section(raw, sub, f"{title}, {metric_label}", idx, costs(res, sub, tenx),
+                         chance=ZERO_CHANCE.get(idx) if zero else None)
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
     return "\n".join(lines) + "\n"
 
