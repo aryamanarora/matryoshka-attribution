@@ -952,7 +952,10 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
         # One legend at the right, in figure_methods order, with the marker each method draws.
         from matplotlib.lines import Line2D
         hs = []
-        for key in figure_methods:
+        order = [k for k in figure_methods if k in STAR_KEYS] + \
+                [k for k in figure_methods if k in FILLED_KEYS and k not in STAR_KEYS] + \
+                [k for k in figure_methods if k not in STAR_KEYS and k not in FILLED_KEYS]
+        for key in order:
             if key not in df["_key"].values:
                 continue
             name = METHODS[key][0]; col = colors[name]
@@ -1434,7 +1437,7 @@ def main():
             # assignment -- see the comment on CPR_METHODS.
             global STAR_KEYS, OUTLINE_NON_STAR, FILLED_KEYS, LABEL_LEFT
             STAR_KEYS = CPR_STARS
-            OUTLINE_NON_STAR = True
+            OUTLINE_NON_STAR = False   # every point filled with a black edge (2026-09-18, requested)
             FILLED_KEYS = CPR_FILLED
             LABEL_LEFT = {}   # was CPR_LABEL_LEFT; with two labels per panel and free x-limits
                               # nothing needs the left anchor, and it put "MAttr" over the star
