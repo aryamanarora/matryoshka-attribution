@@ -32,7 +32,9 @@ for nodes in $NODES; do
   [ "$nodes" = node ] && tasks="nounpp rc simple within_rc addition months weekdays hours arc_easy ioi" \
                       || tasks="nounpp rc simple within_rc addition months weekdays hours"
   sae=0; [ "$nodes" = mlp_sae_span ] && sae=1
-  nd=${nodes//+/-}; ferr=""; saeflags=""; mlr=0.05; gb=""
+  # --grad-batch is what let the patched 5000-example gradient runs fit (64; SAE 25): without it
+  # the whole example set is one batch and the first wave of these OOM'd on the a6000 (2026-09-18).
+  nd=${nodes//+/-}; ferr=""; saeflags=""; mlr=0.05; gb="--grad-batch 64"
   [ $sae = 1 ] && { ferr="_ferr"; saeflags="--sae-error frozen"; mlr=0.5; gb="--grad-batch 25"; }
   for task in $tasks; do
     read -r model ds <<< "${CFG[$task]}"
@@ -49,9 +51,9 @@ for nodes in $NODES; do
         ig)        a="--method ig --ig-steps 10 --grad-examples 500 $gb";   f="${task}_${model}_${nd}_ig_zeroabl${ferr}.json" ;;
         ixg)       a="--method ixg --grad-examples 5000 $gb";               f="${task}_${model}_${nd}_ixg_zeroabl${ferr}.json" ;;
         eg)        [ $sae = 1 ] && continue
-                   a="--method mc_ig --ig-steps 1 --grad-examples 5000"; f="${task}_${model}_${nd}_mc_ig_m1_s42_zeroabl.json" ;;
+                   a="--method mc_ig --ig-steps 1 --grad-examples 5000 $gb"; f="${task}_${model}_${nd}_mc_ig_m1_s42_zeroabl.json" ;;
         attnlrp)   [ $sae = 1 ] && continue
-                   a="--method attnlrp --grad-examples 5000";               f="${task}_${model}_${nd}_attnlrp_zeroabl.json" ;;
+                   a="--method attnlrp --grad-examples 5000 $gb";               f="${task}_${model}_${nd}_attnlrp_zeroabl.json" ;;
         random)    a="--method random";                                     f="${task}_${model}_${nd}_random_s42_zeroabl${ferr}.json" ;;
       esac
       if [ -f "$OUT/$f" ]; then skip=$((skip+1)); continue; fi
