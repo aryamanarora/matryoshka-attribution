@@ -1437,7 +1437,7 @@ def main():
             # assignment -- see the comment on CPR_METHODS.
             global STAR_KEYS, OUTLINE_NON_STAR, FILLED_KEYS, LABEL_LEFT
             STAR_KEYS = CPR_STARS
-            OUTLINE_NON_STAR = False   # every point filled with a black edge (2026-09-18, requested)
+            OUTLINE_NON_STAR = True    # baselines hollow, ours filled (all-filled was tried and reverted)
             FILLED_KEYS = CPR_FILLED
             LABEL_LEFT = {}   # was CPR_LABEL_LEFT; with two labels per panel and free x-limits
                               # nothing needs the left anchor, and it put "MAttr" over the star
