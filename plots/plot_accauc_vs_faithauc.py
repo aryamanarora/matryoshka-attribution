@@ -863,9 +863,9 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
 
     for ax, facet in zip(axes, facets):
         sub = df[df["facet"] == facet]
-        if sub.empty:                       # a placeholder slot (no runs): title only
+        if sub.empty:                       # a placeholder slot (no rows yet): title + note
             ax.set_title("\n".join(facet.split("\n")[:-1]), fontsize=6.2, pad=2.5)
-            ax.text(0.5, 0.5, "no edge-level\nzero-ablation runs", ha="center", va="center",
+            ax.text(0.5, 0.5, PLACEHOLDER_NOTE.get(facet, "no runs"), ha="center", va="center",
                     fontsize=LAB_PT, color="#8a8a8a", transform=ax.transAxes)
             ax.set_xticks([]); ax.set_yticks([])
             for sp in ax.spines.values():
@@ -1030,6 +1030,10 @@ MIB_TEST_EDGE = {
 # attributed under zero and scored with intervention='zero'. Same keys as MIB_TEST.
 MIB_ZERO_FACET = "MIB (node, test), zero\nMIB"
 MIB_EDGE_ZERO_FACET = "MIB (edge, test), zero\nMIB"   # no edge-level zero runs: drawn blank
+# Placeholder panels: kept in the grid even with no rows, with this note in the middle, so the
+# two rows' columns stay aligned. The node-zero note is transient (its wave is landing).
+PLACEHOLDER_NOTE = {MIB_EDGE_ZERO_FACET: "no edge-level\nzero-ablation runs",
+                    MIB_ZERO_FACET: "pending\n(12/12 cells)"}
 MIB_TEST_ZERO = {
     "IxG":               ("mib_zero_test/ixg", "EAP-IG-inputs_zero_node"),
     "IG":                ("mib_zero_test/ig", "EAP-IG-inputs_zero_node"),
@@ -1388,7 +1392,7 @@ def main():
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
     # FIGURE_SUBSTRATES and REQUIRED is therefore NOT enough; it must be added here too.
-    keep = set(df["facet"]) | ({MIB_EDGE_ZERO_FACET} if a.cpr and not a.zero else set())
+    keep = set(df["facet"]) | (set(PLACEHOLDER_NOTE) if a.cpr and not a.zero else set())
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in keep])
     df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
