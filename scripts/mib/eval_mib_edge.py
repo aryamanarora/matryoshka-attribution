@@ -78,7 +78,7 @@ def main():
                              "cause (=necessary, noising): corrupt the top-k, find what breaks "
                              "behavior. (sufficient/necessary still accepted.)")
     parser.add_argument("--masking", default="topk",
-                        choices=["topk", "topk_detached", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
+                        choices=["topk", "topk_detached", "topk_identity", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
                              "hard_topk: hard 0/1 + straight-through. "
                              "hard_concrete: Bernoulli(sigmoid) + L0. "

@@ -14,6 +14,9 @@
 set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; SPLITS=${SPLITS:-"validation test"}; LOGK=${LOGK:-0}
+# MASK=topk_identity (default): soft forward, identity backward = IG along the mask path, dirs
+# *_topkid_*; MASK=topk: the soft top-k Jacobian (sigma' + centring), dirs *_topk_*.
+MASK=${MASK:-topk_identity}; [ "$MASK" = topk_identity ] && mtag=topkid || mtag=topk
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}
 TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
@@ -27,7 +30,7 @@ PAIRS=(
 )
 n=0; skip=0
 for split in $SPLITS; do
-  [ "$split" = validation ] && out="mib_node_topk_${tag}_frozen" || out="test_node_topk_${tag}_frozen"
+  [ "$split" = validation ] && out="mib_node_${mtag}_${tag}_frozen" || out="test_node_${mtag}_${tag}_frozen"
   for p in "${PAIRS[@]}"; do
     read -r model task <<< "$p"
     case " $MODELS " in *" $model "*) ;; *) continue ;; esac
@@ -41,9 +44,9 @@ for split in $SPLITS; do
     esac
     [ "$model" = llama3 ] && [[ "$task" == arc_* ]] && res="-q sphinx -d h100 -r 128G"
     [ "$split" = validation ] && [ "$model" = llama3 ] && [ "$task" = ioi ] && ec="--eval-examples 200"
-    name="frz-$tag-${split:0:3}-${task}-${model}"
+    name="frz-$mtag-$tag-${split:0:3}-${task}-${model}"
     cmd="$EXP $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks \
---masking topk --optimizer none --mode sufficient --lr 0.05 --split $split --train-split train \
+--masking $MASK --optimizer none --mode sufficient --lr 0.05 --split $split --train-split train \
 --include-input $bs $ec --output results/$out"
     n=$((n+1))
     if [ "$DRYRUN" = 1 ]; then echo "DRY nlprun -g 1 $res -n $name"; echo "    $cmd"; else

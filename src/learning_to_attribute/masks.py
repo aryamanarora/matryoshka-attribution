@@ -18,7 +18,7 @@ from .sigmoid_topk import sigmoid_topk, sigmoid_topk_detached_tau
 
 # Variants that need a sampled ``k``.
 VARIANTS = (
-    "topk", "topk_detached", "hard_topk", "hard_topk_identity",
+    "topk", "topk_detached", "topk_identity", "hard_topk", "hard_topk_identity",
     "hard_topk_identity_gumbel", "bernoulli_reinforce",
     "hard_concrete", "topk_kth_threshold", "topk_kth_threshold_hard",
 )
@@ -54,6 +54,15 @@ def build_mask(scores: torch.Tensor, k: float, variant: str = "topk",
 
     if variant == "topk_detached":
         return MaskResult(sigmoid_topk_detached_tau(scores, k=k, T=T, n_iters=n_iters))
+
+    if variant == "topk_identity":
+        # SOFT forward, IDENTITY backward (2026-09-18): the mask is sigmoid top-k, so at zero
+        # scores the forward is the uniform interpolation t*1 of the gradient appendix, but the
+        # Jacobian is I -- no gate slope sigma', no centring. With optimizer="none" the averaged
+        # gradient is then exactly IG along the mask path (rho = the k-schedule's induced
+        # density; uniform k -> plain IG), which is what the no-learning control should be.
+        soft = sigmoid_topk(scores, k=k, T=T, n_iters=n_iters)
+        return MaskResult(soft.detach() + (scores - scores.detach()))
 
     if variant == "hard_topk":
         hard = _hard_topk_indices(scores, k)

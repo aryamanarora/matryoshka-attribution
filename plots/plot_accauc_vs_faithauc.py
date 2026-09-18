@@ -277,8 +277,13 @@ METHODS = {
     "stopk-unif-10x": ("MAttr (10×, ε=10⁻⁸)", P.METHOD["MAttr (Adam, default eps)"]),
     # MAttr without learning (optimizer=none): the k-averaged gradient at zero scores, i.e. the
     # first-step update of the gradient appendix by Monte Carlo. Uniform k = the headline twin.
-    "frozen-unif": ("MAttr (no learning)", P.METHOD["MAttr (Adam, default eps)"]),
-    "frozen-log":  ("MAttr (no learning, log k)", P.METHOD["MAttr (Adam, default eps)"]),
+    # frozenid-*: soft forward + IDENTITY backward (masks.py topk_identity) -- the sigma' gate
+    # slope and the centring are dropped, so this IS IG along the mask path. frozen-*: the same
+    # with the soft top-k Jacobian (MAttr's literal first-step gradient).
+    "frozenid-unif": ("MAttr (no learning)", P.METHOD["MAttr (Adam, default eps)"]),
+    "frozenid-log":  ("MAttr (no learning, log k)", P.METHOD["MAttr (Adam, default eps)"]),
+    "frozen-unif": ("MAttr (no learning, soft bwd)", P.METHOD["MAttr (Adam, default eps)"]),
+    "frozen-log":  ("MAttr (no learning, soft bwd, log k)", P.METHOD["MAttr (Adam, default eps)"]),
     "stopk-log":  ("MAttr (log)",  P.color("stopk-log")),   # default-eps Adam: violet
     # Same forward, same k-schedule, same lr (0.05, the sweep's shared protocol), same optimizer
     # as "MAttr (log)" directly above -- Adam's eps raised 1e-8 -> 1e-2 is the ONLY difference,
@@ -652,7 +657,8 @@ def parse_method(fname, d):
         # "_topk_none" = no learning (trainer.learn_scores optimizer="none", 2026-09-18): the
         # mean negated gradient at zero scores. Its own family so it cannot collide with the
         # default-eps Adam key (neither tag carries an eps mark).
-        opt = ("softsgd" if "_topk_sgd" in tag else "frozen" if "_topk_none" in tag else "stopk")
+        opt = ("softsgd" if "_topk_sgd" in tag else "frozenid" if "_topk_identity_none" in tag
+               else "frozen" if "_topk_none" in tag else "stopk")
         # ADAM'S EPS TOO, and for the identical reason. `_eps1e-2` is an Adam run like the
         # default-eps one, shares the whole `sufficient_topk_adam` prefix, and at neuron scale is
         # a DIFFERENT ranking (acc-AUC 0.388 vs 0.490 on addition/mlp) -- so without this the

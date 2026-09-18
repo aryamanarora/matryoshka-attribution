@@ -887,7 +887,7 @@ def main():
     # scales with lr exactly as the signal does, no learning rate can fix the ratio. build_mask
     # has supported it since the start; only this choices list was gating it.
     p.add_argument("--variant", default="hard_topk",
-                   choices=["topk", "topk_detached", "hard_topk",
+                   choices=["topk", "topk_detached", "topk_identity", "hard_topk",
                             "hard_topk_identity"])  # build_mask gate
     p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
     p.add_argument("--ablation", default="patch", choices=["patch", "zero"],
