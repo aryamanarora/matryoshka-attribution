@@ -518,6 +518,9 @@ NP_MULTI_COST = "27k"
 # here. An order-of-magnitude column.
 COST_GRAD_IG5 = "0.5--5k"    # 5 IG steps x 100--1000 examples
 COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
+# AtP* = AtP + GradDrop: one backward per DROPPED LAYER per example (12 on gpt2 ... 32 on llama3),
+# so 1.2k--32k; the QK fix adds no backward. Plain AtP is one backward, the I x G budget.
+COST_GRAD_GD = "1--32k"
 COST_EPRUN = "3k"            # 3000 steps x batch 1
 COST_EPRUN_EDGE = "5k"       # edge-level Edge Pruning at MAttr's edge step count (submit_eprun_edge_sc.sh)
 # Single-node interchange intervention (scripts/mib/eval_mib_actpatch.py): 2 + 2N FORWARDS per batch
@@ -622,6 +625,9 @@ def eprun_lr(results_dir):
 # (defined above, since it needs them) and looked up via grad_cost's STEP_COST.
 # ig_steps=5 rows; every other gradient row is a single backward per example.
 COST_IG5_ROWS = {"NAP-IG", "Conductance", "EAP-IG-inp (CF, repro)"}
+# The one gradient row whose cost is neither: L backwards per example (COST_GRAD_GD). Named once
+# so the EXTRA_NODE_BASELINES entry, grad_cost and the acc-AUC table agree on the label.
+ATP_STAR_ROW = "AtP$^*$"
 
 
 # MODULE level, not nested inside the renderer: make_mib_accauc_table.py renders the same rows
@@ -936,6 +942,8 @@ def main():
     def grad_cost(name):
         if name in STEP_COST:
             return STEP_COST[name]
+        if name == ATP_STAR_ROW:
+            return COST_GRAD_GD
         return COST_GRAD_IG5 if name in COST_IG5_ROWS else COST_GRAD_IG1
 
     def mask_cost(name):
@@ -1086,6 +1094,15 @@ def main():
         ("RelP+Shapley",     "relpshapley_eval",     "RelPShapley_patching_node"),
         ("AttnLRP",     "attnlrp_eval",     "AttnLRP_patching_node"),
         ("GIM",         "gim_eval",         "GIM_patching_node"),
+        # AtP / AtP* (Kramar et al. 2024), scripts/mib/launch/submit_atp_sc.sh, 2026-09-18. AtP is
+        # the I x G estimate with |.| taken PER EXAMPLE before averaging (their Eq. 5); AtP* adds
+        # GradDrop (L per-layer gradient-dropped backwards, |.| per term, /(L-1)). The QK fix half
+        # of AtP* applies to query/key nodes only and MIB's node set has none (head outputs, MLP
+        # outputs, input), so the row IS the paper's method on this node set, not a partial one --
+        # EAP-IG/src/eap/attribute_node.py get_scores_atp spells this out. Same CELLS, same
+        # --head 200 llama3 cap as the rows above (hence the shared dagger).
+        ("AtP",         "atp_eval",         "AtP_patching_node"),
+        (ATP_STAR_ROW,  "atp_eval",         "AtP-star_patching_node"),
     ]
     # Tilde baselines used a reduced subset for the llama3 cells only -> dagger those
     # (TILDE_LLAMA3_DAGGER is defined at the top of this section).
@@ -1106,7 +1123,13 @@ def main():
         # gets an Avg that looks directly comparable to an 11-cell row and is not. That bit us
         # mid-rerun -- a 3-cell GIM and a 9-cell AttnLRP both landed on Avg 1.39, which reads as
         # a tie between two things that were never measured on the same cells.
-        if data and len(data) < len(COLUMNS):
+        if not data:
+            # A row with no cells would render as 12 "---" and claim a run that scored nothing
+            # (the AtP rows are listed here before their sweep lands). Same rule as emit_ours and
+            # NAPIG_STEP_ROWS: skip, announced, until the first cell exists.
+            print(f"  NOTE {disp}: 0/{len(COLUMNS)} cells ({dirn}) -- not started; row omitted")
+            continue
+        if len(data) < len(COLUMNS):
             print(f"  NOTE {disp}: {len(data)}/{len(COLUMNS)} cells ({dirn}) -- still running; "
                   f"its Avg covers only those {len(data)}")
         NODE_BASELINES[disp] = data

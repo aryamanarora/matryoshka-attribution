@@ -113,6 +113,11 @@ BASELINES = [
     ("RelP+QK", ["relp_qkgrad_eval", "relp_qkgrad_accauc"], "RelP-qkgrad_patching_node"),
     ("RelP+Shapley", ["relpshapley_eval", "relpshapley_accauc"], "RelPShapley_patching_node"),
     ("AttnLRP", ["attnlrp_eval"], "AttnLRP_patching_node"),
+    # AtP / AtP* (Kramar et al. 2024; scripts/mib/launch/submit_atp_sc.sh, 2026-09-18), mirroring
+    # make_mib_table.EXTRA_NODE_BASELINES. Single dir, no legacy `*_accauc` fallback: they postdate
+    # evaluation.py returning acc_auc. The label is shared with the CPR table through M.ATP_STAR_ROW.
+    ("AtP", ["atp_eval"], "AtP_patching_node"),
+    (M.ATP_STAR_ROW, ["atp_eval"], "AtP-star_patching_node"),
     ("GIM", ["gim_eval"], "GIM_patching_node"),
 ]
 NODE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "node"]   # (name, dir, group)
@@ -274,7 +279,13 @@ def collect(level):
             # cannot masquerade as a finished one -- but silence at the terminal is how a row
             # stays half-empty for a week without anyone noticing.
             n = sum(v is not None for v in data.values())
-            if 0 < n < len(COLUMNS):
+            if n == 0:
+                # Listed before its sweep lands (the AtP rows): omit rather than render a row of
+                # dashes that claims a run scored nothing. Same rule as make_mib_table's loop.
+                print(f"  NOTE {disp} ({level}): 0/{len(COLUMNS)} cells ({'/'.join(d)})"
+                      " -- not started; row omitted")
+                continue
+            if n < len(COLUMNS):
                 print(f"  NOTE {disp} ({level}): {n}/{len(COLUMNS)} cells ({'/'.join(d)})"
                       " -- still running")
             grad.append((disp, data, llama))
