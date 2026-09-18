@@ -27,8 +27,8 @@
 # ViT group. Nothing here to build.
 set -euo pipefail
 
-MIB_SHA=2324d9a         # aryamanarora/MIB-circuit-track main, 2026-09-16: + invert (noising) / extra[flip_accuracies] kwargs
-                        # (its .gitmodules pins EAP-IG at 41e9b9c "Add EAP-IG-inputs-mc at edge level")
+MIB_SHA=d7c76bd         # aryamanarora/MIB-circuit-track main, 2026-09-18: EAP-IG @ c2dd06c (intervention=zero for
+                        # EAP-IG-inputs / -mc / AttnLRP); before that 2324d9a (invert / extra[flip_accuracies])
 MIB_URL="${MIB_URL:-https://github.com/aryamanarora/MIB-circuit-track.git}"
 
 PIN=1; SYNC=1
