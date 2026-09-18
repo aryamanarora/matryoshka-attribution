@@ -520,6 +520,14 @@ COST_EPRUN_EDGE = "5k"       # edge-level Edge Pruning at MAttr's edge step coun
 COST_ACTPATCH = "63--144k"
 COST_UGS = "7--114k"         # the 12 mask samples per step are what make this so large
 COST_OURS = {"node": "0.5k", "edge": "5k"}
+# Per-dir overrides for rows that do not train the level's default step count: the 10x-steps
+# twins (submit_node_unif_10x_sc.sh: 5000 steps; submit_edge_unif_10x_sc.sh: 50000). Without
+# this the edge 10x row printed the headline's 5k, i.e. a 10x run costing what 1x costs.
+COST_OURS_DIR = {"mib_node_topk_uniform_lr05_5k": "5k", "mib_edge_topk_uniform_lr05_50k": "50k"}
+
+
+def ours_cost(results_dir, level):
+    return COST_OURS_DIR.get(results_dir, COST_OURS[level])
 
 
 # === Learning-rate column ====================================================================
@@ -983,7 +991,7 @@ def main():
                 lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level], lr=ours_lr(r), crange=crange))
+                                      cost=ours_cost(r, level), lr=ours_lr(r), crange=crange))
             for n, r, g in rows_u:
                 dg = IOI_LLAMA_DAGGER if r in IOI_LLAMA_CAPPED else dagger
                 d = all_results.get(mkey(r, level, g), {})
@@ -993,7 +1001,7 @@ def main():
                 lines.append(make_row(n, d, best, second,
                                       indent=True, dagger=dg, avg_best=avb, avg_second=avs,
                                       suppress_avg=len(d) < len(COLUMNS),
-                                      cost=COST_OURS[level], lr=ours_lr(r), crange=crange))
+                                      cost=ours_cost(r, level), lr=ours_lr(r), crange=crange))
 
     # Generate LaTeX
     ncols = len(COLUMNS)
