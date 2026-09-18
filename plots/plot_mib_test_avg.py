@@ -550,7 +550,7 @@ def bars():
                     "or the bar would claim a free method.")
             lab = tex_to_mpl(RENAME.get(name, name)) \
                 + ("$^{\\dagger}$" if fam in dagger else "") \
-                + (f"$^{{({n}/{len(T.COLUMNS)})}}$" if partial else "")
+                + (f" ({n}/{len(T.COLUMNS)})" if partial else "")
             recs.append((fam, lab, avg(data), sem(data), COST[level][name]))
         out[level_lab] = recs
     seen = {name for _, lab, _ in LEVELS for _, name, _ in ()} | {
@@ -639,9 +639,8 @@ def draw_cost(sx, recs):
             sx.bar(x, cap, width=BAR_W, zorder=2, **bar_style(fam))
             # a white gap through the bar marks the break
             sx.bar(x, cap * 0.05, bottom=cap * 0.62, width=BAR_W * 1.1, color="white", lw=0, zorder=3)
-            sx.annotate(cost, (x, cap), textcoords="offset points", xytext=(0, 1.2),
-                        ha="center", va="bottom", fontsize=FS_ANNOT - 0.7, color=COST_COLOR,
-                        zorder=5)
+            sx.text(x, cap * 0.30, cost, rotation=90, ha="center", va="bottom",
+                    fontsize=FS_ANNOT - 0.7, color="white", zorder=5)
             continue
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
         if hi > lo:
