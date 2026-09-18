@@ -126,7 +126,7 @@ def run_cost(d, m):
 
 
 def fmt_cost(lo, hi):
-    k = lambda v: f"{v / 1000:g}k"
+    k = lambda v: "0" if v == 0 else f"{v / 1000:g}k"
     return k(lo) if lo == hi else f"{k(lo)}--{k(hi)}".replace("k--", "--")
 
 
