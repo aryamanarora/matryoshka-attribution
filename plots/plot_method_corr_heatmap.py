@@ -269,7 +269,10 @@ MAIN_LABELS = [
     # for the SGD one -- same naming split the bar chart carries, and the fix is the same:
     # flip the table to Adam-default rather than renaming further in the figures.
     "IntInv",                                                    # causal reference (single-node interchange intervention, noising)
-    "MAttr (log)*",                                              # learned, ours (1); * = lr 0.05
+    # The HEADLINE arm (scripts/mib/mattr_variants.py: uniform k, Adam) since 2026-09-18 -- this
+    # panel drew the log-k dir as "MAttr" until then, the stale-label case CLAUDE.md flags for
+    # the CPR scatter. The full heatmaps below still carry both arms under their own names.
+    "MAttr (unif)*",                                             # learned, ours (1); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
     "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP", "I$\\times$G", # gradient (4)
 ]
@@ -281,7 +284,7 @@ SUBSETS = ["Attention heads", "MLPs"]
 # SGD identity label now displays as bare "MAttr" and the Adam identity label as "+Adam" -- the
 # swap of make_mib_test_table.py's OUR_NODE_METHODS and make_mib_table.py's emit_ours, applied
 # to this figure's DISPLAY mapping instead of a results-dir list.
-DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
+DISPLAY = {"MAttr (unif)*": "MAttr", "MAttr (log)*": "+log k", "+hard (log)*": "+hard",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune", "Expected Gradients": "EG",
            }
@@ -299,7 +302,7 @@ ORDER_MAIN = [
     "IntInv",
     "I$\\times$G", "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP",
     "DBM", "Node Pruning",
-    "MAttr (log)*",
+    "MAttr (unif)*",
 ]
 assert set(ORDER_MAIN) == set(MAIN_LABELS), "ORDER_MAIN must be a permutation of MAIN_LABELS"
 print("main-text order (matches mib_test_results.tex):", ORDER_MAIN)
