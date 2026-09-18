@@ -56,11 +56,11 @@ SUBSTRATES = [
     ("mlp+attn_head", V.SUBSTRATE_RES["mlp+attn_head"], "MLP neurons + attention heads"),
     ("mlp_sae_span", V.SUBSTRATE_RES["mlp_sae_span"], "SAE latents (MLP out)"),
 ]
-# --zero: the same four substrates under ZERO ablation, all from results/sva_zeroabl (2000 steps
-# for every trained method; the SAE cells carry the frozen error term and were launched by
-# submit_sae_zero_sc.sh, the uniform-k headline by submit_unifk_eps_zero_sc.sh, 2026-09-18).
+# --zero: the same four substrates under ZERO ablation, all from results/sva_zeroabl_5k (5000 steps
+# for every trained method and the patched trees' attribution budgets for the gradient rows, all
+# launched by submit_zero_5k_sc.sh, 2026-09-18; the older results/sva_zeroabl is 2k and unused here).
 # The 10x-steps rows do not exist under zero, so build() passes no 10x tree in this mode.
-ZERO_RES = "results/sva_zeroabl"
+ZERO_RES = "results/sva_zeroabl_5k"
 SUBSTRATES_ZERO = [(sub, ZERO_RES, title) for sub, _, title in SUBSTRATES]
 
 # (block title, [(method key in V.METHODS, display name)]). MAttr labels come from
@@ -127,9 +127,10 @@ def run_cost(d, m):
     if meth in ("mattr", "edge_pruning", "sigmoid_mask"):
         return c["steps"] * (c.get("train_batch_size") or 1)
     if meth in ONE_PASS:
-        return c["grad_examples"]
+        return c.get("grad_examples")
     if meth == "ig":
-        return c["grad_examples"] * c["ig_steps"]
+        ge = c.get("grad_examples")
+        return None if ge is None else ge * c["ig_steps"]
     return None
 
 
