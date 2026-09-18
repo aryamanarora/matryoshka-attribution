@@ -30,6 +30,7 @@ ramp is per column within the section, same ramp as the MIB tables.
 import sys
 from pathlib import Path
 
+import json
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +95,62 @@ LOSS = "logit_diff"
 METRICS = {"cpr": (2, "sva_results.tex", "CPR"),
            "accauc": (0, "sva_accauc_results.tex", "Compactness")}
 
+# === Bwd. column ============================================================================
+# Backward passes through the model, in sequences, to fit ONE cell -- the unit and the reading
+# of make_mib_table's column (compute-proportional, order of magnitude, not wall clock). Read
+# off each run's saved `config`: trained methods spend steps x train batch, gradient methods
+# spend attribution examples x path points (I x G, Expected Gradients and AttnLRP are one
+# backward per example; IG is grad_examples x ig_steps). Random draws a ranking and costs 0.
+# Older files have no `config` block (the 2k node-level NP / DBM runs, whose defaults are
+# 2000 steps x batch 1); NO_CONFIG_COST covers those by method key so the cell is not a dash.
+# A (method, substrate) whose runs differ across tasks prints the range, like MIB's "0.1--1k".
+NO_CONFIG_COST = {"eprun-s090": 2000, "sig_lr0.3_l16.0": 2000}
+ONE_PASS = {"ixg", "mc_ig", "attnlrp"}
+
+
+def run_cost(d, m):
+    """Backward passes of one run, from its config; None if it cannot be determined."""
+    c = d.get("config") or {}
+    if m == "Random":
+        return 0
+    meth = c.get("method")
+    if meth is None:
+        return NO_CONFIG_COST.get(m)
+    if meth in ("mattr", "edge_pruning", "sigmoid_mask"):
+        return c["steps"] * (c.get("train_batch_size") or 1)
+    if meth in ONE_PASS:
+        return c["grad_examples"]
+    if meth == "ig":
+        return c["grad_examples"] * c["ig_steps"]
+    return None
+
+
+def fmt_cost(lo, hi):
+    k = lambda v: f"{v / 1000:g}k"
+    return k(lo) if lo == hi else f"{k(lo)}--{k(hi)}".replace("k--", "--")
+
+
+def costs(res, sub, tenx=None):
+    """{method key: Bwd. string} over every file of the tree(s) that renders in this section."""
+    import glob, os
+    seen = {}
+    for tree, keymap in ((res, None), (tenx, V.TENX_KEYS)):
+        if tree is None:
+            continue
+        for f in glob.glob(tree + "/*.json"):
+            d = json.load(open(f))
+            if d.get("nodes") != sub or d.get("loss") != LOSS or not V.on_model(d):
+                continue
+            m = V.parse_method(os.path.basename(f), d)
+            if keymap is not None:
+                m = keymap.get(m)
+            if m is None:
+                continue
+            v = run_cost(d, m)
+            if v is not None:
+                seen.setdefault(m, []).append(v)
+    return {m: fmt_cost(min(v), max(v)) for m, v in seen.items()}
+
 # Cell styling mirrored from scripts/mib/make_mib_table.py (cell_color / fmt) so the two table
 # families read identically; copied rather than imported because that module's import-time
 # work is the MIB results tree.
@@ -138,7 +195,7 @@ def row_avg(vals, sub):
     return float(np.mean(gs)) if gs else None
 
 
-def section(raw, sub, title, idx):
+def section(raw, sub, title, idx, cost):
     rows = []   # (display, is_ref, {task: v}, avg)
     for _, members in BLOCKS:
         for m, disp in members:
@@ -157,7 +214,7 @@ def section(raw, sub, title, idx):
         rng[t] = (min(xs), max(xs)) if xs else None
 
     def render(m, disp, vals, avg, is_ref):
-        cells = []
+        cells = [cost.get(m, "---")]
         for t, _ in COLUMNS:
             v = vals.get(t)
             b = (not is_ref) and v is not None and v == rank[t][0]
@@ -168,7 +225,7 @@ def section(raw, sub, title, idx):
         cells.append(fmt(avg, b, u, None if is_ref else cell_color(avg, rng["avg"])))
         return f"\\quad {disp} & " + " & ".join(cells) + " \\\\"
 
-    ncols = len(COLUMNS) + 2
+    ncols = len(COLUMNS) + 3
     out = [f"\\multicolumn{{{ncols}}}{{l}}{{\\textit{{{title}}}}} \\\\"]
     by_key = {r[0]: r for r in rows}
     for btitle, members in BLOCKS:
@@ -186,16 +243,16 @@ def section(raw, sub, title, idx):
 def build(idx, metric_label):
     ncols = len(COLUMNS)
     lines = ["\\begin{adjustbox}{max width=\\textwidth}",
-             "\\begin{tabular}{l" + "c" * ncols + "@{\\quad}c}",
+             "\\begin{tabular}{lr" + "c" * ncols + "@{\\quad}c}",
              "\\toprule"]
-    heads, rules, c = [], [], 2
+    heads, rules, c = [], [], 3   # column 2 is Bwd.
     for g, n in GROUP_HEADER:
         heads.append(f"\\multicolumn{{{n}}}{{c}}{{{g}}}" if n > 1 else g)
         rules.append(f"\\cmidrule(lr){{{c}-{c + n - 1}}}")
         c += n
-    lines.append("& " + " & ".join(heads) + " & \\\\")
+    lines.append("& & " + " & ".join(heads) + " & \\\\")
     lines.append(" ".join(rules))
-    lines.append("\\textbf{Method} & " + " & ".join(h for _, h in COLUMNS)
+    lines.append("\\textbf{Method} & \\textbf{Bwd.} & " + " & ".join(h for _, h in COLUMNS)
                  + f" & \\textbf{{Avg}} \\\\")
     cache = {}
     for sub, res, title in SUBSTRATES:
@@ -208,7 +265,7 @@ def build(idx, metric_label):
                         for (m, l, ss, t), v in cache.setdefault(tenx, V.load(tenx)).items()
                         if m in V.TENX_KEYS})
         lines.append("\\midrule")
-        lines += section(raw, sub, f"{title}, {metric_label}", idx)
+        lines += section(raw, sub, f"{title}, {metric_label}", idx, costs(res, sub, tenx))
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{adjustbox}"]
     return "\n".join(lines) + "\n"
 
