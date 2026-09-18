@@ -117,11 +117,11 @@ METHODS = [
     ("AttnLRP",           "attnlrp/AttnLRP_patching_node",                 "nested"),
     ("GIM",               "gim/GIM_patching_node",                         "nested"),
     ("Node Pruning",      EPRUN_BEST[0],                                   "graph"),
-    # Single-node activation patching, NOISING direction (corrupt one node in the clean run, the
+    # Single-node interchange intervention (IntInv), NOISING direction (corrupt one node in the clean run, the
     # classic patching score; scripts/mib/eval_mib_actpatch.py). The denoise direction is not a
     # ranking at all (single restored nodes have no measurable effect; CPR ~ Random), so it is
     # never drawn here. Validation-split scores; 11/12 cells as of 2026-09-17 (ioi/gemma2 pending).
-    ("Act. patching",     "mib_node_actpatch_noise",                       "flat"),
+    ("IntInv",            "mib_node_actpatch_noise",                       "flat"),
     ("DBM",               DBM_BEST,                                        "graph"),
 ]
 TASKS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3"),
@@ -268,7 +268,7 @@ MAIN_LABELS = [
     # makes "MAttr" mean the ADAM dir here while tabs/mib_test_results.tex still uses the name
     # for the SGD one -- same naming split the bar chart carries, and the fix is the same:
     # flip the table to Adam-default rather than renaming further in the figures.
-    "Act. patching",                                             # causal reference (single-node, noising)
+    "IntInv",                                                    # causal reference (single-node interchange intervention, noising)
     "MAttr (log)*",                                              # learned, ours (1); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)
     "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP", "I$\\times$G", # gradient (4)
@@ -284,7 +284,7 @@ SUBSETS = ["Attention heads", "MLPs"]
 DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
            "NAP-IG (5 steps)": "IG-5", "NAP-IG (10 steps)": "IG-10",
            "Node Pruning": "NodePrune", "Expected Gradients": "EG",
-           "Act. patching": "ActPatch"}
+           }
 
 # ORDER matches paper/tabs/mib_test_results.tex's node-level row order exactly (ascending avg
 # CPR AUC within Gradient-based / Mask-based / Ours), NOT a re-cluster -- so a reader holding the
@@ -296,7 +296,7 @@ DISPLAY = {"MAttr (log)*": "MAttr", "+hard (log)*": "+hard",
 # Within the Ours pair, SGD-default ("MAttr SGD (log)") leads (2026-08-24 flip, see DISPLAY).
 # If the table's row order changes, this list has to be updated by hand to match.
 ORDER_MAIN = [
-    "Act. patching",
+    "IntInv",
     "I$\\times$G", "NAP-IG (5 steps)", "Expected Gradients", "AttnLRP",
     "DBM", "Node Pruning",
     "MAttr (log)*",

@@ -450,7 +450,7 @@ _EXTRA = None
 
 def extra():
     """make_mib_test_table.collect_extra(), loaded once: (causal_nodes, grad_edges, mask_edges).
-    The activation-patching rows are 3-cell by design and are never drawn (a bar cannot show 3/12),
+    The interchange-intervention (IntInv) rows are partial by design and are never drawn,
     so only the two edge groups are used here."""
     global _EXTRA
     if _EXTRA is None:

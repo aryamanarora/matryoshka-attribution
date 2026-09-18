@@ -328,15 +328,16 @@ MASK_NODE_BASELINES = [
     ("DBM", "eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node"),
 ]
 
-# Single-node activation patching (scripts/mib/eval_mib_actpatch.py, 2026-09-17): each node's
+# Single-node interchange intervention, "IntInv" (scripts/mib/eval_mib_actpatch.py, 2026-09-17):
+# each node's
 # score is its own interchange effect averaged over 200 train pairs -- the causal quantity the
 # gradient rows approximate and the mask rows learn. eval_mib-format pkls, so load_cpr_auc.
 # Only the three small-model cells exist (2 + 2N forwards per batch is not affordable on 2B/8B),
 # so the rows are partial BY DESIGN: PARTIAL_COVERAGE lets them through baseline_or_skip's
 # half-the-columns gate, and their Avg is suppressed like any partial row.
 CAUSAL_NODE_BASELINES = [
-    ("Act. patching (denoise)", "test_node_actpatch_denoise"),
-    ("Act. patching (noise)",   "test_node_actpatch_noise"),
+    ("IntInv (denoise)", "test_node_actpatch_denoise"),
+    ("IntInv (noise)",   "test_node_actpatch_noise"),
 ]
 PARTIAL_COVERAGE = {n for n, _ in CAUSAL_NODE_BASELINES}
 
@@ -720,7 +721,7 @@ def main():
     # them here (one line) rather than renaming the validation table's, which several captions
     # may refer to.
     GRAD_H, MASK_H = "\\textbf{Gradient-based}", "\\textbf{Mask-based}"
-    CAUSAL_H = "\\textbf{Activation patching}"
+    CAUSAL_H = "\\textbf{Interchange intervention}"
     OURS_H = "\\textbf{\\ourmethod{} (ours)}"
 
     # Rows are ordered WORST-TO-BEST by their Avg column inside every group (requested

@@ -266,13 +266,14 @@ EDGE_BASELINES = {}
 # never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Node/Edge Pruning is not
 # tied to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
 UGS_DIR = "ugs_eval"
-# Single-node activation patching (eval_mib_actpatch.py) exists only where it is affordable --
+# Single-node interchange intervention, "IntInv" in the paper (eval_mib_actpatch.py; the dirs keep
+# the actpatch name). Exists only where it is affordable --
 # gpt2 and qwen2.5, the three small-model cells -- so, like UGS, its rows are partial by design
-# and print no Avg. Own header ("Activation patching"): it is neither a gradient nor a learned
+# and print no Avg. Own header ("Interchange intervention"): it is neither a gradient nor a learned
 # mask but the causal quantity both approximate. denoise = restore one node in the corrupted
 # run (the quantity CPR integrates), noise = corrupt one node in the clean run.
-ACTPATCH_NODE_ROWS = [("Act. patching (denoise)", "mib_node_actpatch_denoise"),
-                      ("Act. patching (noise)", "mib_node_actpatch_noise")]
+ACTPATCH_NODE_ROWS = [("IntInv (denoise)", "mib_node_actpatch_denoise"),
+                      ("IntInv (noise)", "mib_node_actpatch_noise")]
 PARTIAL_COVERAGE = {"UGS"} | {n for n, _ in ACTPATCH_NODE_ROWS}
 MASK_NODE_BASELINES = {}
 MASK_EDGE_BASELINES = {}
@@ -513,7 +514,7 @@ COST_GRAD_IG5 = "0.5--5k"    # 5 IG steps x 100--1000 examples
 COST_GRAD_IG1 = "0.1--1k"    # 1 backward x 100--1000 examples
 COST_EPRUN = "3k"            # 3000 steps x batch 1
 COST_EPRUN_EDGE = "5k"       # edge-level Edge Pruning at MAttr's edge step count (submit_eprun_edge_sc.sh)
-# Single-node activation patching (scripts/mib/eval_mib_actpatch.py): 2 + 2N FORWARDS per batch
+# Single-node interchange intervention (scripts/mib/eval_mib_actpatch.py): 2 + 2N FORWARDS per batch
 # over 200 train pairs, N = 157 nodes on gpt2 / 361 on qwen2.5-0.5B, i.e. 63k / 144k sequences.
 # Forwards, not backwards, so cheaper per unit than the column's gradient rows -- but it is the
 # brute-force baseline and the count is the point: it only ever runs on the two small models.
@@ -1121,7 +1122,7 @@ def main():
         DAGGER[name] = TILDE_LLAMA3_DAGGER
         ROW_LR[name] = eprun_lr(dirn)
 
-    # Activation patching: eval_mib-format pkls (<task>_<model>_validation.pkl), 3 cells max.
+    # Interchange intervention (IntInv): eval_mib-format pkls (<task>_<model>_validation.pkl).
     for name, dirn in ACTPATCH_NODE_ROWS:
         data = {}
         for task, model, _ in COLUMNS:
@@ -1159,7 +1160,7 @@ def main():
                                   suppress_avg=len(data) < len(COLUMNS),
                                   cost=mask_cost(name), crange=range_node))
     if CAUSAL_NODE_BASELINES:
-        lines.append("\\textbf{Activation patching} \\\\")
+        lines.append("\\textbf{Interchange intervention} \\\\")
         for name, data in CAUSAL_NODE_BASELINES.items():
             lines.append(make_row(name, data, best_node, second_node, indent=True,
                                   avg_best=avb, avg_second=avs, dagger=set(),

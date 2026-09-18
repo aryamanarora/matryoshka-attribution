@@ -167,7 +167,7 @@ MASK_BASELINES = [(M.eprun_label("node", M.EPRUN_SHOW["node"][d]), L2A / d, "Edg
 # Edge-level Edge Pruning (submit_eprun_edge_sc.sh), the level's own pick from the same dict.
 EDGE_MASK_BASELINES = [(M.eprun_label("edge", M.EPRUN_SHOW["edge"][d]), L2A / d, "EdgePruning_patching_edge")
                        for _, d in M.EPRUN_SPARSITIES if d in M.EPRUN_SHOW["edge"]]
-# Single-node activation patching (M.ACTPATCH_NODE_ROWS): eval_mib-format pkls, 3 cells by design.
+# Single-node interchange intervention, IntInv (M.ACTPATCH_NODE_ROWS): eval_mib-format pkls.
 CAUSAL_BASELINES = M.ACTPATCH_NODE_ROWS
 # DBM (pyvene sigmoid mask) is in the CPR table's mask block via M.SIGMOID_MASK_ROWS but was
 # missing here, even though its eval pkls carry acc_auc like every other run -- so the acc-AUC
@@ -380,7 +380,7 @@ def main():
             L.append("\\textbf{Mask learning} \\\\")
             L += [emit(d, dd, dc) for d, dd, dc in mask]
         if causal:
-            L.append("\\textbf{Activation patching} \\\\")
+            L.append("\\textbf{Interchange intervention} \\\\")
             L += [emit(d, dd, dc) for d, dd, dc in causal]
 
         llama_ioi = {("ioi", "llama3")}
