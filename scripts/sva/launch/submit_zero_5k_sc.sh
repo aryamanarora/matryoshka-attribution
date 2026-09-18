@@ -38,6 +38,8 @@ for nodes in $NODES; do
   [ $sae = 1 ] && { ferr="_ferr"; saeflags="--sae-error frozen"; mlr=0.5; gb="--grad-batch 25"; }
   for task in $tasks; do
     read -r model ds <<< "${CFG[$task]}"
+    # arc_easy prompts are long: the patched node runs attribute it at --grad-batch 8, and 64 OOMs.
+    gbt=$gb; [ "$task" = arc_easy ] && [ $sae = 0 ] && gbt="--grad-batch 8"
     for m in $METHODS; do
       case $m in
         mattr)     a="--method mattr --variant topk --mode sufficient --k-schedule uniform --optimizer adam --adam-eps 1e-2 --lr $mlr --T 0.5 $TR"
@@ -48,12 +50,12 @@ for nodes in $NODES; do
                    f="${task}_${model}_${nd}_eprun_s090_zeroabl${ferr}_s5000.json" ;;
         dbm)       a="--method sigmoid_mask --lr 0.3 --l1-coeff 6.0 $TR"
                    f="${task}_${model}_${nd}_sig_lr0.3_l16.0_zeroabl${ferr}_s5000.json" ;;
-        ig)        a="--method ig --ig-steps 10 --grad-examples 500 $gb";   f="${task}_${model}_${nd}_ig_zeroabl${ferr}.json" ;;
-        ixg)       a="--method ixg --grad-examples 5000 $gb";               f="${task}_${model}_${nd}_ixg_zeroabl${ferr}.json" ;;
+        ig)        a="--method ig --ig-steps 10 --grad-examples 500 $gbt";   f="${task}_${model}_${nd}_ig_zeroabl${ferr}.json" ;;
+        ixg)       a="--method ixg --grad-examples 5000 $gbt";               f="${task}_${model}_${nd}_ixg_zeroabl${ferr}.json" ;;
         eg)        [ $sae = 1 ] && continue
-                   a="--method mc_ig --ig-steps 1 --grad-examples 5000 $gb"; f="${task}_${model}_${nd}_mc_ig_m1_s42_zeroabl.json" ;;
+                   a="--method mc_ig --ig-steps 1 --grad-examples 5000 $gbt"; f="${task}_${model}_${nd}_mc_ig_m1_s42_zeroabl.json" ;;
         attnlrp)   [ $sae = 1 ] && continue
-                   a="--method attnlrp --grad-examples 5000 $gb";               f="${task}_${model}_${nd}_attnlrp_zeroabl.json" ;;
+                   a="--method attnlrp --grad-examples 5000 $gbt";               f="${task}_${model}_${nd}_attnlrp_zeroabl.json" ;;
         random)    a="--method random";                                     f="${task}_${model}_${nd}_random_s42_zeroabl${ferr}.json" ;;
       esac
       if [ -f "$OUT/$f" ]; then skip=$((skip+1)); continue; fi

@@ -347,20 +347,36 @@ def main():
             return einsum(diff_stack, weights,
                           'batch pos src hidden, src heads -> batch pos heads hidden')
 
+        # The per-source diffs are MEMOIZED across destinations (the other half of
+        # eval_mib_edge.py's fix): a source's (corrupted - clean) is the same tensor for every
+        # destination downstream of it, and recomputing it per hook kept ~65 copies of every
+        # diff alive as checkpoint inputs -- which is what still OOM'd the llama3 ARC cells after
+        # the stacks alone were checkpointed. One diff per source, one zeros tensor per length.
+        diff_cache, zeros_cache = {}, {}
+
+        def diff_for(src_i, n_pos, dtype):
+            cached = diff_cache.get(src_i)
+            if cached is not None:
+                return cached
+            if src_i not in corrupted_acts:
+                z = zeros_cache.get((n_pos, dtype))
+                if z is None:
+                    z = torch.zeros(1, n_pos, d_model, device=device, dtype=dtype)
+                    zeros_cache[(n_pos, dtype)] = z
+                return z
+            clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
+            d = corrupted_acts[src_i] - clean
+            diff_cache[src_i] = d
+            return d
+
         def make_dest_hook(dest_node, letter=None):
             prev_idx = graph.prev_index(dest_node)
             bwd_idx = graph.backward_index(dest_node, qkv=letter, attn_slice=True)
             weights = corruption_mask[:prev_idx, bwd_idx]  # [prev] or [prev, n_heads]
 
             def hook(activations, hook):
-                diffs = []
-                for src_i in range(prev_idx):
-                    if src_i in corrupted_acts:
-                        clean = clean_acts.get(src_i, torch.zeros_like(corrupted_acts[src_i]))
-                        diffs.append(corrupted_acts[src_i] - clean)
-                    else:
-                        diffs.append(torch.zeros(1, activations.shape[1], d_model,
-                                                 device=device, dtype=activations.dtype))
+                diffs = [diff_for(src_i, activations.shape[1], activations.dtype)
+                         for src_i in range(prev_idx)]
                 update = checkpoint(_stack_and_weight, weights, *diffs, use_reentrant=False)
                 return activations + update
             return hook
