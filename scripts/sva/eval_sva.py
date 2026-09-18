@@ -523,10 +523,16 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
                 b_ = kclean[li_].gather(1, bidx_).float()
                 c_ = kpatch[li_].gather(1, sidx_).float()
                 fb_, fc_ = sae.encode(b_), sae.encode(c_)
+                if hooker.zero_ablation:
+                    # Match the intervention these scores are EVALUATED under (the neuron branch
+                    # above does the same): the ablated latent is 0 and the ablated error is 0,
+                    # so the endpoint deltas are f_clean - 0 and e_clean - 0.
+                    fc_ = torch.zeros_like(fc_)
                 fd_ = (fb_ - fc_).float()
                 gw_ = (g_ @ sae.W_dec.float()) / sae.s
                 feat_ = (gw_ * fd_).sum(0)
-                err_ = (b_ - c_) - sae.decode_delta(fd_).float()
+                err_ = ((b_ - c_) - sae.decode_delta(fd_).float() if not hooker.zero_ablation
+                        else (b_ - sae.decode(fb_)).float())   # e_clean - 0
                 errs_ = (g_ * err_).sum(-1).sum(0)
                 # No error column when the node is not part of the substrate -- W_ is d_sae
                 # there, and concatenating it anyway would fail the shape assert below rather

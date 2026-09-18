@@ -32,12 +32,12 @@ class LlamaAttributionHooks:
     def __init__(self, model, mask_type, seq_len, sufficient=False, include_input=False,
                  num_spans=None, zero_ablation=False, sae_error="absorb"):
         assert mask_type in self.MASK_TYPES, f"Unknown mask type: {mask_type}"
-        if zero_ablation and ("sae" in mask_type or "das" in mask_type):
-            # The SAE/DAS paths do not route through _interpolate: they interchange in a learned
-            # feature/rotated basis, where "zero" is a different object from a zeroed activation
-            # (zeroing a rotated subspace is not zeroing the neuron, and the SAE path also has a
-            # reconstruction-error node with no zero analogue). Refuse rather than silently
-            # ablating to the source anyway.
+        if zero_ablation and "das" in mask_type:
+            # The DAS path interchanges in a learned rotated basis, where "zero" is a different
+            # object from a zeroed activation (zeroing a rotated subspace is not zeroing the
+            # neuron). Refuse rather than silently ablating to the source anyway. The SAE path
+            # DOES define it since 2026-09-18 -- see _sae_interchange: an ablated latent is set
+            # to 0 and an ablated error node to 0, the per-latent analogue of x*m.
             raise ValueError(f"zero_ablation is not defined for mask_type {mask_type!r}")
 
         self.model = model
@@ -415,6 +415,15 @@ class LlamaAttributionHooks:
         b = out.gather(1, bidx).to(wdt)            # clean act at base span-last  [B,S,dm]
         c = cf.gather(1, sidx).to(wdt)             # source act at src span-last
         fb, fc = sae.encode(b), sae.encode(c)
+        # ZERO ABLATION (2026-09-18): the ablated side of every latent is 0 instead of the source
+        # latent, and the ablated side of the error node is 0 instead of the source error --
+        # the per-latent analogue of the neuron path's x*m. With everything ablated the site
+        # reads decode(0) = b_dec (the SAE's own zero), not a zeroed residual; that is the
+        # definition, since the substrate is the latents, not the activation they reconstruct.
+        # Implemented by substituting the source-side quantities, so every blend below is
+        # unchanged and both endpoints stay exact (km=ke=1 -> b; km=ke=0 -> decode(0)).
+        if self.zero_ablation:
+            fc = torch.zeros_like(fb)
 
         # CONVEX-BLEND FORM, not base-plus-delta. `km`/`ke` are the weights on the CLEAN side,
         # so km=1 keeps the clean latent and km=0 takes the source one.
@@ -449,6 +458,8 @@ class LlamaAttributionHooks:
         # eb / ec are the two RECONSTRUCTION ERRORS, each measured against its OWN
         # reconstruction. Both are constants of the mask: neither depends on km.
         eb, ec = b - sae.decode(fb), c - sae.decode(fc)
+        if self.zero_ablation:
+            ec = torch.zeros_like(eb)
         if self.sae_error == "none":
             # No error node in the substrate; the error is pinned at the clean residual. Same as
             # "frozen" with ke == 1, which is the point -- "none" is not a fourth semantics.
