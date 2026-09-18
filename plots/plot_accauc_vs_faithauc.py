@@ -1132,17 +1132,24 @@ def main():
                       else CPR_METHODS if a.cpr else FIGURE_METHODS)
     suffix = ("_all" if a.draw_all else "_stepless" if a.stepless
               else "_adam" if a.adam else "_zero" if a.zero else "")
-    if a.cpr and (other_cut_flags := (a.draw_all or a.stepless or a.adam or a.zero)):
-        raise SystemExit("--cpr is a variant of the default cut only")
+    if a.cpr and (other_cut_flags := (a.draw_all or a.stepless or a.adam)):
+        raise SystemExit("--cpr is a variant of the default cut (optionally --zero) only")
     other_cut = a.draw_all or a.stepless or a.adam
     # --zero is a DEFAULT-cut variant, not an `other_cut`: same five methods, same one loss, same
     # labelled renderer -- only the source list grows. So it must not flip other_cut, which is
     # what routes a run to the plotnine path.
+    # --cpr --zero (2026-09-18): the CPR cut on the ZERO-ablation runs alone -- results/sva_zeroabl,
+    # 2k steps, three substrates (no SAE zero runs exist), no MIB panels (MIB is patching-only).
+    # The node column stays, since nothing replaces it here. Writes accauc_vs_cpr_zero.pdf.
+    cpr_zero = a.cpr and a.zero
     sources = (STEPLESS_SOURCES if a.stepless
+               else [s for s in SOURCES if s[2] == "Zero-abl." and "_input" not in s[0]] if cpr_zero
                else SOURCES if (other_cut or a.zero) else FIGURE_SOURCES)
     losses = LOSSES if other_cut else FIGURE_LOSSES
     substrates = SUBSTRATES if other_cut else FIGURE_SUBSTRATES
-    if a.cpr:
+    if cpr_zero:
+        substrates = [(sub, lab) for sub, lab in substrates if sub != "mlp_sae_span"]
+    elif a.cpr:
         # The MIB test panel IS the node-level comparison, on 11 cells rather than the SVA+
         # node column's 4 groups; keeping both would draw the same ordering twice side by side.
         substrates = [(sub, lab) for sub, lab in substrates if sub != "node"]
@@ -1170,7 +1177,10 @@ def main():
         override; it never falls back to `res`, because a silent fallback is exactly how the
         column would end up mixing two error interventions.
         """
-        d = SUBSTRATE_RES.get(sub, res)
+        # The override is for the PATCHED default source only: sva_zeroabl carries the same
+        # substrates at 2k, and routing its mlp column to the 5k patched tree would label patched
+        # runs as zero-ablation (the --zero cut did exactly that before 2026-09-18).
+        d = SUBSTRATE_RES.get(sub, res) if res == FIGURE_SOURCES[0][0] else res
         if d not in cache:
             cache[d] = load(d)
         return cache[d]
@@ -1210,7 +1220,8 @@ def main():
                     facet = ((f"{abl}\n" if show_abl else "")
                              + (f"{slabel}, {inp_label}" if show_inp else slabel)
                              + f"\n{'·'.join(required[sub])}")
-                    raw = tenx_for(sub) if m in TENX_KEYS.values() else raw_for(res, sub)
+                    raw = (tenx_for(sub) if m in TENX_KEYS.values() and res == FIGURE_SOURCES[0][0]
+                           else raw_for(res, sub))
                     r = group_avg(raw, m, lkey, sub, required)
                     if r is None:
                         have = {t for (mm, ll, ss, t) in raw if (mm, ll, ss) == (m, lkey, sub)}
@@ -1225,7 +1236,7 @@ def main():
                     rows.append(dict(acc_auc=r[0], faith_auc=r[1], cpr=r[3], method=mlabel,
                                      _key=m, loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
-    if a.cpr:
+    if a.cpr and not a.zero:
         rows = (mib_rows(figure_methods)
                 + mib_rows(figure_methods, MIB_TEST_EDGE, MIB_EDGE_FACET) + rows)
     df = pd.DataFrame(rows)
@@ -1312,6 +1323,14 @@ def main():
             # MIB's CPR, which is a LINEAR AUC over the kept proportion -- the labels are
             # what tell the reader the two axes weight the sparsity grid differently.
             fam = {METHODS[m][0]: FAMILY_COLOR[m] for m in figure_methods}
+            if a.zero:
+                nf = df["facet"].nunique()
+                draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
+                              xlabel="Compactness (↑)", colors=fam,
+                              figsize=(LAB_FIG[0] * nf / 5, 1.3))
+                print("wrote", out, f"({len(df)} points)")
+                report(df, figure_methods, losses, dropped)
+                return
             hl = [(MIB_EDGE_FACET, mib_edge_eapig_cpr(), "EAP-IG-inp", P.METHOD["IG"])]
             have_rnd = ((df["facet"] == MIB_FACET) & (df["_key"] == "Random")).any()
             if not have_rnd:
