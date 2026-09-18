@@ -38,6 +38,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(
@@ -330,6 +331,22 @@ def main():
                 return act
             return hook
 
+        # The per-destination stacks are RECOMPUTED in backward rather than retained -- the fix
+        # eval_mib_edge.py (MAttr's edge runner) carries, ported here 2026-09-17 after the two
+        # llama3 ARC cells OOM'd on the 80 GB h100 three minutes into training. Stack memory is
+        # ~286 MB per token position on llama3 and ~65 destinations keep theirs alive for
+        # backward, so an ARC tail example (178/186 tokens vs a median of ~55) needs ~53 GB of
+        # stacks; checkpointing keeps one live at a time (~1.6 GB). Gradients are unchanged: the
+        # recomputation is deterministic over the same cached diffs. The other ten cells trained
+        # without it and are untouched.
+        def _stack_and_weight(weights, *diffs):
+            diff_stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
+            if weights.dim() == 1:
+                return einsum(diff_stack, weights,
+                              'batch pos src hidden, src -> batch pos hidden')
+            return einsum(diff_stack, weights,
+                          'batch pos src hidden, src heads -> batch pos heads hidden')
+
         def make_dest_hook(dest_node, letter=None):
             prev_idx = graph.prev_index(dest_node)
             bwd_idx = graph.backward_index(dest_node, qkv=letter, attn_slice=True)
@@ -344,13 +361,7 @@ def main():
                     else:
                         diffs.append(torch.zeros(1, activations.shape[1], d_model,
                                                  device=device, dtype=activations.dtype))
-                diff_stack = torch.stack(diffs, dim=2)  # [batch, pos, prev, d_model]
-                if weights.dim() == 1:
-                    update = einsum(diff_stack, weights,
-                                    'batch pos src hidden, src -> batch pos hidden')
-                else:
-                    update = einsum(diff_stack, weights,
-                                    'batch pos src hidden, src heads -> batch pos heads hidden')
+                update = checkpoint(_stack_and_weight, weights, *diffs, use_reentrant=False)
                 return activations + update
             return hook
 
