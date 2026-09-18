@@ -140,7 +140,9 @@ UNI_MARK, UNI_PER_LEVEL = "unif", 0
 # "EAP-IG-inp (CF)" dropped 2026-09-17: it is MIB's published number for the 5-step grid, and the
 # edge panel now draws our own re-run of that setting ("IG ($m{=}5$)", GRAD_EDGE_BASELINES),
 # named as the node panel names it. The table keeps both; the figure has one bar per method.
-DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)")
+# "IntInv (denoise)" dropped 2026-09-18 (requested): the noising direction is the reference the
+# figure wants; the denoising one sits at the Random floor and only adds a bar.
+DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)", "IntInv (denoise)")
 # OUR rows to drop, by OPTIMISER (2026-09-08, requested): the figure shows Adam only, so the
 # SGD log-k and SGD uniform-k arms are dropped at BOTH levels -- 4 rows, 2 per level.
 #
@@ -506,6 +508,12 @@ def panel_rows(level, loaded):
             # blue exactly where their Avg puts them. Splitting the group would reorder the
             # panel to serve the colour, which is backwards.
             out.append((f"{fam}_uni" if fam == "ours" and UNI_MARK in name else fam, name, data))
+    # The causal bar (IntInv) is not a block of its own (2026-09-18, requested): it is sorted into
+    # the BASELINE run by its mean, so it lands between the gradient rows it beats and the ones
+    # it does not. "ours" keeps the right-hand end; families stay the colour, not the position.
+    base = [r for r in out if not r[0].startswith("ours")]
+    ours = [r for r in out if r[0].startswith("ours")]
+    out = sorted(base, key=lambda r: (avg(r[2]) is None, avg(r[2]) or 0.0)) + ours
     n_uni = sum(1 for f, _, _ in out if f == "ours_uni")
     if n_uni != UNI_PER_LEVEL:
         raise SystemExit(f"{level}: {n_uni} rows matched {UNI_MARK!r}, expected {UNI_PER_LEVEL} "
@@ -568,8 +576,9 @@ def bars():
     if stale:
         raise SystemExit(f"PENDING rows are now complete: {stale} -- remove them from PENDING "
                          "so the completeness guard covers them again")
+    causal_names = {n for n, _ in T.CAUSAL_NODE_BASELINES}
     missing = [n for n in DROP
-               if n not in T.NODE_BASELINES and n not in T.EDGE_BASELINES]
+               if n not in T.NODE_BASELINES and n not in T.EDGE_BASELINES and n not in causal_names]
     if missing:
         raise SystemExit(f"DROP names not present in the baseline dicts: {missing} -- "
                          "renamed in make_mib_test_table.py? update DROP or drop the name")
