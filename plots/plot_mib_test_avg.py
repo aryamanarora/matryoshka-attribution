@@ -166,11 +166,10 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)", "IntInv (denoise)")
 # 2026-09-17 (later): the three EAP-IG-family edge test evals landed 12/12; only Edge Pruning's
 # validation-then-test wave is still mid-flight.
 PENDING = (("edge", T._M.EPRUN_NAME["edge"]),)
-# Rows drawn from FEWER than all cells, on purpose. IntInv costs 2 + 2N forwards per batch and
-# only ever runs on the three small-model cells (make_mib_test_table.PARTIAL_COVERAGE), so its
-# bar is the mean over the cells it has. That mean is NOT comparable to the 12-cell means beside
-# it (the small cells are the easy ones), so the tick label carries the cell count as a
-# superscript and the caption must say so. Everything not listed here still hits the 12/12 gate.
+# Rows ALLOWED to be drawn from fewer than all cells. IntInv was small-model-only when this was
+# added (make_mib_test_table.PARTIAL_COVERAGE); every cell has since landed
+# (submit_mib_actpatch_sc.sh, 2026-09-17), so the allowance is dormant and the bar is a full
+# 12/12 mean like its neighbours. If a cell goes missing again the label says " (n/12)".
 PARTIAL_OK = {("node", n) for n in T.PARTIAL_COVERAGE}
 DROP_OURS_OPT = "sgd"
 # Also dropped BY NAME (2026-09-11, requested): the log-k Adam arm, so the only MAttr bar left
@@ -266,11 +265,13 @@ COST = {
         **{name: _M.COST_OURS["node"] for name, _ in T.OUR_NODE_METHODS},
         "$+$ $10\\times$ steps": "5k",   # KEEP_OURS_EXTRA: 5000 steps x batch 1
         "$-$ learning": _M.COST_OURS["node"],   # dropped by name; same 500 forward+backward
-        # IntInv: FORWARDS, not backward passes -- 2 + 2N per batch over 200 train pairs, N=157
-        # (gpt2) / 361 (qwen2.5) nodes = 63k / 144k sequences (make_mib_table.COST_ACTPATCH).
+        # IntInv: FORWARDS, not backward passes -- (2 + 2N) x 200 train pairs per cell, N = 157
+        # nodes on gpt2 up to 1057 on llama3 (read off results/test_node_actpatch_noise/*_scores.pt),
+        # i.e. 63k -- 423k sequences. All 12 cells exist since submit_mib_actpatch_sc.sh
+        # (2026-09-17); make_mib_table.COST_ACTPATCH's "63--144k" predates the large-model cells.
         # The strip's unit is "passes through the model"; a forward is cheaper than a backward,
         # so if anything this understates the gap. Clipped in draw_cost (COST_CLIP).
-        **{name: _R(_M.COST_ACTPATCH) for name, _ in T.CAUSAL_NODE_BASELINES},
+        **{name: "63–423k" for name, _ in T.CAUSAL_NODE_BASELINES},
     },
     "edge": {
         # MIB's published EAP-IG-inputs is the 5-step grid, the same setting our repro row
@@ -647,8 +648,8 @@ def draw_cost(sx, recs):
             cap = top * STRIP_HEADROOM * 0.86
             sx.bar(x, cap, width=BAR_W, zorder=2, **bar_style(fam))
             # a white gap through the bar marks the break
-            sx.bar(x, cap * 0.05, bottom=cap * 0.62, width=BAR_W * 1.1, color="white", lw=0, zorder=3)
-            sx.text(x, cap * 0.30, cost, rotation=90, ha="center", va="bottom",
+            sx.bar(x, cap * 0.05, bottom=cap * 0.86, width=BAR_W * 1.1, color="white", lw=0, zorder=3)
+            sx.text(x, cap * 0.06, cost, rotation=90, ha="center", va="bottom",
                     fontsize=FS_ANNOT - 0.7, color="white", zorder=5)
             continue
         sx.bar(x, lo, width=BAR_W, zorder=2, **bar_style(fam))
