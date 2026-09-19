@@ -971,7 +971,12 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
                                  label=POINT_LABEL.get(key, name)))
         fig.legend(handles=hs, loc="center right", fontsize=LAB_PT + 0.4, frameon=False,
                    handletextpad=0.4, labelspacing=0.9, borderaxespad=0.2)
-        fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 0.905, 1))
+        # The legend is a fixed physical width (longest label "Random" at LAB_PT+0.4), so the
+        # panel area it takes is inversely proportional to the figure width: 0.095 of the
+        # 1.1*LAB_FIG[0] five-column figure it was tuned on. Scaling it keeps the legend clear
+        # of the last column at other widths (the 2x4 cut is 0.9*LAB_FIG[0]).
+        legend_frac = 0.095 * (LAB_FIG[0] * 1.1) / fig.get_figwidth()
+        fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1 - legend_frac, 1))
     else:
         fig.tight_layout(pad=0.3, w_pad=0.25, h_pad=0.5, rect=(0.013, 0.02, 1, 1))
     # AFTER tight_layout: place_labels measures the marker half-extent and the label widths off
