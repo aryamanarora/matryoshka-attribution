@@ -1446,7 +1446,9 @@ def main():
             # Left anchors, 2026-09-18 (checked on the PNG): MIB node's "MAttr" otherwise gets a
             # leader line down into the IG point because "+log k" sits just right of the star;
             # "+log k" on MLP (patched) and MLP+Attn (zero) ran past the right frame.
-            LABEL_LEFT = {"stopk-unif-eps1e-2": ("MIB (node",),
+            # "MIB (edge" added 2026-09-19: the Edge Pruning point widened that panel's x-range
+            # and pushed both MAttr labels into each other at the top-right corner.
+            LABEL_LEFT = {"stopk-unif-eps1e-2": ("MIB (node", "MIB (edge"),
                           "stopk-log-eps1e-2": ("MLP\n", "MLP+Attn, zero")}
             POINT_LABEL.update(CPR_POINT_LABEL)
             # "log-AUC" vs bare "CPR": the x axis is the log-weighted IIA AUC, the y axis is
