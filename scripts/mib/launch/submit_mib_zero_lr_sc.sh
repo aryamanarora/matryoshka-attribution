@@ -12,17 +12,20 @@
 set -u
 ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; PIN=${PIN:-0}; CELLS=${CELLS:-"gpt2:ioi qwen2.5:ioi"}
+# BS=n: --train-batch-size n (gradient accumulated over n examples per step; default 1 as in
+# every headline run). Dir suffix _bs<n>, job tag prefix b<n>.
+BS=${BS:-1}; [ "$BS" = 1 ] && { bsarg=""; bsuf=""; btag=""; } || { bsarg="--train-batch-size $BS"; bsuf="_bs$BS"; btag="b$BS"; }
 if [ "$PIN" = 1 ]; then LRS=${LRS:-"0.005 0.01 0.02 0.05 0.1 0.2"}; inp=""; suf="_pininput"; tag="zpin"
 else LRS=${LRS:-"0.005 0.01 0.02 0.1 0.2"}; inp="--include-input"; suf=""; tag="zlr"; fi
 n=0
 for lr in $LRS; do for c in $CELLS; do
   IFS=: read -r model task <<< "$c"
-  out=results/test_node_topk_uniform_lr${lr}_zero${suf}
+  out=results/test_node_topk_uniform_lr${lr}_zero${suf}${bsuf}
   [ -f "$out/${task}_${model}_scores.pt" ] && continue
-  name="$tag$lr-$task-$model"
+  name="$btag$tag$lr-$task-$model"
   cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/mib/eval_mib.py --model $model --task $task \
 --steps 500 --k-schedule uniform --masking topk --optimizer adam --mode sufficient --lr $lr --split test --train-split train \
-$inp --ablation zero --output $out"
+$inp $bsarg --ablation zero --output $out"
   n=$((n+1))
   if [ "$DRYRUN" = 1 ]; then echo "DRY $name"; else
     nlprun -g 1 -q jag -d a6000 -c 2 -r 32G -n "$name" -o "$ABS/logs/${name}.out" "$cmd" 2>&1 | grep -E 'Submitted batch job' | sed "s/^/$name: /"; sleep 1
