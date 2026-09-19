@@ -22,11 +22,13 @@ ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p l
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}; SPLIT=test
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}
+TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}
 METHODS=${METHODS:-"mattr mattr-log np dbm ig ixg eg attnlrp random"}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 # 80 GB slot for the llama3 cells that OOM a 48 GB a6000: ARC (all methods), mcqa attribution
 # (IG/I×G/EG over the full train split), and the NP/DBM gate trainers. Default is the h100; pass
-# BIG="-q sphinx -d a100 -r 128G" to use the a100-80GB nodes instead (sphinx9, the only h100,
+# BIG="-q sphinx -d h200 -r 128G" for the 141 GB h200s (sphinx10/11); note "-d a100" can land on
+# sphinx1/2, which are 40 GB and OOM these cells -- prefer the h200 override (sphinx9, the only h100,
 # killed every job step with "Unable to satisfy cpu bind request" on 2026-09-18).
 BIG=${BIG:-"-q sphinx -d h100 -r 128G"}
 PY_L2A="uv run python"; PYE_L2A="uv run --project $ABS python"
@@ -49,6 +51,7 @@ sub() {  # name res cmd
 for cell in "${CELLS[@]}"; do
   read -r model task nex abatch <<< "$cell"
   case " $MODELS " in *" $model "*) ;; *) continue ;; esac
+  case " $TASKS " in *" $task "*) ;; *) continue ;; esac
   tdash=${task//_/-}
   py=$PY_L2A; pye=$PYE_L2A; tbs=""; ebs=20
   case $model in
