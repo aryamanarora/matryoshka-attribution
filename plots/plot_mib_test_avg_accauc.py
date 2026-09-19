@@ -70,8 +70,14 @@ ACC_DIRS = {
              # The L1-ladder row goes through scripts/mib/dbm_multisparsity.cell, the ONE reader
              # the test table also uses, which scores the ladder on MIB's grid (see load_acc).
              T._M.DBM_MULTI_ROW: ("multi", _DBMMS.RESULTS),
-             T._M.NP_MULTI_ROW: ("multi", _DBMMS.NP_RESULTS)},
-    "edge": {name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
+             T._M.NP_MULTI_ROW: ("multi", _DBMMS.NP_RESULTS),
+             # IntInv: eval_mib.py layout (scripts/mib/eval_mib_actpatch.py writes the same pkls).
+             **{name: ("mib", d) for name, d in T.CAUSAL_NODE_BASELINES}},
+    # 2026-09-18: the edge baselines WE ran (IG m=5/10, EG, Edge Pruning) are run_evaluation.py
+    # output like the node ones; the parent draws their rows now that all four are 12/12.
+    "edge": {**{name: ("mib", d) for name, d in T.OUR_EDGE_METHODS},
+             **{name: ("runeval", d, sub)
+                for name, d, sub in list(T.GRAD_EDGE_BASELINES) + list(T.MASK_EDGE_BASELINES)}},
 }
 
 
