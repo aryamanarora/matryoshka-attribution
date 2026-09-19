@@ -165,7 +165,9 @@ DROP = ("NAP (CF)", "NAP-IG (CF)", "UGS", "EAP-IG-inp (CF)", "IntInv (denoise)")
 # key read those as "the pending row has landed" the moment the edge rows were skipped entirely.
 # 2026-09-17 (later): the three EAP-IG-family edge test evals landed 12/12; only Edge Pruning's
 # validation-then-test wave is still mid-flight.
-PENDING = (("edge", T._M.EPRUN_NAME["edge"]),)
+# 2026-09-18: Edge Pruning's edge test wave landed 12/12 (the two llama3 ARC cells last); nothing
+# is pending, so every row is under the completeness guard again.
+PENDING = ()
 # Rows ALLOWED to be drawn from fewer than all cells. IntInv was small-model-only when this was
 # added (make_mib_test_table.PARTIAL_COVERAGE); every cell has since landed
 # (submit_mib_actpatch_sc.sh, 2026-09-17), so the allowance is dormant and the bar is a full
