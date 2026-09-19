@@ -449,10 +449,11 @@ CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
                "stopk-log-eps1e-2", "stopk-unif-eps1e-2", "Random"]
 # Per-method markers for the --cpr cut (2026-09-18, requested): IG vs I x G and NP vs DBM
 # were the same glyph in the same family colour and needed point labels to tell apart; with
-# distinct glyphs the legend carries the names and only the two MAttr points keep labels.
+# distinct glyphs the legend carries the names and only the MAttr star keeps a label
+# (2026-09-19, requested: the "+log k" label went too -- the filled circle is in the legend).
 CPR_MARKERS = {"IG": "o", "IxG": "^", "eprun-s090": "s", "sig_lr0.3_l16.0": "D", "Random": "o",
                "stopk-log-eps1e-2": "o"}
-CPR_LABELLED = {"stopk-unif-eps1e-2", "stopk-log-eps1e-2"}
+CPR_LABELLED = {"stopk-unif-eps1e-2"}
 # The 10x-steps twin ("stopk-unif-eps1e-2-10x") was in this cut 2026-09-17 and was dropped the
 # same day (requested): its row lives in the SVA+ / MIB tables and its bar in plot_mib_test_avg.
 # Everything below still supports it -- one list entry to bring it back. Both budgets are stars.
