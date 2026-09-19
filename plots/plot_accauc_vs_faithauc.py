@@ -810,7 +810,7 @@ def group_avg(raw, m, loss, sub, required=None):
 
 def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-AUC (↑)",
                   xlabel="Compactness (↑)", colors=None, hlines=(), figsize=None,
-                  markers=None, legend=False, free_lims=False, label_keys=None):
+                  markers=None, legend=False, free_lims=False, label_keys=None, ncol=None):
     """The default cut, raw matplotlib: uniform circles + direct point labels, no legend.
 
     `ycol`/`ylabel` select the y metric: the stored log-AUC (default) or the MIB-style CPR the
@@ -845,7 +845,7 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
     # to be. Panels get wider as a result, which is the direction that HELPS label placement --
     # but the docstring's rule still applies: check the printed overlap count AND the x-headroom
     # diagnostic after changing this, not just one of them.
-    ncol = min(LAB_NCOL, len(facets))
+    ncol = ncol or min(LAB_NCOL, len(facets))   # --cpr passes 4: two rows of four, no blanks
     nrow = int(np.ceil(len(facets) / ncol))
     plt.rcParams.update(P.RC)
     # Height scales with the row count: LAB_FIG is sized for one row, and a second row of
@@ -1032,8 +1032,10 @@ MIB_ZERO_FACET = "MIB (node, test), zero\nMIB"
 MIB_EDGE_ZERO_FACET = "MIB (edge, test), zero\nMIB"   # no edge-level zero runs: drawn blank
 # Placeholder panels: kept in the grid even with no rows, with this note in the middle, so the
 # two rows' columns stay aligned. The node-zero note is transient (its wave is landing).
-PLACEHOLDER_NOTE = {MIB_EDGE_ZERO_FACET: "no edge-level\nzero-ablation runs",
-                    MIB_ZERO_FACET: "pending\n(12/12 cells)"}
+# 2026-09-19: empty. The edge column was dropped from the cut (requested), which removed the
+# edge-zero blank, and the node-zero wave has landed 12/12. Kept as the hook for the next
+# transient panel; `keep` below still unions it in.
+PLACEHOLDER_NOTE = {}
 MIB_TEST_ZERO = {
     "IxG":               ("mib_zero_test/ixg", "EAP-IG-inputs_zero_node"),
     "IG":                ("mib_zero_test/ig", "EAP-IG-inputs_zero_node"),
@@ -1357,8 +1359,9 @@ def main():
                                      _key=m, loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
     if a.cpr and not a.zero:
+        # MIB edge (MIB_TEST_EDGE / MIB_EDGE_FACET) dropped from the cut 2026-09-19 (requested):
+        # the figure is node-level throughout; the edge numbers stay in the test table.
         rows = (mib_rows(figure_methods)
-                + mib_rows(figure_methods, MIB_TEST_EDGE, MIB_EDGE_FACET)
                 + mib_rows(figure_methods, MIB_TEST_ZERO, MIB_ZERO_FACET) + rows)
     df = pd.DataFrame(rows)
 
@@ -1383,11 +1386,9 @@ def main():
                    for inp in (["−input", "+input"] if show_inp else [None])
                    for sub, g in SUB_IN]
     if a.cpr:
-        # Row 1: MIB node, MIB edge, then SVA+; row 2 the same columns under zero ablation, with
-        # a BLANK edge slot (no edge-level zero runs) so the columns line up.
+        # Row 1: MIB node, then SVA+; row 2 the same four columns under zero ablation.
         zero_facets = [f.replace("\n", ", zero\n", 1) for f in facet_order]
-        facet_order = ([MIB_FACET, MIB_EDGE_FACET] + facet_order
-                       + [MIB_ZERO_FACET, MIB_EDGE_ZERO_FACET] + zero_facets)
+        facet_order = [MIB_FACET] + facet_order + [MIB_ZERO_FACET] + zero_facets
     # This list is the RENDER WHITELIST, not just a sort key: pd.Categorical maps anything absent
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
@@ -1478,8 +1479,8 @@ def main():
             # printed below, before changing this.
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                           xlabel="Compactness (↑)", colors=fam, hlines=hl,
-                          figsize=(LAB_FIG[0] * 1.1, 1.3), markers=CPR_MARKERS, legend=True,
-                          free_lims=True, label_keys=CPR_LABELLED)
+                          figsize=(LAB_FIG[0] * 0.9, 1.3), markers=CPR_MARKERS, legend=True,
+                          free_lims=True, label_keys=CPR_LABELLED, ncol=4)
         elif a.y_cpr:
             draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)")
         else:
