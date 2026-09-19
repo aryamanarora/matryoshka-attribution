@@ -24,6 +24,11 @@ DRYRUN=${DRYRUN:-0}; SPLIT=test
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}
 METHODS=${METHODS:-"mattr mattr-log np dbm ig ixg eg attnlrp random"}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+# 80 GB slot for the llama3 cells that OOM a 48 GB a6000: ARC (all methods), mcqa attribution
+# (IG/I×G/EG over the full train split), and the NP/DBM gate trainers. Default is the h100; pass
+# BIG="-q sphinx -d a100 -r 128G" to use the a100-80GB nodes instead (sphinx9, the only h100,
+# killed every job step with "Unable to satisfy cpu bind request" on 2026-09-18).
+BIG=${BIG:-"-q sphinx -d h100 -r 128G"}
 PY_L2A="uv run python"; PYE_L2A="uv run --project $ABS python"
 PY_G="UV_PROJECT_ENVIRONMENT=$ABS/.venv-tl2 uv run --no-default-groups --group tl2 python"
 PYE_G="UV_PROJECT_ENVIRONMENT=$ABS/.venv-tl2 uv run --no-default-groups --group tl2 --project $ABS python"
@@ -51,7 +56,8 @@ for cell in "${CELLS[@]}"; do
     gemma2)       res="-q jag -d a6000 -c 3 -r 64G"; py=$PY_G; pye=$PYE_G; tbs="--batch-size 4"; ebs=4 ;;
     llama3)       res="-q jag -d a6000 -c 4 -r 96G"; tbs="--batch-size 2"; ebs=2 ;;
   esac
-  [ "$model" = llama3 ] && [[ "$task" == arc_* ]] && res="-q sphinx -d h100 -r 128G"
+  [ "$model" = llama3 ] && [[ "$task" == arc_* ]] && res="$BIG"
+  gres=$res; [ "$model" = llama3 ] && [ "$task" = mcqa ] && gres="$BIG"   # mcqa/llama3 IG-family attribution OOMs a6000
   [ "$nex" = full ] && nf="" || nf="--num-examples $nex"
   for m in $METHODS; do
     case $m in
@@ -71,7 +77,7 @@ for cell in "${CELLS[@]}"; do
         graph=$out/graph_${task}_${model}.json
         # The gate trainers keep the live activations of every node in the graph: llama3 OOMs a
         # 48 GB a6000 (ioi cell, 2026-09-18), as the patching-side NP runs also needed the h100.
-        mres=$res; [ "$model" = llama3 ] && mres="-q sphinx -d h100 -r 128G"
+        mres=$res; [ "$model" = llama3 ] && mres="$BIG"
         sub "z-$m-$task-$model" "$mres" "if [ -f $graph ]; then echo REUSING $graph; else $EXP $py scripts/mib/eval_mib_edge_pruning.py \
 --model $model --task $task --level node --split $SPLIT --output $out --loss logit_diff --ablation zero $a --skip-eval; fi && \
 cd $MIB && PYTHONPATH=.:EAP-IG/src $EXP $pye run_evaluation.py --models $model --tasks $task --level node --ablation zero \
@@ -81,7 +87,7 @@ cd $MIB && PYTHONPATH=.:EAP-IG/src $EXP $pye run_evaluation.py --models $model -
                    eg) meth=EAP-IG-inputs-mc; a="--ig-steps 1";; attnlrp) meth=AttnLRP; a="";; esac
         cdir=results/zero_$m; odir=$ABS/results/mib_zero_test/$m
         [ -f "$odir/${meth}_zero_node/${tdash}_${model}_${SPLIT}_abs-False.pkl" ] && { skip=$((skip+1)); continue; }
-        sub "z-$m-$task-$model" "$res" "cd $MIB && PYTHONPATH=.:EAP-IG/src $EXP $pye run_attribution.py --models $model --tasks $task \
+        sub "z-$m-$task-$model" "$gres" "cd $MIB && PYTHONPATH=.:EAP-IG/src $EXP $pye run_attribution.py --models $model --tasks $task \
 --method $meth $a --level node --ablation zero --split train --batch-size $abatch $nf --circuit-dir $cdir && \
 PYTHONPATH=.:EAP-IG/src $EXP $pye run_evaluation.py --models $model --tasks $task --method $meth --level node --ablation zero \
 --split $SPLIT --batch-size $ebs --circuit-dir $cdir --output-dir $odir" ;;
