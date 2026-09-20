@@ -49,7 +49,9 @@ for cell in "${CELLS[@]}"; do
     gemma2)       res="-q jag -d a6000 -c 3 -r 64G"; ebs=4; pye=$PYE_G ;;
     llama3)       res="-q jag -d a6000 -c 4 -r 96G"; ebs=2 ;;
   esac
-  [ "$model" = llama3 ] && [[ "$task" == arc_* ]] && res="-q sphinx -d h100 -r 128G"
+  # 80 GB slot for the llama3 cells that OOM a 48 GB a6000: ARC, and mcqa (attribution over the
+  # full train split; both methods died there 2026-09-18). BIG as in submit_mib_zero_sc.sh.
+  [ "$model" = llama3 ] && { [[ "$task" == arc_* ]] || [ "$task" = mcqa ]; } && res="${BIG:--q sphinx -d h100 -r 128G}"
   [ "$nex" = full ] && nf="" || nf="--num-examples $nex"
   [ "$ehead" = 0 ] && hf="" || hf="--head $ehead"
   for meth in $METHODS; do
