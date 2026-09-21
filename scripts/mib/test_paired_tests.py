@@ -105,24 +105,34 @@ def _p(p):
 
 
 def write_tex(path, blocks):
-    """blocks = [(level title, [(name, n, md, wins, p2, p1, holm)], [variant rows])]."""
-    lines = ["\\begin{tabular}{lrrrrr}", "\\toprule",
-             "\\textbf{Baseline} & $n$ & $\\Delta$ CPR & wins & $p$ & $p_{\\mathrm{Holm}}$ \\\\",
-             "\\midrule"]
+    """blocks = [(level title, [(name, n, md, wins, p2, p1, holm)], [variant rows])].
+
+    TWO LEVELS SIDE BY SIDE (2026-09-21, requested): the node block on the left, the edge block
+    on the right, zipped row by row so the table is as tall as the longer block rather than the
+    sum of both. Each side repeats the column header; a short side is padded with empty cells.
+    """
+    hdr = "\\textbf{Baseline} & $n$ & $\\Delta$ CPR & wins & $p$ & $p_{\\mathrm{Holm}}$"
+    sides = []
     for title, rows, variants in blocks:
-        lines.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{title}}}}} \\\\")
+        side = [f"\\multicolumn{{6}}{{l}}{{\\textit{{{title}}}}}"]
         for name, n, md, wins, p2, p1, pa in rows:
             small = n < MIN_N
-            lines.append(f"\\quad {name} & {n} & {md:+.2f} & {wins}/{n} & "
-                         f"{'---' if small else _p(p2)} & {'---' if small else _p(pa)} \\\\")
+            side.append(f"\\quad {name} & {n} & {md:+.2f} & {wins}/{n} & "
+                        f"{'---' if small else _p(p2)} & {'---' if small else _p(pa)}")
         if variants:
-            lines.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{title}, other \\ourmethod{{}} variants "
-                         f"(not in the Holm family)}}}} \\\\")
+            side.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{title}, other \\ourmethod{{}} variants "
+                        f"(not in the Holm family)}}}}")
             for name, n, md, wins, p2, p1 in variants:
-                lines.append(f"\\quad {name} & {n} & {md:+.2f} & {wins}/{n} & {_p(p2)} & --- \\\\")
-        lines.append("\\midrule")
-    lines[-1] = "\\bottomrule"
-    lines.append("\\end{tabular}")
+                side.append(f"\\quad {name} & {n} & {md:+.2f} & {wins}/{n} & {_p(p2)} & ---")
+        sides.append(side)
+    empty = " & & & & & "
+    width = max(len(sd) for sd in sides)
+    lines = ["\\begin{tabular}{lrrrrr@{\\qquad}lrrrrr}", "\\toprule",
+             hdr + " & " + hdr + " \\\\", "\\midrule"]
+    for i in range(width):
+        cells = [sd[i] if i < len(sd) else empty for sd in sides]
+        lines.append(" & ".join(cells) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text("\n".join(lines) + "\n")
     print(f"wrote {path}")
