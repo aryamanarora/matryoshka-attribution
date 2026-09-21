@@ -107,16 +107,16 @@ for ax in axes[:, 0]:
     ax.set_ylabel("Layer")
 for ax in axes[-1]:
     ax.set_xlabel("Head")
-fig.tight_layout(h_pad=1.2, w_pad=0.7, rect=(0, 0.075, 0.905, 1))
-cax = fig.add_axes([0.925, 0.35, 0.012, 0.4])
+fig.tight_layout(h_pad=1.2, w_pad=0.7, rect=(0, 0.085, 0.89, 1))
+cax = fig.add_axes([0.905, 0.35, 0.012, 0.4])
 cb = fig.colorbar(im, cax=cax, ticks=[VMAX, VMAX - 1, VMAX - 2, 0, -(VMAX - 2), -(VMAX - 1), -VMAX])
 cb.set_ticklabels(["1", "10", "100", "med.", "−100", "−10", "−1"])
 cb.ax.tick_params(labelsize=5.5, length=1.5); cb.outline.set_linewidth(0.4)
-cb.set_label("Rank (− = from the bottom)", fontsize=6)
+cb.set_label("Rank", fontsize=6)
 hs = [Line2D([], [], marker="s", ls="", ms=4.5, mfc="none", mec=COL[c], mew=0.9, label=c)
       for c, _ in CLASSES]
-fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.46, 0.0), ncol=7, frameon=False,
-           handletextpad=0.3, columnspacing=0.7, fontsize=5.4,
+fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.45, 0.0), ncol=4, frameon=False,
+           handletextpad=0.3, columnspacing=0.9, fontsize=5.6,
            title="IOI / GPT-2 outlines: Wang et al. (2023) head classes", title_fontsize=5.6)
 out = OUT / "mattr_node_grids.pdf"
 fig.savefig(out); fig.savefig(out.with_suffix(".png"), dpi=200)
