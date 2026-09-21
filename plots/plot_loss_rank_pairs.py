@@ -30,7 +30,11 @@ C_ATTN, C_MLP = "#0072b2", "#e69f00"
 
 
 def load(task, model, loss):
-    tag = ARM.format(loss="" if loss == "logit_diff" else f"_{loss}")
+    """A MAttr loss arm, or an `extra` gradient method given as label=filetag (e.g. IxG=ixg)."""
+    if "=" in loss:
+        tag = loss.split("=", 1)[1]
+    else:
+        tag = ARM.format(loss="" if loss == "logit_diff" else f"_{loss}")
     fs = glob.glob(f"{RES}/{task}_{model}_node_{tag}.scores.pt")
     if not fs:
         return None
@@ -50,13 +54,19 @@ def main():
     ap.add_argument("--task", default="ioi")
     ap.add_argument("--model", default="qwen2.5")
     ap.add_argument("--losses", nargs="+", default=["logit_diff", "ce", "acc", "kl", "cmd"])
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="gradient methods to add as further series, label=filetag, e.g. IxG=ixg "
+                         "(results/sva_sweep/<task>_<model>_node_<filetag>.scores.pt, logit-diff target)")
     ap.add_argument("--mark", nargs="*", default=["a19.h6"])
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     L, H = SHAPE[a.model]
-    scores = {l: load(a.task, a.model, l) for l in a.losses}
-    losses = [l for l in a.losses if scores[l] is not None]
-    for l in a.losses:
+    series = list(a.losses) + list(a.extra)
+    for e in a.extra:
+        LOSS_LABEL[e] = e.split("=", 1)[0]
+    scores = {l: load(a.task, a.model, l) for l in series}
+    losses = [l for l in series if scores[l] is not None]
+    for l in series:
         if scores[l] is None:
             print(f"  {l}: no run for {a.task}/{a.model}, dropped")
     n = len(scores[losses[0]])
@@ -107,7 +117,7 @@ def main():
     fig.suptitle(f"{a.task} / {a.model}, node substrate, MAttr (uniform $k$, Adam $\\epsilon$=1e-2)",
                  fontsize=6.5, y=0.995)
     fig.tight_layout(pad=0.3, w_pad=0.3, h_pad=0.3)
-    out = a.out or f"plots/loss_rank_pairs_{a.task}.pdf"
+    out = a.out or f"plots/loss_rank_pairs_{a.task}{'_' + '_'.join(e.split('=')[0].lower() for e in a.extra) if a.extra else ''}.pdf"
     fig.savefig(out); fig.savefig(out.replace(".pdf", ".png"), dpi=200)
     print("wrote", out)
     print("Spearman rho between losses:")
