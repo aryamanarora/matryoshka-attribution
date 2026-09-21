@@ -21,7 +21,8 @@ from learning_to_attribute import learn_scores, sparsity_sweep, wandb_util, CFAc
 from learning_to_attribute.edge_pruning import (
     learn_scores_edge_pruning, learn_scores_sigmoid_mask)
 from learning_to_attribute.schedules import AdaptiveLogK, FixedK
-from learning_to_attribute.losses import (CLEAN_TARGET_LOSSES, LOSS_CHOICES,
+from learning_to_attribute.losses import (CLEAN_LOGITS_LOSSES, CLEAN_TARGET_LOSSES,
+                                          CORRUPT_TARGET_LOSSES, LOSS_CHOICES,
                                            attribution_loss, resolve_direction)
 from learning_to_attribute.data import SVADataset, CausalGymDataset
 from learning_to_attribute.models import LlamaAttributionHooks
@@ -901,7 +902,8 @@ def main():
                         "and IG becomes textbook zero-baseline IG.")
     p.add_argument("--loss", default="logit_diff", choices=list(LOSS_CHOICES),
                    help="training loss (see learning_to_attribute.losses): logit_diff, ce, "
-                        "logit, prob (bounded), hinge (--hinge-margin), acc (soft-0-1, --acc-temp)")
+                        "logit, prob (bounded), hinge (--hinge-margin), acc (soft-0-1, --acc-temp), "
+                        "kl (to the clean model's distribution), cmd (|1 - per-example faithfulness|)")
     p.add_argument("--hinge-margin", type=float, default=2.0, help="margin (logits) for --loss hinge")
     p.add_argument("--acc-temp", type=float, default=1.0, help="temperature for --loss acc (smaller=sharper)")
     p.add_argument("--ld-scale", type=float, default=2.0, help="margin scale (logits) for --loss ld_tanh")
@@ -1195,6 +1197,47 @@ def main():
                 _clean_d[cl[i]] = float(dv[j])
         return torch.tensor([_clean_d[c] for c in cl], device=device)
 
+    # Per-example FULLY-PATCHED margins for the cmd loss: mask=zeros + sufficient=False is the
+    # F0 forward summarize() uses as the "corrupted" reference of faithfulness. Cached like the
+    # clean margins, one extra no-grad forward per train example over the run.
+    _corr_d = {}
+
+    def corrupt_margins(cl, co, ci, ii):
+        miss = [i for i, c in enumerate(cl) if c not in _corr_d]
+        if miss:
+            with torch.no_grad():
+                ll, cor, inc = forward_last([cl[i] for i in miss], [co[i] for i in miss],
+                                            [ci[i] for i in miss], [ii[i] for i in miss],
+                                            torch.zeros(total, device=device), sufficient=False)
+                ar = torch.arange(ll.shape[0], device=device)
+                dv = ll[ar, cor] - ll[ar, inc]
+            for j, i in enumerate(miss):
+                _corr_d[cl[i]] = float(dv[j])
+        return torch.tensor([_corr_d[c] for c in cl], device=device)
+
+    # Per-example CLEAN last-token log-probs over the vocabulary for the kl loss, cached on the
+    # CPU in fp16 (llama3: 128k vocab x ~1.3k train examples ~ 330 MB) keyed by clean text.
+    _clean_lp = {}
+
+    def clean_logprobs(cl, co, ci, ii):
+        miss = [i for i, c in enumerate(cl) if c not in _clean_lp]
+        if miss:
+            with torch.no_grad():
+                ll, _, _ = forward_last([cl[i] for i in miss], [co[i] for i in miss],
+                                        [ci[i] for i in miss], [ii[i] for i in miss],
+                                        torch.ones(total, device=device), sufficient=False)
+                lp = ll.float().log_softmax(-1).half().cpu()
+            for j, i in enumerate(miss):
+                _clean_lp[cl[i]] = lp[j]
+        return torch.stack([_clean_lp[c] for c in cl]).to(device).float()
+
+    def loss_extras(cl, co, ci, ii):
+        """The reference tensors a loss needs beyond the masked logits, or none."""
+        return dict(
+            target_d=clean_margins(cl, co, ci, ii) if args.loss in CLEAN_TARGET_LOSSES else None,
+            corrupt_d=corrupt_margins(cl, co, ci, ii) if args.loss in CORRUPT_TARGET_LOSSES else None,
+            clean_logp=clean_logprobs(cl, co, ci, ii) if args.loss in CLEAN_LOGITS_LOSSES else None)
+
     def loss_fn(mask):
         cl, co, ci, ii = sample_batch(train, args.train_batch_size, n_train)
         if not cl:
@@ -1207,10 +1250,9 @@ def main():
                 with torch.no_grad():
                     dec = (ll[ar, cor] > ll[ar, inc]).float().mean().item()
                 k_sampler.observe(dec)
-            tgt = clean_margins(cl, co, ci, ii) if args.loss in CLEAN_TARGET_LOSSES else None
             return attribution_loss(args.loss, ll, cor, inc, corrupt_topk=step_cause,
                                     hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
-                                    ld_scale=args.ld_scale, target_d=tgt)
+                                    ld_scale=args.ld_scale, **loss_extras(cl, co, ci, ii))
         # ---- MAttr-IG: integrate dL/dmask over the baseline(CF)->clean mask path ----
         # effective mask alpha*m_hard makes activations cf + alpha*m*(clean-cf): alpha=0 is the
         # all-baseline circuit, alpha=1 the top-k intervention. a_ig_j = mean_alpha dL/d(mask_j)
@@ -1224,6 +1266,7 @@ def main():
         B = len(cl); ar = torch.arange(B, device=device)
         cor = torch.tensor(ci, device=device); inc = torch.tensor(ii, device=device)
         m_hard = mask.detach()
+        extras = loss_extras(cl, co, ci, ii)
         a_ig = torch.zeros_like(m_hard); L1 = None
         old_suf = hooker.sufficient; hooker.sufficient = step_cause
         for j in range(1, IG_STEPS + 1):
@@ -1232,7 +1275,7 @@ def main():
             logits = hf(b_ids, attention_mask=b_attn).logits
             Lj = attribution_loss(args.loss, logits[ar, last].float(), cor, inc, corrupt_topk=step_cause,
                                   hinge_margin=args.hinge_margin, acc_temp=args.acc_temp,
-                                  ld_scale=args.ld_scale)
+                                  ld_scale=args.ld_scale, **extras)
             a_ig = a_ig + torch.autograd.grad(Lj, mm)[0]
             if j == IG_STEPS:
                 L1 = Lj.detach()

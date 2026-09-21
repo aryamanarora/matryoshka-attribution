@@ -18,15 +18,21 @@ import torch
 import torch.nn.functional as F
 
 LOSS_CHOICES = ("logit_diff", "ce", "logit", "prob", "hinge", "acc", "ld_tanh",
-                "ld_match", "ld_match_rel", "ld_norm")
+                "ld_match", "ld_match_rel", "ld_norm", "kl", "cmd")
 
 # Losses that need the per-example CLEAN-model margin passed as ``target_d``. Callers use this
 # to decide whether to pay the (cached) clean forward.
-CLEAN_TARGET_LOSSES = ("ld_match", "ld_match_rel", "ld_norm")
+CLEAN_TARGET_LOSSES = ("ld_match", "ld_match_rel", "ld_norm", "cmd")
+# ...the per-example FULLY-PATCHED margin (mask = 0, every variable at its source value) as
+# ``corrupt_d`` -- the "corrupted" reference of MIB's faithfulness normalisation.
+CORRUPT_TARGET_LOSSES = ("cmd",)
+# ...the clean model's last-token LOG-PROBABILITIES over the vocabulary as ``clean_logp`` [B, V].
+CLEAN_LOGITS_LOSSES = ("kl",)
 
 
 def attribution_loss(name, logits, base_id, source_id, *, corrupt_topk,
-                     hinge_margin=2.0, acc_temp=1.0, ld_scale=2.0, target_d=None):
+                     hinge_margin=2.0, acc_temp=1.0, ld_scale=2.0, target_d=None,
+                     corrupt_d=None, clean_logp=None):
     """Scalar loss to minimize.
 
     Args:
@@ -38,9 +44,19 @@ def attribution_loss(name, logits, base_id, source_id, *, corrupt_topk,
         hinge_margin: margin (logits) for --loss hinge.
         acc_temp: temperature for --loss acc (smaller = sharper soft-0-1).
         ld_scale: margin scale (logits) for --loss ld_tanh.
-        target_d: [B] per-example CLEAN-model margins, required by the ld_match* losses.
+        target_d: [B] per-example CLEAN-model margins, required by the ld_match* and cmd losses.
+        corrupt_d: [B] per-example FULLY-PATCHED margins (mask = 0), required by the cmd loss.
+        clean_logp: [B, vocab] clean-model last-token log-probabilities, required by the kl loss.
     """
     ar = torch.arange(logits.shape[0], device=logits.device)
+    if name == "kl":
+        # KL(p_clean || p_masked) over the whole vocabulary at the last position (2026-09-21):
+        # the mask-learning objective of Edge Pruning (Bhaskar et al.), matched to the CLEAN
+        # model's actual prediction rather than to a label. Sufficiency direction only: the
+        # circuit is asked to reproduce the full model's distribution, not just its argmax.
+        assert not corrupt_topk, "kl is defined for the sufficient/iso direction only"
+        assert clean_logp is not None, "kl needs the clean model's log-probs (clean_logp)"
+        return F.kl_div(logits.log_softmax(-1), clean_logp, log_target=True, reduction="batchmean")
     # base-only losses target the BASE token for iso, the SOURCE token for cause (force source)
     tgt = source_id if corrupt_topk else base_id
     if name == "ce":
@@ -82,6 +98,20 @@ def attribution_loss(name, logits, base_id, source_id, *, corrupt_topk,
         assert target_d is not None, "ld_norm needs per-example clean margins (target_d)"
         dn = d / target_d.abs().clamp_min(1.0)
         return dn.mean() if corrupt_topk else -dn.mean()
+    if name == "cmd":
+        # TRAIN-TIME CMD (2026-09-21): MIB's faithfulness of THIS example at THIS budget,
+        # f = (d - d_corr) / (d_clean - d_corr), penalised by |1 - f| -- the integrand of the
+        # CMD metric (area between the faithfulness curve and 1). Unlike every margin loss it
+        # penalises overshoot (f > 1) exactly as it penalises shortfall, and it is normalised
+        # per example by the clean-minus-patched gap, floored at 1 logit (sign kept) so that
+        # near-tie examples do not blow up. Sufficiency direction only, like ld_match.
+        assert not corrupt_topk, "cmd is defined for the sufficient/iso direction only"
+        assert target_d is not None and corrupt_d is not None, \
+            "cmd needs per-example clean (target_d) and fully-patched (corrupt_d) margins"
+        gap = target_d - corrupt_d
+        gap = torch.where(gap >= 0, gap.clamp_min(1.0), gap.clamp_max(-1.0))
+        f = (d - corrupt_d) / gap
+        return (1.0 - f).abs().mean()
     if name in ("ld_match", "ld_match_rel"):
         # MATCHING loss, not a maximisation. Every other margin loss here is monotone in d, so
         # none of them ever PENALISES overshoot -- ld_tanh makes padding a decided example
