@@ -55,10 +55,11 @@ def write_tex(path, data):
          "\\textbf{Loss} & " + hdr + " & \\textbf{Avg} \\\\", "\\midrule"]
     for bi, (key, ylab) in enumerate(METRICS):
         L.append(f"\\multicolumn{{{len(TASKS) + 2}}}{{l}}{{\\textit{{{ylab.replace('(↑)', '($\\uparrow$)')}}}}} \\\\")
-        cols = {t: [data[loss][t][key] for loss, _, _ in LOSSES if data[loss][t] is not None] for t in TASKS}
+        # ties at the printed precision are all bold (Compactness is flat across losses)
+        cols = {t: [round(data[loss][t][key], 2) for loss, _, _ in LOSSES if data[loss][t] is not None] for t in TASKS}
         best = {t: max(v) if v else None for t, v in cols.items()}
-        avgs = {loss: (sum(data[loss][t][key] for t in TASKS if data[loss][t] is not None)
-                       / max(1, sum(data[loss][t] is not None for t in TASKS))) for loss, _, _ in LOSSES}
+        avgs = {loss: round(sum(data[loss][t][key] for t in TASKS if data[loss][t] is not None)
+                            / max(1, sum(data[loss][t] is not None for t in TASKS)), 2) for loss, _, _ in LOSSES}
         best_avg = max(avgs.values())
         for loss, lab, _ in LOSSES:
             cells = []
@@ -66,7 +67,7 @@ def write_tex(path, data):
                 r = data[loss][t]
                 if r is None:
                     cells.append("---"); continue
-                v = r[key]
+                v = round(r[key], 2)
                 cells.append(f"\\textbf{{{v:.2f}}}" if v == best[t] else f"{v:.2f}")
             av = avgs[loss]
             cells.append(f"\\textbf{{{av:.2f}}}" if av == best_avg else f"{av:.2f}")
