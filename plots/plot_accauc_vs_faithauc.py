@@ -1232,6 +1232,11 @@ def main():
                          "log-weighted Faith AUC, plus a leading panel of the same methods on "
                          "MIB node-level validation read from the MIB pkls. Writes "
                          "accauc_vs_cpr.pdf; the paper figure is untouched.")
+    ap.add_argument("--by-loss", action="store_true",
+                    help="--cpr only: CPR vs Compactness with ONE ROW PER TRAINING LOSS (logit-diff, "
+                         "CE, soft-acc) and one column per trained SVA+ substrate (node, MLP, "
+                         "MLP+Attn); no MIB panel, no SAE column (its CE/acc runs are IG/IxG only). "
+                         "Writes accauc_vs_cpr_byloss.pdf (2026-09-21).")
     ap.add_argument("--full", action="store_true",
                     help="--cpr only: ALSO draw the second row (MIB node + SVA+ substrates under "
                          "zero ablation), 2x4 panels. Writes accauc_vs_cpr_full.pdf (appendix). "
@@ -1252,8 +1257,11 @@ def main():
                       else CPR_METHODS if a.cpr else FIGURE_METHODS)
     if a.full and not (a.cpr and not a.zero):
         raise SystemExit("--full is a variant of --cpr only")
+    if a.by_loss and not (a.cpr and not a.zero and not a.full):
+        raise SystemExit("--by-loss is a variant of plain --cpr only")
     suffix = ("_all" if a.draw_all else "_stepless" if a.stepless
-              else "_adam" if a.adam else "_zero" if a.zero else "_full" if a.full else "")
+              else "_adam" if a.adam else "_zero" if a.zero else "_full" if a.full
+              else "_byloss" if a.by_loss else "")
     if a.cpr and (other_cut_flags := (a.draw_all or a.stepless or a.adam)):
         raise SystemExit("--cpr is a variant of the default cut (optionally --zero) only")
     other_cut = a.draw_all or a.stepless or a.adam
@@ -1267,10 +1275,15 @@ def main():
     sources = (STEPLESS_SOURCES if a.stepless
                else [s for s in SOURCES if s[2] == "Zero-abl." and "_input" not in s[0]] if cpr_zero
                else SOURCES if (other_cut or a.zero) else FIGURE_SOURCES)
-    losses = LOSSES if other_cut else FIGURE_LOSSES
+    losses = LOSSES if (other_cut or a.by_loss) else FIGURE_LOSSES
     substrates = SUBSTRATES if other_cut else FIGURE_SUBSTRATES
     if cpr_zero:
         substrates = [(sub, lab) for sub, lab in substrates if sub != "mlp_sae_span"]
+    elif a.by_loss:
+        # The three TRAINED substrates that carry every loss for every method (node from the
+        # 2k tree, MLP / MLP+Attn from the 5k tree via SUBSTRATE_RES). The node column stays:
+        # there is no MIB panel to replace it (MIB has no CE / soft-acc runs).
+        substrates = list(SUBSTRATES)
     elif a.cpr:
         # The MIB test panel IS the node-level comparison, on 11 cells rather than the SVA+
         # node column's 4 groups; keeping both would draw the same ordering twice side by side.
@@ -1351,6 +1364,7 @@ def main():
                     facet = ((f"{abl}\n" if show_abl and not zero_row else "")
                              + (f"{slabel}, {inp_label}" if show_inp else slabel)
                              + (", zero" if zero_row else "")
+                             + (f", {llabel}" if a.by_loss else "")
                              + f"\n{'·'.join(required[sub])}")
                     raw = (tenx_for(sub) if m in TENX_KEYS.values() and res == FIGURE_SOURCES[0][0]
                            else raw_for(res, sub))
@@ -1373,7 +1387,7 @@ def main():
                     rows.append(dict(acc_auc=acc, faith_auc=r[1], cpr=r[3], method=mlabel,
                                      _key=m, loss=llabel, facet=facet, ablation=abl,
                                      groups="+".join(r[2])))
-    if a.cpr and not a.zero:
+    if a.cpr and not a.zero and not a.by_loss:
         # MIB edge (MIB_TEST_EDGE / MIB_EDGE_FACET) dropped from the cut 2026-09-19 (requested):
         # the figure is node-level throughout; the edge numbers stay in the test table.
         rows = (mib_rows(figure_methods)
@@ -1401,7 +1415,12 @@ def main():
                    for abl in abls
                    for inp in (["−input", "+input"] if show_inp else [None])
                    for sub, g in SUB_IN]
-    if a.cpr:
+    if a.by_loss:
+        # rows = losses, logit-diff (the default) first; columns = the three trained substrates.
+        facet_order = [f.replace("\n", f", {ll}\n", 1)
+                       for ll in [LOSSES["logit_diff"], LOSSES["ce"], LOSSES["acc"]]
+                       for f in facet_order if f.split("\n")[0] in ("Node", "MLP", "MLP+Attn")]
+    elif a.cpr:
         # Row 1: MIB node, then SVA+; row 2 the same four columns under zero ablation.
         zero_facets = [f.replace("\n", ", zero\n", 1) for f in facet_order]
         facet_order = [MIB_FACET] + facet_order + ([MIB_ZERO_FACET] + zero_facets if a.full else [])
@@ -1409,7 +1428,7 @@ def main():
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
     # FIGURE_SUBSTRATES and REQUIRED is therefore NOT enough; it must be added here too.
-    keep = set(df["facet"]) | (set(PLACEHOLDER_NOTE) if a.cpr and not a.zero else set())
+    keep = set(df["facet"]) | (set(PLACEHOLDER_NOTE) if a.cpr and not a.zero and not a.by_loss else set())
     df["facet"] = pd.Categorical(df["facet"], [f for f in facet_order if f in keep])
     df["ablation"] = pd.Categorical(df["ablation"], ["Patched", "Zero-abl."])
     # geom_path connects rows in FRAME order, so the sort below is what defines the line, not
@@ -1477,6 +1496,16 @@ def main():
                 draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                               xlabel="Compactness (↑)", colors=fam,
                               figsize=(LAB_FIG[0] * nf / 5, 1.3))
+                print("wrote", out, f"({len(df)} points)")
+                report(df, figure_methods, losses, dropped)
+                return
+            if a.by_loss:
+                # 3 rows (losses) x 3 columns (substrates); Random has no loss (LOSSLESS) and
+                # therefore appears in the logit-diff row only.
+                draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
+                              xlabel="Compactness (↑)", colors=fam,
+                              figsize=(LAB_FIG[0] * 0.9 * 3 / 4, 1.3), markers=CPR_MARKERS,
+                              legend=True, free_lims=True, label_keys=CPR_LABELLED, ncol=3)
                 print("wrote", out, f"({len(df)} points)")
                 report(df, figure_methods, losses, dropped)
                 return
