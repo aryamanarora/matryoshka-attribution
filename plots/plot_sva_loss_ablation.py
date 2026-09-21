@@ -47,12 +47,49 @@ FS_AXIS, FS_TICK, FS_ANNOT, FS_LEG = 6.5, 5.5, 4.0, 6.0
 BAR_W = 0.26
 
 
+def write_tex(path, data):
+    """losses x tasks tabular, one block per metric, best per column in bold; Avg over the tasks
+    a loss has (all ten for every loss on disk)."""
+    hdr = " & ".join(TASK_LABEL[t].replace(" ", "~") for t in TASKS)
+    L = ["\\begin{tabular}{l" + "r" * len(TASKS) + "@{\\quad}r}", "\\toprule",
+         "\\textbf{Loss} & " + hdr + " & \\textbf{Avg} \\\\", "\\midrule"]
+    for bi, (key, ylab) in enumerate(METRICS):
+        L.append(f"\\multicolumn{{{len(TASKS) + 2}}}{{l}}{{\\textit{{{ylab.replace('(↑)', '($\\uparrow$)')}}}}} \\\\")
+        cols = {t: [data[loss][t][key] for loss, _, _ in LOSSES if data[loss][t] is not None] for t in TASKS}
+        best = {t: max(v) if v else None for t, v in cols.items()}
+        avgs = {loss: (sum(data[loss][t][key] for t in TASKS if data[loss][t] is not None)
+                       / max(1, sum(data[loss][t] is not None for t in TASKS))) for loss, _, _ in LOSSES}
+        best_avg = max(avgs.values())
+        for loss, lab, _ in LOSSES:
+            cells = []
+            for t in TASKS:
+                r = data[loss][t]
+                if r is None:
+                    cells.append("---"); continue
+                v = r[key]
+                cells.append(f"\\textbf{{{v:.2f}}}" if v == best[t] else f"{v:.2f}")
+            av = avgs[loss]
+            cells.append(f"\\textbf{{{av:.2f}}}" if av == best_avg else f"{av:.2f}")
+            L.append(f"\\quad {lab} & " + " & ".join(cells) + " \\\\")
+        if bi < len(METRICS) - 1:
+            L.append("\\midrule")
+    L += ["\\bottomrule", "\\end{tabular}"]
+    from pathlib import Path
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n".join(L) + "\n")
+    print("wrote", path)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--res", default="results/sva_sweep")
     ap.add_argument("--method", default="stopk-unif-eps1e-2", help="parse_method key of the arm")
     ap.add_argument("--sub", default="node")
     ap.add_argument("--out", default="plots/sva_loss_ablation.pdf")
+    ap.add_argument("--tex", default=None,
+                    help="write the same numbers as a tabular (losses x tasks, CPR block then "
+                         "Compactness block, best per column bold) and skip the figure; the paper "
+                         "swapped the bars for this table on 2026-09-21")
     a = ap.parse_args()
     raw = V.load(a.res)
     data = {loss: {t: raw.get((a.method, loss, a.sub, t)) for t in TASKS} for loss, _, _ in LOSSES}
@@ -61,6 +98,10 @@ def main():
         print(f"  {lab}: {len(TASKS) - len(miss)}/{len(TASKS)} cells" + (f"; missing {miss}" if miss else ""))
     if all(v is None for d in data.values() for v in d.values()):
         raise SystemExit(f"no cells for method {a.method!r} / substrate {a.sub!r} in {a.res}")
+
+    if a.tex:
+        write_tex(a.tex, data)
+        return
 
     plt.rcParams.update(P.RC)
     fh = HEAD + len(METRICS) * PANEL_H + FOOT
