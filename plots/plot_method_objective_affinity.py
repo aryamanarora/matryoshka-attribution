@@ -105,7 +105,9 @@ def main():
                 if N[i, j] < len(CELLS):
                     ax.text(j + 0.42, i - 0.38, f"n={N[i, j]}", ha="right", va="top", fontsize=4.5,
                             color="#555555")
-    ax.set_xticks(range(len(OBJECTIVES))); ax.set_xticklabels([ol for _, ol in OBJECTIVES], fontsize=6.5)
+    ax.set_xticks(range(len(OBJECTIVES)))
+    ax.set_xticklabels([ol for _, ol in OBJECTIVES], fontsize=6.5,
+                       rotation=35 if len(OBJECTIVES) > 6 else 0, ha="right" if len(OBJECTIVES) > 6 else "center")
     ax.set_yticks(range(len(METHODS))); ax.set_yticklabels([ml for ml, _ in METHODS], fontsize=6)
     for y in range(len(TARGETS), len(BASE) * len(TARGETS), len(TARGETS)):   # rule between methods
         ax.axhline(y - 0.5, color="white", lw=1.2)
