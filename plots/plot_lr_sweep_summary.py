@@ -125,7 +125,7 @@ def lr_of(label):
 def load():
     """{block: [(lr, {metric: mean or None})]}, plus the printed exclusion log.
 
-    Per-metric completeness: a metric's mean is kept only if all len(S.COLS) cells have it.
+    Per-metric completeness: a metric's mean is kept only if all len(M.COLUMNS) cells have it.
     """
     out, skipped = {}, []
     for name, vals, *_ in M.LR_METHODS:
@@ -138,17 +138,20 @@ def load():
             if lr is None:
                 skipped.append(f"  {name} row {lab!r} ({dirn}): not an lr row -- dropped")
                 continue
-            pairs = [S._pair(dirn, t, m) for t, m, _ in S.COLS]
+            # The TABLE's cells (11: no arithmetic_addition, which the LR sweeps never ran), not
+            # the scatter's column set -- that grew to 12 on 2026-09-18 and silently dropped every
+            # LR point of every block from this figure (each read "11/12 -- dropped").
+            pairs = [S._pair(dirn, t, m) for t, m, _ in M.COLUMNS]
             vals_by = {"acc": [a for a, _ in pairs if a is not None],
                        "cpr": [c for _, c in pairs if c is not None]}
             rec, miss = {}, []
             for key in ("cpr", "acc"):
                 got = vals_by[key]
-                if len(got) == len(S.COLS):
+                if len(got) == len(M.COLUMNS):
                     rec[key] = float(np.mean(got))
                 else:
                     rec[key] = None
-                    miss.append(f"{key} {len(got)}/{len(S.COLS)}")
+                    miss.append(f"{key} {len(got)}/{len(M.COLUMNS)}")
             if miss:
                 skipped.append(f"  {name} lr={lab} ({dirn}): {', '.join(miss)} -- "
                                f"dropped from {'those panels' if rec else 'both panels'}")
@@ -221,7 +224,7 @@ def main():
     print("wrote", a.out)
 
     if skipped:
-        print(f"\nexcluded ({len(S.COLS)} MIB validation cells required per metric):")
+        print(f"\nexcluded ({len(M.COLUMNS)} MIB validation cells required per metric):")
         print("\n".join(skipped))
     print("\nbest lr per block (n = lr values plotted):")
     for name, (leg, _, _) in STYLE.items():
