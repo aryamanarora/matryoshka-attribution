@@ -237,8 +237,9 @@ def main():
     # Transposed (--transpose / --split): metric rows x substrate columns, one vertical colourbar
     # per metric row in a CB_W-wide right margin, substrate names as column titles.
     CB_W, T_HEAD = 0.13, 0.22
+    foot = FOOT if any(c[0] in MARK_KEYS for c in COLS) else 0.30   # no underline note -> no strip
     if T:
-        fh = PANEL_H * len(COLS) + T_HEAD + FOOT
+        fh = PANEL_H * len(COLS) + T_HEAD + foot
         fig, axes = plt.subplots(len(COLS), len(rows), figsize=(FIG_W, fh), squeeze=False)
     else:
         fh = PANEL_H * len(rows) + HEAD + FOOT
@@ -305,7 +306,7 @@ def main():
     # figure-level legends, so without it the legend lands on top of the "Learning rate" labels.
     if T:
         fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.35,
-                         rect=(0, 0.20 / fh, 1 - CB_W, 1 - 0.04 / fh))
+                         rect=(0, (foot - 0.30) / fh, 1 - CB_W, 1 - 0.04 / fh))
     else:
         fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.35,
                          rect=(0, 0.20 / fh, 1, 1 - HEAD / fh))
