@@ -74,6 +74,11 @@ CLASSES = [
 ]
 CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
 HEADS = [h for _, hs in CLASSES for h in hs]
+NEG = CLASSES[-1][1]                       # the two heads every method should rank LAST
+# Summary facet: one column, the median rank over the 24 positive circuit heads. The negative
+# name movers are excluded because the sufficiency ranking puts them at the bottom by design
+# (ranks 151-157 for every method), which would only pull the median away from the reading.
+SUMMARY = "Median\n(24 heads)"
 
 # --- methods: (row label, path, layout), top-to-bottom by test-table CPR Avg -----------------
 # flat   = results/<dir>/ioi_gpt2_importances.json   (eval_mib.py layout; MAttr, IntInv, no-learning)
@@ -121,16 +126,18 @@ for spec in METHODS:
     rk = ranks(scores(spec))
     for h in HEADS:
         rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=rk[h]))
+    rows.append(dict(method=spec[0], head="all", cls=SUMMARY,
+                     rank=float(np.median([rk[h] for h in HEADS if h not in NEG]))))
 df = pd.DataFrame(rows)
 df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS][::-1])   # first method on top
-df["head"] = pd.Categorical(df["head"], HEADS)
-df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES])
+df["head"] = pd.Categorical(df["head"], HEADS + ["all"])
+df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES] + [SUMMARY])
 df["log_rank"] = np.log10(df["rank"])
-df["txt"] = df["rank"].astype(str)
+df["txt"] = df["rank"].map(lambda r: f"{r:g}")
 df["txt_col"] = np.where(df["rank"] <= 12, "#ffffff", "#000000")   # dark cells get white text
 
 # Per-class median rank, printed so the figure's reading can be quoted.
-med = df.groupby(["method", "cls"], observed=True)["rank"].median().unstack()
+med = df[df["cls"] != SUMMARY].groupby(["method", "cls"], observed=True)["rank"].median().unstack()
 print(med.reindex([m[0] for m in METHODS]).to_string())
 
 p = (
