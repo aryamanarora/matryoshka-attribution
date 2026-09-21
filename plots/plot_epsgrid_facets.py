@@ -200,6 +200,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default=None, choices=[None, "unifk"],
                     help="unifk: the uniform-k twin (separate trees, separate output file)")
+    ap.add_argument("--transpose", action="store_true",
+                    help="metrics as ROWS and substrates as COLUMNS (colourbars at the right); "
+                         "implied by --split, where two metric rows across four substrate columns "
+                         "make a full-width, short figure")
     ap.add_argument("--split", default=None, choices=[None, "perf", "rho"],
                     help="perf: Compactness + CPR only; rho: the two Spearman columns only. Half-width "
                          "figures (2026-09-21, to shrink the appendix); suffix _perf / _rho on the output.")
@@ -208,10 +212,12 @@ def main():
     if a.tag == "unifk":
         rows, out_path = unifk_rows(), "plots/epsgrid_facets_unifk.pdf"
     global COLS, FIG_W
+    T = a.transpose or bool(a.split)
     if a.split:
         keep = ("acc_auc", "cpr") if a.split == "perf" else ("rho_ig", "rho_sgd")
         COLS = [c for c in COLS if c[0] in keep]
-        FIG_W = FIG_W * len(COLS) / 5 + 0.45   # same cell size; room for the eps tick labels
+        if not T:
+            FIG_W = FIG_W * len(COLS) / 5 + 0.45   # same cell size; room for the eps tick labels
         out_path = out_path.replace(".pdf", f"_{a.split}.pdf")
     M = {}
     for ri, (rlab, res, refs) in enumerate(rows):
@@ -228,12 +234,21 @@ def main():
 
     underline = []
     plt.rcParams.update(P.RC)
-    fh = PANEL_H * len(rows) + HEAD + FOOT
-    fig, axes = plt.subplots(len(rows), len(COLS), figsize=(FIG_W, fh),
-                             squeeze=False)
+    # Transposed (--transpose / --split): metric rows x substrate columns, one vertical colourbar
+    # per metric row in a CB_W-wide right margin, substrate names as column titles.
+    CB_W, T_HEAD = 0.13, 0.22
+    if T:
+        fh = PANEL_H * len(COLS) + T_HEAD + FOOT
+        fig, axes = plt.subplots(len(COLS), len(rows), figsize=(FIG_W, fh), squeeze=False)
+    else:
+        fh = PANEL_H * len(rows) + HEAD + FOOT
+        fig, axes = plt.subplots(len(rows), len(COLS), figsize=(FIG_W, fh),
+                                 squeeze=False)
     for ci, (key, title, cmap, vmin, vmax, tf) in enumerate(COLS):
         for ri, (rlab, _, _) in enumerate(rows):
-            ax = axes[ri][ci]
+            ax = axes[ci][ri] if T else axes[ri][ci]
+            last_row = (ci == len(COLS) - 1) if T else (ri == len(rows) - 1)
+            first_col = (ri == 0) if T else (ci == 0)
             m = M[(ri, key)]
             norm = (TwoSlopeNorm(vcenter=1.0, vmin=vmin, vmax=vmax)
                     if key == "cpr" else None)
@@ -267,16 +282,19 @@ def main():
                             underline.append(t)
             ax.set_xticks(range(len(LRS)))
             ax.set_yticks(range(len(EPSS)))
-            ax.set_xticklabels(LRS if ri == len(rows) - 1 else [])
-            ax.set_yticklabels(EPS_LAB if ci == 0 else [])
+            ax.set_xticklabels(LRS if last_row else [])
+            ax.set_yticklabels(EPS_LAB if first_col else [])
             ax.tick_params(labelsize=FS_TICK, length=1.2, pad=1.0)
             for sp in ax.spines.values():
                 sp.set_linewidth(0.5)
-            if ci == 0:
+            if first_col:
                 ax.set_ylabel("Adam $\\epsilon$", fontsize=FS_LAB, labelpad=1.5)
-            if ri == len(rows) - 1:
+            if last_row:
                 ax.set_xlabel("Learning rate", fontsize=FS_LAB, labelpad=1.5)
-            if ci == len(COLS) - 1:
+            if T:
+                if ci == 0:
+                    ax.set_title(rlab, fontsize=FS_STRIP, pad=2.5)
+            elif ci == len(COLS) - 1:
                 # Facet strip on the right, ggplot-style: the substrate name is ~0.6in at 6pt
                 # rotated, which fits a PANEL_H-tall panel where a left-hand label would eat
                 # width the four lr columns need.
@@ -285,11 +303,28 @@ def main():
 
     # Bottom of the rect reserves the marker legend's strip; tight_layout does not know about
     # figure-level legends, so without it the legend lands on top of the "Learning rate" labels.
-    fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.35,
-                     rect=(0, 0.20 / fh, 1, 1 - HEAD / fh))
+    if T:
+        fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.35,
+                         rect=(0, 0.20 / fh, 1 - CB_W, 1 - 0.04 / fh))
+    else:
+        fig.tight_layout(pad=0.3, w_pad=0.5, h_pad=0.35,
+                         rect=(0, 0.20 / fh, 1, 1 - HEAD / fh))
     # ONE COLOURBAR PER COLUMN, above row 0 and spanning that column's width. Horizontal because
     # a vertical bar per column would cost four times its width out of the data area.
+    # (Transposed: one VERTICAL bar per metric row, in the right margin, title rotated beside it.)
     for ci, (key, title, cmap, vmin, vmax, tf) in enumerate(COLS):
+        if T:
+            b0 = axes[ci][-1].get_position()
+            cax = fig.add_axes([b0.x1 + 0.012, b0.y0 + 0.04 * b0.height, 0.012, 0.92 * b0.height])
+            cb = fig.colorbar(axes[ci][-1].images[0], cax=cax, orientation="vertical")
+            cb.ax.tick_params(labelsize=FS_TICK, width=0.3, length=1.2, pad=0.8)
+            cb.ax.yaxis.set_major_locator(MaxNLocator(4, prune="upper"))
+            cb.outline.set_linewidth(0.5)
+            cax.text(4.6, 0.5, title, transform=cax.transAxes, rotation=270,
+                     va="center", ha="left", fontsize=FS_LAB)
+            if key == "cpr":
+                cb.ax.axhline(1.0, color="#000000", lw=0.6)
+            continue
         b0 = axes[0][ci].get_position()
         # 92% of the column width, centred: at full width the faith bar's "2.0" tick label
         # collided with the next bar's "0.0" and read as "2.00.0".
