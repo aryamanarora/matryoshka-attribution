@@ -56,7 +56,7 @@ D_SAE = 32768
 NP_MODEL, NP_SET = "llama3.1-8b", "{layer}-llamascope-mlp-32k"
 NP_CACHE = ROOT / "results" / "neuronpedia_cache.json"
 COL = {"neuron": METHOD["MAttr"], "latent": "#d55e00"}      # Wong blue / Wong vermillion
-DESC_CHARS = 58
+DESC_CHARS = 56
 
 
 def top_neurons(task):
@@ -92,8 +92,9 @@ def top_latents(task):
 
 
 def clip(s, n=DESC_CHARS):
-    s = " ".join((s or "").split())
-    return s if len(s) <= n else textwrap.shorten(s, n, placeholder="…")
+    """One line, Transluce's {{token}} markers unwrapped to quotes, word-boundary truncated."""
+    s = " ".join((s or "(no description)").split()).replace("{{", "\u2018").replace("}}", "\u2019")
+    return s if len(s) <= n else textwrap.shorten(s, n, placeholder="\u2026")
 
 
 def main():
@@ -132,10 +133,11 @@ def main():
                 continue
             lab, desc, sc, kind = r
             rel = sc / top[kind] if top[kind] > 0 else 0
-            ax.barh(yy, rel, height=0.72, color=COL[kind], alpha=0.85, edgecolor="none")
+            ax.barh(yy, rel, height=0.72, color=COL[kind], alpha=0.28, edgecolor="none")
             ax.text(-0.02, yy, lab, ha="right", va="center", fontsize=5.6,
                     color=COL[kind], fontweight="bold")
-            ax.text(0.02, yy, desc, ha="left", va="center", fontsize=5.2, color="#000")
+            ax.text(0.015, yy, desc, ha="left", va="center", fontsize=5.0, color="#000",
+                    clip_on=True)
         ax.set_xlim(0, 1); ax.set_ylim(-0.6, len(rows) - 0.4)
         ax.set_yticks([]); ax.set_xticks([0, 0.5, 1]); ax.set_xticklabels(["0", "½", "1"])
         ax.set_title(disp, pad=3)
@@ -148,7 +150,7 @@ def main():
     fig.legend(handles=[Patch(color=COL["neuron"], label="MLP neurons (mlp substrate)"),
                         Patch(color=COL["latent"], label="MLP-output SAE latents (Llama Scope 32k)")],
                loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 1.0))
-    fig.tight_layout(rect=(0.12, 0, 1, 0.975), h_pad=1.0, w_pad=3.6)
+    fig.tight_layout(rect=(0.11, 0, 1, 0.975), h_pad=1.0, w_pad=4.2)
     NT.save_cache()
     json.dump(np_cache, open(NP_CACHE, "w"))
     OUT.mkdir(parents=True, exist_ok=True)
