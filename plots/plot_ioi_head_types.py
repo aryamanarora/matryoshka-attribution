@@ -2,9 +2,12 @@
 
 One heatmap, test-split rankings: rows are the key MIB node-level methods (ordered by their
 test-table CPR average), columns are the 26 attention heads of the Wang et al. (2023) IOI
-circuit grouped by head class, cell = the head's rank among all 157 nodes under that method
-(1 = most important; colour on a log scale, text = rank). A method that "finds the circuit"
-reads as a dark row; a class it misses reads as a light block.
+circuit grouped by head class, cell = the head's rank among all 157 nodes under that method.
+Ranks in the top half (1-78) print as positive numbers in blue (1 = darkest); ranks in the
+bottom half print as NEGATIVE numbers counted from the bottom in red (-1 = last of 157,
+darkest), so "this method actively ranks the head as harmful" reads as red at a glance rather
+than as a large number. White is the median rank. A method that "finds the circuit" reads as a
+blue row with red only under the negative name movers.
 
 Head classes are Wang et al.'s (Figure 2 / Table 2). The negative name movers are the heads
 McDougall et al. (2023) later characterised as copy-suppression heads, so that column is
@@ -39,7 +42,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.6, 2.35),
+        figure_size=(5.5, 2.35),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         axis_text_x=element_text(size=5.5, rotation=90, hjust=0.5, vjust=0.5),
@@ -70,15 +73,10 @@ CLASSES = [
     ("Name\nmover",               ["a9.h6", "a9.h9", "a10.h0"]),
     ("Backup\nname mover",        ["a9.h0", "a9.h7", "a10.h1", "a10.h2", "a10.h6", "a10.h10",
                                    "a11.h2", "a11.h9"]),
-    ("Neg. NM /\ncopy sup.", ["a10.h7", "a11.h10"]),
+    ("Negative NM /\ncopy suppr.", ["a10.h7", "a11.h10"]),
 ]
 CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
 HEADS = [h for _, hs in CLASSES for h in hs]
-NEG = CLASSES[-1][1]                       # the two heads every method should rank LAST
-# Summary facet: one column, the median rank over the 24 positive circuit heads. The negative
-# name movers are excluded because the sufficiency ranking puts them at the bottom by design
-# (ranks 151-157 for every method), which would only pull the median away from the reading.
-SUMMARY = "Median\n(24 pos.)"
 
 # --- methods: (row label, path, layout), top-to-bottom by test-table CPR Avg -----------------
 # flat   = results/<dir>/ioi_gpt2_importances.json   (eval_mib.py layout; MAttr, IntInv, no-learning)
@@ -97,6 +95,21 @@ METHODS = [
     ("Random",             "random_s42/Random_patching_node",                "nested"),
 ]
 N_NODES = 157
+HALF = (N_NODES + 1) / 2          # 79: the median rank, drawn white
+
+
+def signed(rank):
+    """Signed log distance from the median rank: +log10(79/rank) in the top half (rank 1 ->
+    +1.9), -log10(79/(158-rank)) in the bottom half (rank 157 -> -1.9). Symmetric, so one
+    diverging scale serves both halves and the two extremes are equally dark."""
+    if rank <= HALF:
+        return np.log10(HALF / rank)
+    return -np.log10(HALF / (N_NODES + 1 - rank))
+
+
+def label(rank):
+    """Top half: the rank. Bottom half: minus the rank from the bottom (-1 = last)."""
+    return str(rank) if rank <= HALF else f"\u2212{N_NODES + 1 - rank}"
 
 
 def load(path):
@@ -126,31 +139,31 @@ for spec in METHODS:
     rk = ranks(scores(spec))
     for h in HEADS:
         rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=rk[h]))
-    rows.append(dict(method=spec[0], head="med.", cls=SUMMARY,
-                     rank=float(np.median([rk[h] for h in HEADS if h not in NEG]))))
 df = pd.DataFrame(rows)
 df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS][::-1])   # first method on top
-df["head"] = pd.Categorical(df["head"], HEADS + ["med."])
-df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES] + [SUMMARY])
-df["log_rank"] = np.log10(df["rank"])
-df["txt"] = df["rank"].map(lambda r: f"{r:g}")
-df["txt_col"] = np.where(df["rank"] <= 12, "#ffffff", "#000000")   # dark cells get white text
+df["head"] = pd.Categorical(df["head"], HEADS)
+df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES])
+df["u"] = df["rank"].map(signed)
+df["txt"] = df["rank"].map(label)
+L = np.log10(HALF)
+df["txt_col"] = np.where(df["u"].abs() > L - np.log10(12), "#ffffff", "#000000")   # dark cells
 
 # Per-class median rank, printed so the figure's reading can be quoted.
-med = df[df["cls"] != SUMMARY].groupby(["method", "cls"], observed=True)["rank"].median().unstack()
+med = df.groupby(["method", "cls"], observed=True)["rank"].median().unstack()
 print(med.reindex([m[0] for m in METHODS]).to_string())
 
 p = (
-    ggplot(df, aes("head", "method", fill="log_rank"))
+    ggplot(df, aes("head", "method", fill="u"))
     + geom_tile(color="#ffffff", size=0.3)
-    + geom_text(aes(label="txt", color="txt_col"), size=4.6)
+    + geom_text(aes(label="txt", color="txt_col"), size=4.4)
     + facet_grid(cols="cls", scales="free_x", space="free_x")
-    + scale_fill_cmap("Blues_r", name="Rank", limits=(0, np.log10(N_NODES)),
-                      breaks=[0, 1, 2], labels=["1", "10", "100"])
+    + scale_fill_cmap("RdBu", name="Rank", limits=(-L, L),
+                      breaks=[L, L - 1, 0, -(L - 1), -L],
+                      labels=["1", "10", "79", "\u221210", "\u22121"])
     + scale_x_discrete(expand=(0, 0))
     + scale_y_discrete(expand=(0, 0))
     + labs(x="", y="")
-    + theme(legend_key_height=14, legend_key_width=5)
+    + theme(legend_key_height=11, legend_key_width=5)
 )
 # geom_text's colour is data-driven (white on dark cells); take it verbatim, no legend.
 p = p + scale_color_identity()
