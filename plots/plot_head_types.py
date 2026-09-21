@@ -79,8 +79,8 @@ theme_set(
 # that detect the duplicated name, the induction/S-inhibition path, then the heads that write the
 # answer. Class labels are the strip text; "\n" keeps each strip to two short lines.
 CLASSES_IOI = [
-    ("Duplicate\ntoken",          ["a0.h1", "a0.h10", "a3.h0"]),
-    ("Previous\ntoken",           ["a2.h2", "a4.h11"]),
+    ("Dup.\ntoken",               ["a0.h1", "a0.h10", "a3.h0"]),
+    ("Prev.\ntoken",              ["a2.h2", "a4.h11"]),
     ("Induction",                 ["a5.h5", "a5.h8", "a5.h9", "a6.h9"]),
     ("S-inhibition",              ["a7.h3", "a7.h9", "a8.h6", "a8.h10"]),
     ("Name\nmover",               ["a9.h6", "a9.h9", "a10.h0"]),
@@ -104,7 +104,7 @@ TASKS = {
     # Widths: the IOI cut fits \textwidth; the arithmetic one has 38 columns and 3-4 digit ranks,
     # so it is drawn wider (an appendix figure, scaled by \includegraphics[width=\textwidth]).
     "ioi":   dict(cells=[("ioi", "gpt2", "IOI / GPT-2")], classes=CLASSES_IOI,
-                  out="ioi_head_types", width=5.5, height=2.1),
+                  out="ioi_head_types", width=5.9, height=2.1),
     "arith": dict(cells=[("arithmetic_addition", "llama3", "Arith. (+)\nLlama"),
                          ("arithmetic_subtraction", "llama3", "Arith. (−)\nLlama")],
                   classes=CLASSES_ARITH, out="arith_head_types", width=7.2, height=3.9),
