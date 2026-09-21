@@ -9,6 +9,11 @@ darkest), so "this method actively ranks the head as harmful" reads as red at a 
 than as a large number. White is the median rank. A method that "finds the circuit" reads as a
 blue row with red only under the negative name movers.
 
+Node Pruning and DBM are mask learners, not rankers: their rows show membership of the learned
+circuit (check = gate open, i.e. mask logit > 0: sigmoid(logit) > 0.5 for DBM's gate, and for
+Node Pruning's hard-concrete gate the sign of log_alpha, which at its target sparsity 0.5 opens
+80 of the 157 nodes) rather than a rank.
+
 Head classes are Wang et al.'s (Figure 2 / Table 2). The negative name movers are the heads
 McDougall et al. (2023) later characterised as copy-suppression heads, so that column is
 labelled with both names.
@@ -17,7 +22,8 @@ Rank = 1 + #nodes with a strictly larger score, over all 157 nodes (input, 144 h
 i.e. exactly the order MIB's evaluate_area_under_curve consumes (absolute=False). Gradient
 baselines are attributed on the train split and are split-independent (the fork's
 importances.json); MAttr / IntInv / no-learning read their test-run importances; Node Pruning
-and DBM read the learned mask logits in graph_ioi_gpt2.json.
+and DBM read the learned mask logits in graph_ioi_gpt2.json. Random and the no-learning
+control were in the first cut and dropped (requested 2026-09-20).
 
     uv run python plots/plot_ioi_head_types.py   ->  paper/figs/ioi_head_types.pdf
 """
@@ -42,7 +48,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 2.35),
+        figure_size=(5.5, 2.1),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         axis_text_x=element_text(size=5.5, rotation=90, hjust=0.5, vjust=0.5),
@@ -79,8 +85,9 @@ CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
 HEADS = [h for _, hs in CLASSES for h in hs]
 
 # --- methods: (row label, path, layout), top-to-bottom by test-table CPR Avg -----------------
-# flat   = results/<dir>/ioi_gpt2_importances.json   (eval_mib.py layout; MAttr, IntInv, no-learning)
-# graph  = results/<dir>/graph_ioi_gpt2.json          (Node Pruning / DBM mask logits)
+# flat   = results/<dir>/ioi_gpt2_importances.json   (eval_mib.py layout; MAttr, IntInv)
+# graph  = results/<dir>/graph_ioi_gpt2.json          (Node Pruning / DBM mask logits; drawn as
+#                                                      circuit MEMBERSHIP, logit > 0, not rank)
 # nested = <fork results>/<dir>/ioi_gpt2/importances.json (run_attribution.py baselines)
 METHODS = [
     ("MAttr",              "test_node_topk_uniform_lr05",                    "flat"),
@@ -91,9 +98,8 @@ METHODS = [
     ("Expected Gradients", "napig_mc/EAP-IG-inputs-mc_patching_node",        "nested"),
     ("IG (m=10)",          "napig10/EAP-IG-inputs_patching_node",            "nested"),
     ("I×G",                "ig1/EAP-IG-inputs_patching_node",                "nested"),
-    ("− learning",         "test_node_topkid_uniform_frozen",                "flat"),
-    ("Random",             "random_s42/Random_patching_node",                "nested"),
 ]
+MEMBER_U = 0.62      # fill for the membership rows, as a fraction of the scale's half-range
 N_NODES = 157
 HALF = (N_NODES + 1) / 2          # 79: the median rank, drawn white
 
@@ -134,23 +140,33 @@ def ranks(s):
     return {n: int((v > s[n]).sum()) + 1 for n in s}
 
 
+L = np.log10(HALF)
 rows = []
 for spec in METHODS:
-    rk = ranks(scores(spec))
+    sc = scores(spec); rk = ranks(sc); member = spec[2] == "graph"
     for h in HEADS:
-        rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=rk[h]))
+        r = rk[h]
+        if member:
+            inc = sc[h] > 0
+            rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=r,
+                             u=(MEMBER_U if inc else -MEMBER_U) * L, txt="\u2713" if inc else "\u2717",
+                             txt_col="#000000"))
+        else:
+            u = signed(r)
+            rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=r, u=u, txt=label(r),
+                             txt_col="#ffffff" if abs(u) > L - np.log10(12) else "#000000"))
+    if member:
+        print(f"{spec[0]}: {sum(v > 0 for v in sc.values())}/{N_NODES} nodes in the learned circuit, "
+              f"{sum(sc[h] > 0 for h in HEADS)}/{len(HEADS)} of the Wang heads")
 df = pd.DataFrame(rows)
 df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS][::-1])   # first method on top
 df["head"] = pd.Categorical(df["head"], HEADS)
 df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES])
-df["u"] = df["rank"].map(signed)
-df["txt"] = df["rank"].map(label)
-L = np.log10(HALF)
-df["txt_col"] = np.where(df["u"].abs() > L - np.log10(12), "#ffffff", "#000000")   # dark cells
 
-# Per-class median rank, printed so the figure's reading can be quoted.
-med = df.groupby(["method", "cls"], observed=True)["rank"].median().unstack()
-print(med.reindex([m[0] for m in METHODS]).to_string())
+# Per-class median rank of the ranking methods, printed so the figure's reading can be quoted.
+rankers = [m[0] for m in METHODS if m[2] != "graph"]
+med = df[df["method"].isin(rankers)].groupby(["method", "cls"], observed=True)["rank"].median().unstack()
+print(med.reindex(rankers).to_string())
 
 p = (
     ggplot(df, aes("head", "method", fill="u"))
