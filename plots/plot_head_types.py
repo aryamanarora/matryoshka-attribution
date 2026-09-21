@@ -34,6 +34,7 @@ Random and the no-learning control were in the first cut and dropped (requested 
 """
 import argparse
 import json
+import pickle
 import sys
 from pathlib import Path
 
@@ -93,18 +94,20 @@ CLASSES_IOI = [
 # --only. The MLP classes are the paper's layer ranges, not a per-layer list. (One facet per
 # single head made the strip labels collide; the shared heads share a strip.)
 CLASSES_ARITH = [
-    ("Shared heads\n(op, operands)", ["a2.h2", "a15.h13", "a16.h21", "a14.h12"]),
-    ("+ only",             ["a5.h3", "a5.h31"]),
-    ("− only",        ["a13.h21", "a13.h22"]),
-    ("MLP 0",              ["m0"]),
-    ("Late MLPs (16–31): heuristic neurons", [f"m{l}" for l in range(16, 32)]),
+    ("Shared\nheads",      ["a2.h2", "a15.h13", "a16.h21", "a14.h12"]),
+    ("+\nonly",            ["a5.h3", "a5.h31"]),
+    ("−\nonly",       ["a13.h21", "a13.h22"]),
+    ("MLP\n0",             ["m0"]),
+    ("Late MLPs (16–31):\nheuristic neurons", [f"m{l}" for l in range(16, 32)]),
 ]
 TASKS = {
+    # Widths: the IOI cut fits \textwidth; the arithmetic one has 38 columns and 3-4 digit ranks,
+    # so it is drawn wider (an appendix figure, scaled by \includegraphics[width=\textwidth]).
     "ioi":   dict(cells=[("ioi", "gpt2", "IOI / GPT-2")], classes=CLASSES_IOI,
-                  out="ioi_head_types", height=2.1),
+                  out="ioi_head_types", width=5.5, height=2.1),
     "arith": dict(cells=[("arithmetic_addition", "llama3", "Arith. (+)\nLlama"),
                          ("arithmetic_subtraction", "llama3", "Arith. (−)\nLlama")],
-                  classes=CLASSES_ARITH, out="arith_head_types", height=3.7),
+                  classes=CLASSES_ARITH, out="arith_head_types", width=7.2, height=3.9),
 }
 
 # --- methods: (row label, path, layout), top-to-bottom by test-table CPR Avg -----------------
@@ -112,17 +115,42 @@ TASKS = {
 # graph  = results/<dir>/graph_<task>_<model>.json          (Node Pruning / DBM mask logits; drawn
 #                                                            as circuit MEMBERSHIP, logit > 0)
 # nested = <fork results>/<dir>/<task-dash>_<model>/importances.json (run_attribution.py baselines)
+# The 4th field locates the method's TEST-split CPR pkl (the test table's own dirs), drawn in a
+# last grey column so the ranking can be read against the score it earns:
+#   ("ours", dir)       results/<dir>/<task>_<model>_test.pkl                    (eval_mib.py)
+#   ("mib", dir, sub)   results/<dir>/<sub>/<task-dash>_<model>_test_abs-False.pkl (run_evaluation)
 METHODS = [
-    ("MAttr",              "test_node_topk_uniform_lr05",                    "flat"),
-    ("IntInv",             "test_node_actpatch_noise",                       "flat"),
-    ("Node Pruning",       "eprun_node_s0.5_ld",                             "graph"),
-    ("DBM",                "eprun_node_ld_sig_lr0.3_l16.0",                  "graph"),
-    ("AttnLRP",            "attnlrp/AttnLRP_patching_node",                  "nested"),
-    ("Expected Gradients", "napig_mc/EAP-IG-inputs-mc_patching_node",        "nested"),
-    ("IG (m=10)",          "napig10/EAP-IG-inputs_patching_node",            "nested"),
-    ("I×G",                "ig1/EAP-IG-inputs_patching_node",                "nested"),
+    ("MAttr",              "test_node_topk_uniform_lr05",                    "flat",
+     ("ours", "test_node_topk_uniform_lr05")),
+    ("IntInv",             "test_node_actpatch_noise",                       "flat",
+     ("ours", "test_node_actpatch_noise")),
+    ("Node Pruning",       "eprun_node_s0.5_ld",                             "graph",
+     ("mib", "eprun_eval_s0.5_ld", "EdgePruning_patching_node")),
+    ("DBM",                "eprun_node_ld_sig_lr0.3_l16.0",                  "graph",
+     ("mib", "eprun_eval_ld_sig_lr0.3_l16.0", "EdgePruning_patching_node")),
+    ("AttnLRP",            "attnlrp/AttnLRP_patching_node",                  "nested",
+     ("mib", "attnlrp_eval", "AttnLRP_patching_node")),
+    ("Expected Gradients", "napig_mc/EAP-IG-inputs-mc_patching_node",        "nested",
+     ("mib", "napig_mc_test", "EAP-IG-inputs-mc_patching_node")),
+    ("IG (m=10)",          "napig10/EAP-IG-inputs_patching_node",            "nested",
+     ("mib", "napig10_test", "EAP-IG-inputs_patching_node")),
+    ("I×G",                "ig1/EAP-IG-inputs_patching_node",                "nested",
+     ("mib", "ig1_test", "EAP-IG-inputs_patching_node")),
 ]
 MEMBER_U = 0.62      # fill for the membership rows, as a fraction of the scale's half-range
+CPR_CLASS = "Test\nCPR"
+
+
+def cpr(spec, task, model):
+    """Test-split CPR AUC (area_under) of the method on this cell, or None if not on disk."""
+    loc = spec[3]
+    p = (R / loc[1] / f"{task}_{model}_test.pkl" if loc[0] == "ours"
+         else R / loc[1] / loc[2] / f"{task.replace('_', '-')}_{model}_test_abs-False.pkl")
+    if not p.exists():
+        print(f"no test pkl for {spec[0]} on {task}/{model}: {p}")
+        return None
+    with open(p, "rb") as f:
+        return float(pickle.load(f)["area_under"])
 
 
 def signed(rank, n):
@@ -145,7 +173,7 @@ def load(path):
 
 
 def scores(spec, task, model):
-    _, loc, layout = spec
+    _, loc, layout = spec[:3]
     if layout == "flat":
         return load(R / loc / f"{task}_{model}_importances.json")
     if layout == "graph":
@@ -173,7 +201,7 @@ mattr = METHODS[0]; assert mattr[0] == "MAttr"
 mean_rank = pd.DataFrame({cell: ranks(scores(mattr, task, model))
                           for task, model, cell in T["cells"]}).mean(axis=1)
 extra = [n for n in mean_rank.sort_values().index if n not in classed][:10]
-CLASSES.append(("Other: MAttr top-10", extra))
+CLASSES.append(("Other:\nMAttr top-10", extra))
 print("MAttr top-10 outside the taxonomy (mean rank over cells):",
       ", ".join(f"{n} ({mean_rank[n]:g})" for n in extra))
 CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
@@ -202,10 +230,13 @@ for task, model, cell in T["cells"]:
             print(f"{cell.replace(chr(10), ' ')} {spec[0]}: {sum(v > 0 for v in sc.values())}/{n} "
                   f"nodes in the learned circuit, {sum(sc[h] > 0 for h in HEADS)}/{len(HEADS)} "
                   f"of the published circuit nodes")
+        v = cpr(spec, task, model)     # grey cell, no fill on the rank scale
+        rows.append(dict(cell=cell, method=spec[0], head="CPR", cls=CPR_CLASS, rank=np.nan,
+                         u=np.nan, txt="—" if v is None else f"{v:.2f}", txt_col="#000000"))
 df = pd.DataFrame(rows)
 df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS][::-1])   # first method on top
-df["head"] = pd.Categorical(df["head"], HEADS)
-df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES])
+df["head"] = pd.Categorical(df["head"], HEADS + ["CPR"])
+df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES] + [CPR_CLASS])
 df["cell"] = pd.Categorical(df["cell"], [c for _, _, c in T["cells"]])
 
 # Per-class median rank of the ranking methods, printed so the figure's reading can be quoted.
@@ -228,11 +259,12 @@ p = (
     + geom_tile(color="#ffffff", size=0.3)
     + geom_text(aes(label="txt", color="txt_col"), size=4.4)
     + facets
-    + scale_fill_cmap("RdBu", name="Rank", limits=(-L, L), breaks=breaks, labels=labels)
+    + scale_fill_cmap("RdBu", name="Rank", limits=(-L, L), breaks=breaks, labels=labels,
+                      na_value="#e8e8e8")
     + scale_x_discrete(expand=(0, 0))
     + scale_y_discrete(expand=(0, 0))
     + labs(x="", y="")
-    + theme(legend_key_height=44, legend_key_width=5, figure_size=(5.5, T["height"]),
+    + theme(legend_key_height=44, legend_key_width=5, figure_size=(T["width"], T["height"]),
             strip_text_y=element_text(size=6.2, angle=-90))
 )
 # geom_text's colour is data-driven (white on dark cells); take it verbatim, no legend.
