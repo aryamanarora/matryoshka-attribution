@@ -87,13 +87,13 @@ CLASSES_IOI = [
                                    "a11.h2", "a11.h9"]),
     ("Negative NM /\ncopy suppr.", ["a10.h7", "a11.h10"]),
 ]
-# Arithmetic / Llama-3.1-8B (Nikankin et al. 2025, Table 2, LxHy -> ax.hy). a14.h12 is in both
-# the + and the - circuit; a5.h3 / a5.h31 are +-only, a13.h21 / a13.h22 are --only. The MLP
-# classes are the paper's layer ranges, not a per-layer list.
+# Arithmetic / Llama-3.1-8B (Nikankin et al. 2025, Table 2, LxHy -> ax.hy). The shared heads are
+# in both operators' circuits: a2.h2 attends to the operator, a15.h13 to the second operand,
+# a16.h21 to the first, a14.h12 is unlabelled; a5.h3 / a5.h31 are +-only, a13.h21 / a13.h22 are
+# --only. The MLP classes are the paper's layer ranges, not a per-layer list. (One facet per
+# single head made the strip labels collide; the shared heads share a strip.)
 CLASSES_ARITH = [
-    ("Operator\nhead",     ["a2.h2"]),
-    ("Operand\nheads",     ["a15.h13", "a16.h21"]),
-    ("Both\n+ and −", ["a14.h12"]),
+    ("Shared heads\n(op, operands)", ["a2.h2", "a15.h13", "a16.h21", "a14.h12"]),
     ("+ only",             ["a5.h3", "a5.h31"]),
     ("− only",        ["a13.h21", "a13.h22"]),
     ("MLP 0",              ["m0"]),
@@ -205,7 +205,7 @@ for cell in df["cell"].cat.categories:
              .reindex(rankers).to_string())
 
 # Legend: the decades of the top half, the median, the decades of the bottom half.
-dec = int(np.floor(L))
+dec = int(np.ceil(L))          # 1.9 -> 1, 10; 2.72 -> 1, 10, 100
 breaks = [L - i for i in range(dec)] + [0] + [-(L - i) for i in range(dec)][::-1]
 labels = ([f"{10 ** i:d}" for i in range(dec)] + [f"{round(10 ** L)}"]
           + [f"−{10 ** i:d}" for i in range(dec)][::-1])
@@ -220,7 +220,7 @@ p = (
     + scale_x_discrete(expand=(0, 0))
     + scale_y_discrete(expand=(0, 0))
     + labs(x="", y="")
-    + theme(legend_key_height=24, legend_key_width=5, figure_size=(5.5, T["height"]),
+    + theme(legend_key_height=44, legend_key_width=5, figure_size=(5.5, T["height"]),
             strip_text_y=element_text(size=6.2, angle=-90))
 )
 # geom_text's colour is data-driven (white on dark cells); take it verbatim, no legend.
