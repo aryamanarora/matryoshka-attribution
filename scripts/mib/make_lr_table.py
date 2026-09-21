@@ -320,14 +320,15 @@ DAGGER_CELLS = {("ioi", "llama3")}  # capped at 200 in all 3 MAttr blocks (not R
 # logs/eprun_*.out counts to /3000 for every eprun_* dir including the default-LR rows.
 STEPS = {
     "\\ourmethod{}": "500 steps",
-    "$+$ SGD": "500 steps",
+    "$+$ log $k$": "500 steps",
+    "$+$ log $k$, $+$ SGD": "500 steps",
     # submit_softuni_sgd_lr.sh passes --steps 500, same as every other MAttr block. Without an
     # entry here the block renders with NO step note while the blocks around it carry one,
     # which reads as "unknown/unmatched budget" for the one block whose whole job is to be
-    # matched to "$+$ SGD".
-    "$+$ SGD, $+$ unif $k$": "500 steps",
+    # matched to the block above.
+    "$+$ SGD": "500 steps",
+    "$+$ log $k$, $+$ hard": "500 steps",
     "$+$ hard": "500 steps",
-    "$+$ unif $k$, $+$ hard": "500 steps",
     "$+$ hard bwd (REINFORCE)": "500 steps; 2000 in the last row",
     "DBM": "3000 steps",
     "DBM $+$ L1 (lr $=$ 0.3)": "3000 steps",
