@@ -1232,6 +1232,11 @@ def main():
                          "log-weighted Faith AUC, plus a leading panel of the same methods on "
                          "MIB node-level validation read from the MIB pkls. Writes "
                          "accauc_vs_cpr.pdf; the paper figure is untouched.")
+    ap.add_argument("--full", action="store_true",
+                    help="--cpr only: ALSO draw the second row (MIB node + SVA+ substrates under "
+                         "zero ablation), 2x4 panels. Writes accauc_vs_cpr_full.pdf (appendix). "
+                         "Without it --cpr is the one-row patching figure, accauc_vs_cpr.pdf "
+                         "(main text, 2026-09-20).")
     ap.add_argument("--y-cpr", action="store_true",
                     help="THE PAPER'S DEFAULT CUT, unchanged in panels, methods and renderer, with "
                          "the linear CPR on y instead of the log-weighted Faith AUC (CPR is the "
@@ -1245,8 +1250,10 @@ def main():
                       else STEPLESS_METHODS if a.stepless
                       else ADAM_METHODS if a.adam
                       else CPR_METHODS if a.cpr else FIGURE_METHODS)
+    if a.full and not (a.cpr and not a.zero):
+        raise SystemExit("--full is a variant of --cpr only")
     suffix = ("_all" if a.draw_all else "_stepless" if a.stepless
-              else "_adam" if a.adam else "_zero" if a.zero else "")
+              else "_adam" if a.adam else "_zero" if a.zero else "_full" if a.full else "")
     if a.cpr and (other_cut_flags := (a.draw_all or a.stepless or a.adam)):
         raise SystemExit("--cpr is a variant of the default cut (optionally --zero) only")
     other_cut = a.draw_all or a.stepless or a.adam
@@ -1313,8 +1320,10 @@ def main():
     # --cpr (2026-09-18): a SECOND ROW of panels for zero ablation -- the SVA+ substrates from the
     # 5k zero tree (results/sva_zeroabl_5k, submit_zero_5k_sc.sh) -- facet-suffixed ", zero".
     # A source tagged ZERO_ROW is routed to that tree for every substrate (no SUBSTRATE_RES / 10x).
+    # Since 2026-09-20 the zero row is --full only: the main-text figure is the patching row alone,
+    # and the 2x4 version lives in the appendix next to the zero-ablation tables.
     ZERO_ROW = "Zero-abl. (5k)"
-    if a.cpr and not a.zero:
+    if a.cpr and not a.zero and a.full:
         sources = list(sources) + [("results/sva_zeroabl_5k", "−input", ZERO_ROW)]
     for res, inp_label, abl in sources:
         for m in figure_methods:
@@ -1368,7 +1377,8 @@ def main():
         # MIB edge (MIB_TEST_EDGE / MIB_EDGE_FACET) dropped from the cut 2026-09-19 (requested):
         # the figure is node-level throughout; the edge numbers stay in the test table.
         rows = (mib_rows(figure_methods)
-                + mib_rows(figure_methods, MIB_TEST_ZERO, MIB_ZERO_FACET) + rows)
+                + (mib_rows(figure_methods, MIB_TEST_ZERO, MIB_ZERO_FACET) if a.full else [])
+                + rows)
     df = pd.DataFrame(rows)
 
     # ordering for consistent legends / facets (only 4 non-empty substrate x input combos)
@@ -1394,7 +1404,7 @@ def main():
     if a.cpr:
         # Row 1: MIB node, then SVA+; row 2 the same four columns under zero ablation.
         zero_facets = [f.replace("\n", ", zero\n", 1) for f in facet_order]
-        facet_order = [MIB_FACET] + facet_order + [MIB_ZERO_FACET] + zero_facets
+        facet_order = [MIB_FACET] + facet_order + ([MIB_ZERO_FACET] + zero_facets if a.full else [])
     # This list is the RENDER WHITELIST, not just a sort key: pd.Categorical maps anything absent
     # from it to NaN, and the panel then vanishes with no warning -- the point count in the
     # "wrote ..." line still includes it, which is the only visible trace. Adding a substrate to
