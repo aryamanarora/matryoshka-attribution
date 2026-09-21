@@ -200,10 +200,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default=None, choices=[None, "unifk"],
                     help="unifk: the uniform-k twin (separate trees, separate output file)")
+    ap.add_argument("--split", default=None, choices=[None, "perf", "rho"],
+                    help="perf: Compactness + CPR only; rho: the two Spearman columns only. Half-width "
+                         "figures (2026-09-21, to shrink the appendix); suffix _perf / _rho on the output.")
     a = ap.parse_args()
     rows, out_path = ROWS, "plots/epsgrid_facets.pdf"
     if a.tag == "unifk":
         rows, out_path = unifk_rows(), "plots/epsgrid_facets_unifk.pdf"
+    global COLS, FIG_W
+    if a.split:
+        keep = ("acc_auc", "cpr") if a.split == "perf" else ("rho_ig", "rho_sgd")
+        COLS = [c for c in COLS if c[0] in keep]
+        FIG_W = FIG_W * len(COLS) / 5 + 0.45   # same cell size; room for the eps tick labels
+        out_path = out_path.replace(".pdf", f"_{a.split}.pdf")
     M = {}
     for ri, (rlab, res, refs) in enumerate(rows):
         for key, _t, _c, _lo, _hi, tf in COLS:
@@ -297,8 +306,9 @@ def main():
             # bar is horizontal, so value runs along x.
             cb.ax.axvline(1.0, color="#000000", lw=0.6)
 
-    fig.text(0.5, 0.006, "underlined: beats both IG and MAttr+SGD",
-             ha="center", va="bottom", fontsize=FS_STRIP)
+    if any(c[0] in MARK_KEYS for c in COLS):
+        fig.text(0.5, 0.006, "underlined: beats both IG and MAttr+SGD",
+                 ha="center", va="bottom", fontsize=FS_STRIP)
 
     # AFTER tight_layout and the colourbar axes, so the measured extents are the final ones.
     # savefig is called without bbox_inches="tight", so nothing moves between here and the write.
