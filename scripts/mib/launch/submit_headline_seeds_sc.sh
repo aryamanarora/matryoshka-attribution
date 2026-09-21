@@ -19,9 +19,10 @@ DRYRUN=${DRYRUN:-0}
 SEEDS=${SEEDS:-"43 44"}
 TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}
 MODELS=${MODELS:-"gpt2 qwen2.5 gemma2 llama3"}
-# 80 GB slot override for a llama3 cell that OOMs a 48 GB a6000 (none did for the seed-42 node
-# runs); e.g. BIG="-q sphinx -d h200 -r 128G" BIG_TASKS="arc_easy arc_challenge".
-BIG=${BIG:-""}; BIG_TASKS=${BIG_TASKS:-""}
+# The two ARC/llama3 cells OOM a 48 GB a6000 at TEST-split evaluation (an 11 GB allocation in
+# the full-split eval; all four seed-43/44 attempts died there on 2026-09-21), so they default
+# to the 141 GB h200s. BIG="" puts everything on the a6000 slot.
+BIG=${BIG-"-q sphinx -d h200 -r 128G"}; BIG_TASKS=${BIG_TASKS-"arc_easy arc_challenge"}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 PY_L2A="uv run python"
 PY_G="UV_PROJECT_ENVIRONMENT=$ABS/.venv-tl2 uv run --no-default-groups --group tl2 python"
