@@ -86,7 +86,15 @@ def header_lines(columns, stub):
 #
 # Table 1: blocks whose rows vary the LEARNING RATE at a fixed sparsity setting.
 LR_METHODS = [
+    # HEADLINE since 2026-09-15 (mattr_variants.HEADLINE): soft top-k, UNIFORM k, Adam. The
+    # sweep dirs are submit_topkuni_lr.sh's (11 cells, no arithmetic_addition) plus the headline
+    # lr=0.05 dir (12 cells); there is no uniform-k Adam run at lr=0.01. Relabelled 2026-09-20:
+    # this block was "$+$ unif $k$" while the log-k block below was the bare \ourmethod{}.
     ("\\ourmethod{}", [
+        ("0.005", "topkuni_lr_0.005"), ("0.05", "mib_node_topk_uniform_lr05"),
+        ("0.1", "topkuni_lr_0.1"), ("0.3", "topkuni_lr_0.3"),
+    ]),
+    ("$+$ log $k$", [
         ("0.005", "topklog_lr_0.005"), ("0.01", "mib_node_topk_log"),
         ("0.05", "topklog_lr_0.05"), ("0.1", "topklog_lr_0.1"), ("0.3", "topklog_lr_0.3"),
     ]),
@@ -116,7 +124,7 @@ LR_METHODS = [
     # last, so every circuit below k=100% reads corrupted input and sits at the corrupt floor.
     # Excluding that one cell, 3.0's CPR mean vs 1.0 is +0.009 at 6/10 -- i.e. a wash, and the
     # bracketing claim rests on acc-AUC alone. Do not read the CPR Avg here as an LR effect.
-    ("$+$ SGD", [
+    ("$+$ log $k$, $+$ SGD", [
         ("0.005", "softlog_sgd_lr_0.005"), ("0.01", "softlog_sgd_lr_0.01"),
         ("0.05", "softlog_sgd_lr_0.05"), ("0.1", "softlog_sgd_lr_0.1"),
         ("0.3", "softlog_sgd_lr_0.3"), ("1.0", "softlog_sgd_lr_1.0"),
@@ -138,16 +146,16 @@ LR_METHODS = [
     # against log-k's -0.15 / -0.035, and it has not blown up on any cell. Consistent with it
     # spending most steps at large k, where the gate stays far from saturation and so cannot
     # take the overshoot-past-zero path that kills log-k's ioi/gpt2 at 3.0.
-    ("$+$ SGD, $+$ unif $k$", [
+    ("$+$ SGD", [
         ("0.05", "softuni_sgd_lr_0.05"), ("0.1", "softuni_sgd_lr_0.1"),
         ("0.3", "softuni_sgd_lr_0.3"), ("1.0", "softuni_sgd_lr_1.0"),
         ("3.0", "softuni_sgd_lr_3.0"), ("10.0", "softuni_sgd_lr_10.0"),
     ]),
-    ("$+$ hard", [
+    ("$+$ log $k$, $+$ hard", [
         ("0.005", "htklog_lr_0.005"), ("0.01", "mib_node_hard_topk_log"),
         ("0.05", "htklog_lr_0.05"), ("0.1", "htklog_lr_0.1"), ("0.3", "htklog_lr_0.3"),
     ]),
-    ("$+$ unif $k$, $+$ hard", [
+    ("$+$ hard", [
         ("0.005", "htk_lr_0.005"), ("0.01", "mib_node_hard_topk"),
         ("0.05", "htk_lr_0.05"), ("0.1", "htk_lr_0.1"), ("0.3", "htk_lr_0.3"),
     ]),

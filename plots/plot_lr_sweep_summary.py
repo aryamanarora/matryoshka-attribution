@@ -74,7 +74,7 @@ import make_lr_table as M                               # LR_METHODS -- the tabl
 
 # block name (verbatim from make_lr_table.LR_METHODS) -> (legend label, colour, linestyle).
 # ORDER IS LOAD-BEARING: it is the legend's order, and it is the only thing left carrying the
-# ours-then-baselines grouping now that the facet columns are gone. Keep the six MAttr variants
+# ours-then-baselines grouping now that the facet columns are gone. Keep the seven MAttr blocks
 # ahead of the three baselines.
 # Legend labels are the TABLE's row labels, flattened -- the figure is a view of lr_sweep.tex and
 # a reader holding both should not have to translate. That is also why the first block reads
@@ -88,11 +88,15 @@ import make_lr_table as M                               # LR_METHODS -- the tabl
 # the short handle; check the LEGEND, not the axes, when changing them.
 DASH, DOTDASH = (0, (3.2, 1.4)), (0, (4.5, 1.2, 0.9, 1.2))
 STYLE = {
+    # Bare \ourmethod{} is the headline (soft top-k, uniform k, Adam) since 2026-09-15; every
+    # other MAttr block is named relative to it, log k being the marked schedule (2026-09-20).
+    # Dashed = the log-k twin of the solid block in the same colour.
     "\\ourmethod{}":            ("MAttr",              P.METHOD["MAttr"],        "solid"),
+    "$+$ log $k$":              ("$+$ log $k$",        P.METHOD["MAttr"],        DASH),
     "$+$ SGD":                  ("$+$ SGD",            P.METHOD["MAttr (SGD)"],  "solid"),
-    "$+$ SGD, $+$ unif $k$":    ("$+$ SGD, unif. $k$", P.METHOD["MAttr (SGD)"],  DASH),
+    "$+$ log $k$, $+$ SGD":     ("$+$ SGD, log $k$",   P.METHOD["MAttr (SGD)"],  DASH),
     "$+$ hard":                 ("$+$ hard",           P.METHOD["+hard"],        "solid"),
-    "$+$ unif $k$, $+$ hard":   ("$+$ hard, unif. $k$", P.METHOD["+hard"],       DASH),
+    "$+$ log $k$, $+$ hard":    ("$+$ hard, log $k$",  P.METHOD["+hard"],        DASH),
     "$+$ hard bwd (REINFORCE)": ("$+$ hard bwd",       P.METHOD["+hard"],        DOTDASH),
     "DBM":                                 ("DBM",              P.METHOD["DBM"], "solid"),
     "Node Pruning ($s{=}0.5$, logit-diff)": ("Node Pruning, $s{=}0.5$",
