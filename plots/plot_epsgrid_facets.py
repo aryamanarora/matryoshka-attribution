@@ -204,6 +204,9 @@ def main():
                     help="metrics as ROWS and substrates as COLUMNS (colourbars at the right); "
                          "implied by --split, where two metric rows across four substrate columns "
                          "make a full-width, short figure")
+    ap.add_argument("--portrait", action="store_true",
+                    help="with --split: keep substrate rows x metric columns (2 columns, half the "
+                         "page wide), for two side-by-side subfigures; suffix _portrait")
     ap.add_argument("--split", default=None, choices=[None, "perf", "rho"],
                     help="perf: Compactness + CPR only; rho: the two Spearman columns only. Half-width "
                          "figures (2026-09-21, to shrink the appendix); suffix _perf / _rho on the output.")
@@ -212,13 +215,13 @@ def main():
     if a.tag == "unifk":
         rows, out_path = unifk_rows(), "plots/epsgrid_facets_unifk.pdf"
     global COLS, FIG_W
-    T = a.transpose or bool(a.split)
+    T = a.transpose or (bool(a.split) and not a.portrait)
     if a.split:
         keep = ("acc_auc", "cpr") if a.split == "perf" else ("rho_ig", "rho_sgd")
         COLS = [c for c in COLS if c[0] in keep]
         if not T:
             FIG_W = FIG_W * len(COLS) / 5 + 0.45   # same cell size; room for the eps tick labels
-        out_path = out_path.replace(".pdf", f"_{a.split}.pdf")
+        out_path = out_path.replace(".pdf", f"_{a.split}{'_portrait' if a.portrait else ''}.pdf")
     M = {}
     for ri, (rlab, res, refs) in enumerate(rows):
         for key, _t, _c, _lo, _hi, tf in COLS:
