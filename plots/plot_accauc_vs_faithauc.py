@@ -1501,7 +1501,9 @@ def main():
                 return
             if a.by_loss:
                 # 3 rows (losses) x 3 columns (substrates); Random has no loss (LOSSLESS) and
-                # therefore appears in the logit-diff row only.
+                # therefore appears in the logit-diff row only. The node CE / acc panels put the
+                # star at the right edge, so its label anchors LEFT there (checked on the PNG).
+                LABEL_LEFT = {"stopk-unif-eps1e-2": ("Node, CE", "Node, acc")}
                 draw_labelled(df, figure_methods, out, ycol="cpr", ylabel="CPR (↑)",
                               xlabel="Compactness (↑)", colors=fam,
                               figsize=(LAB_FIG[0] * 0.9 * 3 / 4, 1.3), markers=CPR_MARKERS,
