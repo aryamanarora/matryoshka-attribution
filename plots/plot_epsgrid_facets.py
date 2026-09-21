@@ -329,7 +329,7 @@ def main():
     # without spending ink on them -- and they are what the docstring's claim rests on.
     print(f"{'substrate':<16}{'metric':<11}{'>IG':>6}{'>SGD':>7}{'>both':>7}{'cells':>7}")
     for ri, (rlab, _, refs) in enumerate(rows):
-        for key in MARK_KEYS:
+        for key in [k for k in MARK_KEYS if any(c[0] == k for c in COLS)]:   # --split rho has neither
             m = M[(ri, key)]
             ig_v, sgd_v = base[(ri, key)]
             print(f"{rlab:<16}{key:<11}{int(np.nansum(m > ig_v)):>6}"
