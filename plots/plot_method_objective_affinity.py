@@ -31,7 +31,12 @@ CELLS = [("nounpp", "llama3"), ("rc", "llama3"), ("simple", "llama3"), ("within_
          ("addition", "llama3"), ("months", "llama3"), ("weekdays", "llama3"), ("hours", "llama3"),
          ("arc_easy", "llama3"), ("ioi", "qwen2.5")]
 ARM = "sufficient_topk_adam_eps1e-2{loss}_uniformk_bs1"
-OBJECTIVES = [("logit_diff", "logit-diff"), ("ce", "CE"), ("acc", "soft-acc"), ("kl", "KL"), ("cmd", "CMD")]
+# Every loss in learning_to_attribute.losses.LOSS_CHOICES (the seven beyond the first five were
+# launched 2026-09-21 to find, per baseline, the objective its ranking matches best). A column
+# with no landed run is dropped at render time, so the figure grows as the wave lands.
+OBJECTIVES = [("logit_diff", "logit-diff"), ("ce", "CE"), ("acc", "soft-acc"), ("kl", "KL"), ("cmd", "CMD"),
+              ("logit", "logit"), ("prob", "prob"), ("hinge", "hinge"), ("ld_tanh", "ld-tanh"),
+              ("ld_match", "ld-match"), ("ld_match_rel", "ld-match-rel"), ("ld_norm", "ld-norm")]
 # display name -> file tag (results/sva_sweep/<task>_<model>_node_<tag>.scores.pt)
 BASE = [("I$\\times$G", "ixg"), ("IG ($m{=}10$)", "ig"), ("Expected Gradients", "mc_ig_m1_s42"),
         ("AttnLRP", "attnlrp"), ("Node Pruning", "eprun_s090"), ("DBM", "sig_lr0.3_l16.0")]
@@ -69,6 +74,9 @@ def main():
                 if arms[o] is None or len(arms[o]) != len(s):
                     continue
                 rho.setdefault((mlabel, o), []).append(spearmanr(s, arms[o]).correlation)
+    # drop objectives with no landed run anywhere (keeps the figure readable mid-wave)
+    OBJ = [(o, ol) for o, ol in OBJECTIVES if any((m, o) in rho for m, _ in METHODS)]
+    OBJECTIVES[:] = OBJ
     M = np.full((len(METHODS), len(OBJECTIVES)), np.nan)
     N = np.zeros_like(M, dtype=int)
     for i, (mlabel, _) in enumerate(METHODS):
@@ -84,7 +92,7 @@ def main():
         print(f"{mlabel:22s}{row}   {OBJECTIVES[best][1] if best is not None else '---'}")
 
     plt.rcParams.update(P.RC)
-    fig, ax = plt.subplots(figsize=(3.6, 0.19 * len(METHODS) + 0.9))
+    fig, ax = plt.subplots(figsize=(1.0 + 0.5 * len(OBJECTIVES), 0.19 * len(METHODS) + 0.9))
     im = ax.imshow(M, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
     for i in range(M.shape[0]):
         best = int(np.nanargmax(M[i])) if np.isfinite(M[i]).any() else -1
