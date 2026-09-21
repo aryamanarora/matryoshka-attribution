@@ -163,7 +163,19 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--task", choices=list(TASKS), default="ioi")
 a = ap.parse_args()
 T = TASKS[a.task]
-CLASSES = T["classes"]
+CLASSES = list(T["classes"])
+classed = {h for _, hs in CLASSES for h in hs}
+# Last facet (requested 2026-09-21): the ten highest-ranked nodes OUTSIDE the taxonomy under MAttr,
+# so the figure also shows what MAttr promotes that the paper did not name. With several cells the
+# ten are picked by mean MAttr rank across the cells (the columns must be shared by the row
+# blocks); the printed line says what they are.
+mattr = METHODS[0]; assert mattr[0] == "MAttr"
+mean_rank = pd.DataFrame({cell: ranks(scores(mattr, task, model))
+                          for task, model, cell in T["cells"]}).mean(axis=1)
+extra = [n for n in mean_rank.sort_values().index if n not in classed][:10]
+CLASSES.append(("Other: MAttr top-10", extra))
+print("MAttr top-10 outside the taxonomy (mean rank over cells):",
+      ", ".join(f"{n} ({mean_rank[n]:g})" for n in extra))
 CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
 HEADS = [h for _, hs in CLASSES for h in hs]
 
