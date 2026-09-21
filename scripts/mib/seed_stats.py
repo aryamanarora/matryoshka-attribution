@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import make_mib_test_table as T   # COLUMNS, the test table's 12 cells   # noqa: E402
+import ladder_nestedness as LN    # TASK_TEX / MODEL_TEX, the nestedness table's cell names   # noqa: E402
 
 SEEDS = {42: "results/test_node_topk_uniform_lr05",
          43: "results/test_node_topk_uniform_lr05_s43",
@@ -74,7 +75,7 @@ def main():
                 _, _, _, v, mu, sd = rows[i]
                 cells.append(f"{v[0]:.2f} & {mu:.2f} & {sd:.3f}" if sd is not None else
                              (f"{v[0]:.2f} & --- & ---" if v[0] is not None else "--- & --- & ---"))
-            L.append(f"{T.TASK_TEX[t] if hasattr(T, 'TASK_TEX') else t.replace('_', ' ')} / {h} & " + " & ".join(cells) + " \\\\")
+            L.append(f"{LN.TASK_TEX[t]} / {LN.MODEL_TEX[m]} & " + " & ".join(cells) + " \\\\")
         L.append("\\midrule")
         cells = []
         for name, rows, avg in lines_tex:
