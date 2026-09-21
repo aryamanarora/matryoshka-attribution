@@ -36,7 +36,7 @@ CELLS = [("ioi", "gpt2"), ("ioi", "qwen2.5"), ("ioi", "gemma2"), ("ioi", "llama3
          ("arc_easy", "gemma2"), ("arc_easy", "llama3"), ("arc_challenge", "llama3")]
 TASK = {"ioi": "IOI", "arithmetic_addition": "Arith. (+)", "arithmetic_subtraction": "Arith. (−)",
         "mcqa": "MCQA", "arc_easy": "ARC-E", "arc_challenge": "ARC-C"}
-MODEL = {"gpt2": "GPT-2", "qwen2.5": "Qwen 2.5", "gemma2": "Gemma 2", "llama3": "Llama 3.1"}
+MODEL = {"gpt2": "GPT-2", "qwen2.5": "Qwen", "gemma2": "Gemma", "llama3": "Llama"}
 
 # Wang et al. IOI circuit, for the ioi/gpt2 outlines (same table as plot_ioi_head_types.py).
 CLASSES = [
@@ -82,7 +82,7 @@ def grid(task, model):
     return G, signed(rk["input"], n), L, H, n
 
 
-fig, axes = plt.subplots(3, 4, figsize=(5.5, 4.0))
+fig, axes = plt.subplots(3, 4, figsize=(5.5, 4.3))
 VMAX = max(np.log10((len(load(t, m)) + 1) / 2) for t, m in CELLS)
 cmap = plt.get_cmap("RdBu").copy(); cmap.set_bad("#ffffff")
 for ax, (task, model) in zip(axes.ravel(), CELLS):
@@ -91,15 +91,13 @@ for ax, (task, model) in zip(axes.ravel(), CELLS):
     # input embedding: one cell drawn above the MLP column, in the gap row it creates
     ax.add_patch(Rectangle((H + 0.5, -1.5), 1, 1, facecolor=cmap((inp + VMAX) / (2 * VMAX)),
                            edgecolor="none", clip_on=False))
-    ax.text(H + 1, -2.0, "in", ha="center", va="bottom", fontsize=5, color="#555")
-    ax.text(H + 1, L - 0.2, "MLP", ha="center", va="top", fontsize=5, color="#555",
-            transform=ax.transData, clip_on=False)
+    ax.text(H + 1, L + 0.1, "MLP", ha="center", va="top", fontsize=4.8, color="#555", clip_on=False)
     if (task, model) == ("ioi", "gpt2"):
         for h, c in CLASS_OF.items():
             l, hh = (int(t[1:]) for t in h.split("."))
             ax.add_patch(Rectangle((hh - 0.5, l - 0.5), 1, 1, fill=False, lw=0.9, edgecolor=COL[c]))
-    ax.set_title(f"{TASK[task]} / {MODEL[model]}  ({L}×{H})", pad=2.5)
-    ax.set_xticks([0, H - 1]); ax.set_xticklabels(["0", str(H - 1)])
+    ax.set_title(f"{TASK[task]} / {MODEL[model]}", pad=6)   # pad clears the input cell
+    ax.set_xticks([0, H - 1]); ax.set_xticklabels(["0", str(H - 1)])   # dims read off the ticks
     ax.set_yticks([0, L - 1]); ax.set_yticklabels(["0", str(L - 1)])
     ax.tick_params(length=1.5, pad=1.5)
     ax.set_xlim(-0.5, H + 1.5); ax.set_ylim(L - 0.5, -0.5)
@@ -109,17 +107,17 @@ for ax in axes[:, 0]:
     ax.set_ylabel("Layer")
 for ax in axes[-1]:
     ax.set_xlabel("Head")
-fig.tight_layout(h_pad=1.4, w_pad=0.6, rect=(0, 0.05, 0.93, 1))
-cax = fig.add_axes([0.945, 0.35, 0.012, 0.4])
+fig.tight_layout(h_pad=1.2, w_pad=0.7, rect=(0, 0.075, 0.905, 1))
+cax = fig.add_axes([0.925, 0.35, 0.012, 0.4])
 cb = fig.colorbar(im, cax=cax, ticks=[VMAX, VMAX - 1, VMAX - 2, 0, -(VMAX - 2), -(VMAX - 1), -VMAX])
-cb.set_ticklabels(["1", "10", "100", "median", "−100", "−10", "−1"])
+cb.set_ticklabels(["1", "10", "100", "med.", "−100", "−10", "−1"])
 cb.ax.tick_params(labelsize=5.5, length=1.5); cb.outline.set_linewidth(0.4)
 cb.set_label("Rank (− = from the bottom)", fontsize=6)
 hs = [Line2D([], [], marker="s", ls="", ms=4.5, mfc="none", mec=COL[c], mew=0.9, label=c)
       for c, _ in CLASSES]
-fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.47, 0.0), ncol=4, frameon=False,
-           handletextpad=0.3, columnspacing=0.9, title="IOI / GPT-2 outlines: Wang et al. (2023)",
-           title_fontsize=6)
+fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.46, 0.0), ncol=7, frameon=False,
+           handletextpad=0.3, columnspacing=0.7, fontsize=5.4,
+           title="IOI / GPT-2 outlines: Wang et al. (2023) head classes", title_fontsize=5.6)
 out = OUT / "mattr_node_grids.pdf"
 fig.savefig(out); fig.savefig(out.with_suffix(".png"), dpi=200)
 print("wrote", out)

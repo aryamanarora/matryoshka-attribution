@@ -163,7 +163,7 @@ p = (
     + scale_x_discrete(expand=(0, 0))
     + scale_y_discrete(expand=(0, 0))
     + labs(x="", y="")
-    + theme(legend_key_height=11, legend_key_width=5)
+    + theme(legend_key_height=24, legend_key_width=5)
 )
 # geom_text's colour is data-driven (white on dark cells); take it verbatim, no legend.
 p = p + scale_color_identity()
