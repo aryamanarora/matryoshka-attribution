@@ -33,10 +33,15 @@ CELLS = [("nounpp", "llama3"), ("rc", "llama3"), ("simple", "llama3"), ("within_
 ARM = "sufficient_topk_adam_eps1e-2{loss}_uniformk_bs1"
 OBJECTIVES = [("logit_diff", "logit-diff"), ("ce", "CE"), ("acc", "soft-acc"), ("kl", "KL"), ("cmd", "CMD")]
 # display name -> file tag (results/sva_sweep/<task>_<model>_node_<tag>.scores.pt)
-METHODS = [("I$\\times$G", "ixg"), ("IG ($m{=}10$)", "ig"), ("Expected Gradients", "mc_ig_m1_s42"),
-           ("AttnLRP", "attnlrp"), ("Node Pruning", "eprun_s090"), ("DBM", "sig_lr0.3_l16.0"),
-           ("MAttr $-$ learning", "sufficient_topk_identity_none_uniformk_bs1"),
-           ("Random", "random_s42")]
+BASE = [("I$\\times$G", "ixg"), ("IG ($m{=}10$)", "ig"), ("Expected Gradients", "mc_ig_m1_s42"),
+        ("AttnLRP", "attnlrp"), ("Node Pruning", "eprun_s090"), ("DBM", "sig_lr0.3_l16.0")]
+# CONTROL (requested 2026-09-21): every baseline also under the CE and soft-acc TARGETS (the
+# `_ce` / `_acc` twins eval_sva writes for gradient methods and the two mask learners). If a
+# baseline computed on the CE target still lands nearest MAttr-soft-acc, the affinity is about
+# being a first-order / local estimate, not about the target it was given.
+TARGETS = [("", "logit-diff"), ("_ce", "CE"), ("_acc", "soft-acc")]
+METHODS = [(f"{ml} @{tl}" if suf else ml, f"{tag}{suf}") for ml, tag in BASE for suf, tl in TARGETS]
+METHODS += [("MAttr $-$ learning", "sufficient_topk_identity_none_uniformk_bs1"), ("Random", "random_s42")]
 
 
 def load(task, model, tag):
@@ -79,7 +84,7 @@ def main():
         print(f"{mlabel:22s}{row}   {OBJECTIVES[best][1] if best is not None else '---'}")
 
     plt.rcParams.update(P.RC)
-    fig, ax = plt.subplots(figsize=(3.4, 2.6))
+    fig, ax = plt.subplots(figsize=(3.6, 0.19 * len(METHODS) + 0.9))
     im = ax.imshow(M, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
     for i in range(M.shape[0]):
         best = int(np.nanargmax(M[i])) if np.isfinite(M[i]).any() else -1
@@ -93,7 +98,10 @@ def main():
                     ax.text(j + 0.42, i - 0.38, f"n={N[i, j]}", ha="right", va="top", fontsize=4.5,
                             color="#555555")
     ax.set_xticks(range(len(OBJECTIVES))); ax.set_xticklabels([ol for _, ol in OBJECTIVES], fontsize=6.5)
-    ax.set_yticks(range(len(METHODS))); ax.set_yticklabels([ml for ml, _ in METHODS], fontsize=6.5)
+    ax.set_yticks(range(len(METHODS))); ax.set_yticklabels([ml for ml, _ in METHODS], fontsize=6)
+    for y in range(len(TARGETS), len(BASE) * len(TARGETS), len(TARGETS)):   # rule between methods
+        ax.axhline(y - 0.5, color="white", lw=1.2)
+    ax.axhline(len(BASE) * len(TARGETS) - 0.5, color="white", lw=1.2)
     ax.set_xlabel("MAttr training objective", fontsize=7)
     ax.tick_params(length=0)
     cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03)
