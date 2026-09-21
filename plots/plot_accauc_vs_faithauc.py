@@ -452,7 +452,7 @@ CPR_METHODS = ["IG", "IxG", "eprun-s090", "sig_lr0.3_l16.0",
 # distinct glyphs the legend carries the names and only the MAttr star keeps a label
 # (2026-09-19, requested: the "+log k" label went too -- the filled circle is in the legend).
 CPR_MARKERS = {"IG": "o", "IxG": "^", "eprun-s090": "s", "sig_lr0.3_l16.0": "D", "Random": "o",
-               "stopk-log-eps1e-2": "o"}
+               "stopk-log-eps1e-2": "o", "AttnLRP": "v"}   # AttnLRP: --full only (2026-09-21)
 CPR_LABELLED = {"stopk-unif-eps1e-2"}
 # The 10x-steps twin ("stopk-unif-eps1e-2-10x") was in this cut 2026-09-17 and was dropped the
 # same day (requested): its row lives in the SVA+ / MIB tables and its bar in plot_mib_test_avg.
@@ -1255,6 +1255,12 @@ def main():
                       else STEPLESS_METHODS if a.stepless
                       else ADAM_METHODS if a.adam
                       else CPR_METHODS if a.cpr else FIGURE_METHODS)
+    if a.cpr and a.full:
+        # AttnLRP in the appendix (2x4) figure only (requested 2026-09-21): it has node, MLP and
+        # MLP+Attn runs under both ablations and a MIB test row, but no SAE run, so that panel
+        # simply lacks the point. Slotted after IxG so the gradient family stays contiguous.
+        figure_methods = [m for m in figure_methods if m != "AttnLRP"]
+        figure_methods.insert(figure_methods.index("IxG") + 1, "AttnLRP")
     if a.full and not (a.cpr and not a.zero):
         raise SystemExit("--full is a variant of --cpr only")
     if a.by_loss and not (a.cpr and not a.zero and not a.full):
