@@ -33,7 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette as P                              # noqa: E402
 import plot_accauc_vs_faithauc as V              # load(), SVA, ARITH, TASK_MODEL  # noqa: E402
 
-LOSSES = [("logit_diff", "logit-diff", P.METHOD["MAttr"]), ("ce", "CE", "#e69f00"), ("acc", "soft-acc", "#009e73")]
+LOSSES = [("logit_diff", "logit-diff", P.METHOD["MAttr"]), ("ce", "CE", "#e69f00"), ("acc", "soft-acc", "#009e73"),
+          ("kl", "KL", "#cc79a7"), ("cmd", "CMD", "#56b4e9")]   # KL / CMD landed 2026-09-21
 TASKS = list(V.SVA) + list(V.ARITH) + ["arc_easy", "ioi"]
 TASK_LABEL = {"nounpp": "NounPP", "rc": "RC", "simple": "Simple", "within_rc": "Within RC",
               "addition": "Addition", "months": "Months", "weekdays": "Weekdays", "hours": "Hours",
