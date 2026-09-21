@@ -39,7 +39,7 @@ theme_set(
     theme_bw(base_size=8)
     + theme(
         text=element_text(color="#000", family="Inter"),
-        figure_size=(5.5, 2.35),
+        figure_size=(5.6, 2.35),
         axis_title=element_text(size=7),
         axis_text=element_text(size=6),
         axis_text_x=element_text(size=5.5, rotation=90, hjust=0.5, vjust=0.5),
@@ -70,7 +70,7 @@ CLASSES = [
     ("Name\nmover",               ["a9.h6", "a9.h9", "a10.h0"]),
     ("Backup\nname mover",        ["a9.h0", "a9.h7", "a10.h1", "a10.h2", "a10.h6", "a10.h10",
                                    "a11.h2", "a11.h9"]),
-    ("Negative NM /\ncopy suppr.", ["a10.h7", "a11.h10"]),
+    ("Neg. NM /\ncopy sup.", ["a10.h7", "a11.h10"]),
 ]
 CLASS_OF = {h: c for c, hs in CLASSES for h in hs}
 HEADS = [h for _, hs in CLASSES for h in hs]
@@ -78,7 +78,7 @@ NEG = CLASSES[-1][1]                       # the two heads every method should r
 # Summary facet: one column, the median rank over the 24 positive circuit heads. The negative
 # name movers are excluded because the sufficiency ranking puts them at the bottom by design
 # (ranks 151-157 for every method), which would only pull the median away from the reading.
-SUMMARY = "Median\n(24 heads)"
+SUMMARY = "Median\n(24 pos.)"
 
 # --- methods: (row label, path, layout), top-to-bottom by test-table CPR Avg -----------------
 # flat   = results/<dir>/ioi_gpt2_importances.json   (eval_mib.py layout; MAttr, IntInv, no-learning)
@@ -126,11 +126,11 @@ for spec in METHODS:
     rk = ranks(scores(spec))
     for h in HEADS:
         rows.append(dict(method=spec[0], head=h, cls=CLASS_OF[h], rank=rk[h]))
-    rows.append(dict(method=spec[0], head="all", cls=SUMMARY,
+    rows.append(dict(method=spec[0], head="med.", cls=SUMMARY,
                      rank=float(np.median([rk[h] for h in HEADS if h not in NEG]))))
 df = pd.DataFrame(rows)
 df["method"] = pd.Categorical(df["method"], [m[0] for m in METHODS][::-1])   # first method on top
-df["head"] = pd.Categorical(df["head"], HEADS + ["all"])
+df["head"] = pd.Categorical(df["head"], HEADS + ["med."])
 df["cls"] = pd.Categorical(df["cls"], [c for c, _ in CLASSES] + [SUMMARY])
 df["log_rank"] = np.log10(df["rank"])
 df["txt"] = df["rank"].map(lambda r: f"{r:g}")
