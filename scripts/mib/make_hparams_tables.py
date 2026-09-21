@@ -215,14 +215,21 @@ def describe_sva(key):
         eps = float(m.group(1)) if m else 1e-8
         m = re.search(r"_s(\d{3,})", fname)
         steps = int(m.group(1)) if m else 2000
-        per[sub] = (opt, SVA_LR[(opt, fam)], steps, d.get("k_schedule", "log"), eps)
+        # optimizer "none" is the no-learning control (frozen scores): it has no LR at all,
+        # so SVA_LR has no entry for it and the LR cell prints a dash.
+        per[sub] = (opt, SVA_LR.get((opt, fam)), steps, d.get("k_schedule", "log"), eps)
     if not per:
         return None
     opt, _, _, k, eps = per.get("mlp") or per["mlp_sae_span"]
-    lrs = sorted({v[1] for v in per.values()}, key=float)
-    lr = num(lrs[0]) if len(lrs) == 1 else " / ".join(num(x) for x in lrs) + " (SAE)" * 0
+    lrs = sorted({v[1] for v in per.values() if v[1] is not None}, key=float)
+    if not lrs:
+        lr = "---"
+    else:
+        lr = num(lrs[0]) if len(lrs) == 1 else " / ".join(num(x) for x in lrs) + " (SAE)" * 0
     if len(lrs) > 1:
-        lr = f"{num(per['mlp'][1]) if 'mlp' in per else num(lrs[0])} ({num(per['mlp_sae_span'][1])} SAE)"
+        mlp_lr = per["mlp"][1] if per.get("mlp") and per["mlp"][1] is not None else lrs[0]
+        sae_lr = per["mlp_sae_span"][1] if per.get("mlp_sae_span") and per["mlp_sae_span"][1] is not None else lrs[-1]
+        lr = f"{num(mlp_lr)} ({num(sae_lr)} SAE)"
     steps = sorted({v[2] for v in per.values()})
     n_ex = " / ".join(thousands(x) for x in steps)
     return opt, lr, steps, k, eps, n_ex
