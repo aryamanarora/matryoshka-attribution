@@ -38,10 +38,10 @@ mkdir -p logs
 ERRMODE=${ERRMODE:-frozen}
 # Which dictionary. eval_sva picks the Llama-Scope repo from this (LXM for mlp_sae_span, LXR for
 # resid_sae_span), so nothing else needs to change. NODETAG keeps the ORIGINAL mlp paths intact
-# -- results/saefrozen_epslr is already on disk and referenced by plots/plot_sae_epsgrid.py.
+# -- results/saefrozen_epslr is already on disk and referenced by plots/plot_epsgrid_facets.py.
 NODES=${NODES:-mlp_sae_span}
 # NODETAG keeps the ORIGINAL mlp_sae_span paths intact -- results/saefrozen_epslr is on disk and
-# plots/plot_sae_epsgrid.py points at it. NSHORT keeps job names unique per substrate, which the
+# plots/plot_epsgrid_facets.py points at it. NSHORT keeps job names unique per substrate, which the
 # QUEUED guard below depends on.
 #
 # ERRARG IS EMPTY FOR NON-SAE SUBSTRATES. `node` and `mlp` have no reconstruction error to
@@ -112,7 +112,7 @@ subraw () {  # like sub, but WITHOUT $COMMON -- COMMON is the MAttr+Adam grid co
 }
 
 # REFERENCE RUNS for the row's two rho panels and for the baseline columns. They are NOT part of
-# the grid and land in $OUTBASE/refs: plot_sae_epsgrid correlates each grid cell against IG and
+# the grid and land in $OUTBASE/refs: plot_epsgrid_facets correlates each grid cell against IG and
 # against MAttr+SGD, and both references must be the SAME intervention as the grid or the
 # correlation folds an intervention change into a hyperparameter figure.
 if [[ "${REFS:-0}" == 1 ]]; then

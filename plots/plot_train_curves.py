@@ -106,11 +106,11 @@ REF = ("IG", "IG (untrained ref.)")
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 LOSSES = [("ce", "CE"), ("acc", "acc"), ("logit_diff", "logit-diff")]
 # kstar_50 is logged as an absolute unit count and censors at `total`; normalise exactly as
-# plot_method_ranks does so the three substrates are on one scale.
+# the old plot_method_ranks did so the three substrates are on one scale.
 #: AXIS LABELS ARE THE PAPER'S METRIC NAMES, not the log keys. `acc_auc` is the compactness
 #: measure and `faith_auc` is CPR; they were drawn as "acc-AUC"/"faith-AUC" here while every other
-#: figure in the repo had already moved (plot_ablation_bars, plot_dbm_l0_vs_metric,
-#: plot_mib_accauc_cpr_scatter, plot_epsgrid_facets), so a reader crossing figures met two names
+#: figure in the repo had already moved (plot_ablation_bars, plot_mib_accauc_cpr_scatter,
+#: plot_epsgrid_facets), so a reader crossing figures met two names
 #: for one quantity. The keys are untouched -- only what is printed on an axis.
 METRICS = {"acc_auc": "Compactness (↑)", "faith_auc": "CPR (↑)",
            "kstar_pct": r"$k^\star$ (% of units, ↓)"}
@@ -124,8 +124,8 @@ ARM_COLOR = {"MAttr (Adam)": P.METHOD["MAttr"], "MAttr (SGD)": P.METHOD["MAttr (
 FIG_GRID, FIG_ONE = (5.4, 4.6), (2.7, 2.15)
 # Per-row height of the --overlay layout, which is as tall as it has rows. 1.55in puts a
 # full-width 2-row version at 5.4 x 3.7; the half-width overlay reads ROW_H_NARROW below.
-# This module is imported for its constants (plot_train_curves_20k takes the OVERLAY set,
-# plot_rank_stability_20k takes ARM_COLOR/FS_GRID), so repointing a name here reshapes a figure
+# This module is imported for its constants (plot_train_curves_20k takes the OVERLAY set),
+# so repointing a name here reshapes a figure
 # in another file -- ROW_H was briefly redefined to the narrow value and silently squashed
 # train_curves_20k.pdf from 4.25in to 3.25in tall. Add a new name, do not repoint an old one.
 ROW_H = 1.55

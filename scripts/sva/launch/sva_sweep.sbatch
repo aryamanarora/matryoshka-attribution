@@ -9,6 +9,6 @@
 # Thin runner: everything after the script name is forwarded to eval_sva.py.
 # usage: sbatch -J <name> scripts/sva/launch/sva_sweep.sbatch --task nounpp --nodes mlp --method ig --loss ce ...
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 uv run python scripts/sva/eval_sva.py "$@"

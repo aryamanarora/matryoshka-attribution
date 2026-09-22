@@ -18,7 +18,7 @@
 #   <task-dash>_<model>_test_abs-False.pkl   (the _test_ suffix keeps it clear of validation)
 # DRYRUN=1 to preview.
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 SPARSITY=${1:-}

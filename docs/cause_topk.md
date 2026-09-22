@@ -96,7 +96,7 @@ an eval bug: F_clean/F_patch match the twin, and k=total recovers acc 1.0.
 
 64 runs, 8 tasks x 2 substrates x 2 configs x 2 losses, each paired with its iso-trained twin in
 results/sva_sweep (same config, same seed, same 100 eval pairs) and with IG at the same loss.
-Figure: `plots/plot_cause_curves.py` -> `plots/cause_curves_{acc,ce}.pdf`.
+Figure: `plots/cause_curves_{acc,ce}.pdf` (its script, `plot_cause_curves.py`, was removed 2026-09-22; see git history).
 
 ### 4a. Cause-trained vs iso-trained (paired deltas, mean over 8 tasks)
 
@@ -299,7 +299,7 @@ BOTH metrics. On node, joint lands at 0.991-0.992 = IG's 0.992 (ceiling) with no
 ### Artifacts
 * `scripts/sva/analyse_cause.py` -> `results/cause_analysis.csv` (all substrates, all runs)
 * `scripts/sva/launch/submit_sva_cause_neuron.sh` (MODES / SUBS / LOSSES / CONFIGS / KS / SEED / OUT env)
-* `plots/plot_cause_curves.py` -> `plots/cause_curves_{acc,ce}.pdf`
+* `plots/cause_curves_{acc,ce}.pdf` (script removed 2026-09-22; in git history)
 * results: `results/sva_sweep_cause/` (necessary_* / joint_* tags, incl. node + uniformk),
   `results/sva_sweep_cause_s43/`, `results/sva_sweep_s43/` (seed-43 replicates)
 * Budget: 260 runs, ~5 min each on one H100; wall-clock 03:30-07:35 UTC, throughput bound by

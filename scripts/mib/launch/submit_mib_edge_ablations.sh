@@ -2,7 +2,7 @@
 # Rerun edge-level L2A ablations train->val (honest). Run from repo root on sc in tmux.
 # Edge is memory-heavy + slow (5000 steps, full eval). 3 ablations x 9 pairs = 27 jobs.
 set -u
-cd /juice2/scr2/aryaman/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi"

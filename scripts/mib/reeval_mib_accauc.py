@@ -23,10 +23,9 @@ the cells the CPR number next to it was measured on. Node dirs have no scores.pt
 methods, so they fall back to the run_accauc_mattr.sh cap rule (llama3 -> 200, gemma2/ioi ->
 200, else full validation), which is what produced every acc-AUC already in the table.
 
-RUN IN THE MIB VENV (TL 2.x -- the L2A venv's TL 3.2.1 has a Gemma-2 forward bug), from the L2A
-repo root:
-  PYTHONPATH=MIB-circuit-track:MIB-circuit-track/EAP-IG/src \
-    MIB-circuit-track/.venv/bin/python scripts/mib/reeval_mib_accauc.py \
+RUN IN THE TL 2.15.4 STACK (the `tl2` dependency group -- the default env's TL 3.2.1 has a
+Gemma-2 forward bug), from the repo root:
+  UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python scripts/mib/reeval_mib_accauc.py \
       --level edge --split validation --model gpt2 --task ioi --dirs mib_edge_detached_tau
 """
 import argparse
@@ -35,9 +34,9 @@ from pathlib import Path
 
 import torch
 
-# Copied from eval_mib.py rather than imported: this runs in the MIB venv, which does not have
-# the learning_to_attribute package installed, so `import eval_mib` dies at its own imports.
-# reeval_gemma_mib.py inlines them for the same reason. Keep in sync with eval_mib.py.
+# Copied from eval_mib.py rather than imported: the tl2 env has the package but not eval_mib's
+# TL 3.x-era imports, so `import eval_mib` would die at its own imports. reeval_gemma_mib.py
+# inlines them for the same reason. Keep in sync with eval_mib.py.
 MODEL_TL_NAMES = {"gpt2": "gpt2-small", "qwen2.5": "Qwen/Qwen2.5-0.5B",
                   "gemma2": "google/gemma-2-2b", "llama3": "meta-llama/Llama-3.1-8B"}
 TASKS_TO_HF = {"ioi": "ioi", "mcqa": "copycolors_mcqa",
@@ -45,9 +44,11 @@ TASKS_TO_HF = {"ioi": "ioi", "mcqa": "copycolors_mcqa",
                "arithmetic_subtraction": "arithmetic_subtraction",
                "arc_easy": "arc_easy", "arc_challenge": "arc_challenge"}
 
-L2A = Path("/home/guests/aryaman/learning-to-attribute")
+from learning_to_attribute.deps import mib_results_dir  # noqa: E402
+
+L2A = Path(__file__).resolve().parents[2]
 R = L2A / "results"
-MIBR = Path("/home/guests/aryaman/MIB-circuit-track/results")
+MIBR = mib_results_dir()
 
 # Where the node acc-AUC tables read from (scripts/mib/make_mib_accauc_table.py). The lr05 pair keep
 # acc_auc inside their own eval_mib pkl and are not mirrored; final_node/htk_lr_0.05 live in the

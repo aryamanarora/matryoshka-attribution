@@ -66,19 +66,6 @@ def sigmoid_topk(scores, k, T=1.0, n_iters=50):
     return SigmoidTopK.apply(scores, k, T, n_iters)
 
 
-def sigmoid_topk_hard(scores, k, T=1.0, n_iters=50):
-    """Hard binary mask with straight-through gradient estimator.
-
-    Forward: exactly top-k scores get 1, rest get 0.
-    Backward: gradients flow through the soft sigmoid_topk mask (ST estimator).
-    """
-    soft = sigmoid_topk(scores, k, T, n_iters)
-    hard = torch.zeros_like(scores)
-    topk_idx = scores.topk(int(k), dim=-1).indices
-    hard.scatter_(-1, topk_idx, 1.0)
-    return hard + (soft - soft.detach())
-
-
 def sigmoid_topk_detached_tau(scores, k, T=1.0, n_iters=50):
     """Same forward as sigmoid_topk, but tau is detached in backward.
 
@@ -97,18 +84,3 @@ def sigmoid_topk_detached_tau(scores, k, T=1.0, n_iters=50):
             hi = torch.where(f_mid > k, hi, mid)
     tau = ((lo + hi) / 2).detach()  # DETACHED
     return torch.special.expit((scores - tau) / T)
-
-
-def test_gradcheck():
-    scores = torch.randn(3, 10, dtype=torch.float64, requires_grad=True)
-    k = 4.0
-    T = 1.0
-    n_iters = 100
-    assert torch.autograd.gradcheck(
-        lambda s: SigmoidTopK.apply(s, k, T, n_iters),
-        (scores,),
-        eps=1e-6,
-        atol=1e-4,
-        rtol=1e-3,
-    )
-    print("Gradient check passed!")

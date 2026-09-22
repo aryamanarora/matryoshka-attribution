@@ -6,7 +6,7 @@
 # 0.01 llama/ioi is run capped (htk*_lr_0.01) so that column is a fair n=200 comparison.
 # DRYRUN=1 to preview.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
 DRYRUN=${DRYRUN:-0}
 ALL_CELLS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction"

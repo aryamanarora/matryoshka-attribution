@@ -26,7 +26,7 @@
 # lr=1e-3 is NOT in the default list -- results/eprun_eval_ld_sig/ already is that point.
 # Dirs: results/eprun_node_ld_sig_lr<LR>/ + results/eprun_eval_ld_sig_lr<LR>/.
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 STEPS=${STEPS:-3000}

@@ -47,7 +47,7 @@
 #
 # Register new dirs in scripts/mib/make_lr_table.py:METHODS to get their table rows.
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 NICE=${NICE:-3000}

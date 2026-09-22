@@ -275,12 +275,13 @@ SPARSITY_METHODS = [
         ("60.0", "eprun_eval_ld_sig_lr0.3_l160.0"),
         ("200.0", "eprun_eval_ld_sig_lr0.3_l1200.0"),
     ], "$\\lambda_{\\mathrm{L1}}{=}$"),
-    # --- DCM: PULLED FROM THE PAPER 2026-08-13. Do not re-add without reading this. ---
+    # --- DCM: PULLED FROM THE PAPER 2026-08-13 and its port removed 2026-09-22. Do not re-add
+    # without reading this. ---
     #
     # Three blocks used to live here (pinned density 1/5/20%, five LRs each, dirs
-    # results/eprun_eval_ld_dcm_d{0.01,0.05,0.2}_lr*). The runs are still on disk and
-    # scripts/mib/collect_dcm_sweep.py + scripts/mib/dcm_rank_agreement.py still read them; only the
-    # paper-facing rows are gone. Three reasons, in order of weight:
+    # results/eprun_eval_ld_dcm_d{0.01,0.05,0.2}_lr*). The runs are still on disk; the port
+    # (edge_pruning.py:learn_scores_dcm, --gate dcm, collect_dcm_sweep.py, dcm_rank_agreement.py)
+    # is in git history before 2026-09-22. Three reasons, in order of weight:
     #
     # 1. THE NUMBER WE PRINTED CANNOT BE PRODUCED BY DCM. Every block in this table reports
     #    `area_under`, but DCM's mask saturates -- 91-100% of units land at exactly 0.0 or
@@ -296,7 +297,7 @@ SPARSITY_METHODS = [
     # 3. Coverage: 3 of 12 cells (ioi/gpt2, ioi/qwen2.5, mcqa/qwen2.5), hence an all-`---`
     #    Avg column -- the only block in either table that cannot report one.
     #
-    # If it comes back, it must report CPR AT THE PIN (collect_dcm_sweep.py already computes
+    # If it comes back, it must report CPR AT THE PIN (the old collect_dcm_sweep.py computed
     # it; that IS a faithful evaluation of the set DCM emits, and the three pins are the
     # honest analogue of upstream's lambda sweep), and the tie-break must be described as our
     # adaptation. Do NOT re-add it reporting area_under.

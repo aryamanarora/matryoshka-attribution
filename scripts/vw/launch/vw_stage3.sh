@@ -4,8 +4,8 @@
 # deliverable, `vw_whatkept.py --refit-*` is minutes and writes its JSON incrementally, so a
 # truncated run still leaves usable rows.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 
 $PY plots/plot_vw_prune.py   --run $R

@@ -12,6 +12,6 @@
 # NOTE: runs in the `vit` uv dependency group (torchvision + lxt + zennit, transformers<5),
 # synced into .venv-vit from uv.lock -- it conflicts with the default `lm` group, see pyproject.toml.
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python scripts/vit/vit_teaser_attr.py "$@"

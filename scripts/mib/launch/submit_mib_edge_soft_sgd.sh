@@ -33,9 +33,9 @@
 # LR=0.3 overrides the imported node optimum for ALL selected schedules; the output dir follows
 # the LR, so a probe never overwrites the lr=1.0/3.0 rows.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"
-PY_L2A=$ABS/.venv/bin/python                     # gpt2 / qwen2.5 / llama3
-PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"
+PY_L2A="uv run python"                   # gpt2 / qwen2.5 / llama3
+PY_TL2="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python" # gemma2 ONLY (TL 2.15.4)
 PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}
 ONLY=${ONLY:-}

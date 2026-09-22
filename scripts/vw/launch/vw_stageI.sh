@@ -8,5 +8,5 @@
 # full family under ZERO ablation and is simply absent from the control, so the claim cannot
 # be made either way until this runs.
 set -uo pipefail
-cd ~/learning-to-attribute
-.venv/bin/python scripts/vw/vw_prune.py --run results/vw/base --seqs 1024 --ablation mean --out prune_mean.json
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+uv run python scripts/vw/vw_prune.py --run results/vw/base --seqs 1024 --ablation mean --out prune_mean.json

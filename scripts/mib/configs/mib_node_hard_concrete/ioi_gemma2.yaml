@@ -1,9 +1,0 @@
-model: gemma2
-task: ioi
-steps: 500
-masking: hard_concrete
-l0-lambda: 1e-3
-mode: sufficient
-split: validation
-eval-examples: 500
-output: results/mib_node_hard_concrete

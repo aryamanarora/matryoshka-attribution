@@ -13,7 +13,7 @@
 # flip out and recover. NOTE: it is a targeted rescue, not a general win — it degrades the
 # already-healthy cells (esp. llama3). See memory uniform-k-sgd-starves-upstream-node.
 set -u
-cd ~/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 # Standard 11 node pairs.
 PAIRS=(

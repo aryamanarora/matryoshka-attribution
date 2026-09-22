@@ -44,8 +44,8 @@
 #   bash scripts/mib/launch/submit_test_edge_sgd.sh            # submit
 #   DRYRUN=1 bash scripts/mib/launch/submit_test_edge_sgd.sh   # preview
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
-PY_GEMMA=$ABS/MIB-circuit-track/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
+PY_GEMMA="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python"
 PP_GEMMA="$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src"
 DRYRUN=${DRYRUN:-0}
 PAIRS=(

@@ -20,11 +20,13 @@ from pathlib import Path
 
 import torch
 
+from learning_to_attribute.deps import mib_results_dir
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "plots"))
 from plot_task_corr_heatmap import names   # canonical node order for the json -> vec map
 
 R = Path("results")
-R_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
+R_MIB = mib_results_dir()
 OUT = R / "transfer_src"
 MIB_TASKS = ["ioi", "arithmetic_subtraction", "mcqa", "arc_easy", "arc_challenge"]
 SVA_TASKS = ["simple", "nounpp", "rc", "within_rc", "addition", "months", "weekdays", "hours"]

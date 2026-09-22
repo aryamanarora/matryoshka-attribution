@@ -17,8 +17,8 @@
 # `f_mid > k` elementwise, so (B, N) scores with (B, 1) k give per-item masks that match the
 # scalar-k path to 3e-8. Only the outer loop is new.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 M="$PY scripts/vw/vw_mattr.py --run $R --method mattr --optimizer adam --k-per-item"
 

@@ -8,8 +8,8 @@
 # and prunes only the 16,777,216 token->logit weights, which is where a ranking has to know
 # something about language. Both ablations, same rankings, same held-out split.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 
 $PY scripts/vw/vw_prune.py --run $R --seqs 1024 --rows token --out prune_tok.json

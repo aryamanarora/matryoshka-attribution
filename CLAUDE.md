@@ -10,11 +10,10 @@ necessity) and is what MIB's CPR measures — so all our MIB runs are the *suffi
 
 - MIB scripts (`eval_mib.py`, `eval_mib_edge.py`): `--mode sufficient` (now the default)
   = denoising = our runs. `--mode necessary` = noising.
-- DAS / CausalGym (`scripts/causalgym/attribute.py`): config key / flag `sufficient: true` = denoising
-  = top-k clean, matching MIB. **Gotcha:** the *internal* legacy flag (and
-  `sigmoid_das.intervene`'s `sufficient=` param) use the OPPOSITE sense (`True` = top-k get
-  CF / noising); `attribute.py` inverts once right after `parse_args` (`args.sufficient =
-  not args.sufficient`). Don't "fix" that inversion — it's load-bearing.
+- DAS: `sigmoid_das.RotateLayer.intervene`'s `sufficient=` param uses the OPPOSITE (legacy)
+  sense (`True` = top-k get CF / noising); callers invert once at the boundary. Don't "fix" it.
+  (The CausalGym `attribute.py` scripts that documented this were removed 2026-09-22; they are
+  in git history.)
 
 Both `--mode`/`sufficient:` labels were originally flipped and were corrected (commits on
 2026-06-15). Behavior of all existing runs was preserved (config values flipped to match).
@@ -127,7 +126,7 @@ diagnosis rather than a per-model cross-check.
 All gemma2 cells of the LR sweep + MAttr node dirs were re-evaluated under TL 2.15.4 on
 2026-07-24 by `scripts/mib/reeval_gemma_mib.py` (which asserts TL 2.x and overwrites the pkls
 in place), so `paper/tabs/lr_sweep.tex` and the MAttr rows of `mib_results.tex` are clean.
-`submit_lr_sweep_*.sh` still points at `$ABS/.venv/bin/python` — re-running one of those
+`submit_lr_sweep_*.sh` still runs every model in the default env — re-running one of those
 scripts would silently reintroduce the bad Gemma numbers.
 
 ### llama3 cells are evaluated on 200 examples — match it
@@ -149,16 +148,13 @@ rows by the granularity actually pruned, mapped in `scripts/mib/make_mib_table.p
 name — `results/eprun_*` and the `EdgePruning_patching_<level>` subfolder MIB's
 `run_evaluation.py --method EdgePruning` writes. Don't rename those; it would orphan the pkls.
 
-### Known-still-wrong artifacts (as of 2026-06-09)
-These compare NAP-IG against the **uniform-k** `mib_node_hard_topk` instead of the
-log-k `mib_node_hard_topk_log`, so they're inconsistent with the paper's L2A:
-- `plots/plot_rank_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
-- `plots/plot_score_scatter_all.py` (`LOCAL_OURS`/`CLUSTER_OURS`)
-- `scripts/mib/compare_ranks.py` → `paper/tabs/rank_correlations.tex` (`compare_node_methods("mib_node_hard_topk", ...)`)
-
-The natural-k comparison scripts (`plot_cpr_curves_naturalk.py`,
-`plot_rank_scatter_naturalk.py`, `plot_score_scatter_naturalk.py`) were fixed to use
-`mib_node_hard_topk_log`.
+### Removed on 2026-09-22 (pre-release cleanup)
+The hard-topk-era rank/score scatter and CPR-curve plots, `compare_ranks.py` and the other
+`rank_correlations` / `cpr_summary` / `hybrid` / DCM generators, the `scripts/mib/configs/` tree
+(nothing passed `--config`), and the causalgym / global_kl / toy / impossibility substrates were
+deleted; all are in git history before that date. Still on the pre-2026-09-15 headline: the
+transfer chain (`plot_task_corr_heatmap.METHOD_DIR` -> `prep_transfer_sources.py` ->
+`results/transfer_src/mattr`) and `plot_mib_curves.py`'s MAttr arms.
 
 ## Cluster (Stanford NLP `sc`) submission gotchas
 
@@ -183,11 +179,10 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
 - Always prepend `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` for the big models.
 - `-r` must keep mem/cpu ≤ MaxMemPerCPU (~30G on jag): e.g. 64G needs `-c 3`, 96G needs
   `-c 4`. Mismatch triggers `srun: fatal: cpus-per-task set by two different env vars`.
-- `eval_mib.py` reads `--config <path>` relative to CWD first, then `scripts/mib/`; task
-  names in configs must use underscores (`arc_easy`, not `arc-easy`).
+- `eval_mib.py` still accepts `--config <path>` (relative to CWD first, then `scripts/mib/`),
+  but every launcher passes CLI flags; task names must use underscores (`arc_easy`).
 - `--mib-path` is resolved by `src/learning_to_attribute/deps.py:find_mib_path()`: explicit flag,
-  `$L2A_MIB_PATH`, `deps/MIB-circuit-track` (what `bash scripts/setup.sh` clones), then the older
-  gitignored symlink `./MIB-circuit-track`. **It must be OUR FORK with submodules**
+  `$L2A_MIB_PATH`, then `deps/MIB-circuit-track` (what `bash scripts/setup.sh` clones). **It must be OUR FORK with submodules**
   (`aryamanarora/MIB-circuit-track`, pinned in `scripts/setup.sh`; EAP-IG submodule `41e9b9c`).
   Upstream's `evaluate_area_under_curve` returns 5 values, ours 7 (`accuracies`, `acc_auc`), and
   `eval_mib.py` / `eval_mib_edge.py` unpack 7 -- an upstream or stale clone trains for hours and

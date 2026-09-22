@@ -1,8 +1,0 @@
-model: gemma2
-task: arc_easy
-steps: 500
-k-schedule: uniform
-mode: sufficient
-split: validation
-eval-examples: 500
-output: results/mib_node

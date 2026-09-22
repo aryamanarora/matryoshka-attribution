@@ -14,8 +14,8 @@
 # W_ij * E[s_i] in expectation, and E[s_i] comes from the activation sums vw_scores_feat.py
 # already stores.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 A="$PY scripts/vw/vw_feat.py attrib --run $R"
 

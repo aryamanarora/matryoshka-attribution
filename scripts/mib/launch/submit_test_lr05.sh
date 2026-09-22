@@ -4,7 +4,7 @@
 # Test split is small (ioi=1000), so full eval is fine everywhere -- no llama cap.
 # 3 configs x 11 cells = 33 jobs. DRYRUN=1 to preview.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
 DRYRUN=${DRYRUN:-0}
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction"

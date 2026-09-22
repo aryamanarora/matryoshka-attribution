@@ -1,28 +1,0 @@
-2026-06-26 00:14:50,476 INFO __main__: Loading HF model gpt2 for training...
-2026-06-26 00:14:50,751 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
-2026-06-26 00:14:50,925 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
-2026-06-26 00:14:51,088 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
-2026-06-26 00:14:51,233 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
-2026-06-26 00:14:51,386 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
-2026-06-26 00:14:51,530 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
-2026-06-26 00:14:51,859 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/config.json "HTTP/1.1 200 OK"
-Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights:  50%|█████     | 74/148 [00:00<00:00, 736.92it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 1254.07it/s]
-2026-06-26 00:14:55,178 INFO httpx: HTTP Request: HEAD https://huggingface.co/gpt2/resolve/main/generation_config.json "HTTP/1.1 200 OK"
-2026-06-26 00:14:55,825 INFO __main__: Model loaded in 5.3s
-2026-06-26 00:14:58,489 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
-2026-06-26 00:14:58,501 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/mib-bench/ioi/e5f3468f3af4c0883be35cd3bced8c711c95d286/README.md "HTTP/1.1 200 OK"
-2026-06-26 00:14:58,683 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/ioi.py "HTTP/1.1 404 Not Found"
-2026-06-26 00:14:59,115 INFO httpx: HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/mib-bench/ioi/mib-bench/ioi.py "HTTP/1.1 404 Not Found"
-2026-06-26 00:14:59,268 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/revision/e5f3468f3af4c0883be35cd3bced8c711c95d286 "HTTP/1.1 200 OK"
-2026-06-26 00:14:59,414 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/.huggingface.yaml "HTTP/1.1 404 Not Found"
-2026-06-26 00:14:59,731 INFO httpx: HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=mib-bench/ioi "HTTP/1.1 200 OK"
-2026-06-26 00:14:59,880 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/tree/e5f3468f3af4c0883be35cd3bced8c711c95d286/data?recursive=true&expand=false "HTTP/1.1 404 Not Found"
-2026-06-26 00:15:00,074 INFO httpx: HTTP Request: GET https://huggingface.co/api/datasets/mib-bench/ioi/tree/e5f3468f3af4c0883be35cd3bced8c711c95d286?recursive=false&expand=false "HTTP/1.1 200 OK"
-2026-06-26 00:15:00,263 INFO httpx: HTTP Request: HEAD https://huggingface.co/datasets/mib-bench/ioi/resolve/e5f3468f3af4c0883be35cd3bced8c711c95d286/dataset_infos.json "HTTP/1.1 404 Not Found"
-2026-06-26 00:15:00,859 INFO __main__: Loaded 10000 TRAIN examples from ioi (train)
-2026-06-26 00:15:00,860 INFO __main__: Node scores: Node: 12L x (12h + 1mlp)+input = 157 = 157 total
-2026-06-26 00:15:00,861 INFO __main__: Training for 20 steps on ioi/gpt2...
-2026-06-26 00:15:01,823 INFO __main__: Step    1/20  loss=1.5475  k=87/157  bias=0  (1.1 step/s)
-2026-06-26 00:15:02,278 INFO __main__: Training complete in 1.4s
-2026-06-26 00:15:02,283 INFO __main__: Saved train log to results/smoke_iso/ioi_gpt2_trainlog.csv
-2026-06-26 00:15:02,283 INFO __main__: Skipping MIB eval (--skip-eval)

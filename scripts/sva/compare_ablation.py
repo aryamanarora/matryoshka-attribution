@@ -49,7 +49,7 @@ from plot_accauc_vs_faithauc import on_model   # noqa: E402
 def parse_method(fname, nodes):
     """Method label from the filename tag.
 
-    NOTE: this deliberately does NOT reuse plots/plot_sva_sweep.py's parse_method, which tests
+    NOTE: this deliberately does NOT reuse the old plots/plot_sva_sweep.py's parse_method, which tested
     `"hard_topk" in tag` and so lets the plain-`topk` variant fall through to a catch-all that
     returns "IG". Plain `topk` (soft top-k forward) is the HEADLINE MAttr variant as of
     2026-07-21, so that path silently averages the headline into the IG series. Order the tests

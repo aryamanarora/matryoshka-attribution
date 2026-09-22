@@ -1,6 +1,6 @@
 """Sparsity sweep for learned attribution scores (the hand-rolled CPR-style eval).
 
-Generalizes ``scripts/causalgym/attribute.py:_eval_sparsity`` (lines ~321-377): rank nodes by the
+Generalizes the original CausalGym ``_eval_sparsity`` routine: rank nodes by the
 learned scores, and at each sparsity level keep the top-k as a hard mask and measure how
 well the masked model matches the reference. The metric computation (KL / CE / logit-diff /
 MSE / ...) is the caller's via ``apply_and_eval(hard_mask) -> {metric_name: value}``, so this

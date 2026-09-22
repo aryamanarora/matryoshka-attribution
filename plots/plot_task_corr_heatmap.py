@@ -51,6 +51,8 @@ from plotnine import (ggplot, aes, geom_tile, geom_vline, geom_hline, labs,
                       scale_fill_gradient2, theme_bw, theme_set, theme,
                       element_text, element_line, element_blank)
 
+from learning_to_attribute.deps import mib_results_dir
+
 R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 
@@ -76,12 +78,12 @@ NL, NH = 32, 32                      # llama3-8B: 32 layers, 32 heads
 # "nested" layout. Its SVA cells are in results/sva_sweep (NOT sva_sweep_input): they were
 # submitted WITHOUT --include-input, so the tensor is 1056 long and has no input node. That is
 # what forces METHOD_TASKS' node space to drop `input` -- see main().
-R_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
+R_MIB = mib_results_dir()
 SIG_MIB_DIR = "napig_mc/EAP-IG-inputs-mc_patching_node"
 SIG_SVA_DIR = "sva_sweep"
 SIG_SVA_TAG = "node_mc_ig_m1_s42"
 
-# (task, display name, harness, group). Three groups, matching plot_node_summary.py's families:
+# (task, display name, harness, group). Three groups:
 # MIB, subject-verb agreement, and arithmetic in the wild. Ordered within each group as the paper
 # already orders them (make_mib_test_table.COLUMNS; tabs/sva_top_mlp_attn.tex's Simple / Noun PP /
 # RC / Within RC and Addition / Months / Weekdays / Hours headings). GROUP is a display grouping

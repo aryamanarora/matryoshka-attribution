@@ -30,7 +30,7 @@
 # ARM A -- adam-eps x lr. THE UNTESTED HPARAM. With 2.29M mask logits, nearly every per-step
 #   gradient is far below Adam's default eps=1e-8, so m_hat/(sqrt(v_hat)+eps) ~ sign(g): the
 #   learned score is a signed COUNT of steps and all effect MAGNITUDE is divided out (this is
-#   the measured mechanism behind id-STE+Adam's collapse, see report_sva_mlp_lr.py). Raising
+#   the measured mechanism behind id-STE+Adam's collapse, see docs/adam_vs_sgd_mlp.html). Raising
 #   eps above the typical |g| restores magnitude sensitivity and continuously interpolates
 #   Adam -> SGD+momentum at effective lr = lr/eps. If the deficit is an OPTIMIZER artifact,
 #   acc-AUC should climb toward 0.49 along the eps axis. If it is the OBJECTIVE, large-eps Adam

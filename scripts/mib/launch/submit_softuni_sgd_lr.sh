@@ -27,7 +27,7 @@
 # INHERITED TRAPS (see submit_softlog_sgd_lr.sh for the full write-up):
 #  1. --lr is passed on the command line, NOT through scripts/mib/launch/mib_node_seed.sbatch, which reads only
 #     $1..$8 and silently drops a 9th "lr" argument (every job would then run at the default).
-#  2. gemma2 runs under MIB-circuit-track/.venv (TL 2.15.4) -- the L2A venv's Gemma-2 forward is
+#  2. gemma2 runs in the tl2 env (TL 2.15.4) -- the default env's Gemma-2 forward is
 #     wrong (CLAUDE.md, proved in 525673a) -- and that venv needs an explicit PYTHONPATH because
 #     learning_to_attribute is not installed in it. Note that submit_softuni_lr05.sh, which
 #     produced the Adam uniform-k row this sweep is read against, does NOT do this; its gemma2
@@ -41,9 +41,9 @@
 #
 # DRYRUN=1 to preview.  LRS="0.05 0.1" to override the grid.  ONLY=gemma2 to restrict to one model.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"
-PY_L2A=$ABS/.venv/bin/python                     # gpt2 / qwen2.5 / llama3
-PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"
+PY_L2A="uv run python"                   # gpt2 / qwen2.5 / llama3
+PY_TL2="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python" # gemma2 ONLY (TL 2.15.4)
 PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}
 LRS=${LRS:-"0.05 0.1 0.3 1.0"}

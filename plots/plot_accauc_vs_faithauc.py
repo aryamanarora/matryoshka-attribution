@@ -161,8 +161,8 @@ SOURCES = [("results/sva_sweep", "−input", "Patched"),
            ("results/sva_zeroabl_input", "+input", "Zero-abl.")]
 SUBSTRATES = [("node", "Node"), ("mlp", "MLP"), ("mlp+attn_head", "MLP+Attn")]
 # The SAE column is added to the DEFAULT cut only, not to the module-level SUBSTRATES, because
-# that list is iterated by plot_accauc_vs_faithauc_cause.py and scripts/sva/method_winrate.py --
-# widening it there would silently add an SAE column to two other artifacts.
+# that list is iterated by scripts/sva/method_winrate.py (and, until 2026-09-22, by the cause
+# twin of this figure) -- widening it there would silently add an SAE column elsewhere.
 #
 # NOT EVERY METHOD IS ON IT. Node Pruning and DBM have no SAE runs at all, so group_avg drops
 # them from this panel and main()'s MISSING column names them every run. That is the documented
@@ -242,8 +242,7 @@ TENX_RES = {"mlp": "results/sva_sweep_50k", "mlp+attn_head": "results/sva_sweep_
 
 # method key -> (display label, colour); order = legend order.
 # Colours come from plots/palette.py -- the single source of truth for every figure. Do not
-# write hex codes here; plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py read this
-# dict directly, and three more figures read palette.py, so a local override desyncs the paper.
+# write hex codes here; other figures read palette.py, so a local override desyncs the paper.
 METHODS = {
     "IG":         ("IG",           P.color("IG")),
     "IxG":        ("I×G",          P.color("I×G")),
@@ -370,8 +369,8 @@ LOSS_SHAPE = {"acc": "o", "CE": "^", "logit-diff": "s", NO_LOSS: "*"}
 LOSS_PATH = ["CE", "acc", "logit-diff"]
 
 # Methods drawn in THIS figure. METHODS itself stays the full registry -- it is the shared
-# method set/colour map that plot_accauc_vs_faithauc_cause.py and plot_faith_vs_acc_k1.py
-# iterate, so deleting a key there would silently drop the series from those figures too.
+# method set/colour map other scripts (scripts/sva/method_winrate.py) iterate, so deleting a
+# key there would silently drop the series elsewhere too.
 #
 # *** THE DEFAULT CUT WAS NARROWED ON 2026-08-29 (requested) TO: patched only, logit-diff only,
 # six methods. *** It is the figure that ships as fig:acc-faith; every other cut below is an
@@ -390,7 +389,7 @@ LOSS_PATH = ["CE", "acc", "logit-diff"]
 #
 #  THE OTHER TWO LOSSES, dropped. With one loss each method is ONE point per panel, so the four
 #  panels carry 6 markers instead of 18 and the loss-robustness story moves to the figure that
-#  can actually show it (plots/plot_sva_robustness_grid.py, which has a column per loss). This
+#  can actually show it (the old plots/plot_sva_robustness_grid.py, a column per loss). This
 #  also retires the dashed guide and the Loss legend from this figure -- see `losses` in main().
 #
 # ONE ADAM POINT, and it is the eps=1e-2 one. The default-eps arm (`stopk-log`) was drawn here

@@ -12,7 +12,7 @@
 #   - llama3              : --eval-examples 200 (subset),           batch-size 2
 # Getting this wrong makes llama3 non-comparable to the baseline table AND runs ~forever.
 set -u
-cd ~/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 # Standard 9 edge pairs (no llama3 arc_* at edge level).
 PAIRS=(

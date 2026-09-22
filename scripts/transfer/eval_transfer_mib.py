@@ -2,7 +2,7 @@
 
 For one TARGET MIB task, loads llama3 once, then loops over a list of SOURCE score vectors
 (LABEL:PATH specs) and runs the exact eval_mib Phase-2 eval (Graph.from_model + MIB's
-evaluate_area_under_curve) for each. This is eval_mib_from_scores.py with (a) many sources per
+evaluate_area_under_curve) for each. This is eval_mib.py's scoring phase with (a) many sources per
 model load and (b) an incremental output json, so a preempted job resumes.
 
 Sources may be either format that holds the full node-layout vector (index 0 = input, then
@@ -119,7 +119,7 @@ def main():
         if vec.numel() != n_expected:
             raise SystemExit(f"{pth}: {vec.numel()} scores, expected {n_expected} "
                              f"(input + {nl}x{nh} heads + {nl} MLPs)")
-        # Same graph fill as eval_mib_from_scores.py, from the unified vector.
+        # Same graph fill as eval_mib.py, from the unified vector.
         nst = torch.full((graph.n_forward,), float("nan"))
         for name, node in graph.nodes.items():
             if name == "logits":

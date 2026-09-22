@@ -28,7 +28,7 @@
 #
 # Dirs: results/eprun_node_ld_sig[_lr<LR>]/ (circuits) + results/eprun_eval_ld_sig[_lr<LR>]/.
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 STEPS=${STEPS:-3000}

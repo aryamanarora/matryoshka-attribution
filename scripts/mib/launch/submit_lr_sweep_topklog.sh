@@ -4,7 +4,7 @@
 # at 200) but --masking topk and output dirs topklog_lr_<lr>. lr=0.01 == existing mib_node_topk_log.
 # DRYRUN=1 to preview.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
 DRYRUN=${DRYRUN:-0}
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi"

@@ -71,7 +71,7 @@ in-process evaluation and `run_evaluation.py` disagree on the same circuit (nota
 Gemma), so mixing them is not apples-to-apples. `--skip-eval` (what the runner passes)
 trains and dumps only.
 
-Both training and evaluation run in the **MIB venv** (`MIB-circuit-track/.venv`,
+Both training and evaluation run in the **TL 2.15.4 stack** (the `tl2` uv dependency group,
 TL 2.15.4): the L2A venv's TL 3.x has a Gemma-2 forward bug.
 
 ## Cost

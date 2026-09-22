@@ -1,6 +1,7 @@
 """Scatter: Pearson r of two tasks' scores vs their average causal transfer.
 
-Third panel of the cross-task family (plots/plot_task_score_corr.py, plot_task_transfer.py):
+Third panel of the cross-task family (with plot_task_transfer.py; the score-corr panel's
+script was removed 2026-09-22):
 does score similarity PREDICT causal transfer? One point per unordered task pair (13 choose 2
 = 78). x = Pearson r of the two headline-MAttr score vectors (the quantity the left heatmap
 shows); y = relative acc-AUC transfer symmetrised over direction, (T[A<-B] + T[B<-A])/2, each

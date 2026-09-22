@@ -166,12 +166,6 @@ OUR_METHODS = [
     ("$+$ id-STE", "mib_edge_identity_sgd_uniform", "edge", "uniform"),
 ]
 
-# Seed run directories (for mean ± std)
-SEED_DIRS = {
-    "topk": "mib_node_seeds/topk",
-    "hard_topk": "mib_node_seeds/hard_topk",
-}
-
 # Node baselines (reproduced on validation set)
 NODE_BASELINES = {}
 
@@ -186,7 +180,7 @@ NODE_BASELINES = {}
 # what pinned it on the venv rather than run noise. Both dirs are now parked in
 # results/_stale_tl321/ and nothing reads them.
 #
-# Replacements are both TL 2.15.4 (MIB-circuit-track/.venv) and both use the CELLS block that
+# Replacements are both TL 2.15.4 (the tl2 env) and both use the CELLS block that
 # run_variants.sh / run_relp.sh / run_gim.sh / run_attnlrp.sh share, so NAP-IG is now
 # flag-identical to the other gradient baselines in its column rather than merely close.
 NAPIG_REPRO_DIR = "napig_ref_eval"        # MIB-circuit-track run_variants.sh, `ref` arm
@@ -557,7 +551,7 @@ def ours_cost(results_dir, level):
 # documented default when there is no suffix. A hand-maintained {dir: lr} dict would go stale on
 # the next repoint in exactly the silent way this column exists to prevent.
 LR_GATE_DEFAULT = {           # eval_mib_edge_pruning.py:160, when --lr is not passed
-    "hard_concrete": 0.8, "sigmoid": 1e-3, "dcm": 1e-1,
+    "hard_concrete": 0.8, "sigmoid": 1e-3,
 }
 # UGS is not ours and not run_edge_pruning's: ~/optimalablation/edge_pruning_unif_mib.py:149-159
 # derives its LR from reg_lamb and the ablation type rather than taking a flag, and
@@ -618,8 +612,7 @@ def eprun_lr(results_dir):
                 return fmt_lr(float(part[2:]))
             except ValueError:
                 pass
-    gate = ("sigmoid" if "_sig" in results_dir else
-            "dcm" if "_dcm" in results_dir else "hard_concrete")
+    gate = "sigmoid" if "_sig" in results_dir else "hard_concrete"
     return fmt_lr(LR_GATE_DEFAULT[gate])
 # The ig-steps 10 / 30 rows carry their own cost, declared with the rows in NAPIG_STEP_ROWS
 # (defined above, since it needs them) and looked up via grad_cost's STEP_COST.

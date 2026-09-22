@@ -1,15 +1,0 @@
-2026-06-26 07:10:48,901 INFO: Loading meta-llama/Llama-3.1-8B ...
-2026-06-26 07:10:49,187 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-2026-06-26 07:10:49,408 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
-2026-06-26 07:10:49,575 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
-2026-06-26 07:10:49,737 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
-2026-06-26 07:10:50,655 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
-2026-06-26 07:10:50,828 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 53/291 [00:00<00:00, 520.81it/s]Loading weights:  36%|███▋      | 106/291 [00:00<00:00, 313.58it/s]Loading weights:  49%|████▉     | 142/291 [00:00<00:00, 281.35it/s]Loading weights:  59%|█████▉    | 173/291 [00:00<00:00, 269.55it/s]Loading weights:  69%|██████▉   | 202/291 [00:00<00:00, 253.67it/s]Loading weights:  78%|███████▊  | 228/291 [00:00<00:00, 246.45it/s]Loading weights:  88%|████████▊ | 255/291 [00:00<00:00, 241.46it/s]Loading weights:  97%|█████████▋| 281/291 [00:01<00:00, 240.88it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 272.95it/s]
-2026-06-26 07:10:54,997 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
-2026-06-26 07:11:01,108 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
-2026-06-26 07:11:01,109 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
-2026-06-26 07:11:01,737 INFO: Eval on 100 test pairs (len=6)
-2026-06-26 07:11:02,227 INFO: F(clean)=3.200  F(patch)=-2.962
-2026-06-26 07:11:13,342 INFO: iso/faith AUC=1.163 (fmax 2.354) | cause AUC=0.161 | total=2752512 -> results/sva/nounpp_llama3_mlp_relp.json

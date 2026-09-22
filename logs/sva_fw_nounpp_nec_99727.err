@@ -1,16 +1,0 @@
-2026-06-26 06:51:34,783 INFO: Loading meta-llama/Llama-3.1-8B ...
-2026-06-26 06:51:35,030 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-2026-06-26 06:51:35,249 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
-2026-06-26 06:51:35,416 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
-2026-06-26 06:51:35,571 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
-2026-06-26 06:51:36,520 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
-2026-06-26 06:51:36,705 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  14%|█▎        | 40/291 [00:00<00:00, 364.97it/s]Loading weights:  26%|██▋       | 77/291 [00:00<00:00, 255.18it/s]Loading weights:  38%|███▊      | 111/291 [00:00<00:00, 274.18it/s]Loading weights:  48%|████▊     | 140/291 [00:00<00:00, 271.70it/s]Loading weights:  60%|██████    | 175/291 [00:00<00:00, 290.75it/s]Loading weights:  70%|███████   | 205/291 [00:00<00:00, 261.46it/s]Loading weights:  82%|████████▏ | 239/291 [00:00<00:00, 273.33it/s]Loading weights:  92%|█████████▏| 267/291 [00:00<00:00, 273.55it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 279.65it/s]
-2026-06-26 06:51:40,741 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
-2026-06-26 06:51:46,807 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
-2026-06-26 06:51:46,808 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
-2026-06-26 06:51:46,809 INFO: Training 2000 steps (hard_topk gate, necessary, adam, k=log)...
-2026-06-26 06:54:37,861 INFO: Eval on 100 test pairs (len=6)
-2026-06-26 06:54:38,325 INFO: F(clean)=3.200  F(patch)=-2.962
-2026-06-26 06:54:48,846 INFO: iso/faith AUC=0.026 (fmax 1.000) | cause AUC=-3.567 | total=2752512 -> results/sva/nounpp_llama3_mlp_necessary_hard_topk_adam.json

@@ -14,8 +14,8 @@
 #
 # 4x and 8x the previous best, plus a lower-lr cell because lr and budget interact.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 M="$PY scripts/vw/vw_mattr.py --run $R --method mattr --optimizer adam --adam-eps 1e-8"
 

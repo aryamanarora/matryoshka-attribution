@@ -8,6 +8,6 @@
 #SBATCH --error=logs_arith/%x_%j.err
 # usage: sbatch -J arith-probes scripts/arith_formats/launch/probes.sbatch --model llama3.1-8b
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false
-.venv/bin/python scripts/arith_formats/probes.py "$@"
+uv run python scripts/arith_formats/probes.py "$@"

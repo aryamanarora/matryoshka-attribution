@@ -9,8 +9,8 @@
 # 2. pick the cell whose held-out loss is closest to the note's published 3.38, link it as
 #    results/vw/base, and record the whole sweep
 set -euo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 
 for lr in 1e-3 2e-3 3e-3; do
   $PY scripts/vw/vw_train.py --lr $lr                                --out results/vw/lr_$lr

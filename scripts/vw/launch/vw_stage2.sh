@@ -16,8 +16,8 @@
 # ORDER MATTERS: the headline four arms run first, so a truncated job still answers the
 # question. Everything after them is an ablation.
 set -euo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 M="$PY scripts/vw/vw_mattr.py --run $R"
 

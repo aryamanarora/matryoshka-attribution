@@ -22,7 +22,7 @@
 # the staged files live. Until finalize runs, the live trees still serve the old data, so
 # figures rebuilt mid-wave stay complete instead of half-swapped.
 #
-# GATED ON scripts/sva/check_gradchunk.py: the whole wave is --dependency=afterok:<gate>, and the
+# GATED ON a smoke job (the since-removed check_gradchunk.py): the whole wave is --dependency=afterok:<gate>, and the
 # gate verifies the new non-SAE --grad-batch chunking against the full-batch path on a smoke
 # pair. If the gate fails, every job here sits DependencyNeverSatisfied and nothing is written.
 #
@@ -35,7 +35,7 @@
 # logit_diff ONLY -- the reported cut. The acc/ce arms stay at 100 ex. (appendix robustness
 # grid; bump them the same way if that figure is ever promoted).
 #
-# GATE=<jobid> required (the check_gradchunk sbatch id). DRY=1 to preview.
+# GATE=<jobid> required (the smoke job's sbatch id). DRY=1 to preview.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 mkdir -p logs results/_gradcm_staging

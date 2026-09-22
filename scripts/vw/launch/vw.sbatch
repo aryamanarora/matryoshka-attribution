@@ -9,8 +9,8 @@
 # Thin runner for the interference-weights replication. Everything after the sbatch script
 # is forwarded verbatim:   sbatch -J vw_lr1e3 scripts/vw/launch/vw.sbatch scripts/vw/vw_train.py --lr 1e-3 ...
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Dispatch on the first argument so this one runner covers both the python entry points
 # and the multi-stage shell drivers (scripts/vw_stage*.sh).
-if [[ "$1" == *.sh ]]; then bash "$@"; else .venv/bin/python "$@"; fi
+if [[ "$1" == *.sh ]]; then bash "$@"; else uv run python "$@"; fi

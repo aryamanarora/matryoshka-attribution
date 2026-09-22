@@ -31,7 +31,7 @@ partial-coverage row.
 The UGS code is `alestolfo/optimalablation`, cloned at `~/optimalablation` (not a submodule; it is
 a baseline checkout, so the local patches below are captured in `baselines/optimalablation.patch`).
 It is written against transformer_lens 2.x, so it runs in the **MIB venv**
-(`MIB-circuit-track/.venv`, TL 2.15.4 + transformers 4.46.3) — the same venv we use for all MIB
+(the `tl2` uv dependency group, TL 2.15.4 + transformers 4.46.3) — the same stack we use for all MIB
 eval. Its only missing dependency there was `seaborn` (installed; nothing else changed).
 
 Four patches were needed to make the published script run at all:
@@ -63,15 +63,15 @@ sbatch scripts/mib/launch/run_ugs.sbatch qwen mcqa 0.001
 # -> ~/optimalablation/results/pruning/<task>/cf/ugs_mib_<model>/0.001/snapshot.pth
 
 # 2. convert the mask to a MIB graph (writes graph.json next to the snapshot)
-cd ~/MIB-circuit-track && PYTHONPATH=.:EAP-IG/src .venv/bin/python convert_mask_to_graph.py \
+cd deps/MIB-circuit-track && PYTHONPATH=.:EAP-IG/src env UV_PROJECT_ENVIRONMENT=$PWD/../../.venv-tl2 uv run --project $PWD/../.. --no-default-groups --group tl2 python convert_mask_to_graph.py \
     --path ~/optimalablation/results/pruning --task ioi --ablation cf \
     --model gpt2-small --lambdas 0.001
 
 # 3. evaluate with MIB's own harness, into the layout make_mib_table.py reads for baselines
-cd ~/MIB-circuit-track && PYTHONPATH=.:EAP-IG/src .venv/bin/python run_evaluation.py \
+cd deps/MIB-circuit-track && PYTHONPATH=.:EAP-IG/src env UV_PROJECT_ENVIRONMENT=$PWD/../../.venv-tl2 uv run --project $PWD/../.. --no-default-groups --group tl2 python run_evaluation.py \
     --models gpt2 --tasks ioi --level edge --ablation patching --split validation \
     --method UGS --circuit-files <.../graph.json> \
-    --output-dir ~/learning-to-attribute/results/ugs_eval
+    --output-dir ../../results/ugs_eval
 # -> results/ugs_eval/UGS_patching_edge/<task-dash>_<model>_validation_abs-False.pkl
 ```
 

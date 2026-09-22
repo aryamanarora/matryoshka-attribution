@@ -57,8 +57,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import make_mib_table as M   # noqa: E402  single source of truth for the 11-cell column set
+from learning_to_attribute.deps import mib_results_dir  # noqa: E402
 
-RESULTS_MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
+RESULTS_MIB = mib_results_dir()
 RESULTS_L2A = Path("results")
 TABDIR = Path("paper/tabs")
 TOPN = 10

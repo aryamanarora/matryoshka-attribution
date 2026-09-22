@@ -24,7 +24,7 @@ reaches ~5 where IOI/Qwen reaches ~2), so it gets a per-panel y -- read shape, n
 
 Each curve reads BOTH arrays from one self-consistent eval pkl:
   MAttr    -> results/<dir>/{task}_{model}_validation.pkl
-  gradient -> MIB-circuit-track/results/<dir>/<sub>/{stask}_{model}_validation_abs-False.pkl
+  gradient -> deps/MIB-circuit-track/results/<dir>/<sub>/{stask}_{model}_validation_abs-False.pkl
               (dir is *_accauc for the older runs, *_eval for ones evaluated after the
                `accuracies` array became standard -- see the METHODS comment)
 The `eprun` loader branch is kept though no series uses it, so a mask-learning baseline can be
@@ -41,11 +41,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
+from learning_to_attribute.deps import mib_results_dir
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette as P                                   # noqa: E402
 
 R = Path("results")
-MIB = Path("/home/guests/aryaman/MIB-circuit-track/results")
+MIB = mib_results_dir()
 OUT = Path("plots")
 PCT = (.001, .002, .005, .01, .02, .05, .1, .2, .5, 1)
 

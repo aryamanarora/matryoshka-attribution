@@ -1,8 +1,0 @@
-model: llama3
-task: arc_easy
-steps: 5000
-k-schedule: log
-mode: sufficient
-split: validation
-eval-examples: 500
-output: results/mib_edge

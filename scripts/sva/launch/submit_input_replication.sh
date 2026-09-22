@@ -121,7 +121,7 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
     #
     # LOG-k ONLY. results/sva_sweep carries both schedules for this arm, but nothing consumes
     # the +input uniform-k cells: fig:acc-faith uses `softsgd-log`, and
-    # plot_kschedule_accauc_vs_faithauc.py -- the one figure that faces the schedules off across
+    # the old plot_kschedule_accauc_vs_faithauc.py -- the one figure that faced the schedules off across
     # both sweep dirs -- filters to `hard_topk` and never sees the soft forward at all. Adding
     # uniform would double the wave for a series no artifact reads.
     want softsgd && sub "${PFX}_${task}_softsgd_log_${loss}" "sufficient_topk_sgd${ls}_bs1" \

@@ -21,7 +21,7 @@
 #
 # Register a new budget in scripts/mib/make_mib_table.py:EPRUN_SPARSITIES to get its table rows.
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 SPARSITIES=("${@:-}")

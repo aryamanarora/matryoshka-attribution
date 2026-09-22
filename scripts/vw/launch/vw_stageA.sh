@@ -4,6 +4,6 @@
 # and each additional job in a dependency chain costs another full queue wait.
 #   sbatch -J vw_A --time=01:00:00 scripts/vw/launch/vw.sbatch scripts/vw/launch/vw_stageA.sh
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 bash scripts/vw/launch/vw_stage1a.sh
 bash scripts/vw/launch/vw_stage1b.sh

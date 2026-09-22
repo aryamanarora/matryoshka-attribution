@@ -25,9 +25,9 @@
 #     hold byte-identical pkls (verified by md5sum on ioi_gpt2_validation.pkl). That "sweep"
 #     is three copies of one run, not three LRs.
 #
-#  2. It runs gemma2 under MIB-circuit-track/.venv (TL 2.15.4), not the L2A .venv (TL 3.2.1),
+#  2. It runs gemma2 in the tl2 env (TL 2.15.4), not the default env (TL 3.2.1),
 #     whose Gemma-2 forward is wrong (CLAUDE.md; proved against an HF reference in 525673a).
-#     submit_lr_sweep_topklog.sh hardcodes $ABS/.venv/bin/python for every model, so re-running
+#     submit_lr_sweep_topklog.sh ran the default (TL 3.2.1) env for every model, so re-running
 #     it would silently reintroduce the bad Gemma numbers.
 #     ...and that venv needs an explicit PYTHONPATH. It is the MIB repo's own environment and
 #     does NOT have learning_to_attribute installed, so invoking its python directly dies at
@@ -43,9 +43,9 @@
 # DRYRUN=1 to preview.  LRS="0.05 0.1" to override the grid.  ONLY=gemma2 to restrict to one
 # model's cells (used to resubmit just the gemma2 arm after the PYTHONPATH fix above).
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"
-PY_L2A=$ABS/.venv/bin/python                 # gpt2 / qwen2.5 / llama3
-PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"
+PY_L2A="uv run python"               # gpt2 / qwen2.5 / llama3
+PY_TL2="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python" # gemma2 ONLY (TL 2.15.4)
 # Prefix for PY_TL2 only; PY_L2A has the package installed editable and needs none.
 PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}

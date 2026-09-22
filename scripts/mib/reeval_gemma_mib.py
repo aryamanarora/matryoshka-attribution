@@ -5,9 +5,10 @@ WHY: MAttr numbers were produced by scripts/eval_mib{,_edge}.py in the L2A venv 
 whose Gemma-2 forward disagrees with HuggingFace (see memory eval-mib-vs-run-evaluation-divergence).
 Only the 3 Gemma cells (ioi/mcqa/arc_easy, gemma2) are affected; gpt2/qwen/llama are version-stable.
 
-RUN IN THE MIB VENV, from the L2A repo root, one job per (level, split, task):
-  PYTHONPATH=MIB-circuit-track:MIB-circuit-track/EAP-IG/src \
-    MIB-circuit-track/.venv/bin/python scripts/mib/reeval_gemma_mib.py --level node --split validation --task arc_easy
+RUN IN THE TL 2.15.4 STACK (the `tl2` dependency group), from the repo root, one job per
+(level, split, task):
+  UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python \
+    scripts/mib/reeval_gemma_mib.py --level node --split validation --task arc_easy
 
 For each MAttr dir it rebuilds the circuit (node: Graph.from_json of importances.json; edge:
 scores.pt -> graph.scores[real_edge_mask]), runs evaluate_area_under_curve, and OVERWRITES:
@@ -20,9 +21,11 @@ from pathlib import Path
 
 import torch
 
-L2A = Path("/home/guests/aryaman/learning-to-attribute")
+from learning_to_attribute.deps import mib_results_dir
+
+L2A = Path(__file__).resolve().parents[2]
 R = L2A / "results"
-MIBR = Path("/home/guests/aryaman/MIB-circuit-track/results")
+MIBR = mib_results_dir()
 HFTASK = {"ioi": "ioi", "mcqa": "copycolors_mcqa", "arc_easy": "arc_easy"}
 HEAD = {"ioi": 200, "mcqa": 0, "arc_easy": 0}   # match run_accauc.sh baseline caps (ioi gemma2 -> 200)
 

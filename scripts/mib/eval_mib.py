@@ -24,9 +24,7 @@ from learning_to_attribute import (sigmoid_topk, learn_scores, normalize_mode, M
 from learning_to_attribute import wandb_util
 from learning_to_attribute.losses import attribution_loss, resolve_direction
 from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
-from learning_to_attribute.models import (
-    LlamaAttributionHooks, GPTNeoXAttributionHooks, GPT2AttributionHooks,
-)
+from learning_to_attribute.models import LlamaAttributionHooks, GPT2AttributionHooks
 from learning_to_attribute.deps import find_mib_path
 
 logging.basicConfig(
@@ -64,7 +62,6 @@ TASKS_TO_HF = {
 HOOKS_BY_TYPE = {
     "llama": LlamaAttributionHooks,
     "gpt2": GPT2AttributionHooks,
-    "gpt_neox": GPTNeoXAttributionHooks,
     "qwen2": LlamaAttributionHooks,
     "gemma2": LlamaAttributionHooks,
 }
@@ -203,7 +200,7 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
     # transformers renamed from_pretrained's `torch_dtype` to `dtype` in v5, and THIS FILE RUNS
     # UNDER BOTH. Per CLAUDE.md every gemma2 cell must be trained/scored in
-    # MIB-circuit-track/.venv (transformers 4.46.3, TL 2.15.4, whose Gemma-2 forward is the
+    # the tl2 env (transformers 4.46.3, TL 2.15.4, whose Gemma-2 forward is the
     # correct one), while gpt2/qwen2.5/llama3 run in .venv (transformers 5.9.0). Hardcoding
     # `dtype=` killed all 12 gemma2 jobs of the 2026-08-20 softlog_sgd sweep 28s in, with
     # `Gemma2ForCausalLM.__init__() got an unexpected keyword argument 'dtype'`. Gate on the

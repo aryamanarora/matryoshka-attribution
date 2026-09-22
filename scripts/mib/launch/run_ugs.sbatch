@@ -21,11 +21,12 @@ DATASET=${2:?dataset}
 LAMB=${3:-0.001}          # MIB README: reg_lamb=0.001 for the reported UGS results
 MAXSEC=${4:-0}            # >0 wraps the run in `timeout` (for smoke tests)
 
-UGS=/home/guests/aryaman/optimalablation
-PY=/home/guests/aryaman/MIB-circuit-track/.venv/bin/python
+UGS=${UGS:-$HOME/optimalablation}          # alestolfo/optimalablation checkout (docs/ugs_baseline.md)
+L2A="${SLURM_SUBMIT_DIR:-$(pwd)}"          # submit from the repo root
+PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"   # TL 2.15.4 stack, same as the MIB fork
 cd "$UGS"
 
-CMD=("$PY" edge_pruning_unif_mib.py -d "$DATASET" -e cf -n "ugs_mib_${MODEL}" -l "$LAMB")
+CMD=($PY edge_pruning_unif_mib.py -d "$DATASET" -e cf -n "ugs_mib_${MODEL}" -l "$LAMB")
 [ "$MAXSEC" -gt 0 ] && CMD=(timeout --signal=INT "$MAXSEC" "${CMD[@]}")
 
 UGS_MODEL="$MODEL" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "${CMD[@]}"

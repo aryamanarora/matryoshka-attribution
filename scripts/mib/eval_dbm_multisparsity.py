@@ -22,10 +22,10 @@ computed once and shared across the whole ladder, so a cell costs (n_rungs + 2) 
 instead of n_rungs * 12. That also guarantees every rung is normalised against the same two
 reference scores, which a per-run invocation would not.
 
-Run under the MIB venv (TL 2.15.4) -- mandatory for gemma2, whose forward is wrong under the L2A
-venv's TL 3.x. See scripts/mib/launch/submit_dbm_multisparsity.sh.
+Run in the TL 2.15.4 stack (the `tl2` dependency group) -- mandatory for gemma2, whose forward
+is wrong under the default env's TL 3.x. See scripts/mib/launch/submit_dbm_multisparsity.sh.
 
-    PYTHONPATH=$MIB:$MIB/EAP-IG/src $MIB/.venv/bin/python scripts/mib/eval_dbm_multisparsity.py \
+    env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python scripts/mib/eval_dbm_multisparsity.py \
         --model gpt2 --task ioi --split validation
 
 Out: results/dbm_multisparsity/{task}_{model}_{split}.json

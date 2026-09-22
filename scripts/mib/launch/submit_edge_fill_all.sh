@@ -3,7 +3,7 @@
 #  - small models (gpt2/qwen/gemma): only bernoulli_reinforce row was never run -> jag, full eval.
 #  - llama3 cells: a6000 OOMs at full eval -> sphinx h100, 200-example subset (daggered).
 set -u
-cd /juice2/scr2/aryaman/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 
 # ---- small-model bernoulli_reinforce cells (jag a6000, full eval) ----

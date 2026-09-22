@@ -3,7 +3,7 @@
 # hard_topk: lr 0.005/0.05/0.1/0.3 ; bernoulli: lr 0.01/0.05/0.3 + lr0.1@2k.
 # (bern lr0.1@500 is the main mib_node_bernoulli_reinforce rerun, not repeated here.)
 set -u
-cd /juice2/scr2/aryaman/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 PAIRS=( "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction" \
         "qwen2.5 mcqa" "gemma2 mcqa" "llama3 mcqa" "gemma2 arc_easy" "llama3 arc_easy" "llama3 arc_challenge" )

@@ -9,6 +9,6 @@
 # Thin runner: everything after the script name is forwarded to eval_transfer_mib.py.
 # usage: sbatch -J xfer_mib_ioi scripts/transfer/launch/transfer_mib.sbatch --model llama3 --task ioi --sources ...
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 uv run python scripts/transfer/eval_transfer_mib.py "$@"

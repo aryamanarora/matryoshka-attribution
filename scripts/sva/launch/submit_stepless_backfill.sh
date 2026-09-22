@@ -14,7 +14,7 @@
 #   results/sva_sweep_input  node           all ten tasks                                 (10)
 #
 # LOGIT-DIFF ONLY, because that is all the default cut draws. This does NOT make Expected Gradients
-# complete for the multi-loss artifacts: `--all` / `--adam` and plots/plot_sva_robustness_grid.py
+# complete for the multi-loss artifacts: `--all` / `--adam` (and the old plot_sva_robustness_grid.py)
 # want ce and acc too, which is a further ~66 runs. Those stay out of scope until someone wants
 # that figure to carry the row.
 #

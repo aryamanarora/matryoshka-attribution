@@ -21,9 +21,10 @@
 #   bash scripts/mib/launch/submit_eapig_edge_accauc.sh            # submit
 #   DRYRUN=1 bash scripts/mib/launch/submit_eapig_edge_accauc.sh   # preview
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute
-MIB=/home/guests/aryaman/MIB-circuit-track
-PY=$MIB/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+L2A=$ABS
+MIB=${L2A_MIB_PATH:-$L2A/deps/MIB-circuit-track}
+PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"   # TL 2.15.4 stack (mandatory for gemma2)
 DRYRUN=${DRYRUN:-0}
 CDIR=$ABS/results/eapig_repro_accauc_circuits
 OUT=$ABS/results/eapig_repro_accauc

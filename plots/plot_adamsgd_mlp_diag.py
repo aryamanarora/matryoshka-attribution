@@ -357,7 +357,7 @@ def fig_eps_grid(res="results/adamsgd_mlp/A_eps", refs=None, specs=None,
     above 1 over-recovers -- higher is NOT better).
 
     PARAMETERISED SO OTHER SUBSTRATES REUSE IT RATHER THAN COPY IT (2026-09-02). The SAE
-    version of this row (plots/plot_sae_epsgrid.py) started life as a second implementation
+    version of this row (the old plots/plot_sae_epsgrid.py) started life as a second implementation
     of the same 130 lines; two copies of a figure this fiddly drift on the first edit, and the
     whole point of putting the two rows on facing pages is that they are drawn identically.
     `res` is the results tree, `refs` maps a rho panel key to its reference .scores.pt

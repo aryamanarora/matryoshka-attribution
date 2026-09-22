@@ -32,9 +32,9 @@
 #
 # DRYRUN=1 to preview.  LRS="0.1" to override the grid.  ONLY=gemma2 for one model's cells.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"
-PY_L2A=$ABS/.venv/bin/python                     # gpt2 / qwen2.5 / llama3
-PY_TL2=$ABS/MIB-circuit-track/.venv/bin/python   # gemma2 ONLY (TL 2.15.4)
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"
+PY_L2A="uv run python"                   # gpt2 / qwen2.5 / llama3
+PY_TL2="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python" # gemma2 ONLY (TL 2.15.4)
 PP_TL2="PYTHONPATH=$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src "
 DRYRUN=${DRYRUN:-0}
 LRS=${LRS:-"0.005 0.1 0.3"}

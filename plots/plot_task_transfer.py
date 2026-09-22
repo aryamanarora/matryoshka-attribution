@@ -112,7 +112,7 @@ def main():
                          "value lookup). Partial rounds show as grey NA tiles.")
     sz.add_argument("--third", action="store_true",
                     help="draw at ~1.8in for a 0.31\\textwidth slot (three-in-a-row), matching "
-                         "plot_task_score_corr --third box-for-box. Output gets _third.")
+                         "the (removed) plot_task_score_corr --third box-for-box. Output gets _third.")
     args = ap.parse_args()
     if args.raw and args.metric == "cpr":
         raise SystemExit("--raw needs --metric acc: raw CPR and faith-AUC share no units")
@@ -212,7 +212,7 @@ def main():
                        axis_text_y=element_text(size=4.5)))
     if args.half or args.third:
         # Sub-full slots: top colourbar keeps panel width for the 13 columns. The --third box
-        # (1.8 x 2.1) matches plot_task_score_corr --third so a 3-subfigure row sits equal;
+        # (1.8 x 2.1) matches the old plot_task_score_corr --third so a 3-subfigure row sits equal;
         # the axis TITLES are dropped there -- at 1.8in they cost a tile-row each and the
         # caption already says which side is source and which is target.
         # Three-panel row of fig:task-transfer: square plot rectangle, authored at final page

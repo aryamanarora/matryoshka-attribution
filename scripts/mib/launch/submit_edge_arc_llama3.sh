@@ -28,7 +28,7 @@
 #   bash scripts/mib/launch/submit_edge_arc_llama3.sh            # submit
 #   DRYRUN=1 bash scripts/mib/launch/submit_edge_arc_llama3.sh   # preview
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
 DRYRUN=${DRYRUN:-0}
 
 # outdir | masking | k-schedule | lr | optimizer | split

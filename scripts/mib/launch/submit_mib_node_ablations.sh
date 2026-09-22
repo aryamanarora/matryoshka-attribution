@@ -2,7 +2,7 @@
 # Rerun all node-level L2A ablations train->val (honest: train on train, eval on validation).
 # Run from repo root on sc inside tmux.
 set -u
-cd /juice2/scr2/aryaman/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 PAIRS=(
   "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi"

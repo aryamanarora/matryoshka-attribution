@@ -3,7 +3,7 @@
     uv run python scripts/mib/make_mib_submission.py \
         --node-dir results/test_node_topk_uniform_lr05 \
         --edge-dir results/test_edge_topk_uniform_lr05 \
-        --out /tmp/mib_submit
+        --out results/mib_submit
 
 Output layout (what the leaderboard's validator and backend expect -- one folder per
 task/model, ONE .json/.pt file inside, task names HYPHENATED):

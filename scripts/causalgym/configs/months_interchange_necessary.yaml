@@ -1,8 +1,0 @@
-model: meta-llama/Llama-3.1-8B
-text: "Q: What month is four months after January?\nA:"
-cf_text: "Q: What month is four months after October?\nA:"
-mask: mlp
-loss: kl
-steps: 300
-sufficient: false
-output: results/months_interchange_necessary

@@ -180,8 +180,7 @@ GF_LAYER, GF_NEURONS = GOODFIRE["layer"], GOODFIRE["neurons"]
 GF_CITE = r"\citet{feucht2026arithmetic}"
 # Training losses, as a top-level section each. Keys are the runs' own meta["loss"]; the middle
 # field is the tag fragment that selects them on disk (empty = logit-diff, the loss every
-# headline SVA number in the paper uses). Order matches plot_sva_sweep.LOSS_ORDER so the two
-# artifacts read top-to-bottom the same way.
+# headline SVA number in the paper uses).
 LOSSES = [("logit_diff", "", "Logit difference"),
           ("ce", "_ce", "Cross-entropy"),
           ("acc", "_acc", "Accuracy")]

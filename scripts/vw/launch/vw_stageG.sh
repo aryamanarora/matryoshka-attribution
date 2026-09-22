@@ -12,8 +12,8 @@
 # 91.4 / 0.035). If the path-linear blind spot is really about large |sw|, Expected Gradients should
 # do RELATIVELY better on this family than on the last one.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 A="$PY scripts/vw/vw_feat.py attrib --run $R"
 

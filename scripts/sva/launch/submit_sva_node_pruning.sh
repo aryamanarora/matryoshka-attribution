@@ -40,7 +40,7 @@ STEPS=${STEPS:-2000}          # matches MATTR_COMMON in submit_sva_sweep.sh -- k
 TAG="eprun_s$(printf '%03d' "$(python3 -c "print(round($S*100))")")"
 
 # (sweep_dir, nodes, task, model, loss) for every cell the figure needs.
-GRID=$(.venv/bin/python - <<'EOF'
+GRID=$(uv run python - <<'EOF'
 import glob, json, os, sys
 # DECLARED, not derived-from-disk. This used to enumerate the headline-MAttr jsons already
 # present, which cannot work as a COVERAGE requirement: a cell whose MAttr run has not finished

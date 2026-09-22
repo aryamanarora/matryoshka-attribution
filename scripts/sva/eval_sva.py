@@ -82,14 +82,11 @@ def _span_last(tokenizer, content_spans):
 
 # goodfire-ai/arithmetic-wild's generated datasets. Resolved like deps.find_mib_path: $L2A_ARITH_DIR,
 # then deps/arithmetic-wild (where scripts/setup.sh-era checkouts keep outside repos; the 7 MB
-# `datasets/` tree was copied there from Tilde on 2026-09-15), then the Tilde path that was
-# hardcoded here until then -- so the older machines keep working and a fresh clone gets a
-# clear error naming the fix instead of a Tilde path.
+# `datasets/` tree lives there) -- so a fresh clone gets a clear error naming the fix.
 def _arith_dir():
     root = Path(__file__).resolve().parents[2]
     cands = [os.environ.get("L2A_ARITH_DIR"),
-             root / "deps" / "arithmetic-wild" / "datasets" / "Llama-3.1-8B",
-             "/home/guests/aryaman/arithmetic-wild/datasets/Llama-3.1-8B"]
+             root / "deps" / "arithmetic-wild" / "datasets" / "Llama-3.1-8B"]
     for c in cands:
         if c and Path(c).is_dir():
             return str(c)

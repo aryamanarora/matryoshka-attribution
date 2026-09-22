@@ -31,7 +31,7 @@
 # 11 cells, one job each -> results/eprun_eval_ld_sig_lr<LR>[_l1<L1>]/
 #   EdgePruning_patching_node/<task-dash>_<model>_test_abs-False.pkl
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 LR=${1:-0.3}

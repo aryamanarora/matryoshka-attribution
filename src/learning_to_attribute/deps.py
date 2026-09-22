@@ -10,8 +10,7 @@ Resolution order, first hit wins:
   1. an explicit path (`--mib-path` / the `explicit` argument)
   2. `$L2A_MIB_PATH`
   3. `<repo>/deps/MIB-circuit-track`          (scripts/setup.sh's layout)
-  4. `<repo>/MIB-circuit-track`               (the older gitignored symlink; machines provisioned
-                                               before deps/ existed keep working without a copy)
+  4. `<repo>/MIB-circuit-track`               (an older gitignored symlink, if one exists)
   5. `./MIB-circuit-track` relative to the CWD (the scripts' historical default)
 """
 
@@ -58,15 +57,8 @@ def find_mib_path(explicit: str | os.PathLike | None = None) -> Path:
 def mib_results_dir(explicit: str | os.PathLike | None = None) -> Path:
     """The MIB fork's own `results/` tree (run_attribution / run_evaluation outputs, the
     `*_accauc` re-eval mirrors, `mattr_accauc*`), which the table generators read baseline
-    rows from. Resolved through find_mib_path(), with the Tilde path that the generators
-    hardcoded until 2026-09-16 as a last resort so that checkout keeps working."""
-    try:
-        return find_mib_path(explicit) / "results"
-    except FileNotFoundError:
-        legacy = Path("/home/guests/aryaman/MIB-circuit-track/results")
-        if legacy.is_dir():
-            return legacy
-        raise
+    rows from. Resolved through find_mib_path()."""
+    return find_mib_path(explicit) / "results"
 
 
 def add_mib_to_sys_path(explicit: str | os.PathLike | None = None) -> Path:

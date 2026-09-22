@@ -22,15 +22,15 @@
 #   edge  -- submit_edge_lr05.sh: steps 5000, no --include-input, 9 cells (no llama3 ARC, there
 #            are no edge circuits there), llama3 capped at 200 on BOTH splits.
 #
-# GEMMA2 CAVEAT: like every other script here this runs the L2A venv (TL 3.2.1), whose Gemma-2
+# GEMMA2 CAVEAT: like every other script here this runs the default env (TL 3.2.1), whose Gemma-2
 # forward is wrong. The four new dirs are registered in reeval_gemma_mib.py's DIRS, so after
-# this wave lands the gemma2 cells MUST be re-evaluated under the MIB venv (TL 2.15.4):
-#   PYTHONPATH=MIB-circuit-track:MIB-circuit-track/EAP-IG/src \
-#     MIB-circuit-track/.venv/bin/python scripts/mib/reeval_gemma_mib.py --level node --split test \
+# this wave lands the gemma2 cells MUST be re-evaluated in the TL 2.15.4 stack (`tl2` group):
+#   env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python \
+#     scripts/mib/reeval_gemma_mib.py --level node --split test \
 #       --task <ioi|mcqa|arc_easy> --dirs test_node_topk_uniform_lr05
 # Skipping that step silently ships wrong Gemma numbers in three cells per dir.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
 DRYRUN=${DRYRUN:-0}
 
 NODE_PAIRS=(

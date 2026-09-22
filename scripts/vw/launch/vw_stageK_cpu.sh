@@ -5,8 +5,8 @@
 # (except for negative Features->Logits weights)". Zero ablation (the note's), coarse grid,
 # four rankings, 256 held-out sequences. Thread count capped: shared login node.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 D="0.55 0.3 0.15 0.05 0.02 0.01 0.002"
 for S in pos neg; do

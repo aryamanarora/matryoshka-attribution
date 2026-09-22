@@ -10,7 +10,7 @@
 # OUT / NODE / EDGE / HEAD override the defaults below.
 set -euo pipefail
 ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"
-OUT=${OUT:-/nlp/scr/aryaman/mib_submit}
+OUT=${OUT:-$ABS/results/mib_submit}
 NODE=${NODE:-results/test_node_softlog_sgd_lr_1.0}
 EDGE=${EDGE:-results/test_edge_softlog_sgd_lr_3.0}
 HEAD=${HEAD:-100}

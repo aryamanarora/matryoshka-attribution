@@ -1,16 +1,0 @@
-2026-06-26 06:59:09,779 INFO: Loading meta-llama/Llama-3.1-8B ...
-2026-06-26 06:59:10,037 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-2026-06-26 06:59:10,244 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
-2026-06-26 06:59:10,405 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
-2026-06-26 06:59:10,549 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
-2026-06-26 06:59:11,509 INFO: HTTP Request: GET https://huggingface.co/api/models/meta-llama/Llama-3.1-8B "HTTP/1.1 200 OK"
-2026-06-26 06:59:11,723 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json "HTTP/1.1 200 OK"
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/291 [00:00<?, ?it/s]Loading weights:  13%|█▎        | 38/291 [00:00<00:00, 287.20it/s]Loading weights:  23%|██▎       | 67/291 [00:00<00:01, 206.38it/s]Loading weights:  31%|███       | 89/291 [00:00<00:01, 160.22it/s]Loading weights:  36%|███▋      | 106/291 [00:00<00:01, 134.35it/s]Loading weights:  45%|████▍     | 130/291 [00:00<00:01, 156.30it/s]Loading weights:  52%|█████▏    | 151/291 [00:00<00:00, 167.97it/s]Loading weights:  59%|█████▉    | 171/291 [00:00<00:00, 173.96it/s]Loading weights:  65%|██████▌   | 190/291 [00:01<00:00, 175.46it/s]Loading weights:  72%|███████▏  | 209/291 [00:01<00:00, 161.32it/s]Loading weights:  78%|███████▊  | 226/291 [00:01<00:00, 132.77it/s]Loading weights:  84%|████████▎ | 243/291 [00:01<00:00, 140.65it/s]Loading weights:  91%|█████████ | 264/291 [00:01<00:00, 149.84it/s]Loading weights: 100%|██████████| 291/291 [00:01<00:00, 168.84it/s]
-2026-06-26 06:59:16,354 INFO: HTTP Request: HEAD https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/generation_config.json "HTTP/1.1 200 OK"
-2026-06-26 06:59:24,392 INFO: seq_len=6 (modal clean length; {6: 358, 7: 32, 8: 10})
-2026-06-26 06:59:24,393 INFO: Nodes (mlp): MLP: 32L x 6pos x 14336n = 2,752,512 = 2,752,512 total
-2026-06-26 06:59:24,394 INFO: Training 2000 steps (hard_topk gate, necessary, adam, k=log)...
-2026-06-26 07:02:16,791 INFO: Eval on 100 test pairs (len=6)
-2026-06-26 07:02:17,255 INFO: F(clean)=3.200  F(patch)=-2.962
-2026-06-26 07:02:28,009 INFO: iso/faith AUC=0.026 (fmax 1.000) | cause AUC=-3.567 | total=2752512 -> results/sva/nounpp_llama3_mlp_necessary_hard_topk_adam.json

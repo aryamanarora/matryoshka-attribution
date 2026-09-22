@@ -25,8 +25,8 @@
 # Tags are explicit: vw_mattr.py's automatic tag has no steps/batch field, so two runs that
 # differ only in budget would overwrite each other.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 M="$PY scripts/vw/vw_mattr.py --run $R --method mattr --optimizer adam"
 

@@ -51,12 +51,10 @@ def learn_scores(
     sgd_dampening: float = 0.0,
     grad_norm: float = 0.0,
     l0_lambda: float = 0.0,
-    manual_backward: bool = False,
     extra_params: Optional[list] = None,
     lr_extra: Optional[float] = None,
     extra_optimizer: Optional[str] = None,
     device="cpu",
-    init_scores: Optional[torch.Tensor] = None,
     on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
     log_every: int = 0,
     logger=None,
@@ -67,8 +65,7 @@ def learn_scores(
     Args mirror the knobs previously inlined in eval_mib.py / attribute.py / the toys:
     ``variant`` selects the masking ablation (see ``masks.VARIANTS``); ``k_schedule`` is a
     ``schedules.sample_k`` schedule; ``optimizer`` in ``{adam, sgd, none}``; ``extra_params``/
-    ``lr_extra`` add a second param group (e.g. DAS rotations). ``init_scores`` overrides
-    the zero init. (Dropped 2026-08-26: ``lr_schedule``, the ``use_bias``/``natural_k_frac``
+    ``lr_extra`` add a second param group (e.g. DAS rotations). (Dropped 2026-08-26: ``lr_schedule``, the ``use_bias``/``natural_k_frac``
     bias-step, and ``k_schedule="natural"`` -- no headline result used them.)
 
     ``optimizer="none"`` (2026-09-18) is MAttr WITHOUT LEARNING: the scores stay at their init
@@ -80,10 +77,7 @@ def learn_scores(
     learning (one forward + backward); no learning rate.
     """
     frozen = optimizer == "none"
-    if init_scores is not None:
-        scores = nn.Parameter(init_scores.to(device).clone())
-    else:
-        scores = nn.Parameter(torch.zeros(total, device=device))
+    scores = nn.Parameter(torch.zeros(total, device=device))
     main_params = [scores]
     opt_cls = torch.optim.SGD if optimizer in ("sgd", "none") else torch.optim.Adam
     # Adam's eps is a real knob at neuron scale, not a numerical guard. With ~2.3M mask logits
@@ -130,15 +124,9 @@ def learn_scores(
 
             mr = build_mask(scores, k, variant, T=T, n_iters=n_iters)
 
-            if manual_backward:
-                assert mr.reinforce is None and mr.l0_scores is None, \
-                    "manual_backward is incompatible with REINFORCE / hard_concrete variants"
-                loss = loss_fn(mr.mask)
-                lv = float(loss) if loss is not None else float("nan")
-            else:
-                loss = loss_fn(mr.mask)
-                if loss is None:                   # caller signalled skip (e.g. empty batch)
-                    continue
+            loss = loss_fn(mr.mask)
+            if loss is None:                   # caller signalled skip (e.g. empty batch)
+                continue
                 if mr.l0_scores is not None:
                     loss = loss + l0_lambda * mr.l0_scores.sum()
                 if mr.reinforce is not None:
@@ -248,7 +236,7 @@ def expected_gradients(
     interpolated at its own alpha along the caller's path -- in this repo always the
     INPUT-EMBEDDING path, ``emb(alpha) = base + alpha * (emb_clean - base)`` (see
     ``LlamaAttributionHooks.capture_node_acts`` / ``override_embed`` /
-    ``contract_node_grads`` and eval_global_kl's ``make_embed_ig_grad_fn``) -- backward the
+    ``contract_node_grads``, composed in scripts/sva/eval_sva.py) -- backward the
     LOSS, and return the per-node contraction ``dL/da_j . delta_j`` as a [total] tensor plus
     the loss value. Return ``None`` to skip the step. Scores are the NEGATED mean of the
     returned vectors (goodness = -loss, matching ``loss_fn``'s minimize convention),

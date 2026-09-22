@@ -17,8 +17,8 @@
 # This is a discriminator, not a sweep: if the dense-end failure is the schedule, log_both
 # fixes it and uniform overshoots the other way. If it is not, all three look alike there.
 set -uo pipefail
-cd ~/learning-to-attribute
-PY=.venv/bin/python
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+PY="uv run python"
 R=results/vw/base
 M="$PY scripts/vw/vw_mattr.py --run $R --method mattr --optimizer adam --steps 3000"
 

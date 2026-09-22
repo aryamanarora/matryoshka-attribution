@@ -42,14 +42,14 @@ STEPS=${STEPS:-2000}          # matches MATTR_COMMON in submit_sva_sweep.sh and 
 # with str(float): L1=6 would give "_l16" here but "_l16.0" there, the skip check below would
 # never match, and every run would resubmit forever. Normalising both through Python's own
 # float repr makes the two spellings agree by construction rather than by discipline.
-read -r LR L1 <<< "$(.venv/bin/python -c "print(float('$LR'), float('$L1'))")"
+read -r LR L1 <<< "$(uv run python -c "print(float('$LR'), float('$L1'))")"
 TAG="sig_lr${LR}"
 [ "$L1" != "0.0" ] && TAG="${TAG}_l1${L1}"
 
 # (sweep_dir, nodes, task, model, loss) for every cell the figure needs.
 # Kept byte-identical to the block in submit_sva_node_pruning.sh -- the two baselines have to
 # land on the same cells or the figure compares them over different task populations.
-GRID=$(.venv/bin/python - <<'EOF'
+GRID=$(uv run python - <<'EOF'
 import glob, json, os, sys
 # DECLARED, not derived-from-disk. This used to enumerate the headline-MAttr jsons already
 # present, which cannot work as a COVERAGE requirement: a cell whose MAttr run has not finished

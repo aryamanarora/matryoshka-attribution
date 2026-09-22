@@ -23,13 +23,13 @@
 # copy submit_test_lr05.sh. The L2A venv is TL 3.2.1, whose Gemma-2 forward disagrees with
 # HuggingFace (commit 525673a), so every gemma2 dir produced by the older test submitters had
 # to be listed in make_mib_table.GEMMA_REEVAL_PENDING and fixed afterwards by
-# reeval_gemma_mib.py. Verified that MIB-circuit-track/.venv (TL 2.15.4) runs eval_mib.py
+# reeval_gemma_mib.py. Verified that the tl2 env (TL 2.15.4) runs eval_mib.py
 # directly given PYTHONPATH=src, so the correct numbers can be produced on the first pass and
 # these two dirs never need to enter that backlog. gpt2/qwen2.5/llama3 are version-stable and
 # stay on the L2A venv, matching every other MAttr run.
 set -u
-ABS=/home/guests/aryaman/learning-to-attribute; cd "$ABS"; PY=$ABS/.venv/bin/python
-PY_GEMMA=$ABS/MIB-circuit-track/.venv/bin/python
+ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
+PY_GEMMA="env UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python"
 PP_GEMMA="$ABS/src:$ABS/MIB-circuit-track:$ABS/MIB-circuit-track/EAP-IG/src"
 DRYRUN=${DRYRUN:-0}
 PAIRS=(

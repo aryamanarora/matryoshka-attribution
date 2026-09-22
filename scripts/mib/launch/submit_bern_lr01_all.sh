@@ -2,7 +2,7 @@
 # Re-run all +hard bwd (bernoulli_reinforce) node cells at lr 0.1 (was undertrained at 0.01).
 # Node llama3 fits on jag a6000 (full eval), unlike edge. Overwrites the existing dirs.
 set -u
-cd /juice2/scr2/aryaman/learning-to-attribute
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 PAIRS=( "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "llama3 ioi" "llama3 arithmetic_subtraction" \
         "qwen2.5 mcqa" "gemma2 mcqa" "llama3 mcqa" "gemma2 arc_easy" "llama3 arc_easy" "llama3 arc_challenge" )

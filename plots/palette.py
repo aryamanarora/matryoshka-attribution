@@ -3,7 +3,7 @@
 Import this instead of writing hex codes into a figure script. Before this module the same
 4-method palette was hand-copied into five files (plot_accauc_vs_faithauc, the cause and k1
 figures via its METHODS dict, plot_mib_accauc_cpr_scatter, plot_mib_curves,
-plot_mib_logitdiff_curves), so a recolour either touched all five or left the paper showing two
+the old plot_mib_logitdiff_curves), so a recolour either touched all five or left the paper showing two
 different colours for the same method.
 
 Colours are Wong / Tol colourblind-safe stock, chosen so the two gradient baselines separate by

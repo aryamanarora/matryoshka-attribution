@@ -12,7 +12,7 @@ transition; entry points call :func:`normalize_mode` to fold the new names onto 
 canonical values, so all downstream logic, saved configs, and result-dir names are unchanged.
 """
 
-# canonical -> preferred alias, and the reverse, plus identity mappings
+# accepted names -> canonical
 ISO, CAUSE = "iso", "cause"
 SUFFICIENT, NECESSARY = "sufficient", "necessary"
 
@@ -20,7 +20,6 @@ _TO_CANONICAL = {
     "iso": SUFFICIENT, "sufficient": SUFFICIENT,
     "cause": NECESSARY, "necessary": NECESSARY,
 }
-_TO_PREFERRED = {SUFFICIENT: ISO, NECESSARY: CAUSE}
 
 # choices lists for argparse: new names first (preferred), old kept for back-compat
 MODE_CHOICES = [ISO, CAUSE, SUFFICIENT, NECESSARY]
@@ -36,8 +35,3 @@ def normalize_mode(mode: str) -> str:
     except KeyError:
         raise ValueError(
             f"unknown intervention mode {mode!r}; use {MODE_CHOICES}") from None
-
-
-def preferred_mode(mode: str) -> str:
-    """Return the preferred (iso/cause) name for any accepted mode string."""
-    return _TO_PREFERRED[normalize_mode(mode)]

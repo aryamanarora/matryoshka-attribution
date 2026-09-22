@@ -30,8 +30,8 @@ from pathlib import Path
 sys.path.insert(0, "scripts/mib")
 import make_mib_table as M  # noqa: E402  COLUMNS
 
-L2A = Path("/home/guests/aryaman/learning-to-attribute")
-MIBV = "/home/guests/aryaman/MIB-circuit-track/.venv/bin/python"
+L2A = Path(__file__).resolve().parents[2]
+MIBV = "UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python"   # TL 2.15.4 stack
 R = L2A / "results"
 DRYRUN = os.environ.get("DRYRUN", "0") == "1"
 
@@ -92,7 +92,7 @@ def main():
         bs = 1 if (model == "gemma2" and task.startswith(("arc_", "arithmetic_"))) else r["bs"]
         hrs = 24 if model == "llama3" else (12 if level == "edge" else 6)
         name = f"acc-{level[0]}{split[0]}-{task}-{model}"
-        cmd = (f"cd {L2A} && PYTHONPATH=MIB-circuit-track:MIB-circuit-track/EAP-IG/src "
+        cmd = (f"cd {L2A} && "
                f"PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True {MIBV} "
                f"scripts/mib/reeval_mib_accauc.py --level {level} --split {split} "
                f"--model {model} --task {task} --batch-size {bs} --skip-done "

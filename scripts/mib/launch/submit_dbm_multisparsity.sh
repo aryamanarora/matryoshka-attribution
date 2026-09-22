@@ -18,12 +18,12 @@
 #   SPLIT=test bash scripts/mib/launch/submit_dbm_multisparsity.sh   # needs a test-split ladder
 #   DRYRUN=1 bash scripts/mib/launch/submit_dbm_multisparsity.sh
 set -u
-L2A=/home/guests/aryaman/learning-to-attribute
-MIB=/home/guests/aryaman/MIB-circuit-track
+L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+MIB=${L2A_MIB_PATH:-$L2A/deps/MIB-circuit-track}
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 SPLIT=${SPLIT:-validation}
-PY=$MIB/.venv/bin/python
+PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"   # TL 2.15.4 stack (mandatory for gemma2)
 
 CELLS=(
  "gpt2 ioi 20" "qwen2.5 ioi 10" "gemma2 ioi 10" "llama3 ioi 2"

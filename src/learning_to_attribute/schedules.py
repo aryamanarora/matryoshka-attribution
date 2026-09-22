@@ -2,7 +2,7 @@
 
 Canonical home for the ``k``-sampling logic that was copy-pasted across
 ``scripts/mib/eval_mib.py`` (lines ~265-269), ``scripts/mib/eval_mib_edge.py`` (``sample_k``),
-``scripts/causalgym/attribute.py`` (``sample_k``), and the toy scripts. Each function makes exactly
+the original CausalGym ``attribute.py`` (``sample_k``), and the toy scripts. Each function makes exactly
 one ``torch.rand(1).item()`` draw in the same place as the originals, so seeded runs stay
 bit-identical after migration.
 """
@@ -59,22 +59,6 @@ def sample_k(total: int, schedule: str = "uniform") -> float:
             return L
         return max(1.0, total - L)
     return 1.0 + (total - 1.0) * torch.rand(1).item()
-
-
-def sample_k_sum_pow2(n: int) -> list[float]:
-    """Powers-of-two ``k`` grid ``{1, 2, 4, ..., n-1}`` (deterministic, no RNG draw).
-
-    Matches ``toy_linear_mattr.py``'s ``sum_pow2`` schedule: the masked loss is summed over
-    every ``k`` in this grid each step. Returned as floats for use with ``build_mask``.
-    """
-    ks: list[float] = []
-    v = 1
-    while v < n:
-        ks.append(float(v))
-        v *= 2
-    if n - 1 >= 1 and float(n - 1) not in ks:
-        ks.append(float(n - 1))
-    return ks
 
 
 class FixedK:
@@ -135,12 +119,3 @@ class AdaptiveLogK:
             return
         self.kmax_log += self.lr if float(acc) < self.target else -self.lr
         self.kmax_log = min(self.logmax, max(self.floor_log, self.kmax_log))
-
-
-def natural_k(scores: torch.Tensor) -> float:
-    """``k`` implied by the current threshold: number of non-negative scores (min 1).
-
-    Library helper with no internal callers since the natural-k / bias-step trainer
-    features were dropped (2026-08-26); kept exported for external consumers.
-    """
-    return float(max(1, int((scores.detach() >= 0).sum().item())))

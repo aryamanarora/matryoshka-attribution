@@ -8,7 +8,7 @@
 #SBATCH --error=logs/mib_%x_%j.err
 # usage: sbatch -J mib_<mask>_<model>_<task> scripts/mib/launch/mib_node.sbatch <model> <task> <masking> <kschedule> <outdir>
 set -euo pipefail
-cd ~/learning-to-attribute
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 MODEL=$1; TASK=$2; MASK=$3; KS=$4; OUT=$5; OPT=${6:-adam}; BS=${7:-20}
 uv run python scripts/mib/eval_mib.py --model "$MODEL" --task "$TASK" --steps 500 \
