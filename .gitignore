@@ -22,4 +22,5 @@ paper/
 
 # wandb run dirs (eval_sva.py --wandb); the run of record is on wandb.ai, not on disk
 wandb/
-data/vw/train.bin
+# scripts/vw/vw_data.py regenerates these (tok4096.json, train.bin, val.bin, meta.json)
+data/vw/
