@@ -1,6 +1,6 @@
 """Assemble every result of the replication into the markdown tables we actually quote.
 
-    uv run python scripts/vw/vw_summary.py --run results/vw/base >> docs/interference_vw.md
+    uv run python scripts/vw/vw_summary.py --run results/vw/base >> results/vw/interference_vw.md
 
 Reads whatever the pipeline has written (`log.json`, `report.json`, `prune.json`,
 `whatkept.json`) and emits five tables, each with the note's own published figure alongside

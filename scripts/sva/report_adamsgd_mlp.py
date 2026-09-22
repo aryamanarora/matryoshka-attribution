@@ -1,4 +1,4 @@
-"""Build docs/adam_vs_sgd_mlp.html -- the report on why MAttr+Adam loses to MAttr+SGD (and to
+"""Build results/adam_vs_sgd_mlp.html -- the report on why MAttr+Adam loses to MAttr+SGD (and to
 IG / Expected Gradients) at MLP-neuron scale.
 
 ONE cell: addition / llama3 / --nodes mlp (2,293,760 neurons), sufficient (denoising), bs=1,
@@ -10,7 +10,7 @@ copied number goes stale silently (see CLAUDE.md, "Verification anchor").
     uv run python scripts/sva/report_adamsgd_mlp.py      # then this
 
 Reads: results/sva_sweep, results/sva_mlp_lr, results/sva_mlp_steps20k, results/adamsgd_mlp.
-Writes: docs/adam_vs_sgd_mlp.html (self-contained; PNGs embedded base64).
+Writes: results/adam_vs_sgd_mlp.html (self-contained; PNGs embedded base64).
 """
 
 import base64
@@ -853,7 +853,7 @@ uv run python scripts/sva/report_adamsgd_mlp.py   # this page</pre>""")
            "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap' "
            "rel='stylesheet'>"
            f"<style>{CSS}</style></head><body>" + "\n".join(P) + "</body></html>")
-    out = os.path.join(ROOT, "docs", "adam_vs_sgd_mlp.html")
+    out = os.path.join(ROOT, "results", "adam_vs_sgd_mlp.html")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w").write(doc)
     print("wrote", out, f"({len(doc)/1024:.0f} KB)")

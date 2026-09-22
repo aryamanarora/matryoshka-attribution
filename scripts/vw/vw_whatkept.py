@@ -2,8 +2,8 @@
 
     uv run python scripts/vw/vw_whatkept.py --run results/vw/base --density 0.02
 
-Motivated by the finding in the sibling toy-model replication (mask-learning-finetuning,
-docs/interference_toy.md): there, MAttr+Adam beat both the trained model and the true
+Motivated by the finding in the sibling toy-model replication (the separate
+mask-learning-finetuning repo): there, MAttr+Adam beat both the trained model and the true
 circuit by keeping ~1250 individually-worthless off-circuit weights, and the mechanism was
 that their SUM supplied a per-row constant the frozen bias could no longer provide. The
 weights were not computing anything; they were standing in for a scalar.

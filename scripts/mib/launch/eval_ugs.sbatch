@@ -10,13 +10,13 @@
 #   sbatch scripts/mib/launch/eval_ugs.sbatch <gpt2-small|qwen> <ioi|mcqa> [lamb] [split] [ugs_results_root]
 #
 # Writes results/ugs_eval/UGS_patching_edge/<task-dash>_<mib_model>_<split>_abs-False.pkl,
-# the layout make_mib_table.py reads for edge baselines. See docs/ugs_baseline.md.
+# the layout make_mib_table.py reads for edge baselines. Setup: run_ugs.sbatch's header.
 set -euo pipefail
 UGSMODEL=${1:?model}
 TASK=${2:?task}
 LAMB=${3:-0.001}
 SPLIT=${4:-validation}
-UGS=${UGS:-$HOME/optimalablation}          # alestolfo/optimalablation checkout (docs/ugs_baseline.md)
+UGS=${UGS:-$HOME/optimalablation}          # alestolfo/optimalablation checkout (run_ugs.sbatch header)
 ROOT=${5:-$UGS/results/pruning}
 L2A="${SLURM_SUBMIT_DIR:-$(pwd)}"          # submit from the repo root
 

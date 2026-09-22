@@ -135,7 +135,7 @@ EDGE_METHODS = [(n, r, g) for n, r, l, g in M.OUR_METHODS if l == "edge"]
 # row that the node CPR table does not, on the argument that at m=1 it costs what I x G costs
 # while scoring like the grid arms -- and eapig_mc_eval is 11/11 at edge too. Edge Pruning has
 # no edge-level results at all (eprun_eval_*/EdgePruning_patching_edge is empty), so UGS is the
-# only mask learner here, at the 3 cells it can run (docs/ugs_baseline.md).
+# only mask learner here, at the 3 cells it can run (scripts/mib/launch/run_ugs.sbatch).
 EDGE_BASELINES_ACC = [
     ("EAP-IG-inp (CF, repro)", ["eapig_clean_eval"], "EAP-IG-inputs_patching_edge"),
     ("$+$ 10 IG steps", ["eapig_clean10_eval"], "EAP-IG-inputs_patching_edge"),

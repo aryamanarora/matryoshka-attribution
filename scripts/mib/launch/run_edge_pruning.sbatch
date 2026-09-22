@@ -30,7 +30,7 @@
 # eval_mib_edge_pruning.py --l1-coeff. GATE=sigmoid LOSS=logit_diff LR=0.3 L1=0.5 ...
 # -> results/eprun_node_ld_sig_lr0.3_l10.5/.
 #
-# Unlike UGS (docs/ugs_baseline.md), this runs for every MIB model and at BOTH levels: the
+# Unlike UGS (run_ugs.sbatch), this runs for every MIB model and at BOTH levels: the
 # gates live in our own trainer, so nothing is tied to a particular architecture.
 # Writes results/eprun_eval/EdgePruning_patching_<level>/<task-dash>_<model>_<split>_abs-False.pkl,
 # the layout make_mib_table.py / make_mib_accauc_table.py read for baselines.

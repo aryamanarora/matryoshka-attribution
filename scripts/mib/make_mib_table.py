@@ -263,8 +263,8 @@ EDGE_BASELINES = {}
 
 # Mask-learning baselines, emitted under their own header in both sections.
 # UGS (MIB's own mask baseline) is edge-level and only runs on gpt2-small/qwen, so it can
-# never fill more than 3 of the 11 columns (docs/ugs_baseline.md). Node/Edge Pruning is not
-# tied to an architecture or a level and covers everything (docs/edge_pruning_baseline.md).
+# never fill more than 3 of the 11 columns (launch/run_ugs.sbatch). Node/Edge Pruning is not
+# tied to an architecture or a level and covers everything (launch/run_edge_pruning.sbatch).
 UGS_DIR = "ugs_eval"
 # Single-node interchange intervention, "IntInv" in the paper (eval_mib_actpatch.py; the dirs keep
 # the actpatch name). Exists only where it is affordable --
