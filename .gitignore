@@ -24,4 +24,4 @@ paper/
 wandb/
 # scripts/vw/vw_data.py regenerates these (tok4096.json, train.bin, val.bin, meta.json)
 data/vw/
-README.md
+CLAUDE.md
