@@ -41,7 +41,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from learning_to_attribute.deps import mib_results_dir
+from matryoshka_attribution.deps import mib_results_dir
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette as P                                   # noqa: E402

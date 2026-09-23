@@ -10,7 +10,7 @@
 # validation cap every other validation row uses), batch 2, on jag a6000 like the validation
 # rows of the ablation itself.
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; ONLY=${ONLY:-}; OBJS=${OBJS:-"iso cause joint"}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 PY="uv run python"

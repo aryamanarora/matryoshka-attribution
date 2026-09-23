@@ -175,7 +175,7 @@ TASKS = [("simple", "Simple"), ("nounpp", "Noun PP"),
 # four lists overlap heavily (weekdays' 15 are a subset of addition's 28), so marking a
 # cross-task member would turn "the method found the weekdays neurons" into a near-tautology.
 GOODFIRE = json.load(open(Path(__file__).resolve().parent.parent.parent
-                          / "src/learning_to_attribute/data/arith_wild_l18_neurons.json"))
+                          / "src/matryoshka_attribution/data/arith_wild_l18_neurons.json"))
 GF_LAYER, GF_NEURONS = GOODFIRE["layer"], GOODFIRE["neurons"]
 GF_CITE = r"\citet{feucht2026arithmetic}"
 # Training losses, as a top-level section each. Keys are the runs' own meta["loss"]; the middle

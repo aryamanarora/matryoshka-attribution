@@ -10,7 +10,7 @@
 # default sweep here since the pinned arm has no other run at that lr.
 #   PIN=1 bash scripts/mib/launch/submit_mib_zero_lr_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; PIN=${PIN:-0}; CELLS=${CELLS:-"gpt2:ioi qwen2.5:ioi"}
 # BS=n: --train-batch-size n (gradient accumulated over n examples per step; default 1 as in
 # every headline run). Dir suffix _bs<n>, job tag prefix b<n>.

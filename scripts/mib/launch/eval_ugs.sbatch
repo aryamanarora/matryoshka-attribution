@@ -26,7 +26,7 @@ case "$UGSMODEL" in
   *) echo "UGS supports only gpt2-small / qwen"; exit 1 ;;
 esac
 
-MIB=${L2A_MIB_PATH:-$L2A/deps/MIB-circuit-track}
+MIB=${MATTR_MIB_PATH:-$L2A/deps/MIB-circuit-track}
 PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"
 GRAPH="$ROOT/$TASK/cf/ugs_mib_${UGSMODEL}/${LAMB}/graph.json"
 cd "$MIB"

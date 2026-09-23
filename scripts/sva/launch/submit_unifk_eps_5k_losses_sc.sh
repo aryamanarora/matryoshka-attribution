@@ -14,7 +14,7 @@
 #   bash scripts/sva/launch/submit_unifk_eps_5k_losses_sc.sh
 #   DRY=1 NODES=mlp bash scripts/sva/launch/submit_unifk_eps_5k_losses_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRY=${DRY:-0}
 LOSSES=${LOSSES:-"ce acc"}
 TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours"}

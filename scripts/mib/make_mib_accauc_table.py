@@ -15,7 +15,7 @@ Run from repo root:  uv run python scripts/mib/make_mib_accauc_table.py  ->  pap
 import pickle
 from pathlib import Path
 import make_mib_table as M   # reuse COLUMNS + node OUR_METHODS + unifk/opt_of conventions
-from learning_to_attribute.deps import mib_results_dir
+from matryoshka_attribution.deps import mib_results_dir
 
 # The MIB fork's results tree (deps/MIB-circuit-track/results on the juice3 checkout, the
 # legacy Tilde path elsewhere). Was hardcoded to Tilde until 2026-09-16, which on sc made every

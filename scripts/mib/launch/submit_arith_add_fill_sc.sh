@@ -40,7 +40,7 @@
 #   ONLY="mattr grad" DRYRUN=1 bash scripts/mib/launch/submit_arith_add_fill_sc.sh   # subset / preview
 #   ONLY groups: mattr_node mattr_edge grad dbm dbm_sweep  (mattr = mattr_node mattr_edge)
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}
 ONLY=${ONLY:-"mattr_node mattr_edge grad dbm dbm_sweep"}

@@ -253,7 +253,7 @@ METHODS = {
     "mc_ig":      ("Expected Gradients",  P.color("Expected Gradients")),
     # Single-pass like I×G (only the backward RULES change): LN-freeze, gated-MLP secant +
     # half-rule, and the uniform half-rule on the QK/OV matmuls. The HF-side implementation is
-    # src/learning_to_attribute/grad_attribution.py, verified against vanilla eager attention
+    # src/matryoshka_attribution/grad_attribution.py, verified against vanilla eager attention
     # by scripts/tools/test_attnlrp_hf.py; on MIB the equivalent TransformerLens path is within
     # Spearman 0.96 of GIM (MIB-circuit-track/gim_attnlrp_decomp.py), so this series stands in
     # for the whole LRP family here.

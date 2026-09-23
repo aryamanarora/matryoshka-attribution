@@ -16,7 +16,7 @@ from plotnine import (ggplot, aes, geom_tile, geom_text, labs, facet_wrap,
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from learning_to_attribute.deps import mib_results_dir          # noqa: E402
+from matryoshka_attribution.deps import mib_results_dir          # noqa: E402
 R = Path("results")                                             # l2a: flat MAttr importances
 R_MIB = mib_results_dir()                                       # nested gradient baselines (deps/MIB-circuit-track/results)
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)

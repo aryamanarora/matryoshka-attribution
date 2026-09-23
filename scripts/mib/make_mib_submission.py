@@ -48,7 +48,7 @@ import sys
 from pathlib import Path
 
 import torch
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(find_mib_path() / "EAP-IG" / "src"))

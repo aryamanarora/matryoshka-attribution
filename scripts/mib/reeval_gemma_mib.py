@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from learning_to_attribute.deps import mib_results_dir
+from matryoshka_attribution.deps import mib_results_dir
 
 L2A = Path(__file__).resolve().parents[2]
 R = L2A / "results"

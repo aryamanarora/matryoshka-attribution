@@ -19,13 +19,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import math
 
-from learning_to_attribute import (sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES,
+from matryoshka_attribution import (sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES,
                                    CFActivationCache)
-from learning_to_attribute import wandb_util
-from learning_to_attribute.losses import attribution_loss, resolve_direction
-from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
-from learning_to_attribute.models import LlamaAttributionHooks, GPT2AttributionHooks
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution import wandb_util
+from matryoshka_attribution.losses import attribution_loss, resolve_direction
+from matryoshka_attribution.sigmoid_topk import sigmoid_topk_detached_tau
+from matryoshka_attribution.models import LlamaAttributionHooks, GPT2AttributionHooks
+from matryoshka_attribution.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,

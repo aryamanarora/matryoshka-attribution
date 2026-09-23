@@ -14,7 +14,7 @@
 #   bash scripts/mib/launch/submit_headline_seeds_sc.sh
 #   SEEDS="43" TASKS="ioi" DRYRUN=1 bash scripts/mib/launch/submit_headline_seeds_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}
 SEEDS=${SEEDS:-"43 44"}
 TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}

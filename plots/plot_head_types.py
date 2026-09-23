@@ -45,7 +45,7 @@ from plotnine import (aes, element_blank, element_rect, element_text, facet_grid
                       scale_x_discrete, scale_y_discrete, theme, theme_bw, theme_set)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from learning_to_attribute.deps import mib_results_dir  # noqa: E402
+from matryoshka_attribution.deps import mib_results_dir  # noqa: E402
 
 R = Path("results")
 R_MIB = mib_results_dir()

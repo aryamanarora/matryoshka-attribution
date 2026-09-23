@@ -21,8 +21,8 @@ import torch.nn.functional as F
 import yaml
 from torch.utils.checkpoint import checkpoint
 
-from learning_to_attribute import wandb_util
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution import wandb_util
+from matryoshka_attribution.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,8 +110,8 @@ def main():
     from einops import einsum
 
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from learning_to_attribute import sigmoid_topk, learn_scores, normalize_mode
-    from learning_to_attribute.sigmoid_topk import sigmoid_topk_detached_tau
+    from matryoshka_attribution import sigmoid_topk, learn_scores, normalize_mode
+    from matryoshka_attribution.sigmoid_topk import sigmoid_topk_detached_tau
     args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

@@ -40,7 +40,7 @@ from vw_scores import load_run, load_tokens  # noqa: E402
 from vw_scores_feat import load_transcoder  # noqa: E402
 from vw_transcoder import activations  # noqa: E402
 
-from learning_to_attribute import learn_scores  # noqa: E402
+from matryoshka_attribution import learn_scores  # noqa: E402
 
 
 @torch.no_grad()

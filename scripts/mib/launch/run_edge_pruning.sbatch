@@ -59,7 +59,7 @@ L1=${L1:-}
 L1_TARGET=${L1_TARGET:-gate}
 
 L2A="${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
-MIB=${L2A_MIB_PATH:-$L2A/deps/MIB-circuit-track}
+MIB=${MATTR_MIB_PATH:-$L2A/deps/MIB-circuit-track}
 # TL 2.15.4 env: the L2A venv's TL 3.x has a Gemma-2 forward bug, and this script both
 # trains and evaluates through TransformerLens.
 PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"

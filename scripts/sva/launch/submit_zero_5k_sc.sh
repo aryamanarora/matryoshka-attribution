@@ -17,7 +17,7 @@
 #   bash scripts/sva/launch/submit_zero_5k_sc.sh
 #   NODES=node METHODS="mattr ig" DRY=1 bash scripts/sva/launch/submit_zero_5k_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 OUT=results/sva_zeroabl_5k; DRY=${DRY:-0}
 NODES=${NODES:-"node mlp mlp+attn_head mlp_sae_span"}
 METHODS=${METHODS:-"mattr mattr-log np dbm ig ixg eg attnlrp random"}

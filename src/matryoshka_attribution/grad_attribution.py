@@ -146,8 +146,8 @@ def _install(model, attn_cls):
     # the wrappers rewrite config._attn_implementation, which is the SHARED model config, so
     # stash the real one once here rather than per layer (per layer, the second install would
     # record "noqk"/"attnlrp" as the original and revert would leave it installed).
-    if not hasattr(model, "_l2a_orig_attn_impl"):
-        model._l2a_orig_attn_impl = m.config._attn_implementation
+    if not hasattr(model, "_mattr_orig_attn_impl"):
+        model._mattr_orig_attn_impl = m.config._attn_implementation
     m.norm = StraightThroughRMSNorm(m.norm)
     for layer in m.layers:
         layer.input_layernorm = StraightThroughRMSNorm(layer.input_layernorm)
@@ -176,7 +176,7 @@ def revert_relp(model):
             layer.self_attn = layer.self_attn.attn
         if isinstance(layer.mlp, RelPGradMLP):
             layer.mlp = layer.mlp.mlp
-    if hasattr(model, "_l2a_orig_attn_impl"):
-        m.config._attn_implementation = model._l2a_orig_attn_impl
-        del model._l2a_orig_attn_impl
+    if hasattr(model, "_mattr_orig_attn_impl"):
+        m.config._attn_implementation = model._mattr_orig_attn_impl
+        del model._mattr_orig_attn_impl
     return model

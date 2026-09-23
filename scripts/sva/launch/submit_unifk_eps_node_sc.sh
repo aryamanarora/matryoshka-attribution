@@ -17,7 +17,7 @@
 #   bash scripts/sva/launch/submit_unifk_eps_node_sc.sh            # submit
 #   DRY=1 LOSSES=logit_diff bash scripts/sva/launch/submit_unifk_eps_node_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 OUT=results/sva_sweep
 LOSSES=${LOSSES:-"logit_diff ce acc"}
 TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours arc_easy ioi"}

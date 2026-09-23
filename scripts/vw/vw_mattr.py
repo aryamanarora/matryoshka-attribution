@@ -84,7 +84,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from vw_model import CTX, VOCAB, TinyLM  # noqa: E402
 from vw_scores import D_VP, load_run, load_tokens  # noqa: E402
 
-from learning_to_attribute import learn_scores  # noqa: E402
+from matryoshka_attribution import learn_scores  # noqa: E402
 
 
 class Batches:
@@ -121,8 +121,8 @@ def run_mattr_per_item(model, stream, args, device):
     A local training loop rather than `learn_scores`, because k there is a per-step scalar.
     The mask primitive, the k-schedule and the optimizer are all the shipped ones.
     """
-    from learning_to_attribute.masks import build_mask
-    from learning_to_attribute.schedules import sample_k
+    from matryoshka_attribution.masks import build_mask
+    from matryoshka_attribution.schedules import sample_k
 
     W = model.W_TL().float()
     pos_rows = VOCAB + torch.arange(CTX, device=device)

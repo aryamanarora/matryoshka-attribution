@@ -13,7 +13,7 @@
 # qwen2.5 pinned to a6000 (CUDA "no kernel image" on older cards). --head 200 on llama3
 # VALIDATION only, like every other row of the validation table.
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; SPLIT=${SPLIT:-test}; ONLY=${ONLY:-}
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
 PY="uv run python"

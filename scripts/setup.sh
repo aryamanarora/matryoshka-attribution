@@ -16,8 +16,8 @@
 # The pin below is what every number in results/ was produced against; move it in the same
 # commit as the numbers it changes.
 #
-# WHERE THE CODE LOOKS (src/learning_to_attribute/deps.py, first hit wins): --mib-path,
-# $L2A_MIB_PATH, deps/MIB-circuit-track, then the older gitignored symlink ./MIB-circuit-track,
+# WHERE THE CODE LOOKS (src/matryoshka_attribution/deps.py, first hit wins): --mib-path,
+# $MATTR_MIB_PATH, deps/MIB-circuit-track, then the older gitignored symlink ./MIB-circuit-track,
 # so a machine provisioned before deps/ existed keeps working and this script will not clone a
 # second copy next to it.
 #
@@ -70,7 +70,7 @@ if [ "$SYNC" = 1 ]; then
   echo; echo "smoke check (no model download): the checkout resolves and its evaluate returns 7 values"
   uv run python - <<'PY'
 import inspect, sys
-from learning_to_attribute.deps import add_mib_to_sys_path
+from matryoshka_attribution.deps import add_mib_to_sys_path
 p = add_mib_to_sys_path()
 from MIB_circuit_track.evaluation import evaluate_area_under_curve as f
 from eap.graph import Graph  # the EAP-IG submodule is checked out

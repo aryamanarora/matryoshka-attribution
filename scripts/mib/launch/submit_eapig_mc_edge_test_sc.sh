@@ -19,7 +19,7 @@
 #   CDIR=eapig_clean METHOD=EAP-IG-inputs bash scripts/mib/launch/submit_eapig_mc_edge_test_sc.sh
 #   CDIR=eapig_clean10 METHOD=EAP-IG-inputs bash scripts/mib/launch/submit_eapig_mc_edge_test_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}; SPLIT=${SPLIT:-test}
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}

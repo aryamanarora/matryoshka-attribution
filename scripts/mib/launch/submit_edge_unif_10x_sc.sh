@@ -10,7 +10,7 @@
 #   bash scripts/mib/launch/submit_edge_unif_10x_sc.sh
 #   STEPS=50000 CELLS="gpt2 ioi" DRYRUN=1 bash scripts/mib/launch/submit_edge_unif_10x_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; STEPS=${STEPS:-50000}; SPLIT=${SPLIT:-validation}
 OUT=${OUT:-results/mib_edge_topk_uniform_lr05_50k}
 PAIRS=("gpt2 ioi" "qwen2.5 ioi" "qwen2.5 mcqa")

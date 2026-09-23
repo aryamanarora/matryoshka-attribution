@@ -5,7 +5,7 @@ These reproduce, bit-for-bit (including RNG-draw order), the inline ``if/elif`` 
 ``build_mask`` each step and dispatches the optimizer step on the returned
 :class:`MaskResult` aux fields (REINFORCE manual gradient, L0 penalty).
 
-All variants build on the frozen primitives in :mod:`learning_to_attribute.sigmoid_topk`
+All variants build on the frozen primitives in :mod:`matryoshka_attribution.sigmoid_topk`
 (``sigmoid_topk``, ``sigmoid_topk_detached_tau``); their numerics must not change.
 """
 

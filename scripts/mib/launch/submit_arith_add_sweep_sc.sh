@@ -25,7 +25,7 @@
 #   bash scripts/mib/launch/submit_arith_add_sweep_sc.sh          # 18 jobs
 #   ONLY=dbm DRYRUN=1 bash ...                                     # ONLY: np | dbm
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}; ONLY=${ONLY:-"np dbm"}
 MODEL=llama3; TASK=arithmetic_addition; HT=arithmetic-addition

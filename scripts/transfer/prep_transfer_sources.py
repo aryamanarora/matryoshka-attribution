@@ -20,7 +20,7 @@ from pathlib import Path
 
 import torch
 
-from learning_to_attribute.deps import mib_results_dir
+from matryoshka_attribution.deps import mib_results_dir
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "plots"))
 from plot_task_corr_heatmap import names   # canonical node order for the json -> vec map

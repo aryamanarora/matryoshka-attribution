@@ -24,7 +24,7 @@
 #   MODELS=gemma2 bash scripts/mib/launch/submit_mib_node_mode_ablation_sc.sh
 #   MODES=cause SPLITS=validation DRYRUN=1 bash ...
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; MODES=${MODES:-"cause joint"}; SPLITS=${SPLITS:-"validation test"}
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}   # gemma2 is opt-in: MODELS=gemma2 (or add it to the list)
 TASKS=${TASKS:-"ioi arithmetic_addition arithmetic_subtraction mcqa arc_easy arc_challenge"}   # subset for resubmits

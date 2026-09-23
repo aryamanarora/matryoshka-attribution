@@ -44,7 +44,7 @@ TASKS_TO_HF = {"ioi": "ioi", "mcqa": "copycolors_mcqa",
                "arithmetic_subtraction": "arithmetic_subtraction",
                "arc_easy": "arc_easy", "arc_challenge": "arc_challenge"}
 
-from learning_to_attribute.deps import mib_results_dir  # noqa: E402
+from matryoshka_attribution.deps import mib_results_dir  # noqa: E402
 
 L2A = Path(__file__).resolve().parents[2]
 R = L2A / "results"

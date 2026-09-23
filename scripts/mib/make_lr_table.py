@@ -365,7 +365,7 @@ def steps_note(method):
 #
 # CPR never needs this (area_under is in every pkl ever written), so the chain is only
 # consulted for acc_auc and the default table is byte-identical to before.
-from learning_to_attribute.deps import mib_results_dir   # deps/MIB-circuit-track/results, else the Tilde path
+from matryoshka_attribution.deps import mib_results_dir   # deps/MIB-circuit-track/results, else the Tilde path
 ACCAUC_FALLBACK_ROOTS = [
     mib_results_dir() / "mattr_accauc",
     mib_results_dir() / "mattr_accauc_val",

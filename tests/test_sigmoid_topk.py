@@ -2,7 +2,7 @@
 
 import torch
 
-from learning_to_attribute.sigmoid_topk import SigmoidTopK
+from matryoshka_attribution.sigmoid_topk import SigmoidTopK
 
 
 def test_gradcheck():

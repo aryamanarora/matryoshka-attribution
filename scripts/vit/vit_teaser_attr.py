@@ -69,8 +69,8 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from learning_to_attribute.losses import attribution_loss   # noqa: E402
-from learning_to_attribute.trainer import learn_scores       # noqa: E402
+from matryoshka_attribution.losses import attribution_loss   # noqa: E402
+from matryoshka_attribution.trainer import learn_scores       # noqa: E402
 
 # ImageNet-1k index ranges. Dogs are 151-268 (Chihuahua .. Mexican hairless);
 # domestic cats are 281-285 (tabby, tiger cat, Persian, Siamese, Egyptian).
@@ -294,7 +294,7 @@ def run_mattr(model, x, E_clean, sample_image, eval_fn, pos, neg, args, device, 
 
     def loss_fn(mask):
         # corrupt_topk=False == sufficient / iso: the top-k units stay clean and must retain
-        # the base behaviour (see learning_to_attribute.losses).
+        # the base behaviour (see matryoshka_attribution.losses).
         return attribution_loss(loss_name, apply_mask(mask.unsqueeze(0)),
                                 base_id, source_id, corrupt_topk=False)
 

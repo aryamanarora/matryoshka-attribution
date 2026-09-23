@@ -18,7 +18,7 @@
 # AutoModelForCausalLM, no transformer_lens). Cells with a landed json are skipped.
 #   ROWS="node mlpn_gemma2" DRY=1 bash scripts/sva/launch/submit_epslr_unifk_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRY=${DRY:-0}; ROWS=${ROWS:-"node mlpn_gemma2 mlpn sae"}; REFS=${REFS:-1}
 EPSES=${EPSES:-"1e-8 1e-6 1e-4 1e-2 1e-1 1e0"}
 LRS=${LRS:-"0.005 0.05 0.5 5.0"}

@@ -31,7 +31,7 @@ from functools import partial
 from pathlib import Path
 
 import torch
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 
 def build_graph(Graph, model, scores, include_input):

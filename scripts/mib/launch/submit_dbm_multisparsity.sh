@@ -19,7 +19,7 @@
 #   DRYRUN=1 bash scripts/mib/launch/submit_dbm_multisparsity.sh
 set -u
 L2A="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIB=${L2A_MIB_PATH:-$L2A/deps/MIB-circuit-track}
+MIB=${MATTR_MIB_PATH:-$L2A/deps/MIB-circuit-track}
 cd "$L2A"
 DRYRUN=${DRYRUN:-0}
 SPLIT=${SPLIT:-validation}

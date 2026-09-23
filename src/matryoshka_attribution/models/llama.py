@@ -180,7 +180,7 @@ class LlamaAttributionHooks:
         """Create per-layer learned orthogonal DAS rotations (d_model -> das_dim) and set the
         node layout: per-(layer, span, das_dim) score in the rotated subspace."""
         assert self.is_das, "set_das only for das_*_span"
-        from learning_to_attribute.sigmoid_das import make_rotate_layer
+        from matryoshka_attribution.sigmoid_das import make_rotate_layer
         self.das_dim = das_dim or self.hidden_size
         self.R = {li: make_rotate_layer(self.hidden_size, self.das_dim).to(device, dtype)
                   for li in range(self.num_layers)}

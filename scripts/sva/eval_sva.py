@@ -17,15 +17,15 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from learning_to_attribute import learn_scores, sparsity_sweep, wandb_util, CFActivationCache
-from learning_to_attribute.edge_pruning import (
+from matryoshka_attribution import learn_scores, sparsity_sweep, wandb_util, CFActivationCache
+from matryoshka_attribution.edge_pruning import (
     learn_scores_edge_pruning, learn_scores_sigmoid_mask)
-from learning_to_attribute.schedules import AdaptiveLogK, FixedK
-from learning_to_attribute.losses import (CLEAN_LOGITS_LOSSES, CLEAN_TARGET_LOSSES,
+from matryoshka_attribution.schedules import AdaptiveLogK, FixedK
+from matryoshka_attribution.losses import (CLEAN_LOGITS_LOSSES, CLEAN_TARGET_LOSSES,
                                           CORRUPT_TARGET_LOSSES, LOSS_CHOICES,
                                            attribution_loss, resolve_direction)
-from learning_to_attribute.data import SVADataset, CausalGymDataset
-from learning_to_attribute.models import LlamaAttributionHooks
+from matryoshka_attribution.data import SVADataset, CausalGymDataset
+from matryoshka_attribution.models import LlamaAttributionHooks
 
 
 # span-last token positions per string, keyed by the (cleaned) string. Lets the span-mode
@@ -80,12 +80,12 @@ def _span_last(tokenizer, content_spans):
     return last
 
 
-# goodfire-ai/arithmetic-wild's generated datasets. Resolved like deps.find_mib_path: $L2A_ARITH_DIR,
+# goodfire-ai/arithmetic-wild's generated datasets. Resolved like deps.find_mib_path: $MATTR_ARITH_DIR,
 # then deps/arithmetic-wild (where scripts/setup.sh-era checkouts keep outside repos; the 7 MB
 # `datasets/` tree lives there) -- so a fresh clone gets a clear error naming the fix.
 def _arith_dir():
     root = Path(__file__).resolve().parents[2]
-    cands = [os.environ.get("L2A_ARITH_DIR"),
+    cands = [os.environ.get("MATTR_ARITH_DIR"),
              root / "deps" / "arithmetic-wild" / "datasets" / "Llama-3.1-8B"]
     for c in cands:
         if c and Path(c).is_dir():
@@ -114,7 +114,7 @@ class ArithDataset:
         either direction and are dropped, not left to contribute a null gradient.
     """
     def __init__(self, task, tokenizer, split="train", frac=0.8, data_dir=ARITH_DIR):
-        from learning_to_attribute.data.arithmetic_wild import ArithmeticWildDataset
+        from matryoshka_attribution.data.arithmetic_wild import ArithmeticWildDataset
         ds = ArithmeticWildDataset(task, data_dir)
         n = len(ds.bases)
         idx = range(0, int(n * frac)) if split == "train" else range(int(n * frac), n)
@@ -249,7 +249,7 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     assert not (relp and attnlrp), "relp and attnlrp are alternative backward rule sets"
     modified_bwd = relp or attnlrp
     if modified_bwd:
-        from learning_to_attribute.grad_attribution import install_attnlrp, install_relp, revert_relp
+        from matryoshka_attribution.grad_attribution import install_attnlrp, install_relp, revert_relp
         (install_attnlrp if attnlrp else install_relp)(hf)
     layers = hf.model.layers
     use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_head", "node", "mlp+attn_span", "mlp+attn_head_span")
@@ -898,7 +898,7 @@ def main():
                         "gradient baselines: with a zero baseline IxG becomes Gradient x Input "
                         "and IG becomes textbook zero-baseline IG.")
     p.add_argument("--loss", default="logit_diff", choices=list(LOSS_CHOICES),
-                   help="training loss (see learning_to_attribute.losses): logit_diff, ce, "
+                   help="training loss (see matryoshka_attribution.losses): logit_diff, ce, "
                         "logit, prob (bounded), hinge (--hinge-margin), acc (soft-0-1, --acc-temp), "
                         "kl (to the clean model's distribution), cmd (|1 - per-example faithfulness|)")
     p.add_argument("--hinge-margin", type=float, default=2.0, help="margin (logits) for --loss hinge")
@@ -1026,7 +1026,7 @@ def main():
         # length-matched per example but variable across examples -> node substrate only.
         # The MIB fork is found the way every scripts/mib runner finds it (deps/MIB-circuit-track
         # first, then the legacy ./MIB-circuit-track symlink), not by a CWD-relative name.
-        from learning_to_attribute.deps import add_mib_to_sys_path
+        from matryoshka_attribution.deps import add_mib_to_sys_path
         add_mib_to_sys_path()
         from MIB_circuit_track.dataset import HFEAPDataset
         hf_task, name_full = f"mib-bench/{args.task}", MODEL_FULLNAMES[args.model]
@@ -1072,7 +1072,7 @@ def main():
                                    zero_ablation=args.ablation == "zero",
                                    sae_error=args.sae_error)
     if SAE:
-        from learning_to_attribute.sae_loader import load_llama_scope_saes
+        from matryoshka_attribution.sae_loader import load_llama_scope_saes
         comp = "M" if args.nodes == "mlp_sae_span" else "R"
         repo = args.sae_repo or f"fnlp/Llama3_1-8B-Base-LX{comp}-8x"
         sdt = torch.float32 if args.sae_dtype == "float32" else torch.bfloat16

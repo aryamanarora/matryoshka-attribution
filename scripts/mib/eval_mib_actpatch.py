@@ -35,8 +35,8 @@ from pathlib import Path
 import torch
 
 from eval_mib import MODEL_FULLNAMES, MODEL_TL_NAMES, TASKS_TO_HF, get_hooks_class
-from learning_to_attribute import CFActivationCache
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution import CFActivationCache
+from matryoshka_attribution.deps import find_mib_path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)

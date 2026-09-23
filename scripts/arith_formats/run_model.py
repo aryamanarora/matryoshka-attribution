@@ -40,8 +40,8 @@ import torch.nn.functional as F
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data import FORMATS, gold, is_correct, make_items, prompt  # noqa: E402
 
-from learning_to_attribute.sigmoid_topk import sigmoid_topk  # noqa: E402
-from learning_to_attribute.trainer import learn_scores  # noqa: E402
+from matryoshka_attribution.sigmoid_topk import sigmoid_topk  # noqa: E402
+from matryoshka_attribution.trainer import learn_scores  # noqa: E402
 
 MODELS = {
     "qwen3-0.6b": "Qwen/Qwen3-0.6B-Base",

@@ -18,7 +18,7 @@
 #   EPS=1e-8 bash scripts/sva/launch/submit_unifk_eps_50k_sc.sh
 #   NODES="mlp" DRY=1 bash scripts/sva/launch/submit_unifk_eps_50k_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRY=${DRY:-0}; STEPS=${STEPS:-50000}; EPS=${EPS:-1e-2}
 [ "$EPS" = 1e-8 ] && epstag="" || epstag="_eps$EPS"
 TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours"}

@@ -48,7 +48,7 @@ from pathlib import Path
 
 import math
 import torch
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 # Default ladder: submit_dbm_l1.sh's original five plus the 2026-09-08 extension. A rung with no
 # graph on disk is skipped and named in the output, so a partial ladder is visible rather than
@@ -98,7 +98,7 @@ def own_l0(ladder, sd):
         # k_log[-1] is the EXPECTED open-gate count at the last step -- the run's own L0. Not
         # args.target_sparsity, which the sigmoid gate ignores entirely.
         return float(sd["k_log"][-1])
-    from learning_to_attribute.edge_pruning import deterministic_z_from_log_alpha
+    from matryoshka_attribution.edge_pruning import deterministic_z_from_log_alpha
     return float((deterministic_z_from_log_alpha(sd["scores"].float()) > 0).sum().item())
 
 

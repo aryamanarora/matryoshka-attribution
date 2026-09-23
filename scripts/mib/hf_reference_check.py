@@ -6,7 +6,7 @@ Whichever HF agrees with is the correct Gemma-2 forward.
 import sys
 from pathlib import Path
 import torch
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 mib = find_mib_path()
 sys.path.insert(0, str(mib)); sys.path.insert(0, str(mib / "EAP-IG" / "src"))

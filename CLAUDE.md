@@ -142,7 +142,7 @@ arc-c 586, mcqa 50) and both the MIB paper's test numbers and `submit_test_lr05.
 full-split, so capping a test cell would make it the only subset-scored row in that table.
 
 ### "Node Pruning" vs "Edge Pruning" is a display name, not a different method
-Same recipe and same code (`src/learning_to_attribute/edge_pruning.py`); the paper labels the
+Same recipe and same code (`src/matryoshka_attribution/edge_pruning.py`); the paper labels the
 rows by the granularity actually pruned, mapped in `scripts/mib/make_mib_table.py:EPRUN_NAME`
 (`node` → "Node Pruning", `edge` → "Edge Pruning"). Everything on disk keeps the original
 name — `results/eprun_*` and the `EdgePruning_patching_<level>` subfolder MIB's
@@ -181,8 +181,8 @@ averaged-sparsity eval is GPU-heavy. Per model size, submit via `nlprun` (in tmu
   `-c 4`. Mismatch triggers `srun: fatal: cpus-per-task set by two different env vars`.
 - `eval_mib.py` still accepts `--config <path>` (relative to CWD first, then `scripts/mib/`),
   but every launcher passes CLI flags; task names must use underscores (`arc_easy`).
-- `--mib-path` is resolved by `src/learning_to_attribute/deps.py:find_mib_path()`: explicit flag,
-  `$L2A_MIB_PATH`, then `deps/MIB-circuit-track` (what `bash scripts/setup.sh` clones). **It must be OUR FORK with submodules**
+- `--mib-path` is resolved by `src/matryoshka_attribution/deps.py:find_mib_path()`: explicit flag,
+  `$MATTR_MIB_PATH`, then `deps/MIB-circuit-track` (what `bash scripts/setup.sh` clones). **It must be OUR FORK with submodules**
   (`aryamanarora/MIB-circuit-track`, pinned in `scripts/setup.sh`; EAP-IG submodule `41e9b9c`).
   Upstream's `evaluate_area_under_curve` returns 5 values, ours 7 (`accuracies`, `acc_auc`), and
   `eval_mib.py` / `eval_mib_edge.py` unpack 7 -- an upstream or stale clone trains for hours and

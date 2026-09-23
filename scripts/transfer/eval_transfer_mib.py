@@ -34,7 +34,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mib"))  # eval_mib lives in the mib group
 from eval_mib import MODEL_TL_NAMES, TASKS_TO_HF
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 
 def load_source_vec(path):

@@ -17,7 +17,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from learning_to_attribute.deps import mib_results_dir  # noqa: E402
+from matryoshka_attribution.deps import mib_results_dir  # noqa: E402
 
 plt.rcParams.update({"font.family": "Inter", "font.size": 7, "axes.titlesize": 7.5,
                      "axes.labelsize": 7, "xtick.labelsize": 6, "ytick.labelsize": 6,

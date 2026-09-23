@@ -2,7 +2,7 @@
 
 Ground truth is \\citet{feucht2026arithmetic}'s layer-18 MLP neurons for the four
 arithmetic-wild tasks -- 15-28 neurons each, vendored at
-src/learning_to_attribute/data/arith_wild_l18_neurons.json. It is the only unit-level
+src/matryoshka_attribution/data/arith_wild_l18_neurons.json. It is the only unit-level
 published circuit any of our tasks has (IOI/GPT-2 has a published HEAD circuit, which is a
 different object), so this is the paper's one chance to score attribution against prior work
 rather than against faithfulness.
@@ -70,7 +70,7 @@ import numpy as np
 import palette as P
 import torch
 
-GT = Path("src/learning_to_attribute/data/arith_wild_l18_neurons.json")
+GT = Path("src/matryoshka_attribution/data/arith_wild_l18_neurons.json")
 # (row label, results dir, tag fragment). The ablation is a SETTING, not a rescoring: the mask
 # methods train through it and the gradient baselines change estimator (I×G -> Gradient×Input,
 # IG -> zero-baseline IG), so the two rows are two experiments and only the ORDERING within a row

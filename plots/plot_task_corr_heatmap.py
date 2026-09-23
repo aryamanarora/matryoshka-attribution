@@ -51,7 +51,7 @@ from plotnine import (ggplot, aes, geom_tile, geom_vline, geom_hline, labs,
                       scale_fill_gradient2, theme_bw, theme_set, theme,
                       element_text, element_line, element_blank)
 
-from learning_to_attribute.deps import mib_results_dir
+from matryoshka_attribution.deps import mib_results_dir
 
 R = Path("results")
 OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)

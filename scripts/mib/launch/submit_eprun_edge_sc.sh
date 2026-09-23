@@ -16,7 +16,7 @@
 #   MODELS=gemma2 bash scripts/mib/launch/submit_eprun_edge_sc.sh
 #   SPARSITIES=0.5 SPLITS=validation DRYRUN=1 bash scripts/mib/launch/submit_eprun_edge_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}; SPLITS=${SPLITS:-"validation test"}; SPARSITIES=${SPARSITIES:-"0.99"}
 STEPS=${STEPS:-5000}; LOSS=${LOSS:-logit_diff}

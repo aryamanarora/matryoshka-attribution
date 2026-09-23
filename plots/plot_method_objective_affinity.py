@@ -31,7 +31,7 @@ CELLS = [("nounpp", "llama3"), ("rc", "llama3"), ("simple", "llama3"), ("within_
          ("addition", "llama3"), ("months", "llama3"), ("weekdays", "llama3"), ("hours", "llama3"),
          ("arc_easy", "llama3"), ("ioi", "qwen2.5")]
 ARM = "sufficient_topk_adam_eps1e-2{loss}_uniformk_bs1"
-# Every loss in learning_to_attribute.losses.LOSS_CHOICES (the seven beyond the first five were
+# Every loss in matryoshka_attribution.losses.LOSS_CHOICES (the seven beyond the first five were
 # launched 2026-09-21 to find, per baseline, the objective its ranking matches best). A column
 # with no landed run is dropped at render time, so the figure grows as the wave lands.
 OBJECTIVES = [("logit_diff", "logit-diff"), ("ce", "CE"), ("acc", "soft-acc"), ("kl", "KL"), ("cmd", "CMD"),

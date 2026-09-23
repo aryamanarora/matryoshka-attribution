@@ -14,7 +14,7 @@ loaded once, every arm on the same image / corruption family / explained scalar:
                                                         ranking up to the soft top-k's T)
   ig      Expected Gradients, alpha ~ U(0,1) per draw, along the patch-embedding path from a freshly
           sampled corruption to the clean image; compute-matched at one forward+backward per
-          step, same step count as MAttr. `learning_to_attribute.trainer.expected_gradients`, called
+          step, same step count as MAttr. `matryoshka_attribution.trainer.expected_gradients`, called
           in chunks so the running mean can be probed at the same cadence as MAttr's scores.
 
 Every arm is probed every `--probe-every` steps with the hard top-k sufficiency AUC of its
@@ -41,8 +41,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from learning_to_attribute.losses import attribution_loss   # noqa: E402
-from learning_to_attribute.trainer import learn_scores, expected_gradients   # noqa: E402
+from matryoshka_attribution.losses import attribution_loss   # noqa: E402
+from matryoshka_attribution.trainer import learn_scores, expected_gradients   # noqa: E402
 from vit_teaser_attr import (CAT_IDX, DOG_IDX, FRACS, GRID, N_PATCH, _LOG,   # noqa: E402
                              forward_from_patches, load_model, make_auc_probe,
                              make_corrupt_image_sampler, make_target_fn)

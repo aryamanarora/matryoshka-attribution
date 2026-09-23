@@ -415,7 +415,7 @@ def fig_eps_grid(res="results/adamsgd_mlp/A_eps", refs=None, specs=None,
         gt_layer = gt_pub = None
         if key == "recall_auc":
             gtj = json.load(open(os.path.join(
-                ROOT, "src/learning_to_attribute/data/arith_wild_l18_neurons.json")))
+                ROOT, "src/matryoshka_attribution/data/arith_wild_l18_neurons.json")))
             gt_layer, gt_pub = gtj["layer"], np.array(gtj["neurons"]["addition"])
         gt = (gt_layer, gt_pub) if key == "recall_auc" else None
         M = eps_grid_matrix(res, key, refs=REF, epss=epss, lrs=lrs, gt=gt)

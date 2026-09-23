@@ -13,7 +13,7 @@ import argparse
 import torch
 from transformers.models.llama.modeling_llama import eager_attention_forward
 
-from learning_to_attribute.grad_attribution import (
+from matryoshka_attribution.grad_attribution import (
     attnlrp_attention_forward, install_attnlrp, install_relp, revert_relp)
 
 

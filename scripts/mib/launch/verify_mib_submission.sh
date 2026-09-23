@@ -10,7 +10,7 @@
 # Usage: scripts/mib/launch/verify_mib_submission.sh <submission dir> <node results dir> [head=100]
 #
 # The MIB checkout is resolved the same way the eval scripts do (deps.find_mib_path: --mib-path /
-# $L2A_MIB_PATH / deps/MIB-circuit-track). The interpreter is this project's default env via
+# $MATTR_MIB_PATH / deps/MIB-circuit-track). The interpreter is this project's default env via
 # `uv run` -- fine here because the cell is gpt2, which is version-stable; a gemma2 cell would
 # need the `tl2` group instead (CLAUDE.md). On sc, run this as a john CPU job, not on the login
 # node: importing torch from the NFS venv there crawls (nfs_wait_bit_killable for 20+ min on 2026-09-14).
@@ -19,7 +19,7 @@ SUB=${1:?submission dir}; NODE_DIR=${2:?node results dir (for the full json)}; H
 ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 [[ "$NODE_DIR" = /* ]] || NODE_DIR="$ABS/$NODE_DIR"
 [[ "$SUB" = /* ]] || SUB="$ABS/$SUB"
-MIB=$(cd "$ABS" && uv run python -c "from learning_to_attribute.deps import find_mib_path; print(find_mib_path())")
+MIB=$(cd "$ABS" && uv run python -c "from matryoshka_attribution.deps import find_mib_path; print(find_mib_path())")
 PY="uv run --project $ABS python"
 OUT=$ABS/results/mib_submission_check
 echo "MIB checkout: $MIB ($(git -C "$MIB" rev-parse --short HEAD))"; echo "python: $PY"

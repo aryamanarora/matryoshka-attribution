@@ -29,7 +29,7 @@
 #     $1..$8 and silently drops a 9th "lr" argument (every job would then run at the default).
 #  2. gemma2 runs in the tl2 env (TL 2.15.4) -- the default env's Gemma-2 forward is
 #     wrong (CLAUDE.md, proved in 525673a) -- and that venv needs an explicit PYTHONPATH because
-#     learning_to_attribute is not installed in it. Note that submit_softuni_lr05.sh, which
+#     matryoshka_attribution is not installed in it. Note that submit_softuni_lr05.sh, which
 #     produced the Adam uniform-k row this sweep is read against, does NOT do this; its gemma2
 #     cells were fixed after the fact by reeval_gemma_mib.py.
 #  3. eval_mib.py must be recent enough to carry the transformers dtype/torch_dtype version gate

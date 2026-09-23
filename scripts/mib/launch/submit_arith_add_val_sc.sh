@@ -21,7 +21,7 @@
 # 15 node (jag a6000) + 10 edge (sphinx h100) = 25 jobs. A cell with a validation pkl already on
 # disk is skipped. LEVELS="node" / DRYRUN=1 / ONLY=<substring> to restrict.
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"
 DRYRUN=${DRYRUN:-0}; LEVELS=${LEVELS:-"node edge"}; ONLY=${ONLY:-}
 MODEL=llama3; TASK=arithmetic_addition
 EXP="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"

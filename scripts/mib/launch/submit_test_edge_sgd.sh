@@ -86,7 +86,7 @@ $bs --output results/$out"
       # stripping only bin/ and .venv/ printed ".venv" for gemma2 and for everything else alike
       # and the one thing this line exists to show -- which venv a gemma2 cell will use -- was
       # invisible. Strip the .venv too and the repo name comes out (MIB-circuit-track vs
-      # learning-to-attribute), which is the actual distinction.
+      # this repo), which is the actual distinction.
       echo "DRY $name  (lr=$lr sched=$sched repo=$(basename $(dirname $(dirname $(dirname $py)))) -> $out)"
     else
       sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

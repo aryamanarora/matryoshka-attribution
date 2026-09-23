@@ -30,8 +30,8 @@
 #     submit_lr_sweep_topklog.sh ran the default (TL 3.2.1) env for every model, so re-running
 #     it would silently reintroduce the bad Gemma numbers.
 #     ...and that venv needs an explicit PYTHONPATH. It is the MIB repo's own environment and
-#     does NOT have learning_to_attribute installed, so invoking its python directly dies at
-#     `from learning_to_attribute import ...` with ModuleNotFoundError. The first four gemma2
+#     does NOT have matryoshka_attribution installed, so invoking its python directly dies at
+#     `from matryoshka_attribution import ...` with ModuleNotFoundError. The first four gemma2
 #     jobs of this sweep failed exactly that way before $PP was added. `src` is ours; the other
 #     two entries are the precedent from scripts/mib/launch/reeval_bern_gemma.sh:41, kept so eval_mib.py's
 #     MIB-side imports resolve the same way they do there.

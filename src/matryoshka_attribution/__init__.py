@@ -1,7 +1,7 @@
 from .sigmoid_topk import SigmoidTopK, sigmoid_topk, sigmoid_topk_detached_tau
 from .sigmoid_das import RotateLayer, make_rotate_layer
 # Core MAttr learning algorithm — depends only on torch, so always importable. Kept above
-# the heavy model/data imports so other repos (e.g. circuits) can `from learning_to_attribute
+# the heavy model/data imports so other repos (e.g. circuits) can `from matryoshka_attribution
 # import build_mask` without pulling transformers/datasets.
 from .masks import MaskResult, build_mask, VARIANTS
 from .schedules import sample_k
@@ -18,7 +18,7 @@ try:
     from .data import CausalGymDataset, SVADataset, SVA_TASKS
 except ImportError as _e:  # pragma: no cover
     import warnings as _warnings
-    _warnings.warn(f"learning_to_attribute: model/data adapters unavailable ({_e}); "
+    _warnings.warn(f"matryoshka_attribution: model/data adapters unavailable ({_e}); "
                    "core (build_mask/learn_scores/...) still usable.")
     LlamaAttributionHooks = None
     CausalGymDataset = None

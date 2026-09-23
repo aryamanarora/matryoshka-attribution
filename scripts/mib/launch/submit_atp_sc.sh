@@ -21,7 +21,7 @@
 #   MODELS=gemma2 bash scripts/mib/launch/submit_atp_sc.sh
 #   METHODS=AtP-star DRYRUN=1 bash scripts/mib/launch/submit_atp_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 MIB=$ABS/deps/MIB-circuit-track
 DRYRUN=${DRYRUN:-0}; SPLIT=${SPLIT:-validation}
 MODELS=${MODELS:-"gpt2 qwen2.5 llama3"}

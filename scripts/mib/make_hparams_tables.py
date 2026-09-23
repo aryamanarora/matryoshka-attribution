@@ -124,7 +124,7 @@ def describe_mib(results_dir):
 
 
 # cells: optimiser, LR, eps, path, # examples, steps/example. Node Pruning and DBM use torch's
-# default Adam eps (src/learning_to_attribute/edge_pruning.py constructs the optimiser without one).
+# default Adam eps (src/matryoshka_attribution/edge_pruning.py constructs the optimiser without one).
 NONE3 = ["---", "---", "---"]
 MIB_FIXED_NODE = [
     ("Node Pruning", ["Adam", "$0.8$", "$10^{-8}$", "hard-concrete, $s = 0.5$", "3{,}000", "1"]),

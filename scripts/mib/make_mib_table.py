@@ -10,7 +10,7 @@ import math
 from pathlib import Path
 
 import mattr_variants as MV   # which MAttr variant is the unmarked headline, and the label grammar
-from learning_to_attribute import deps as MV_DEPS   # find_mib_path / mib_results_dir
+from matryoshka_attribution import deps as MV_DEPS   # find_mib_path / mib_results_dir
 
 import torch
 
@@ -663,7 +663,7 @@ def eprun_label(level, suffix):
 
 # Bhaskar et al. (2024) named the method for the granularity it prunes at, so the display name
 # follows the level we actually ran: "Node Pruning" for node-level rows, "Edge Pruning" for
-# edge-level ones. Same recipe, same code (src/learning_to_attribute/edge_pruning.py) -- only
+# edge-level ones. Same recipe, same code (src/matryoshka_attribution/edge_pruning.py) -- only
 # the label tracks the substrate. Do NOT hardcode one name for both; a node-level row called
 # "Edge Pruning" (or vice versa) misstates what was pruned.
 EPRUN_NAME = {"node": "Node Pruning", "edge": "Edge Pruning"}

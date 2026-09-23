@@ -12,7 +12,7 @@
 #   bash scripts/mib/launch/submit_mib_node_frozen_sc.sh
 #   MODELS=gemma2 bash scripts/mib/launch/submit_mib_node_frozen_sc.sh
 set -u
-ABS=${ABS:-/juice3/scr3/nlp/interp/learning-to-attribute}; cd "$ABS"; mkdir -p logs
+ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
 DRYRUN=${DRYRUN:-0}; SPLITS=${SPLITS:-"validation test"}; LOGK=${LOGK:-0}
 # MASK=topk_identity (default): soft forward, identity backward = IG along the mask path, dirs
 # *_topkid_*; MASK=topk: the soft top-k Jacobian (sigma' + centring), dirs *_topk_*.

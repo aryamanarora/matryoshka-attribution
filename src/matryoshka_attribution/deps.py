@@ -8,7 +8,7 @@ clone trains for hours and then dies AFTER eval, before `scores.pt` is written.
 
 Resolution order, first hit wins:
   1. an explicit path (`--mib-path` / the `explicit` argument)
-  2. `$L2A_MIB_PATH`
+  2. `$MATTR_MIB_PATH`
   3. `<repo>/deps/MIB-circuit-track`          (scripts/setup.sh's layout)
   4. `<repo>/MIB-circuit-track`               (an older gitignored symlink, if one exists)
   5. `./MIB-circuit-track` relative to the CWD (the scripts' historical default)
@@ -34,8 +34,8 @@ def find_mib_path(explicit: str | os.PathLike | None = None) -> Path:
     candidates = []
     if explicit:
         candidates.append(("--mib-path", Path(explicit)))
-    if os.environ.get("L2A_MIB_PATH"):
-        candidates.append(("$L2A_MIB_PATH", Path(os.environ["L2A_MIB_PATH"])))
+    if os.environ.get("MATTR_MIB_PATH"):
+        candidates.append(("$MATTR_MIB_PATH", Path(os.environ["MATTR_MIB_PATH"])))
     candidates += [
         ("deps/", REPO_ROOT / "deps" / MIB_NAME),
         ("legacy symlink", REPO_ROOT / MIB_NAME),
@@ -44,14 +44,14 @@ def find_mib_path(explicit: str | os.PathLike | None = None) -> Path:
     for how, p in candidates:
         if _looks_like_mib(p):
             return p.resolve()
-        if how in ("--mib-path", "$L2A_MIB_PATH"):
+        if how in ("--mib-path", "$MATTR_MIB_PATH"):
             raise FileNotFoundError(
                 f"{how}={p} is not a MIB-circuit-track checkout with its EAP-IG submodule "
                 f"(need {_MARKER} and EAP-IG/src/eap). Clone with --recurse-submodules.")
     raise FileNotFoundError(
         "MIB-circuit-track not found. Run `bash scripts/setup.sh` (clones our fork with its "
         "EAP-IG submodule into deps/MIB-circuit-track at the pinned commit), or pass --mib-path "
-        "/ set $L2A_MIB_PATH. Looked in: " + ", ".join(str(p) for _, p in candidates))
+        "/ set $MATTR_MIB_PATH. Looked in: " + ", ".join(str(p) for _, p in candidates))
 
 
 def mib_results_dir(explicit: str | os.PathLike | None = None) -> Path:

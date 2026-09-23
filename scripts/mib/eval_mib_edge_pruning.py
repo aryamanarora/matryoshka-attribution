@@ -2,7 +2,7 @@
 
 Learns hard-concrete gate latents (log-alphas) with the original Edge-Pruning recipe
 (KL to the unmasked model + annealed-target Lagrangian sparsity; see
-learning_to_attribute/edge_pruning.py), then ranks units by the final log-alphas in the
+matryoshka_attribution/edge_pruning.py), then ranks units by the final log-alphas in the
 standard MIB CPR eval. ``--level edge`` masks edges (the original method, same patching
 environment as eval_mib_edge.py); ``--level node`` is the node-level equivalent — one
 latent per attention head / MLP, gating the node's output between its clean and
@@ -16,7 +16,7 @@ intervention MIB CPR measures — Edge Pruning is inherently this intervention.
 environment, task loss and step count — so the two rows differ only in how the mask is
 learned. By default it carries no sparsity penalty (pyvene's library adds none); ``--l1-coeff``
 restores one, since pyvene's own tutorial for the class does. See
-learning_to_attribute/edge_pruning.py:learn_scores_sigmoid_mask.
+matryoshka_attribution/edge_pruning.py:learn_scores_sigmoid_mask.
 """
 
 import argparse
@@ -32,7 +32,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
-from learning_to_attribute.deps import find_mib_path
+from matryoshka_attribution.deps import find_mib_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -154,7 +154,7 @@ def main():
     # src/ layout: also works when the package is not pip-installed (e.g. under the MIB venv)
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-    from learning_to_attribute.edge_pruning import (
+    from matryoshka_attribution.edge_pruning import (
         learn_scores_edge_pruning, learn_scores_sigmoid_mask)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
