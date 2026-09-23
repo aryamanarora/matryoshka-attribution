@@ -36,9 +36,8 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plots"))
 sys.path.insert(0, str(ROOT / "scripts" / "sva"))
-sys.path.insert(0, str(ROOT / "scripts" / "causalgym"))
 import make_sva_neuron_table as NT                    # noqa: E402  (decode/top_units/describe)
-from gen_sae_feature_table import fetch_feature, load_cache  # noqa: E402
+from neuronpedia import fetch_feature, load_cache  # noqa: E402  (scripts/sva)
 from palette import RC, METHOD, furnish               # noqa: E402  (plots/ is on sys.path)
 
 plt.rcParams.update(RC)
