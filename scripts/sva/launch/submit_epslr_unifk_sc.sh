@@ -1,7 +1,7 @@
 #!/bin/bash
 # UNIFORM-k twin of the Adam eps x lr grid behind figs/epsgrid_facets.pdf (whose runs are all
 # log-k: submit_epslr.sh / submit_adam_vs_sgd_mlp.sh ARM A). Same four substrates, same six eps
-# and four lr, same everything else (topk / logit_diff / sufficient / bs 1 / 2000 steps / 100
+# and four lr, same everything else (topk / logit_diff / iso / bs 1 / 2000 steps / 100
 # eval examples / probe every 250 on 64); the ONLY change is --k-schedule uniform, the headline
 # schedule since 2026-09-15 (scripts/mib/mattr_variants.py). Separate trees (<tree>_unifk) and
 # a separate figure (plots/plot_epsgrid_facets.py --tag unifk) -- the log-k figure stays as is.
@@ -41,7 +41,7 @@ for row in $ROWS; do
   res=${res//_/ }
   errarg=""; [ "$err" != "-" ] && errarg="--sae-error $err"
   common="--model $model --task addition --dataset arith --nodes $nodes $errarg \
---method mattr --variant topk --k-schedule uniform --mode sufficient --loss logit_diff \
+--method mattr --variant topk --k-schedule uniform --mode iso --loss logit_diff \
 --optimizer adam --train-batch-size 1 --steps $STEPS --eval-examples 100 \
 --train-eval-every 250 --train-eval-examples 64"
   if [ "$REFS" = 1 ]; then
@@ -49,7 +49,7 @@ for row in $ROWS; do
     if ls "$out"/*sgd*.json >/dev/null 2>&1; then skip=$((skip+1)); else
       name="${prefix}-ref-sgd"
       cmd="cd $ABS && mkdir -p $out && $EXP uv run python scripts/sva/eval_sva.py --model $model --task addition --dataset arith --nodes $nodes $errarg \
---loss logit_diff --method mattr --variant topk --mode sufficient --k-schedule uniform --optimizer sgd --lr 1.0 \
+--loss logit_diff --method mattr --variant topk --mode iso --k-schedule uniform --optimizer sgd --lr 1.0 \
 --train-batch-size 1 --steps $STEPS --eval-examples 100 --output $out"
       n=$((n+1))
       if [ "$DRY" = 1 ]; then echo "DRY nlprun -g 1 $res -n $name"; else

@@ -38,8 +38,8 @@ for nodes in "${NODES[@]}"; do
   nabbr=${nodes//+/-}
   for loss in "${LOSSES[@]}"; do
     # mattr_tag(topk, adam, $loss, log) -- logit_diff is the unmarked loss, log is the unmarked
-    # k-schedule, so the logit_diff tag is bare "sufficient_topk_adam_bs1".
-    tag="sufficient_topk_adam"
+    # k-schedule, so the logit_diff tag is bare "iso_topk_adam_bs1".
+    tag="iso_topk_adam"
     [[ "$loss" != "logit_diff" ]] && tag="${tag}_${loss}"
     tag="${tag}_bs1"
     f="$OUT/${TASK}_${MODEL}_${nabbr}_${tag}.json"
@@ -47,7 +47,7 @@ for nodes in "${NODES[@]}"; do
     args=(--model "$MODEL" --task "$TASK" --dataset arith --nodes "$nodes"
           --method mattr --loss "$loss" --k-schedule log
           --variant topk --optimizer adam --lr "$LR"
-          --mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-examples 100
+          --mode iso --train-batch-size 1 --steps "$STEPS" --eval-examples 100
           --ablation patch --output "$OUT")
     name="sva_${TASK}_${nabbr}_mattr_stopk_adam_log_${loss}_relog"
     if [[ "${DRY:-0}" == "1" ]]; then echo "sbatch -J $name scripts/sva/launch/sva_sweep.sbatch ${args[*]}"

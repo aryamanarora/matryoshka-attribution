@@ -17,9 +17,8 @@
 # commit as the numbers it changes.
 #
 # WHERE THE CODE LOOKS (src/matryoshka_attribution/deps.py, first hit wins): --mib-path,
-# $MATTR_MIB_PATH, deps/MIB-circuit-track, then the older gitignored symlink ./MIB-circuit-track,
-# so a machine provisioned before deps/ existed keeps working and this script will not clone a
-# second copy next to it.
+# $MATTR_MIB_PATH, then deps/MIB-circuit-track -- which find_mib_path clones at the pin if it is
+# missing, so a fresh checkout works from the first `uv run` even without this script.
 #
 # NO SEPARATE GEMMA2 VENV. Gemma-2 cells must run under TL 2.15.4 (README.md); that stack is the
 # `tl2` dependency group of pyproject.toml, locked in uv.lock, and a job syncs it into its own env
@@ -27,10 +26,11 @@
 # ViT group. Nothing here to build.
 set -euo pipefail
 
-MIB_SHA=582fdbc         # aryamanarora/MIB-circuit-track main, 2026-09-18: EAP-IG @ 3fb341e (AtP / AtP-star node
-                        # methods, None-grad fix); before that d7c76bd (EAP-IG c2dd06c, intervention=zero for EAP-IG-inputs /
-                        # -mc / AttnLRP) and 2324d9a (invert / extra[flip_accuracies])
-MIB_URL="${MIB_URL:-https://github.com/aryamanarora/MIB-circuit-track.git}"
+# The pin and URL live in src/matryoshka_attribution/deps.py (deps.find_mib_path clones at the
+# pin on first use too; this script just does it up front, with --latest as the escape hatch).
+DEPS_PY="$(dirname "${BASH_SOURCE[0]}")/../src/matryoshka_attribution/deps.py"
+MIB_SHA=$(sed -n 's/^MIB_SHA = "\(.*\)"/\1/p' "$DEPS_PY")
+MIB_URL="${MIB_URL:-$(sed -n 's/^MIB_URL = "\(.*\)"/\1/p' "$DEPS_PY")}"
 
 PIN=1; SYNC=1
 for arg in "$@"; do
@@ -50,9 +50,6 @@ NAME=MIB-circuit-track; DEST="deps/$NAME"; MARKER=run_evaluation.py
 echo "benchmark repo (our fork, called unmodified from scripts/mib/):"
 if [ -f "$DEST/$MARKER" ]; then
   echo "  $NAME: already present at $DEST ($(git -C "$DEST" rev-parse --short HEAD 2>/dev/null || echo 'no git metadata'))"
-elif [ -f "$NAME/$MARKER" ]; then
-  echo "  $NAME: found the older checkout/symlink at ./$NAME ($(git -C "$NAME" rev-parse --short HEAD 2>/dev/null || echo '?'))"
-  echo "            deps.py falls back to it, so not cloning a second copy. Remove it to move to deps/."
 else
   echo "  $NAME: cloning $MIB_URL (with submodules)"
   git clone --quiet --recurse-submodules "$MIB_URL" "$DEST"

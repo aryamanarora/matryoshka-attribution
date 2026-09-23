@@ -21,9 +21,9 @@ for spec in "sva nounpp rc simple within_rc" "arith addition months weekdays hou
     sub "fx_${t}_ig"   "${C[@]}" --method ig --ig-steps 10 --eval-examples 100 --grad-batch 25
     sub "fx_${t}_ixg"  "${C[@]}" --method ixg --eval-examples 100 --grad-batch 25
     sub "fx_${t}_rand" "${C[@]}" --method random --seed 42 --eval-examples 100
-    sub "fx_${t}_adam" "${C[@]}" --method mattr --variant topk --mode sufficient --k-schedule log \
+    sub "fx_${t}_adam" "${C[@]}" --method mattr --variant topk --mode iso --k-schedule log \
         --optimizer adam --lr 1.0 --adam-eps 1e-2 --train-batch-size 1 --steps 2000 --eval-examples 100
-    sub "fx_${t}_sgd"  "${C[@]}" --method mattr --variant topk --mode sufficient --k-schedule log \
+    sub "fx_${t}_sgd"  "${C[@]}" --method mattr --variant topk --mode iso --k-schedule log \
         --optimizer sgd --lr 1.0 --train-batch-size 1 --steps 2000 --eval-examples 100
   done
 done

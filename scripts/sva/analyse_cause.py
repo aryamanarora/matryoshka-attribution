@@ -13,8 +13,8 @@ Per (substrate, task, method, loss) we report
 and then rank methods per substrate averaged over tasks (task-group averaged like
 plot_accauc_vs_faithauc.group_avg so ARC-E/IOI don't get outvoted by the 4 SVA tasks).
 
-Also matches every cause-TRAINED MAttr run (results/sva_sweep_cause, tag necessary_*) to its
-iso-trained twin (results/sva_sweep, tag sufficient_*) and reports the paired delta.
+Also matches every cause-TRAINED MAttr run (results/sva_sweep_cause, tag cause_*) to its
+iso-trained twin (results/sva_sweep, tag iso_*) and reports the paired delta.
 
 Run:  uv run python scripts/sva/analyse_cause.py [--sub node|mlp|mlp+attn_head|all]
 """
@@ -46,12 +46,12 @@ def parse_any(fname, d):
     """parse_method plus the cause-trained MAttr tags it deliberately drops."""
     tag = fname.split("_" + d["nodes"].replace("+", "-") + "_", 1)[1].rsplit(".json", 1)[0]
     # mode prefix FIRST: parse_method's hard_topk branch does not look at the prefix, so a
-    # `necessary_hard_topk_*` tag would otherwise come back as an iso "soft-log".
-    if tag.startswith("necessary_") or tag.startswith("joint_"):
+    # `cause_hard_topk_*` tag would otherwise come back as an iso "soft-log".
+    if tag.startswith("cause_") or tag.startswith("joint_"):
         mode = tag.split("_")[0]
-        t2 = tag.replace(mode + "_", "sufficient_", 1)
+        t2 = tag.replace(mode + "_", "iso_", 1)
         m = R.parse_method(fname.replace(tag, t2), d)
-        return (m, "cause" if mode == "necessary" else "joint") if m else (None, None)
+        return (m, "cause" if mode == "cause" else "joint") if m else (None, None)
     m = R.parse_method(fname, d)
     return (m, "iso") if m is not None else (None, None)
 

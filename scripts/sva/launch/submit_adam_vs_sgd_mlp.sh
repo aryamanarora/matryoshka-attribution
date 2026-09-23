@@ -1,6 +1,6 @@
 #!/bin/bash
 # WHY ADAM LOSES TO SGD (AND TO IG) AT MLP-NEURON SCALE -- the diagnostic matrix.
-# One cell: addition / llama3 / --nodes mlp (2,293,760 neurons), sufficient/denoising, bs=1,
+# One cell: addition / llama3 / --nodes mlp (2,293,760 neurons), iso/denoising, bs=1,
 # log-k, 2000 steps, 100 eval pairs. Same cell as submit_sva_mlp_lr.sh, so every job here is
 # directly comparable to what is already on disk in results/sva_mlp_lr and results/sva_sweep.
 # ~4 min/job on an a6000.
@@ -66,7 +66,7 @@ OUTBASE=${OUTBASE:-results/adamsgd_mlp}
 STEPS=${STEPS:-2000}
 ARMS=${ARMS:-"A B C D"}
 COMMON=(--model llama3 --task addition --dataset arith --nodes mlp
-        --method mattr --variant topk --k-schedule log --mode sufficient
+        --method mattr --variant topk --k-schedule log --mode iso
         --train-batch-size 1 --steps "$STEPS" --eval-examples 100
         --train-eval-every 250 --train-eval-examples 64)
 
@@ -125,14 +125,14 @@ fi
 if [[ " $ARMS " == *" D "* ]]; then
   # Eval-only: no --steps/--optimizer semantics, just re-score two existing vectors with the
   # per-example margin dumped. One job, because the model load + eval-set build amortise.
-  A=results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.scores.pt
-  S=results/sva_mlp_lr/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1.scores.pt
+  A=results/sva_sweep/addition_llama3_mlp_iso_topk_adam_bs1.scores.pt
+  S=results/sva_mlp_lr/topk_sgd/lr_1.0/addition_llama3_mlp_iso_topk_sgd_bs1.scores.pt
   G=results/sva_sweep/addition_llama3_mlp_ig.scores.pt
   for f in "$A" "$S" "$G"; do [ -e "$f" ] || { echo "MISSING $f"; exit 1; }; done
   if [ "${DRY:-0}" = "1" ]; then echo "DRY perex -> $OUTBASE/D_perexample"
   else mkdir -p "$OUTBASE/D_perexample"
        sbatch -J "perex" scripts/sva/launch/sva_sweep.sbatch --model llama3 --task addition --dataset arith \
-         --nodes mlp --mode sufficient --eval-examples 100 --dump-per-example \
+         --nodes mlp --mode iso --eval-examples 100 --dump-per-example \
          --scores-from "adam:$A" "sgd:$S" "ig:$G" \
          --output "$OUTBASE/D_perexample" >/dev/null
        echo "submitted perex"

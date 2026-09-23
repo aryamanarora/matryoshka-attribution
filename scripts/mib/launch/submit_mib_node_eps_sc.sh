@@ -41,7 +41,7 @@ for split in $SPLITS; do
     [ "$split" = validation ] && [ "$model" = llama3 ] && [ "$task" = ioi ] && ec="--eval-examples 200"
     name="eps$EPS-${split:0:3}-${task}-${model}"
     cmd="$EXP $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform \
---masking topk --optimizer adam --adam-eps $EPS --mode sufficient --lr 0.05 --split $split --train-split train \
+--masking topk --optimizer adam --adam-eps $EPS --mode iso --lr 0.05 --split $split --train-split train \
 --include-input $bs $ec --output results/$out"
     n=$((n+1))
     if [ "$DRYRUN" = 1 ]; then echo "DRY nlprun -g 1 $res -n $name"; echo "    $cmd"; else

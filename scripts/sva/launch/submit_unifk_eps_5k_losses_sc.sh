@@ -7,7 +7,7 @@
 # (plot_accauc_vs_faithauc.py --cpr --by-loss). Every flag other than --loss is the 5k
 # headline's (read off the landed logit_diff json's `config`): lr 0.05, T 0.5, eps 1e-2,
 # 5000 steps, bs 1, eval-examples 100, train-eval-every 200, seed 42. Output tag:
-#   results/sva_sweep_5k/<task>_llama3_<mlp|mlp-attn_head>_sufficient_topk_adam_eps1e-2_<loss>_uniformk_bs1_s5000.json
+#   results/sva_sweep_5k/<task>_llama3_<mlp|mlp-attn_head>_iso_topk_adam_eps1e-2_<loss>_uniformk_bs1_s5000.json
 #
 # sc / nlprun, run INSIDE tmux. LOSSES defaults to the two missing ones; pass LOSSES="kl cmd"
 # for the newer losses once they are wanted here too.
@@ -22,7 +22,7 @@ NODES=${NODES:-"mlp mlp+attn_head"}
 OUT=results/sva_sweep_5k
 declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
                 [addition]=arith [months]=arith [weekdays]=arith [hours]=arith )
-COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode sufficient \
+COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode iso \
 --optimizer adam --adam-eps 1e-2 --lr 0.05 --T 0.5 --steps 5000 --train-batch-size 1 \
 --eval-examples 100 --train-eval-every 200 --train-eval-examples 20 --seed 42 --output $OUT"
 RES="-q jag -d a6000 -c 4 -r 96G"
@@ -31,7 +31,7 @@ for t in $TASKS; do
   for nodes in $NODES; do
     for loss in $LOSSES; do
       ls=""; [ "$loss" != logit_diff ] && ls="_$loss"
-      f="$OUT/${t}_llama3_${nodes//+/-}_sufficient_topk_adam_eps1e-2${ls}_uniformk_bs1_s5000.json"
+      f="$OUT/${t}_llama3_${nodes//+/-}_iso_topk_adam_eps1e-2${ls}_uniformk_bs1_s5000.json"
       if [ -f "$f" ]; then echo "SKIP $(basename $f)"; skip=$((skip+1)); continue; fi
       name="u5k-${loss}-${nodes//+/-}-${t}"
       cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/sva/eval_sva.py \

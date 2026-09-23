@@ -4,7 +4,7 @@
 # 12 cells at seeds 43 and 44 into results/test_node_topk_uniform_lr05_s<seed>, so the paper can
 # report seed variance for the main result rather than a single run. Every flag other than
 # --seed and --output is the headline's (submit_softuni_lr05.sh, node branch): 500 steps, uniform
-# k, soft top-k, Adam lr 0.05 (eps default 1e-8), sufficient, train on train, --include-input,
+# k, soft top-k, Adam lr 0.05 (eps default 1e-8), iso, train on train, --include-input,
 # full test split (no llama cap: test splits are <= 1188 examples).
 #
 # gemma2 trains AND evaluates in the TL 2.15.4 stack (README.md: the L2A venv's Gemma-2 forward
@@ -51,7 +51,7 @@ for seed in $SEEDS; do
     [ -n "$BIG" ] && [ "$model" = llama3 ] && case " $BIG_TASKS " in *" $task "*) res="$BIG" ;; esac
     name="hseed${seed}-${task}-${model}"
     cmd="$EXP $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform \
---masking topk --optimizer adam --mode sufficient --lr 0.05 --split test --train-split train \
+--masking topk --optimizer adam --mode iso --lr 0.05 --split test --train-split train \
 --include-input --seed $seed $bs --output $out"
     n=$((n+1))
     if [ "$DRYRUN" = 1 ]; then echo "DRY nlprun -g 1 $res -n $name"; echo "    $cmd"; else

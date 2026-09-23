@@ -29,7 +29,7 @@ mkdir -p logs
 
 MIB_DIR=results/softlog_sgd_lr_1.0                # headline MAttr, MIB harness (README.md)
 SVA_DIR=results/sva_sweep_input                    # headline MAttr, eval_sva harness
-SVA_TAG=node_sufficient_topk_sgd_bs1
+SVA_TAG=node_iso_topk_sgd_bs1
 
 MIB_TASKS=(ioi arithmetic_subtraction mcqa arc_easy arc_challenge)
 SVA_TASKS=(simple nounpp rc within_rc)             # --dataset sva
@@ -85,7 +85,7 @@ for t in "${SVA_TASKS[@]}" "${ARITH_TASKS[@]}"; do
   ds=sva; [[ " ${ARITH_TASKS[*]} " == *" $t "* ]] && ds=arith
   sub "xfers${SUF}_${t}" --time=24:00:00 scripts/sva/launch/sva_sweep.sbatch \
     --model llama3 --task "$t" --dataset "$ds" --nodes node --include-input \
-    --method mattr --variant topk --optimizer sgd --k-schedule log --mode sufficient \
+    --method mattr --variant topk --optimizer sgd --k-schedule log --mode iso \
     --train-batch-size 1 --lr 1.0 --loss logit_diff --eval-examples 200 --no-wandb \
     --output "results/transfer_sva${SUF}" --scores-from "${SOURCES[@]}"
 done

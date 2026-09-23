@@ -1,6 +1,6 @@
 """Figures for the "why does Adam lose to SGD at MLP-neuron scale" investigation.
 
-ONE cell throughout: addition / llama3 / --nodes mlp, 2,293,760 neurons, sufficient
+ONE cell throughout: addition / llama3 / --nodes mlp, 2,293,760 neurons, iso
 (denoising), bs=1, log-k, 2000 steps unless a panel says otherwise. Sources:
 
   results/sva_sweep/addition_llama3_mlp_*        the pre-existing 51-run loss x gate x optimizer
@@ -112,8 +112,8 @@ def tail_loss(d):
 REF = {
     "IG": "results/sva_sweep/addition_llama3_mlp_ig.json",
     "Expected Gradients": "results/adamsgd_mlp/E_steplessig/addition_llama3_mlp_mc_ig_m1_s42.json",
-    "MAttr+Adam": "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json",
-    "MAttr+SGD": "results/sva_mlp_lr/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1.json",
+    "MAttr+Adam": "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_bs1.json",
+    "MAttr+SGD": "results/sva_mlp_lr/topk_sgd/lr_1.0/addition_llama3_mlp_iso_topk_sgd_bs1.json",
 }
 COL = {"IG": C_IG, "Expected Gradients": C_SIG, "MAttr+Adam": C_ADAM, "MAttr+SGD": C_SGD}
 
@@ -156,7 +156,7 @@ def fig_curves():
 def collect_cell():
     """Every MAttr run on this cell that logged a training loss, plus the gradient baselines."""
     rows = []
-    pats = ["results/sva_sweep/addition_llama3_mlp_sufficient_*.json",
+    pats = ["results/sva_sweep/addition_llama3_mlp_iso_*.json",
             "results/sva_mlp_lr/*/lr_*/*.json",
             "results/sva_mlp_steps20k/*/lr_*/*.json",
             "results/adamsgd_mlp/A_eps/*/*.json",
@@ -410,7 +410,7 @@ def fig_eps_grid(res="results/adamsgd_mlp/A_eps", refs=None, specs=None,
         # paper reads -- so the comparison is against the shipped run, not a sweep replicate.
         REF = refs if refs is not None else {
             "rho_ig": "results/sva_sweep/addition_llama3_mlp_ig.scores.pt",
-            "rho_sgd": "results/sva_sweep/addition_llama3_mlp_sufficient_topk_sgd_bs1.scores.pt"}
+            "rho_sgd": "results/sva_sweep/addition_llama3_mlp_iso_topk_sgd_bs1.scores.pt"}
         # Published layer-18 neurons for this cell's task, for the recall panel.
         gt_layer = gt_pub = None
         if key == "recall_auc":
@@ -499,7 +499,7 @@ def fig_interventions():
         ("MAttr+SGD", best(["results/sva_mlp_lr/topk_sgd/lr_*/*.json",
                             "results/adamsgd_mlp/F_seed/sgd_*/*.json"]), C_SGD),
         ("MAttr+Adam", best(["results/sva_mlp_lr/topk_adam/lr_*/*.json",
-                             "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json",
+                             "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_bs1.json",
                              "results/adamsgd_mlp/A_eps/eps_1e-8_lr_*/*.json",
                              "results/adamsgd_mlp/F_seed/adam_*/*.json"]), C_ADAM),
         ("  + tuned $\\epsilon$", best("results/adamsgd_mlp/A_eps/*/*.json"), C_FIX),
@@ -831,7 +831,7 @@ def fig_acc_vs_faith():
     # broken Adam: default-eps lr sweep + the 1e-6 arm, hollow markers, no path
     bx, by = [], []
     for pat in ("results/sva_mlp_lr/topk_adam/lr_*/*.json",
-                "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json",
+                "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_bs1.json",
                 "results/adamsgd_mlp/A_eps/eps_1e-8_lr_*/*.json",
                 "results/adamsgd_mlp/A_eps/eps_1e-6_lr_*/*.json"):
         for f in glob.glob(os.path.join(ROOT, pat)):

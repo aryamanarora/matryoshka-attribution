@@ -58,14 +58,14 @@ OUT = Path("paper/figs"); OUT.mkdir(parents=True, exist_ok=True)
 
 # The headline MAttr dirs, one per harness. MIB: verified against
 # scripts/mib/launch/submit_softlog_sgd_lr.sh:94-96 (`--k-schedule log --masking topk --optimizer sgd
-# --include-input`, node level, 500 steps). SVA: the `_sufficient_topk_sgd_bs1` tag is the same
+# --include-input`, node level, 500 steps). SVA: the `_iso_topk_sgd_bs1` tag is the same
 # recipe (variant=topk soft forward, k_schedule=log, optimizer=sgd, lr=1.0, loss=logit_diff,
-# mode=sufficient) at 2000 steps; the `_acc` / `_ce` siblings are loss ablations and `_uniformk`
+# mode=iso) at 2000 steps; the `_acc` / `_ce` siblings are loss ablations and `_uniformk`
 # is the uniform-k one, so the bare tag is the row we ship. assert_recipe() re-checks all of that
 # from each json's config rather than trusting the filename.
 METHOD_DIR = "softlog_sgd_lr_1.0"
 SVA_DIR = "sva_sweep_input"          # the --include-input twin of results/sva_sweep
-SVA_TAG = "node_sufficient_topk_sgd_bs1"
+SVA_TAG = "node_iso_topk_sgd_bs1"
 MODEL = "llama3"
 NL, NH = 32, 32                      # llama3-8B: 32 layers, 32 heads
 
@@ -158,7 +158,7 @@ def assert_recipe(cfg, path):
     # eval_sva.py calls the forward variant `variant` where eval_mib.py's flag is `--masking`;
     # same knob, different arg name, so this dict follows the SVA config's spelling.
     want = {"nodes": "node", "variant": "topk", "k_schedule": "log", "optimizer": "sgd",
-            "mode": "sufficient", "ablation": "patch", "method": "mattr",
+            "mode": "iso", "ablation": "patch", "method": "mattr",
             "loss": "logit_diff", "lr": 1.0, "include_input": True, "model": MODEL}
     bad = {k: (cfg.get(k), v) for k, v in want.items() if cfg.get(k) != v}
     if bad:
@@ -208,7 +208,7 @@ def load_sig_sva(task):
         raise SystemExit(f"missing {p} -- no Expected Gradients run for {task}; the arithmetic-wild "
                          "tasks have `_node_ig` (10-step) but not `_node_mc_ig_m1_s42`")
     cfg = json.load(open(p)).get("config", {})
-    want = {"nodes": "node", "method": "mc_ig", "ig_steps": 1, "mode": "sufficient",
+    want = {"nodes": "node", "method": "mc_ig", "ig_steps": 1, "mode": "iso",
             "ablation": "patch", "loss": "logit_diff", "include_input": False, "model": MODEL}
     bad = {k: (cfg.get(k), v) for k, v in want.items() if cfg.get(k) != v}
     if bad:

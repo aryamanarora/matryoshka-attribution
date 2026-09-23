@@ -45,7 +45,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "plots"))
 # Reuse the figure's own tag parser and method registry rather than restating them. These have
-# a history of silently folding the headline `sufficient_topk_` runs and `attnlrp` into the IG
+# a history of silently folding the headline `iso_topk_` runs and `attnlrp` into the IG
 # series via a catch-all `else: return "IG"`, so a second copy here is a real hazard.
 from plot_accauc_vs_faithauc import (  # noqa: E402
     METHODS, SVA, ARITH, parse_method, on_model)

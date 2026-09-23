@@ -24,7 +24,7 @@ submit() { # lr model task
   local name="topklog-lr${lr}-${task}-${model}"
   local cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule log \
---masking topk --mode sufficient --lr $lr --split validation --train-split train \
+--masking topk --mode iso --lr $lr --split validation --train-split train \
 --include-input $bs $ec --output results/topklog_lr_$lr"
   if [ "$DRYRUN" = "1" ]; then echo "DRY $name ${ec:+[$ec]}"; else
     sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

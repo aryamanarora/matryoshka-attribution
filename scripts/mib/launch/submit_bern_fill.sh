@@ -48,7 +48,7 @@ for c in "${CONFIGS[@]}"; do
     name="bf-${out#bern_lr_}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib.py --model $model --task $task --steps $steps --k-schedule uniform \
---masking bernoulli_reinforce --mode sufficient --lr $lr --split validation --train-split train \
+--masking bernoulli_reinforce --mode iso --lr $lr --split validation --train-split train \
 --include-input $bs $ec --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       echo "DRY $name -> $out ${ec:+[$ec]}"

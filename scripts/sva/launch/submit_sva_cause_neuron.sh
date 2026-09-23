@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cause-trained (--mode necessary: top-k PATCHED to source, complement clean, loss pushes the
+# Cause-trained (--mode cause: top-k PATCHED to source, complement clean, loss pushes the
 # SOURCE label) and joint-trained MAttr on the NEURON substrates, where the cause metric is not
 # saturated. Companion to submit_sva_cause.sh (node substrate, default-eps Adam, 2026-07-25).
 #
@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 mkdir -p logs results/sva_sweep_cause
 OUT=${OUT:-results/sva_sweep_cause}
-read -ra MODES   <<< "${MODES:-necessary}"
+read -ra MODES   <<< "${MODES:-cause}"
 read -ra SUBS    <<< "${SUBS:-mlp mlp+attn_head}"
 read -ra LOSSES  <<< "${LOSSES:-ce acc logit_diff}"
 read -ra TASKS   <<< "${TASKS:-nounpp rc simple within_rc addition months weekdays hours}"

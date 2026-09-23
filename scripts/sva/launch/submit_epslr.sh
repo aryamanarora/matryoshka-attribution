@@ -16,7 +16,7 @@
 # plausible |grad| range; lr spans four decades so each eps gets its own optimum.
 #
 # EVERYTHING ELSE IS HELD AT THE NO-ERROR SWEEP'S SETTINGS (topk / log-k / logit_diff /
-# sufficient / bs 1 / 2000 steps / 100 eval examples), so the only things varying are eps and lr.
+# iso / bs 1 / 2000 steps / 100 eval examples), so the only things varying are eps and lr.
 #
 # ERRMODE PICKS THE INTERVENTION, and it decides what the grid can be compared against:
 #   frozen (default) each error term is measured against its OWN reconstruction, so the error
@@ -76,7 +76,7 @@ DS=${DS:-arith}
 EPSES=${EPSES:-"1e-8 1e-6 1e-4 1e-2 1e-1 1e0"}
 LRS=${LRS:-"0.005 0.05 0.5 5.0"}
 COMMON=(--model "$MODEL" --task "$TASK" --dataset "$DS" --nodes "$NODES" "${ERRARG[@]}"
-        --method mattr --variant topk --k-schedule log --mode sufficient --loss logit_diff
+        --method mattr --variant topk --k-schedule log --mode iso --loss logit_diff
         --optimizer adam --train-batch-size 1 --steps "$STEPS" --eval-examples 100
         --train-eval-every 250 --train-eval-examples 64)
 
@@ -121,7 +121,7 @@ if [[ "${REFS:-0}" == 1 ]]; then
   subraw "${PREFIX}ref-ig"   "$OUTBASE/refs" "${R[@]}" --method ig --ig-steps 10 --eval-examples 100 --grad-batch 25
   subraw "${PREFIX}ref-ixg"  "$OUTBASE/refs" "${R[@]}" --method ixg --eval-examples 100 --grad-batch 25
   subraw "${PREFIX}ref-rand" "$OUTBASE/refs" "${R[@]}" --method random --seed 42 --eval-examples 100
-  subraw "${PREFIX}ref-sgd"  "$OUTBASE/refs" "${R[@]}" --method mattr --variant topk --mode sufficient \
+  subraw "${PREFIX}ref-sgd"  "$OUTBASE/refs" "${R[@]}" --method mattr --variant topk --mode iso \
       --k-schedule log --optimizer sgd --lr 1.0 --train-batch-size 1 --steps "$STEPS" --eval-examples 100
 fi
 

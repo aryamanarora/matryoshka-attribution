@@ -21,7 +21,7 @@ for p in "${PAIRS[@]}"; do
   if [ -f "$OUT/${task}_${model}_scores.pt" ]; then echo "SKIP ${task}_${model}"; continue; fi
   name="eu10x-${SPLIT:0:3}-${task}-${model}"
   cmd="$EXP uv run python scripts/mib/eval_mib_edge.py --model $model --task $task --steps $STEPS --k-schedule uniform \
---masking topk --mode sufficient --lr 0.05 --split $SPLIT --train-split train --batch-size 5 --eval-examples 0 --output $OUT"
+--masking topk --mode iso --lr 0.05 --split $SPLIT --train-split train --batch-size 5 --eval-examples 0 --output $OUT"
   n=$((n+1))
   if [ "$DRYRUN" = 1 ]; then echo "DRY nlprun -g 1 -q jag -d a6000 -c 3 -r 64G -n $name"; echo "    $cmd"; else
     nlprun -g 1 -q jag -d a6000 -c 3 -r 64G -n "$name" -o "$ABS/logs/${name}.out" "$cmd" 2>&1 | grep -E 'Submitted batch job' | sed "s/^/$name: /"; sleep 1

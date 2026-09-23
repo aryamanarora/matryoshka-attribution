@@ -36,7 +36,7 @@
 #     (b65d931); without it every gemma2 job dies 28s in under the 4.46.3 venv.
 #
 # Protocol is otherwise byte-for-byte submit_softlog_sgd_lr.sh -- 500 steps, --include-input,
-# --mode sufficient, train->validation, llama3/ioi capped at --eval-examples 200 -- because the
+# --mode iso, train->validation, llama3/ioi capped at --eval-examples 200 -- because the
 # comparison is only meaningful against the arm it mirrors.
 #
 # DRYRUN=1 to preview.  LRS="0.05 0.1" to override the grid.  ONLY=gemma2 to restrict to one model.
@@ -68,7 +68,7 @@ submit() { # lr model task
   local name="softunisgd-lr${lr}-${task}-${model}"
   local cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $pp$py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform \
---masking topk --optimizer sgd --mode sufficient --lr $lr --split validation --train-split train \
+--masking topk --optimizer sgd --mode iso --lr $lr --split validation --train-split train \
 --include-input $bs $ec --output results/softuni_sgd_lr_$lr"
   if [ "$DRYRUN" = "1" ]; then echo "DRY $name ${ec:+[$ec]} [py=${py#$ABS/}]${pp:+ [+PYTHONPATH]}"; else
     sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

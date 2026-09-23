@@ -97,7 +97,7 @@ for c in "${CONFIGS[@]}"; do
     name="esgd3-${split:0:3}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; ${pre}\
 $py scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule log \
---masking topk --optimizer sgd --mode sufficient --lr $LR --split $split --train-split train \
+--masking topk --optimizer sgd --mode iso --lr $LR --split $split --train-split train \
 $bs --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       echo "DRY $name  (lr=$LR split=$split repo=$(basename $(dirname $(dirname $(dirname $py)))) -> $out)"

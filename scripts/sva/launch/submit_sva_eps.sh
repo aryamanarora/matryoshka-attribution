@@ -40,7 +40,7 @@
 # plot_accauc_vs_faithauc.REQUIRED, which drops any series missing a required task-group.
 #
 # THIS WAVE DEPENDS ON THE 2026-08-28 run_tag CHANGE. eval_sva.run_tag now encodes a non-default
-# --adam-eps (`sufficient_topk_adam_eps1e-2_bs1`); before it did not, and these runs would have
+# --adam-eps (`iso_topk_adam_eps1e-2_bs1`); before it did not, and these runs would have
 # OVERWRITTEN the default-eps ones in the same dir. If the predicted filenames below come out
 # without `_eps1e-2`, stop -- the tag change is missing and this script will destroy data.
 #
@@ -48,7 +48,7 @@
 # skip-if-exists check below could not see them -- they sat in per-config --output dirs under
 # results/adamsgd_mlp/, which is the workaround that existed precisely BECAUSE run_tag did not
 # encode eps. Same config in every field (eps 0.01, lr 0.05, logit_diff, patch, no
-# include-input, 2000 steps, bs1, log k, topk/adam/sufficient, 100 eval examples), verified
+# include-input, 2000 steps, bs1, log k, topk/adam/iso, 100 eval examples), verified
 # against each json's stored `config`:
 #   A_eps/eps_1e-2_lr_0.05         addition / mlp
 #   G_nounpp/eps_1e-2_lr_0.05      nounpp   / mlp
@@ -110,14 +110,14 @@ emit() {  # $1=task $2=nodes $3=outdir $4=ablation $5=include-input(0|1) $6=name
   # Mirror eval_sva.run_tag() EXACTLY: base, then _eps, then _loss (omitted for logit_diff),
   # then _zeroabl, then _bs1. A drift here does not fail loudly -- it makes the skip-if-exists
   # check miss and the wave resubmit everything, so it is written in run_tag's own order.
-  local tag="sufficient_topk_adam_eps${EPS}"
+  local tag="iso_topk_adam_eps${EPS}"
   [[ "$LOSS" != logit_diff ]] && tag="${tag}_${LOSS}"
   [[ "$abl" != patch ]] && tag="${tag}_${abl}abl"
   tag="${tag}_bs1"
   local extra=(); [[ "$inp" == 1 ]] && extra=(--include-input)
   sub "${pfx}${LTAG}_${task}_${nabbr}" "$out" "$out/${task}_${model}_${nabbr}_${tag}.json" \
       --model "$model" --task "$task" --dataset "$ds" --nodes "$nodes" \
-      --method mattr --variant topk --optimizer adam --k-schedule log --mode sufficient \
+      --method mattr --variant topk --optimizer adam --k-schedule log --mode iso \
       --loss "$LOSS" --lr "$LR" --adam-eps "$EPS" \
       --train-batch-size 1 --steps 2000 --eval-examples 100 \
       --ablation "$abl" "${extra[@]}"

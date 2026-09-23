@@ -28,8 +28,7 @@ class TrainResult:
     scores: torch.Tensor                       # final scores, on CPU
     loss_log: list = field(default_factory=list)
     k_log: list = field(default_factory=list)
-    # (step, k, k_frac, loss, 0) -- last slot was bias_step, kept 0 for schema compat
-    train_log: list = field(default_factory=list)
+    train_log: list = field(default_factory=list)   # (step, k, k_frac, loss)
     train_time_s: float = 0.0
 
 
@@ -51,9 +50,6 @@ def learn_scores(
     sgd_dampening: float = 0.0,
     grad_norm: float = 0.0,
     l0_lambda: float = 0.0,
-    extra_params: Optional[list] = None,
-    lr_extra: Optional[float] = None,
-    extra_optimizer: Optional[str] = None,
     device="cpu",
     on_step: Optional[Callable[[int, float, float, torch.Tensor], None]] = None,
     log_every: int = 0,
@@ -62,10 +58,8 @@ def learn_scores(
 ) -> TrainResult:
     """Learn attribution ``scores`` over ``total`` nodes by minimizing ``loss_fn(mask)``.
 
-    Args mirror the knobs previously inlined in eval_mib.py / attribute.py / the toys:
     ``variant`` selects the masking ablation (see ``masks.VARIANTS``); ``k_schedule`` is a
-    ``schedules.sample_k`` schedule; ``optimizer`` in ``{adam, sgd, none}``; ``extra_params``/
-    ``lr_extra`` add a second param group (e.g. DAS rotations). (Dropped 2026-08-26: ``lr_schedule``, the ``use_bias``/``natural_k_frac``
+    ``schedules.sample_k`` schedule; ``optimizer`` in ``{adam, sgd, none}``. (Dropped 2026-08-26: ``lr_schedule``, the ``use_bias``/``natural_k_frac``
     bias-step, and ``k_schedule="natural"`` -- no headline result used them.)
 
     ``optimizer="none"`` (2026-09-18) is MAttr WITHOUT LEARNING: the scores stay at their init
@@ -93,16 +87,6 @@ def learn_scores(
     # frozen: lr 0 keeps the forward at the init while the loop below still computes .grad.
     groups = [{"params": main_params, "lr": 0.0 if frozen else lr, **adam_kw}]
     frozen_acc, frozen_n = (torch.zeros(total, dtype=torch.float64, device=device), 0) if frozen else (None, 0)
-    extra_optimizer_ = None
-    if extra_params:
-        elr = lr_extra if lr_extra is not None else lr
-        if extra_optimizer is not None and extra_optimizer != optimizer:
-            # extra params (e.g. DAS rotation) get their OWN optimizer -- lets the scores use
-            # SGD (id-STE magnitude signal) while the rotation uses Adam (manifold param).
-            ecls = torch.optim.SGD if extra_optimizer == "sgd" else torch.optim.Adam
-            extra_optimizer_ = ecls([{"params": list(extra_params), "lr": elr}])
-        else:
-            groups.append({"params": list(extra_params), "lr": elr, **adam_kw})
     optimizer_ = opt_cls(groups)
 
     result = TrainResult(scores=scores)
@@ -112,8 +96,6 @@ def learn_scores(
         # is fixed within a batch, this is the only knob that reduces *k-schedule* variance
         # (batching only averages example noise). k_avg=1 is the original single-draw step.
         optimizer_.zero_grad()
-        if extra_optimizer_ is not None:
-            extra_optimizer_.zero_grad()
         ks, losses = [], []
         for _ka in range(k_avg):
             if k_sampler is not None:
@@ -143,13 +125,10 @@ def learn_scores(
         if not losses:                             # every draw skipped
             continue
         if k_avg > 1:                              # mean gradient (keep effective lr ~ bs=1)
-            for opt in (optimizer_, extra_optimizer_):
-                if opt is None:
-                    continue
-                for pgrp in opt.param_groups:
-                    for prm in pgrp["params"]:
-                        if prm.grad is not None:
-                            prm.grad /= len(losses)
+            for pgrp in optimizer_.param_groups:
+                for prm in pgrp["params"]:
+                    if prm.grad is not None:
+                        prm.grad /= len(losses)
         # Grad norm BEFORE the step, for the log line only. Read here because the optimizer may
         # rewrite .grad in place. Diagnostic for the residual-SAE runaway: there the accumulated
         # update implies per-step gradients ~1e12 near init, which no learning rate can absorb --
@@ -191,8 +170,6 @@ def learn_scores(
             elif gn64 > grad_norm:
                 scores.grad.mul_(grad_norm / gn64)
         optimizer_.step()
-        if extra_optimizer_ is not None:
-            extra_optimizer_.step()
         if frozen and scores.grad is not None:
             frozen_acc -= scores.grad.detach().double()   # goodness = -loss, as SGD would subtract
             frozen_n += 1
@@ -201,7 +178,7 @@ def learn_scores(
 
         result.loss_log.append(loss_val)
         result.k_log.append(float(k))
-        result.train_log.append((step, float(k), float(k) / total, loss_val, 0))
+        result.train_log.append((step, float(k), float(k) / total, loss_val))
         if on_step is not None:
             # live scores passed for callers that track recovery metrics during training
             # (toys); read-only — do not mutate. wandb-style loggers can ignore it.
@@ -234,9 +211,7 @@ def expected_gradients(
     ``loss_fn(mask)``: sample a batch, call ``draw_alphas(batch_size)`` for a float tensor of
     per-EXAMPLE interpolation points, run ONE forward with each example's embedding
     interpolated at its own alpha along the caller's path -- in this repo always the
-    INPUT-EMBEDDING path, ``emb(alpha) = base + alpha * (emb_clean - base)`` (see
-    ``LlamaAttributionHooks.capture_node_acts`` / ``override_embed`` /
-    ``contract_node_grads``, composed in scripts/sva/eval_sva.py) -- backward the
+    INPUT-EMBEDDING path, ``emb(alpha) = base + alpha * (emb_clean - base)`` -- backward the
     LOSS, and return the per-node contraction ``dL/da_j . delta_j`` as a [total] tensor plus
     the loss value. Return ``None`` to skip the step. Scores are the NEGATED mean of the
     returned vectors (goodness = -loss, matching ``loss_fn``'s minimize convention),
@@ -258,7 +233,7 @@ def expected_gradients(
 
     Shared with a ``learn_scores`` run: ``steps``, ``k_schedule``, the batch handling inside
     the environment closure, the global-RNG seeding convention, and the
-    :class:`TrainResult`/``train_log`` row schema ``(step, mean_k, mean_alpha, loss, 0)``.
+    :class:`TrainResult`/``train_log`` row schema ``(step, mean_k, mean_alpha, loss)``.
     Per-step cost is one forward + one backward, so equal ``steps`` is compute-comparable
     to MAttr.
     """
@@ -287,7 +262,7 @@ def expected_gradients(
         alpha = float(torch.cat(drawn).mean()) if drawn else float("nan")
         result.loss_log.append(lv)
         result.k_log.append(alpha * total)
-        result.train_log.append((step, alpha * total, alpha, lv, 0))
+        result.train_log.append((step, alpha * total, alpha, lv))
         if log_every and logger is not None and ((step + 1) % log_every == 0 or step == 0):
             rate = (step + 1) / (time.time() - t0)
             logger.info("IG   %4d/%d  loss=%.4f  mean alpha=%.4f  k=%.0f/%d  (%.1f step/s)",

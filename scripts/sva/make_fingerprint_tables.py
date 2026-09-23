@@ -98,7 +98,7 @@ def parse_method(fname, d):
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"
         return f"{fam}-{ks}"
-    if "sufficient_topk_" in tag:   # soft top-k forward (differentiable, no STE)
+    if "iso_topk_" in tag:   # soft top-k forward (differentiable, no STE)
         if re.search(r"_ig\d+", tag):
             return None
         ks = "unif" if "uniformk" in tag else "log"

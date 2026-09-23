@@ -1,7 +1,6 @@
 """Mask-variant registry: the single place every MAttr masking ablation is defined.
 
-These reproduce, bit-for-bit (including RNG-draw order), the inline ``if/elif`` block in
-``scripts/mib/eval_mib.py`` (lines ~271-339). The trainer (``trainer.learn_scores``) calls
+The trainer (``trainer.learn_scores``) calls
 ``build_mask`` each step and dispatches the optimizer step on the returned
 :class:`MaskResult` aux fields (REINFORCE manual gradient, L0 penalty).
 
@@ -20,7 +19,7 @@ from .sigmoid_topk import sigmoid_topk, sigmoid_topk_detached_tau
 VARIANTS = (
     "topk", "topk_detached", "topk_identity", "hard_topk", "hard_topk_identity",
     "hard_topk_identity_gumbel", "bernoulli_reinforce",
-    "hard_concrete", "topk_kth_threshold", "topk_kth_threshold_hard",
+    "hard_concrete",
 )
 
 
@@ -107,22 +106,5 @@ def build_mask(scores: torch.Tensor, k: float, variant: str = "topk",
         probs = torch.sigmoid(scores)
         hard = torch.bernoulli(probs)
         return MaskResult(hard - probs.detach() + probs, l0_scores=torch.sigmoid(scores))
-
-    if variant in ("topk_kth_threshold", "topk_kth_threshold_hard"):
-        # circuits/evals/mattr.py parity: detached k-th SCORE as threshold (NOT bisection tau).
-        # Matches its sigmoid_topk incl. the k>=numel -> all-ones guard.
-        ki = max(1, int(k))
-        if ki >= scores.numel():
-            soft = torch.ones_like(scores)
-            if variant == "topk_kth_threshold_hard":
-                hard = torch.ones_like(scores)
-                return MaskResult(hard - soft.detach() + soft)
-            return MaskResult(soft)
-        kth = torch.topk(scores.detach(), ki).values[-1]
-        soft = torch.sigmoid((scores - kth) / T)
-        if variant == "topk_kth_threshold_hard":
-            hard = (scores.detach() >= kth).float()
-            return MaskResult(hard - soft.detach() + soft)
-        return MaskResult(soft)
 
     raise ValueError(f"Unknown mask variant: {variant!r}. Known: {VARIANTS}")

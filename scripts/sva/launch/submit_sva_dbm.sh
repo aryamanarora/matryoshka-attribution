@@ -83,7 +83,7 @@ for res, spec in REQ.items():
 # cell exists that this grid does not cover, the figure would average a substrate/task the
 # baselines never ran -- fail loudly rather than ship a panel with a missing series.
 for res in REQ:
-    for f in glob.glob(res + "/*_sufficient_topk_adam*_bs1.json"):
+    for f in glob.glob(res + "/*_iso_topk_adam*_bs1.json"):
         mid = os.path.basename(f).split("_bs1")[0].split("adam", 1)[1]
         if "uniformk" in mid or "ig" in mid:      # ablations, not the headline series
             continue
@@ -128,12 +128,12 @@ while read -r res nodes task model loss; do
   if [ "${DRY:-0}" = "1" ]; then
     # Keep this in sync with the real sbatch below -- a preview that hides --steps or --lr is
     # how a recipe change ships unnoticed.
-    echo "sbatch -J $name scripts/sva/launch/sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method sigmoid_mask --loss $loss --lr $LR --l1-coeff $L1 --mode sufficient --train-batch-size 1 --steps $STEPS --eval-examples 100 ${extra[*]-} ${abl[*]-} --output $res"
+    echo "sbatch -J $name scripts/sva/launch/sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method sigmoid_mask --loss $loss --lr $LR --l1-coeff $L1 --mode iso --train-batch-size 1 --steps $STEPS --eval-examples 100 ${extra[*]-} ${abl[*]-} --output $res"
   else
     sbatch -J "$name" scripts/sva/launch/sva_sweep.sbatch \
       --model "$model" --task "$task" --dataset "$ds" --nodes "$nodes" \
       --method sigmoid_mask --loss "$loss" --lr "$LR" --l1-coeff "$L1" \
-      --mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-examples 100 \
+      --mode iso --train-batch-size 1 --steps "$STEPS" --eval-examples 100 \
       "${extra[@]+"${extra[@]}"}" "${abl[@]+"${abl[@]}"}" --output "$res" >/dev/null
   fi
   n=$((n+1))

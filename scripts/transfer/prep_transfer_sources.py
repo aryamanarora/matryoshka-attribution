@@ -37,14 +37,14 @@ METHODS = {
     # transfer-vs-corr scatter) can treat every method's vectors uniformly. Its transfer
     # round ran off the raw files; results are identical (same tensors, same layout).
     "mattr": dict(mib=("ours", R / "softlog_sgd_lr_1.0" / "{task}_llama3_scores.pt"),
-                  sva_tag="sufficient_topk_sgd_bs1",
+                  sva_tag="iso_topk_sgd_bs1",
                   want={"method": "mattr", "variant": "topk", "optimizer": "sgd",
-                        "k_schedule": "log", "mode": "sufficient", "include_input": True}),
+                        "k_schedule": "log", "mode": "iso", "include_input": True}),
     # the "+ Adam" ablation: same recipe as the headline, optimizer swapped (README.md table)
     "adam": dict(mib=("ours", R / "topklog_lr_0.05" / "{task}_llama3_scores.pt"),
-                 sva_tag="sufficient_topk_adam_bs1",
+                 sva_tag="iso_topk_adam_bs1",
                  want={"method": "mattr", "variant": "topk", "optimizer": "adam",
-                       "k_schedule": "log", "mode": "sufficient", "include_input": True}),
+                       "k_schedule": "log", "mode": "iso", "include_input": True}),
     "mc_ig": dict(mib=("json", R_MIB / "napig_mc" / "EAP-IG-inputs-mc_patching_node"
                        / "{stask}_llama3" / "importances.json"),
                   sva_tag="mc_ig_m1_s42",

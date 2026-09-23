@@ -2,7 +2,7 @@
 
 Everything the paper does with attribution patching is done here twice: with the paper's own
 attribution patching (AP, ``(a(x) - a(x')) * dM/da`` at x') and with MAttr (a learned soft
-top-k mask over the same units, trained in the sufficient/denoising direction: top-k units keep
+top-k mask over the same units, trained in the iso/denoising direction: top-k units keep
 their clean-prompt activation, the rest take the sign-flipped prompt's activation, and the loss
 pushes the model's preference back toward its clean answer).
 

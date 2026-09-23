@@ -3,7 +3,7 @@
     uv run python scripts/mib/summarize_mode_ablation.py [--splits validation test]
 
 Prints, per split, CPR AUC (`area_under`) and acc-AUC (`acc_auc`) for the headline dir (iso =
-sufficient / denoising objective, what CPR measures), the `--mode cause` run (necessary /
+denoising objective, what CPR measures), the `--mode cause` run (noising /
 noising) and the `--mode joint` run (per-step coin flip, losses.resolve_direction), cell by cell
 over make_mib_table.COLUMNS, with the average over the cells every row has. Dirs are the ones
 scripts/mib/launch/submit_mib_node_mode_ablation_sc.sh writes; the headline dirs come from

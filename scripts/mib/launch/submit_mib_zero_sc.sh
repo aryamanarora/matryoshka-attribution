@@ -69,7 +69,7 @@ for cell in "${CELLS[@]}"; do
         out=results/test_node_topk_${ks}_lr05_zero
         [ -f "$out/${task}_${model}_scores.pt" ] && { skip=$((skip+1)); continue; }
         sub "z-$m-$task-$model" "$res" "$EXP $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks \
---masking topk --optimizer adam --mode sufficient --lr 0.05 --split $SPLIT --train-split train --include-input \
+--masking topk --optimizer adam --mode iso --lr 0.05 --split $SPLIT --train-split train --include-input \
 --ablation zero $tbs --output $out" ;;
       np|dbm)
         if [ $m = np ]; then out=results/eprun_node_s0.5_ld_zero; ev=results/eprun_eval_s0.5_ld_zero

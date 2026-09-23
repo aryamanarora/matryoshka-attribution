@@ -1,10 +1,8 @@
 """Sampling schedules for the number of kept nodes ``k`` and related helpers.
 
-Canonical home for the ``k``-sampling logic that was copy-pasted across
-``scripts/mib/eval_mib.py`` (lines ~265-269), ``scripts/mib/eval_mib_edge.py`` (``sample_k``),
-the original CausalGym ``attribute.py`` (``sample_k``), and the toy scripts. Each function makes exactly
-one ``torch.rand(1).item()`` draw in the same place as the originals, so seeded runs stay
-bit-identical after migration.
+Canonical home for the ``k``-sampling logic shared by every entry point. Each schedule makes
+exactly one ``torch.rand(1).item()`` draw per call (``log_both`` two), so seeded runs are
+reproducible across scripts.
 """
 
 import math
@@ -19,37 +17,13 @@ def sample_k(total: int, schedule: str = "uniform") -> float:
         total: total number of score parameters.
         schedule: ``"uniform"`` samples ``k ~ Uniform(1, total)``; ``"log"`` samples
             ``k ~ exp(Uniform(log 1, log total))`` so 1-10 is as likely as 10-100;
-            ``"logit"`` samples ``k/total`` logit-uniformly, the schedule under which a
-            zero-init SGD run's expected score is exactly activation-path IG (see below).
+            ``"log_both"`` spends half its draws on ``total - k`` for a log-uniform ``k``.
 
     One ``torch.rand(1)`` draw, matching the inlined implementations.
     """
     if schedule == "log":
         log_k = math.log(1) + (math.log(total) - math.log(1)) * torch.rand(1).item()
         return math.exp(log_k)
-    if schedule == "logit":
-        # k = total * sigmoid(u), u ~ U(-ln(total-1), +ln(total-1)); i.e. alpha = k/total is
-        # LOGIT-uniform on [1/total, 1-1/total]. Equivalently: sample sigmoid_topk's bisection
-        # threshold tau uniformly instead of sampling the count.
-        #
-        # WHY THIS ONE: at zero init the mask is uniform at alpha = k/total, the intervention is
-        # h = alpha*clean + (1-alpha)*cf, and sigmoid_topk's implicit-diff backward multiplies
-        # dL/dm by the gate slope sp = alpha*(1-alpha). So the score a zero-init SGD run
-        # accumulates is a PATH INTEGRAL of the attribution g.delta with weight
-        #     w(alpha) ∝ alpha*(1-alpha) * p(alpha).
-        # Choosing p ∝ 1/(alpha*(1-alpha)) cancels the gate slope exactly and leaves w flat --
-        # so MAttr+SGD's expected update becomes activation-path integrated gradients, up to a
-        # positive constant and a rank-irrelevant mean shift. It is the UNIQUE such p.
-        # (For contrast: "log" gives w ∝ 1-alpha, "uniform" gives w ∝ alpha*(1-alpha).)
-        #
-        # The exactness is an argument about the near-zero-score regime only; once the scores
-        # spread past T the mask is no longer uniform and there is no single alpha. Also note
-        # this schedule spends ~half its draws at alpha -> 1, where the gate slope makes the
-        # step tiny, so per-step signal is weaker than "log" at matched step count -- the
-        # variance is the price of the unbiasedness.
-        L = math.log(total - 1.0)
-        u = -L + 2.0 * L * torch.rand(1).item()
-        return total / (1.0 + math.exp(-u))
     if schedule == "log_both":
         # 50/50: log-uniform k (small k -> supervises the HEAD of the ranking) OR
         # total - log-uniform (small complement -> supervises the TAIL: which nodes to

@@ -64,7 +64,7 @@ for sched in $SCHEDS; do
     name="esgd-${tag}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $pp$py scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule $sched \
---masking topk --optimizer sgd --mode sufficient --lr $lr --split validation --train-split train \
+--masking topk --optimizer sgd --mode iso --lr $lr --split validation --train-split train \
 --batch-size $bs --eval-examples $ev --output results/$out"
     if [ "$DRYRUN" = "1" ]; then echo "DRY $name lr=$lr -> $out [py=${py#$ABS/}]${pp:+ [+PYTHONPATH]}"; else
       sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

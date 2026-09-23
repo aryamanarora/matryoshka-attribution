@@ -72,8 +72,8 @@ def compute_scores(args, device):
     logger.info("Loaded %d TRAIN examples from %s (%s)", len(dataset), args.task, args.train_split)
 
     HooksCls = get_hooks_class(hf_model)
-    # sufficient=False is the legacy flag sense: mask=1 stays CLEAN, mask=0 gets the CF.
-    hooker = HooksCls(hf_model, "node", seq_len=1, sufficient=False, include_input=True)
+    # iso: mask=1 stays CLEAN, mask=0 gets the CF.
+    hooker = HooksCls(hf_model, "node", seq_len=1, corrupt_topk=False, include_input=True)
     total = hooker.total
     logger.info("Node scores: %s", hooker.describe())
     hooker.register_hooks()

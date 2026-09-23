@@ -70,7 +70,7 @@ if want mattr_node; then
     IFS='|' read -r tag sched opt lr out <<< "$spec"
     if [ -f "results/$out/${TASK}_${MODEL}_scores.pt" ]; then skipping "$out"; continue; fi
     submit "aa-node-$tag" "$NODE_RES" "$EXP uv run python scripts/mib/eval_mib.py --model $MODEL --task $TASK \
---steps 500 --k-schedule $sched --masking topk --optimizer $opt --mode sufficient --lr $lr \
+--steps 500 --k-schedule $sched --masking topk --optimizer $opt --mode iso --lr $lr \
 --split test --train-split train --include-input --batch-size 2 --output results/$out" >/dev/null
   done
 fi
@@ -83,7 +83,7 @@ if want mattr_edge; then
     IFS='|' read -r tag sched opt lr out <<< "$spec"
     if [ -f "results/$out/${TASK}_${MODEL}_scores.pt" ]; then skipping "$out"; continue; fi
     submit "aa-edge-$tag" "$EDGE_RES" "$EXP uv run python scripts/mib/eval_mib_edge.py --model $MODEL --task $TASK \
---steps 5000 --k-schedule $sched --masking topk --optimizer $opt --mode sufficient --lr $lr \
+--steps 5000 --k-schedule $sched --masking topk --optimizer $opt --mode iso --lr $lr \
 --split test --train-split train --batch-size 2 --eval-examples 200 --output results/$out" >/dev/null
   done
 fi

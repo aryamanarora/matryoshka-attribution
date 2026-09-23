@@ -627,7 +627,7 @@ def parse_method(fname, d):
     #   mc_ig_m1_s42    `_s42` is a SEED; stripping cost Expected Gradients its series (8 -> 7)
     # `random_s42` happens to survive on its prefix branch, but the rule is the same: only a
     # trained MAttr run carries a step suffix, so only those are stripped.
-    if "sufficient_" in tag or "hard_topk" in tag:
+    if "iso_" in tag or "hard_topk" in tag:
         tag = re.sub(r"_s\d+$", "", tag)
     # Node Pruning / DBM at a bumped budget (the 2026-09-06 5k runs) carry the same marker,
     # but their tags ALSO end in _s090 (a sparsity) / seeds elsewhere, so the strip demands
@@ -652,7 +652,7 @@ def parse_method(fname, d):
         fam = "idSTE" if "identity" in tag else "soft"
         ks = "unif" if "uniformk" in tag else "log"
         return f"{fam}-{ks}"
-    if "sufficient_topk_" in tag:   # soft top-k forward (differentiable, no STE)
+    if "iso_topk_" in tag:   # soft top-k forward (differentiable, no STE)
         if re.search(r"_ig\d+", tag):
             return None
         ks = "unif" if "uniformk" in tag else "log"
@@ -668,7 +668,7 @@ def parse_method(fname, d):
         opt = ("softsgd" if "_topk_sgd" in tag else "frozenid" if "_topk_identity_none" in tag
                else "frozen" if "_topk_none" in tag else "stopk")
         # ADAM'S EPS TOO, and for the identical reason. `_eps1e-2` is an Adam run like the
-        # default-eps one, shares the whole `sufficient_topk_adam` prefix, and at neuron scale is
+        # default-eps one, shares the whole `iso_topk_adam` prefix, and at neuron scale is
         # a DIFFERENT ranking (acc-AUC 0.388 vs 0.490 on addition/mlp) -- so without this the
         # 2026-08-28 eps wave would pool into `stopk-log` exactly as the SGD wave did.
         # eval_sva.run_tag writes the value in normalised sci notation (eval_sva.eps_tag), so the
@@ -678,9 +678,9 @@ def parse_method(fname, d):
         eps = re.search(r"_eps([0-9.]+e[+-]?[0-9]+)", tag)
         return f"{opt}-{ks}" + (f"-eps{eps.group(1)}" if eps else "")
     # Be STRICT here. This used to fall through to "IG" for anything unrecognised, which meant a
-    # cause-trained MAttr run (tag `necessary_topk_adam_bs1`, from --mode necessary) would be
+    # cause-trained MAttr run (tag `cause_topk_adam_bs1`, from --mode cause) would be
     # silently relabelled "IG" and averaged into the IG points. Unknown tags must drop out, not
-    # masquerade as a baseline. All `necessary_*` runs are therefore invisible to these figures
+    # masquerade as a baseline. All `cause_*` runs are therefore invisible to these figures
     # by design -- they belong in a cause-trained figure of their own.
     # `mc_ig_m{draws}_s{seed}`. Draws and seed are BOTH in the key, so the m=1 arm (the only one
     # that is compute-matched to I×G) can never be averaged with a 10-draw run, and seed

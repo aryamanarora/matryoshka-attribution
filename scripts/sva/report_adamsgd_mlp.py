@@ -1,7 +1,7 @@
 """Build results/adam_vs_sgd_mlp.html -- the report on why MAttr+Adam loses to MAttr+SGD (and to
 IG / Expected Gradients) at MLP-neuron scale.
 
-ONE cell: addition / llama3 / --nodes mlp (2,293,760 neurons), sufficient (denoising), bs=1,
+ONE cell: addition / llama3 / --nodes mlp (2,293,760 neurons), iso (denoising), bs=1,
 100 eval pairs, 2000 steps unless stated. Everything is read from disk at build time -- no
 number is hardcoded in the prose, because re-evaluations overwrite result jsons in place and a
 copied number goes stale silently (see README.md, "Verification anchor").
@@ -96,7 +96,7 @@ REFS = {
     "I×G": "results/sva_sweep/addition_llama3_mlp_ixg.json",
     "AttnLRP": "results/sva_sweep/addition_llama3_mlp_attnlrp.json",
     "Random ranking": "results/sva_sweep/addition_llama3_mlp_random_s42.json",
-    "MAttr+Adam (lr 0.05)": "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_bs1.json",
+    "MAttr+Adam (lr 0.05)": "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_bs1.json",
     "MAttr+SGD (lr 1.0)": "results/sva_mlp_lr/topk_sgd/lr_1.0/*.json",
 }
 
@@ -108,7 +108,7 @@ IG = rd(REFS["IG (10 steps, 100 examples)"])
 def cell_rows():
     """Every MAttr run on this cell that logged a training loss."""
     rows = []
-    for pat in ["results/sva_sweep/addition_llama3_mlp_sufficient_*.json",
+    for pat in ["results/sva_sweep/addition_llama3_mlp_iso_*.json",
                 "results/sva_mlp_lr/*/lr_*/*.json",
                 "results/sva_mlp_steps20k/*/lr_*/*.json",
                 "results/adamsgd_mlp/A_eps/*/*.json",
@@ -229,10 +229,10 @@ def arm_b_table():
              ("hinge, margin 2", "results/adamsgd_mlp/B_loss/hinge_adam_lr_*/*.json",
               "results/adamsgd_mlp/B_loss/hinge_sgd_lr_*/*.json"),
              ("prob (bounded)", "results/adamsgd_mlp/B_loss/prob_adam_lr_*/*.json", None),
-             ("acc (soft 0–1)", "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_acc_bs1.json",
-              "results/sva_sweep/addition_llama3_mlp_sufficient_topk_sgd_acc_bs1.json"),
-             ("ce", "results/sva_sweep/addition_llama3_mlp_sufficient_topk_adam_ce_bs1.json",
-              "results/sva_sweep/addition_llama3_mlp_sufficient_topk_sgd_ce_bs1.json")]
+             ("acc (soft 0–1)", "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_acc_bs1.json",
+              "results/sva_sweep/addition_llama3_mlp_iso_topk_sgd_acc_bs1.json"),
+             ("ce", "results/sva_sweep/addition_llama3_mlp_iso_topk_adam_ce_bs1.json",
+              "results/sva_sweep/addition_llama3_mlp_iso_topk_sgd_ce_bs1.json")]
     rows = []
     for name, pa, ps in specs:
         a = best_of(pa) if pa else None
@@ -269,8 +269,8 @@ def generality_table():
     for task in ("addition", "nounpp", "rc", "simple", "within_rc"):
         for lab, fn in (("IG", f"{task}_llama3_mlp_ig.json"),
                         ("Expected Gradients", f"{task}_llama3_mlp_mc_ig_m1_s42.json"),
-                        ("MAttr+SGD", f"{task}_llama3_mlp_sufficient_topk_sgd_bs1.json"),
-                        ("MAttr+Adam", f"{task}_llama3_mlp_sufficient_topk_adam_bs1.json")):
+                        ("MAttr+SGD", f"{task}_llama3_mlp_iso_topk_sgd_bs1.json"),
+                        ("MAttr+Adam", f"{task}_llama3_mlp_iso_topk_adam_bs1.json")):
             d = rd(f"results/sva_sweep/{fn}")
             if not d:
                 continue
@@ -510,8 +510,8 @@ def svaplus_table():
     rows = []
     for t in ("nounpp", "rc", "simple", "within_rc"):
         ig_ = rd(f"results/sva_sweep/{t}_llama3_mlp_ig.json")
-        sg = rd(f"results/sva_sweep/{t}_llama3_mlp_sufficient_topk_sgd_bs1.json")
-        ad = rd(f"results/sva_sweep/{t}_llama3_mlp_sufficient_topk_adam_bs1.json")
+        sg = rd(f"results/sva_sweep/{t}_llama3_mlp_iso_topk_sgd_bs1.json")
+        ad = rd(f"results/sva_sweep/{t}_llama3_mlp_iso_topk_adam_bs1.json")
         ld = best_of([f"results/adamsgd_mlp/M_svaplus/{t}_ld_lr_*/*.json"] +
                      (["results/adamsgd_mlp/G_nounpp/eps_1e-2_lr_*/*.json"] if t == "nounpp" else []))
         hg = best_of(f"results/adamsgd_mlp/M_svaplus/{t}_hinge_lr_*/*.json")
@@ -561,7 +561,7 @@ def build():
 
     A("<h1>Why MAttr+Adam fails at MLP-neuron scale</h1>")
     A('<p class="sub">One cell throughout: <span class="mono">addition / llama3-8B / '
-      '--nodes mlp</span>, 2,293,760 neurons, sufficient (denoising) intervention, batch '
+      '--nodes mlp</span>, 2,293,760 neurons, iso (denoising) intervention, batch '
       'size 1, log-<i>k</i> schedule, 2000 steps × 1 example unless stated, 100 held-out '
       'eval pairs. Data-matched: every learned method sees the same training split for the '
       'same number of steps.</p>')

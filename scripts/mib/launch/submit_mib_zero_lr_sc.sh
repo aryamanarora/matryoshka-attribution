@@ -24,7 +24,7 @@ for lr in $LRS; do for c in $CELLS; do
   [ -f "$out/${task}_${model}_scores.pt" ] && continue
   name="$btag$tag$lr-$task-$model"
   cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/mib/eval_mib.py --model $model --task $task \
---steps 500 --k-schedule uniform --masking topk --optimizer adam --mode sufficient --lr $lr --split test --train-split train \
+--steps 500 --k-schedule uniform --masking topk --optimizer adam --mode iso --lr $lr --split test --train-split train \
 $inp $bsarg --ablation zero --output $out"
   n=$((n+1))
   if [ "$DRYRUN" = 1 ]; then echo "DRY $name"; else

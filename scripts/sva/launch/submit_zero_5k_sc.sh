@@ -42,10 +42,10 @@ for nodes in $NODES; do
     gbt=$gb; [ "$task" = arc_easy ] && [ $sae = 0 ] && gbt="--grad-batch 8"
     for m in $METHODS; do
       case $m in
-        mattr)     a="--method mattr --variant topk --mode sufficient --k-schedule uniform --optimizer adam --adam-eps 1e-2 --lr $mlr --T 0.5 $TR"
-                   f="${task}_${model}_${nd}_sufficient_topk_adam_eps1e-2_zeroabl_uniformk${ferr}_bs1_s5000.json" ;;
-        mattr-log) a="--method mattr --variant topk --mode sufficient --k-schedule log --optimizer adam --adam-eps 1e-2 --lr $mlr --T 0.5 $TR"
-                   f="${task}_${model}_${nd}_sufficient_topk_adam_eps1e-2_zeroabl${ferr}_bs1_s5000.json" ;;
+        mattr)     a="--method mattr --variant topk --mode iso --k-schedule uniform --optimizer adam --adam-eps 1e-2 --lr $mlr --T 0.5 $TR"
+                   f="${task}_${model}_${nd}_iso_topk_adam_eps1e-2_zeroabl_uniformk${ferr}_bs1_s5000.json" ;;
+        mattr-log) a="--method mattr --variant topk --mode iso --k-schedule log --optimizer adam --adam-eps 1e-2 --lr $mlr --T 0.5 $TR"
+                   f="${task}_${model}_${nd}_iso_topk_adam_eps1e-2_zeroabl${ferr}_bs1_s5000.json" ;;
         np)        a="--method edge_pruning --target-sparsity 0.9 --lr 0.05 $TR"
                    f="${task}_${model}_${nd}_eprun_s090_zeroabl${ferr}_s5000.json" ;;
         dbm)       a="--method sigmoid_mask --lr 0.3 --l1-coeff 6.0 $TR"

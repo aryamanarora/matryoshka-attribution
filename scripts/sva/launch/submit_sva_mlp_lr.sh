@@ -27,7 +27,7 @@
 # sweep's centre rather than recomputed.
 #
 # OUTPUT DIR PER LR IS LOAD-BEARING. eval_sva.run_tag() does NOT encode the learning rate --
-# every LR here produces the SAME filename, addition_llama3_mlp_sufficient_topk_adam_bs1.json.
+# every LR here produces the SAME filename, addition_llama3_mlp_iso_topk_adam_bs1.json.
 # Writing them all to one --output would leave the last job to finish silently overwriting the
 # rest, and the sweep would look like it ran while holding one run. One subdir per LR is what
 # keeps them apart; do not "tidy" them into a shared dir.
@@ -117,7 +117,7 @@ for lr in $LRS; do
   name="svalr-${TASK}-${NODES}-${VARIANT}-${OPT}${ETAG}-lr${lr}"
   args=(--model "$MODEL" --task "$TASK" --dataset "$DATASET" --nodes "$NODES"
         --method mattr --variant "$VARIANT" --optimizer "$OPT" --k-schedule log
-        --loss logit_diff --mode sufficient --train-batch-size 1 --steps "$STEPS"
+        --loss logit_diff --mode iso --train-batch-size 1 --steps "$STEPS"
         --train-eval-every "$PROBE_EVERY" --train-eval-examples "$PROBE_EX"
         --eval-examples 100 --lr "$lr" "${EPSARG[@]}" --output "$out")
   if [ "${DRY:-0}" = "1" ]; then echo "DRY $name -> $out"

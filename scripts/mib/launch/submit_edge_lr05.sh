@@ -1,6 +1,6 @@
 #!/bin/bash
 # Edge-level MIB training at lr=0.05 for the 3 headline MAttr variants, on val AND test.
-# hard-fwd log-k, soft-fwd log-k, hard-fwd uniform-k. Edge protocol: steps 5000, mode sufficient,
+# hard-fwd log-k, soft-fwd log-k, hard-fwd uniform-k. Edge protocol: steps 5000, mode iso,
 # no include-input, 9 cells (no llama arc), llama capped eval-200/batch-2 (daggered). DRYRUN=1 to preview.
 set -u
 ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"; cd "$ABS"; PY="uv run python"
@@ -27,7 +27,7 @@ for split in validation test; do
       name="e05-${tag}-${sched}-${split:0:3}-${task}-${model}"
       cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule $sched \
---masking $mask --mode sufficient --lr 0.05 --split $split --train-split train \
+--masking $mask --mode iso --lr 0.05 --split $split --train-split train \
 --batch-size $bs --eval-examples $ev --output results/$out"
       if [ "$DRYRUN" = "1" ]; then echo "DRY $name -> $out"; else
         sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

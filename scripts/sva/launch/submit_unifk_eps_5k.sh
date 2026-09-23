@@ -24,7 +24,7 @@ mkdir -p logs
 declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
                 [addition]=arith [months]=arith [weekdays]=arith [hours]=arith )
 TASKS=(nounpp rc simple within_rc addition months weekdays hours)
-COMMON=(--model llama3 --method mattr --variant topk --k-schedule uniform --mode sufficient
+COMMON=(--model llama3 --method mattr --variant topk --k-schedule uniform --mode iso
         --loss logit_diff --optimizer adam --adam-eps 1e-2 --T 0.5 --steps 5000
         --train-batch-size 1 --eval-examples 100 --train-eval-every 200
         --train-eval-examples 20 --seed 42)

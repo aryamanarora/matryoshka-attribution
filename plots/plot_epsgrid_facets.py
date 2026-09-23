@@ -71,18 +71,18 @@ SW = "results/sva_sweep"
 ROWS = [
     ("Llama 3 / Node", "results/epslr_node",
      {"rho_ig": f"{SW}/addition_llama3_node_ig.scores.pt",
-      "rho_sgd": f"{SW}/addition_llama3_node_sufficient_topk_sgd_bs1.scores.pt"}),
+      "rho_sgd": f"{SW}/addition_llama3_node_iso_topk_sgd_bs1.scores.pt"}),
     ("Gemma 2 / MLP", "results/epslr_mlpn_gemma2",
      {"rho_ig": "results/epslr_mlpn_gemma2/refs/addition_gemma2_mlp_ig.scores.pt",
       "rho_sgd": "results/epslr_mlpn_gemma2/refs/"
-                 "addition_gemma2_mlp_sufficient_topk_sgd_bs1.scores.pt"}),
+                 "addition_gemma2_mlp_iso_topk_sgd_bs1.scores.pt"}),
     ("Llama 3 / MLP", "results/adamsgd_mlp/A_eps",
      {"rho_ig": f"{SW}/addition_llama3_mlp_ig.scores.pt",
-      "rho_sgd": f"{SW}/addition_llama3_mlp_sufficient_topk_sgd_bs1.scores.pt"}),
+      "rho_sgd": f"{SW}/addition_llama3_mlp_iso_topk_sgd_bs1.scores.pt"}),
     ("Llama 3 / SAE", "results/saefrozen_epslr",
      {"rho_ig": f"{FERR}/addition_llama3_mlp_sae_span_ig_ferr.scores.pt",
       "rho_sgd": f"{FERR}/addition_llama3_mlp_sae_span_"
-                 "sufficient_topk_sgd_ferr_bs1.scores.pt"}),
+                 "iso_topk_sgd_ferr_bs1.scores.pt"}),
 ]
 # (key, column title, cmap, vmin, vmax). ONE SCALE PER COLUMN, spanning all three rows --
 # vmax is the global max over the substrates, rounded up. Observed: acc 0.110-0.526,

@@ -58,7 +58,7 @@ read -r -a LOSSES <<<"${LOSSES:-ce acc logit_diff}"
 # MAttr settings are submit_sva_sweep.sh's verbatim: topk gate, log k, 2000 steps, bs 1, 100 eval
 # examples, SGD at lr 1.0 (its own off-protocol optimum, as on every other substrate) and Adam at
 # lr 0.05. The eps arm adds --adam-eps 1e-2 and nothing else.
-MATTR_COMMON=(--method mattr --variant topk --k-schedule log --mode sufficient
+MATTR_COMMON=(--method mattr --variant topk --k-schedule log --mode iso
               --train-batch-size 1 --steps 2000 --eval-examples 100)
 SEEDS=(42 43 44)
 declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
@@ -89,7 +89,7 @@ for task in "${TASKS[@]}"; do
   # --- MAttr + SGD, all three losses
   if grep -qw mattr_sgd <<<"$ARMS"; then
     for loss in "${LOSSES[@]}"; do
-      tg="sufficient_topk_sgd"; [[ "$loss" != logit_diff ]] && tg="${tg}_${loss}"
+      tg="iso_topk_sgd"; [[ "$loss" != logit_diff ]] && tg="${tg}_${loss}"
       sub_one "saems${SFX}_${task}_${loss}" "$OUT/${task}_llama3_${NODES}_${tg}_bs1.json" \
         --model llama3 --task "$task" --dataset "${DS[$task]}" --nodes "$NODES" "${INP[@]}" \
         --loss "$loss" --optimizer sgd --lr 1.0 "${MATTR_COMMON[@]}"
@@ -97,7 +97,7 @@ for task in "${TASKS[@]}"; do
   fi
   # --- MAttr + Adam at eps=1e-2, logit-diff only (matches its MLP-basis twin)
   if grep -qw mattr_adameps <<<"$ARMS"; then
-    sub_one "saema${SFX}_${task}" "$OUT/${task}_llama3_${NODES}_sufficient_topk_adam_eps1e-2_bs1.json" \
+    sub_one "saema${SFX}_${task}" "$OUT/${task}_llama3_${NODES}_iso_topk_adam_eps1e-2_bs1.json" \
       --model llama3 --task "$task" --dataset "${DS[$task]}" --nodes "$NODES" "${INP[@]}" \
       --loss logit_diff --optimizer adam --lr 0.05 --adam-eps 1e-2 "${MATTR_COMMON[@]}"
   fi

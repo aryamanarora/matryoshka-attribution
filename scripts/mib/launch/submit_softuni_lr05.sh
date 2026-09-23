@@ -65,7 +65,7 @@ run() {  # level split model task
     [ "$split" = validation ] && [ "$model" = llama3 ] && [ "$task" = ioi ] && { ec="--eval-examples 200"; tlim=06:00:00; }
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule uniform \
---masking topk --mode sufficient --lr 0.05 --split $split --train-split train \
+--masking topk --mode iso --lr 0.05 --split $split --train-split train \
 --include-input $bs $ec --output results/$out"
   else
     out=$([ "$split" = validation ] && echo mib_edge_topk_uniform_lr05 || echo test_edge_topk_uniform_lr05)
@@ -76,7 +76,7 @@ $PY scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule
     esac
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule uniform \
---masking topk --mode sufficient --lr 0.05 --split $split --train-split train \
+--masking topk --mode iso --lr 0.05 --split $split --train-split train \
 --batch-size $bs --eval-examples $ev --output results/$out"
   fi
   name="su05-${level:0:1}-${split:0:3}-${task}-${model}"

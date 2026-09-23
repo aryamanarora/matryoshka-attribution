@@ -2,8 +2,6 @@
 .DS_Store
 *.pyc
 __pycache__/
-# an optional local symlink to an outside MIB checkout (deps.find_mib_path fallback)
-MIB-circuit-track
 # scripts/setup.sh clones our MIB fork here at a pinned commit (see src/matryoshka_attribution/deps.py)
 deps/MIB-circuit-track/
 # goodfire-ai/arithmetic-wild's generated datasets (7 MB), read by scripts/sva/eval_sva.py via

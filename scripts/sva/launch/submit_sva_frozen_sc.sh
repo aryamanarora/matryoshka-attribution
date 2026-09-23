@@ -5,7 +5,7 @@
 #   mlp, mlp+attn  results/sva_sweep_5k      5000 steps            (8 tasks)
 #   mlp_sae_span   results/sva_sweep_ferr5k  5000 steps, frozen err (8 tasks, h100)
 # Both k-schedules (uniform = headline twin, log). Tags carry no eps (no optimizer):
-#   <task>_<model>_<nodes>_sufficient_topk_none[_uniformk][_ferr]_bs1[_s5000].json
+#   <task>_<model>_<nodes>_iso_topk_none[_uniformk][_ferr]_bs1[_s5000].json
 # sc / nlprun, run INSIDE tmux.
 #   bash scripts/sva/launch/submit_sva_frozen_sc.sh
 #   NODES=node KS=uniform DRY=1 bash scripts/sva/launch/submit_sva_frozen_sc.sh
@@ -31,14 +31,14 @@ for nodes in $NODES; do
     [ "$ks" = uniform ] && ktag="_uniformk" || ktag=""
     for task in $tasks; do
       read -r model ds <<< "${CFG[$task]}"
-      f="$out/${task}_${model}_${nd}_sufficient_${MASK}_none${ktag}${ferr}_bs1${ssuf}.json"
+      f="$out/${task}_${model}_${nd}_iso_${MASK}_none${ktag}${ferr}_bs1${ssuf}.json"
       if [ -f "$f" ]; then skip=$((skip+1)); continue; fi
       if [ "$nodes" = mlp_sae_span ]; then res="-q sphinx -d h100 -r 128G"
       elif [ "$model" = qwen2.5 ]; then res="-q jag -d a6000 -c 2 -r 32G"
       else res="-q jag -d a6000 -c 4 -r 96G"; fi
       name="frz-$MASK-$ks-$nd-$task"
       cmd="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/sva/eval_sva.py \
---model $model --task $task --dataset $ds --nodes $nodes --method mattr --variant $MASK --mode sufficient \
+--model $model --task $task --dataset $ds --nodes $nodes --method mattr --variant $MASK --mode iso \
 --loss logit_diff --optimizer none --k-schedule $ks --steps $steps --T 0.5 --train-batch-size 1 \
 --eval-examples 100 --train-eval-every 200 --train-eval-examples 20 --seed 42 $extra --output $out"
       n=$((n+1))

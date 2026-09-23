@@ -34,7 +34,7 @@ for a in "${ABL[@]}"; do
     esac
     name="re-${an}-${task}-${model}"
     nlprun -g 1 -q jag -d a6000 $res -n "$name" \
-      "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks --masking $mask --mode sufficient --split validation --train-split train --include-input $bs --output results/$out"
+      "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run python scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks --masking $mask --mode iso --split validation --train-split train --include-input $bs --output results/$out"
     sleep 1
   done
 done

@@ -96,7 +96,7 @@ METHODS = [
     ("DBM", "sig_lr0.3_l16.0%s", "DBM", "solid"),
     # HIGH-EPS ADAM (eps=1e-2) as of 2026-08-30. At 2.29M mask logits the default eps=1e-8 makes
     # Adam's update ~sign(g)*lr, so every neuron takes the same size step regardless of effect
-    # size and the score becomes a signed COUNT of steps -- `sufficient_topk_adam%s_bs1` was
+    # size and the score becomes a signed COUNT of steps -- `iso_topk_adam%s_bs1` was
     # measuring that degeneracy. BOTH Adam arms are switched together: leaving "+ unif k" at the
     # old eps would make that ablation differ in TWO things (schedule AND eps) and stop being an
     # ablation. run_tag order is base, then _eps, then _loss, which is why %s sits after eps.
@@ -106,16 +106,16 @@ METHODS = [
     # the default-eps one gets the palette's existing purple rather than a dashed blue, because
     # on this figure the two behave like different methods (0/4 vs 4/4 in the top-200), not like
     # a hyperparameter variant of one.
-    ("MAttr ($\\epsilon{=}10^{-2}$)", "sufficient_topk_adam_eps1e-2%s_bs1", "MAttr", "solid"),
-    ("MAttr ($\\epsilon{=}10^{-8}$)", "sufficient_topk_adam%s_bs1",
+    ("MAttr ($\\epsilon{=}10^{-2}$)", "iso_topk_adam_eps1e-2%s_bs1", "MAttr", "solid"),
+    ("MAttr ($\\epsilon{=}10^{-8}$)", "iso_topk_adam%s_bs1",
      "MAttr (Adam, default eps)", "solid"),
     # "+ unif k" DROPPED from this figure 2026-08-30 (requested). It is still a column of
     # scripts/sva/make_sva_neuron_table.py (`stopk-unif`), so the figure and the table no longer
     # describe the same method set -- the docstring's "same runs and the same order as
     # make_sva_neuron_table.METHODS" no longer holds, and re-adding it here needs
-    # sufficient_topk_adam_eps1e-2%s_uniformk_bs1 runs, which do not exist (the eps arm was only
+    # iso_topk_adam_eps1e-2%s_uniformk_bs1 runs, which do not exist (the eps arm was only
     # ever run at log k).
-    ("MAttr + SGD", "sufficient_topk_sgd%s_bs1", "MAttr (SGD)", "solid"),
+    ("MAttr + SGD", "iso_topk_sgd%s_bs1", "MAttr (SGD)", "solid"),
 ]
 LOSSES = [("logit-diff", ""), ("CE", "_ce"), ("Accuracy", "_acc")]
 # HALF-WIDTH (2.65in ~ 0.48\linewidth) by default, so this can sit in a subfigure beside
@@ -156,7 +156,7 @@ def tag_for(tpl, lfrag, zfrag):
     """Fill a METHODS template for one (loss, ablation).
 
     The sweep's run_tag puts the zero-ablation fragment directly AFTER the loss fragment, i.e.
-    before the trailing `_uniformk`/`_bs1` -- `sufficient_topk_sgd_ce_zeroabl_bs1`, never
+    before the trailing `_uniformk`/`_bs1` -- `iso_topk_sgd_ce_zeroabl_bs1`, never
     `..._bs1_zeroabl`. Appending instead of inserting resolves to nothing on disk for the four
     mask arms, which would silently drop them from the zero row rather than error. Verified
     against all 7 methods x 3 losses in results/sva_zeroabl.

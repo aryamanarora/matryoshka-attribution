@@ -14,8 +14,8 @@ and cached slices are mathematically identical to the original full-batch CF for
 Assembled tensors are zero-padded past each example's length; downstream only ever reads
 positions the loss can see (real positions of the base batch), so the loss is unchanged.
 
-Supported for the mlp/attn(/embed) cache slots -- i.e. the node, tied, per-position and
-span layouts. SAE / DAS / resid layouts fall back to plain per-step recomputation.
+Supported for the mlp/attn(/embed) cache slots -- i.e. the node and per-position layouts.
+The SAE layouts fall back to plain per-step recomputation.
 """
 import torch
 
@@ -26,9 +26,7 @@ class CFActivationCache:
         self.max_bytes = int(max_gb * 1e9)
         self.logger = logger
         h = hooker
-        self.supported = ((h.has_mlp or h.has_attn)
-                          and not (h.is_sae or h.is_das or h.has_resid)
-                          and self.max_bytes > 0)
+        self.supported = (h.has_mlp or h.has_attn) and not h.is_sae and self.max_bytes > 0
         self.store = {}          # key -> {"len", "mlp": {li: [p,D]}, "attn": {...}, "embed"}
         self.bytes = 0
         self.full_logged = False

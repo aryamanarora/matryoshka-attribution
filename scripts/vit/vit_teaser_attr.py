@@ -15,7 +15,7 @@ replaced by its own mean colour -- see `--baseline` for why that one),
 
     E = m * E_clean + (1 - m) * E_corrupt ,
 
-which is exactly MIB/MAttr's `sufficient` (iso / denoising) intervention -- the selected
+which is exactly MIB/MAttr's iso (denoising) intervention -- the selected
 patches stay CLEAN and the complement is corrupted (see README.md). The gradient methods
 (AttnLRP, SmoothGrad, Grad x AttnRoll) attribute in their native space; pixel-level maps
 are additionally pooled to the same 14x14 patch grid so every panel can be shown either way.
@@ -293,7 +293,7 @@ def run_mattr(model, x, E_clean, sample_image, eval_fn, pos, neg, args, device, 
         return forward_from_patches(model, mm * E_clean + (1 - mm) * E_corr)
 
     def loss_fn(mask):
-        # corrupt_topk=False == sufficient / iso: the top-k units stay clean and must retain
+        # corrupt_topk=False == iso: the top-k units stay clean and must retain
         # the base behaviour (see matryoshka_attribution.losses).
         return attribution_loss(loss_name, apply_mask(mask.unsqueeze(0)),
                                 base_id, source_id, corrupt_topk=False)

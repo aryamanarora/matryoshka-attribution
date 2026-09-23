@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fill ALL missing edge ablation cells (validation, k-schedule=log, mode=sufficient).
+# Fill ALL missing edge ablation cells (validation, k-schedule=log, mode=iso).
 #  - small models (gpt2/qwen/gemma): only bernoulli_reinforce row was never run -> jag, full eval.
 #  - llama3 cells: a6000 OOMs at full eval -> sphinx h100, 200-example subset (daggered).
 set -u
@@ -11,7 +11,7 @@ for p in "gpt2 ioi" "qwen2.5 ioi" "gemma2 ioi" "qwen2.5 mcqa" "gemma2 mcqa" "gem
   read -r model task <<< "$p"
   case $model in gpt2|qwen2.5) res="-c 3 -r 64G";; gemma2) res="-c 4 -r 96G";; esac
   nlprun -g 1 -q jag -d a6000 $res -n "eb-${task}-${model}" \
-    "$EXP uv run python scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule log --masking bernoulli_reinforce --mode sufficient --split validation --train-split train --batch-size 5 --eval-examples 0 --output results/mib_edge_bernoulli_reinforce"
+    "$EXP uv run python scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule log --masking bernoulli_reinforce --mode iso --split validation --train-split train --batch-size 5 --eval-examples 0 --output results/mib_edge_bernoulli_reinforce"
   sleep 1
 done
 
@@ -21,7 +21,7 @@ run_llama() {
   out=$1; mask=$2; shift 2
   for t in "$@"; do
     nlprun -g 1 -q sphinx -d h100 -r 128G -n "el-${mask}-${t}" \
-      "$EXP uv run python scripts/mib/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule log --masking $mask --mode sufficient --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/$out"
+      "$EXP uv run python scripts/mib/eval_mib_edge.py --model llama3 --task $t --steps 5000 --k-schedule log --masking $mask --mode iso --split validation --train-split train --batch-size 2 --eval-examples 200 --output results/$out"
     sleep 1
   done
 }

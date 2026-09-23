@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette as P  # noqa: E402
 
 RES = "results/sva_sweep"
-ARM = "sufficient_topk_adam_eps1e-2{loss}_uniformk_bs1"
+ARM = "iso_topk_adam_eps1e-2{loss}_uniformk_bs1"
 LOSS_LABEL = {"logit_diff": "logit-diff", "ce": "CE", "acc": "soft-acc", "kl": "KL", "cmd": "CMD"}
 SHAPE = {"qwen2.5": (24, 14), "llama3": (32, 32), "gpt2": (12, 12), "gemma2": (26, 8)}   # (layers, heads)
 C_ATTN, C_MLP = "#0072b2", "#e69f00"

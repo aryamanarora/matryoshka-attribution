@@ -89,11 +89,11 @@ from plot_train_curves import (ARM_COLOR, FIG_OVERLAY_W, FS_OVERLAY,   # noqa: E
 RES20K = "results/sva_mlp_steps20k"
 RUNS_EPS2ONLY = [   # legacy: the eps=1e-2 pair + SGD, without the default-eps arms
     ("MAttr (Adam)", "lr 0.05",  "solid",
-     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_iso_topk_adam_eps1e-2_bs1_s20000.json"),
     ("MAttr (Adam)", "lr 0.005", "dashed",
-     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_iso_topk_adam_eps1e-2_bs1_s20000.json"),
     ("MAttr (SGD)",  "lr 1.0",   "solid",
-     f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1_s20000.json"),
+     f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_iso_topk_sgd_bs1_s20000.json"),
 ]
 # --eps: the SAME four 20k runs recut as an EPS comparison. Colour is the eps arm (the palette
 # already separates them: high-eps blue, default-eps purple) and linestyle is the lr, so the two
@@ -113,15 +113,15 @@ ARM_COLOR = dict(ARM_COLOR, **{
 
 RUNS = [
     ("Adam $\\epsilon{=}10^{-8}$", "lr 0.05", "solid",
-     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_iso_topk_adam_bs1_s20000.json"),
     ("Adam $\\epsilon{=}10^{-8}$", "lr 0.005", "dashed",
-     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_iso_topk_adam_bs1_s20000.json"),
     ("Adam $\\epsilon{=}10^{-2}$", "lr 0.05", "solid",
-     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.05/addition_llama3_mlp_iso_topk_adam_eps1e-2_bs1_s20000.json"),
     ("Adam $\\epsilon{=}10^{-2}$", "lr 0.005", "dashed",
-     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_sufficient_topk_adam_eps1e-2_bs1_s20000.json"),
+     f"{RES20K}/topk_adam/lr_0.005/addition_llama3_mlp_iso_topk_adam_eps1e-2_bs1_s20000.json"),
     ("SGD", "lr 1.0", "solid",
-     f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_sufficient_topk_sgd_bs1_s20000.json"),
+     f"{RES20K}/topk_sgd/lr_1.0/addition_llama3_mlp_iso_topk_sgd_bs1_s20000.json"),
 ]
 
 # IG on the SAME cell (addition / llama3 / mlp / logit_diff), from the sweep dir the paper reads.

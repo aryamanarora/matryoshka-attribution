@@ -53,7 +53,7 @@ sub () {  # sub <name> <outdir> <args...>
   n=$((n+1))
 }
 COMMON=(--model llama3 --dataset arith --method mattr --variant topk --k-schedule log
-        --mode sufficient --loss logit_diff --train-batch-size 1 --steps 2000
+        --mode iso --loss logit_diff --train-batch-size 1 --steps 2000
         --eval-examples 100 --train-eval-every 250 --train-eval-examples 64)
 
 # ---- 1. eps top end, on the winning lr band
@@ -67,7 +67,7 @@ done
 # ---- 2. second cell: nounpp (SVA), same 2.29M-unit mlp substrate.
 #         --dataset sva, and eps=1e-8 is the control it has to beat.
 SVA=(--model llama3 --dataset sva --method mattr --variant topk --k-schedule log
-     --mode sufficient --loss logit_diff --train-batch-size 1 --steps 2000
+     --mode iso --loss logit_diff --train-batch-size 1 --steps 2000
      --eval-examples 100 --train-eval-every 250 --train-eval-examples 64)
 for eps in 1e-8 1e-2; do
   for lr in 0.05 0.5; do
@@ -90,7 +90,7 @@ sub "nodesgd-lr1.0" "$OUT/H_node/sgd_lr_1.0" "${COMMON[@]}" --task addition --no
 
 # ---- 4. re-run the Expected Gradients reference that arm E lost to a kwarg bug (now fixed)
 sub "steplessig" "$OUT/E_steplessig" --model llama3 --task addition --dataset arith \
-    --nodes mlp --mode sufficient --method mc_ig --ig-steps 1 --seed 42 --loss logit_diff \
+    --nodes mlp --mode iso --method mc_ig --ig-steps 1 --seed 42 --loss logit_diff \
     --eval-examples 100
 
 echo "== ${DRY:+DRY }total $n jobs -> $OUT =="

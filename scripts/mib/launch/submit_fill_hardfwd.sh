@@ -27,7 +27,7 @@ submit() { # sched lr model task
   local name="${dirpre/_lr/}-lr${lr}-${task}-${model}"
   local cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $sched \
---masking hard_topk --mode sufficient --lr $lr --split validation --train-split train \
+--masking hard_topk --mode iso --lr $lr --split validation --train-split train \
 --include-input $bs $ec --output results/${dirpre}_${lr}"
   if [ "$DRYRUN" = "1" ]; then echo "DRY $name ${ec:+[cap]}"; else
     sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

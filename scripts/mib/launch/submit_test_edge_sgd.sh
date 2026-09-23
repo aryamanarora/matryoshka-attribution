@@ -79,7 +79,7 @@ for c in "${CONFIGS[@]}"; do
     name="tesgd-${tag}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; ${pre}\
 $py scripts/mib/eval_mib_edge.py --model $model --task $task --steps 5000 --k-schedule $sched \
---masking topk --optimizer sgd --mode sufficient --lr $lr --split test --train-split train \
+--masking topk --optimizer sgd --mode iso --lr $lr --split test --train-split train \
 $bs --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       # THREE dirnames, not two: both interpreters live in a directory called `.venv`, so

@@ -71,12 +71,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log", choices=["uniform", "log"])
-    parser.add_argument("--mode", default="iso",
-                        choices=["iso", "cause", "sufficient", "necessary"],
-                        help="iso (=sufficient, denoising): corrupt the complement of the top-k, "
-                             "maximize retained clean behavior (MIB CPR; all our runs). "
-                             "cause (=necessary, noising): corrupt the top-k, find what breaks "
-                             "behavior. (sufficient/necessary still accepted.)")
+    parser.add_argument("--mode", default="iso", choices=["iso", "cause"],
+                        help="iso (denoising): corrupt the complement of the top-k, maximize "
+                             "retained clean behavior (MIB CPR; all our runs). "
+                             "cause (noising): corrupt the top-k, find what breaks behavior.")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "topk_identity", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k (ours). topk_detached: soft forward, detached tau. "
@@ -110,9 +108,8 @@ def main():
     from einops import einsum
 
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from matryoshka_attribution import sigmoid_topk, learn_scores, normalize_mode
+    from matryoshka_attribution import sigmoid_topk, learn_scores
     from matryoshka_attribution.sigmoid_topk import sigmoid_topk_detached_tau
-    args.mode = normalize_mode(args.mode)   # iso/cause -> sufficient/necessary (both accepted)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     random.seed(args.seed)
@@ -158,9 +155,9 @@ def main():
     total = n_real
     logger.info("Edge scores: %d parameters", total)
 
-    # "necessary" (noising) corrupts the top-k edges; "sufficient" (denoising) corrupts
-    # the complement (our runs / MIB CPR).
-    corrupt_topk = args.mode == "necessary"
+    # cause (noising) corrupts the top-k edges; iso (denoising) corrupts the complement
+    # (our runs / MIB CPR).
+    corrupt_topk = args.mode == "cause"
 
     # Precompute source node info for hooks (input, a{l}.h{h}, m{l})
     source_hooks = []  # (hook_name, node_name, forward_index, is_attn)

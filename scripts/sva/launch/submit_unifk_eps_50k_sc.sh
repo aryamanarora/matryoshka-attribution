@@ -25,7 +25,7 @@ TASKS=${TASKS:-"nounpp rc simple within_rc addition months weekdays hours"}
 NODES=${NODES:-"mlp mlp+attn_head mlp_sae_span"}
 declare -A DS=( [nounpp]=sva [rc]=sva [simple]=sva [within_rc]=sva
                 [addition]=arith [months]=arith [weekdays]=arith [hours]=arith )
-COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode sufficient \
+COMMON="--model llama3 --method mattr --variant topk --k-schedule uniform --mode iso \
 --loss logit_diff --optimizer adam --adam-eps $EPS --T 0.5 --steps $STEPS --train-batch-size 1 \
 --eval-examples 100 --train-eval-every 1000 --train-eval-examples 20 --seed 42"
 # The SAE substrate does not fit a 48 GB a6000 (five of eight cells OOM'd in the encode within
@@ -36,10 +36,10 @@ for t in $TASKS; do
   for nodes in $NODES; do
     if [ "$nodes" = mlp_sae_span ]; then
       out=results/sva_sweep_ferr50k; extra="--lr 0.5 --sae-error frozen"
-      f="$out/${t}_llama3_mlp_sae_span_sufficient_topk_adam${epstag}_uniformk_ferr_bs1_s${STEPS}.json"
+      f="$out/${t}_llama3_mlp_sae_span_iso_topk_adam${epstag}_uniformk_ferr_bs1_s${STEPS}.json"
     else
       out=results/sva_sweep_50k; extra="--lr 0.05"
-      f="$out/${t}_llama3_${nodes//+/-}_sufficient_topk_adam${epstag}_uniformk_bs1_s${STEPS}.json"
+      f="$out/${t}_llama3_${nodes//+/-}_iso_topk_adam${epstag}_uniformk_bs1_s${STEPS}.json"
     fi
     if [ -f "$f" ]; then echo "SKIP $(basename $f)"; skip=$((skip+1)); continue; fi
     name="u50k${epstag}-${nodes//+/-}-${t}"

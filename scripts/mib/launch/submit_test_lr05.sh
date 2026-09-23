@@ -29,7 +29,7 @@ for c in "${CONFIGS[@]}"; do
     name="t05-${tag}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $sched \
---masking $mask --mode sufficient --lr 0.05 --split test --train-split train \
+--masking $mask --mode iso --lr 0.05 --split test --train-split train \
 --include-input $bs --output results/$out"
     if [ "$DRYRUN" = "1" ]; then echo "DRY $name"; else
       sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

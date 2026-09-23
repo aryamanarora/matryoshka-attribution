@@ -8,7 +8,7 @@ environment as eval_mib_edge.py); ``--level node`` is the node-level equivalent 
 latent per attention head / MLP, gating the node's output between its clean and
 corrupted activation (z*clean + (1-z)*corrupted).
 
-Denoising-only (mask=1 keeps clean, 0 patches corrupted), i.e. the `sufficient`
+Denoising-only (mask=1 keeps clean, 0 patches corrupted), i.e. the `iso`
 intervention MIB CPR measures — Edge Pruning is inherently this intervention.
 
 ``--gate sigmoid`` swaps the mask parameterization for pyvene's SigmoidMaskIntervention

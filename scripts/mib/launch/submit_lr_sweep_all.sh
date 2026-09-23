@@ -13,7 +13,7 @@ launch() { # mask lr steps outdir tag
   for p in "${PAIRS[@]}"; do
     read -r model task <<< "$p"; IFS='|' read -r res bs <<< "$(res_for $model)"
     nlprun -g 1 -q jag -d a6000 $res -n "${tag}-${task}-${model}" \
-      "$EXP uv run python scripts/mib/eval_mib.py --model $model --task $task --steps $steps --k-schedule uniform --masking $mask --mode sufficient --lr $lr --split validation --train-split train --include-input $bs --output results/$out"
+      "$EXP uv run python scripts/mib/eval_mib.py --model $model --task $task --steps $steps --k-schedule uniform --masking $mask --mode iso --lr $lr --split validation --train-split train --include-input $bs --output results/$out"
     sleep 1
   done
 }

@@ -7,9 +7,9 @@
 THE THREE RUNS are the headline node-level recipe (soft top-k forward, uniform k, Adam, lr 0.05,
 500 steps -- mattr_variants.HEADLINE) trained under three objectives and otherwise identical:
 
-    iso     top-k CLEAN, complement corrupted (denoising; = `sufficient`). What every MIB row of
+    iso     top-k CLEAN, complement corrupted (denoising). What every MIB row of
             ours is trained with, and what MIB's CPR measures.
-    cause   top-k CORRUPTED, complement clean (noising; = `necessary`).
+    cause   top-k CORRUPTED, complement clean (noising).
     joint   a fair coin per step between the two (losses.resolve_direction).
 
 Dirs are summarize_mode_ablation.DIRS; the cells are make_mib_table.COLUMNS (12). Both metrics

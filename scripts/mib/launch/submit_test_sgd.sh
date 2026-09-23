@@ -57,7 +57,7 @@ for c in "${CONFIGS[@]}"; do
     name="tsgd-${tag}-${task}-${model}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; ${pre}\
 $py scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $sched \
---masking topk --optimizer sgd --mode sufficient --lr $lr --split test --train-split train \
+--masking topk --optimizer sgd --mode iso --lr $lr --split test --train-split train \
 --include-input $bs --output results/$out"
     if [ "$DRYRUN" = "1" ]; then echo "DRY $name  (lr=$lr sched=$sched py=$py -> $out)"; else
       sbatch --partition=main --gres=gpu:1 --cpus-per-task=$cpus --mem=$mem --time=$tlim \

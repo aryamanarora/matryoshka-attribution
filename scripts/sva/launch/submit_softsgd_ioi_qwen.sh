@@ -23,7 +23,7 @@
 # "$+$ SGD (soft top-$k$ fwd)" section has a unif-$k$ row, and with the pin applied its IOI
 # columns render as `---` until these land.
 #
-# PROTOCOL is read off results/sva_sweep_input/ioi_qwen2.5_node_sufficient_topk_sgd_bs1.json's
+# PROTOCOL is read off results/sva_sweep_input/ioi_qwen2.5_node_iso_topk_sgd_bs1.json's
 # stored config, with include_input flipped back off: soft top-k forward, SGD, log-k, 2000 steps,
 # train-batch-size 1, --eval-examples 100, --ablation patch. LR IS 1.0, not the sweep's shared
 # 0.05 -- every topk:sgd cell in results/sva_sweep is lr=1.0 (same call, same reason, as
@@ -45,14 +45,14 @@ for loss in ce acc logit_diff; do
   # run_tag), which is why the two are spelled out rather than built from $sched.
   for sched in log uniform; do
     ks=""; [[ "$sched" == uniform ]] && ks="_uniformk"
-    tag="sufficient_topk_sgd${ls}${ks}_bs1"
+    tag="iso_topk_sgd${ls}${ks}_bs1"
     name="sgdq_ioi_${sched}_${loss}"
     f="$OUT/ioi_qwen2.5_node_${tag}.json"
     if [[ "${FORCE:-0}" != 1 && -f "$f" ]]; then skip=$((skip+1)); continue; fi
     if [[ "${FORCE:-0}" != 1 ]] && grep -qxF "$name" <<<"$QUEUED"; then qskip=$((qskip+1)); continue; fi
     args=(--model qwen2.5 --task ioi --dataset mib --nodes node --eval-examples 100
           --ablation patch --output "$OUT" --method mattr --loss "$loss" --variant topk
-          --optimizer sgd --k-schedule "$sched" --mode sufficient --train-batch-size 1
+          --optimizer sgd --k-schedule "$sched" --mode iso --train-batch-size 1
           --steps 2000 --lr 1.0)
     if [[ "${DRY:-0}" == 1 ]]; then echo "sbatch -J $name ... $f"
     else sbatch -J "$name" scripts/sva/launch/sva_sweep.sbatch "${args[@]}" >/dev/null; fi

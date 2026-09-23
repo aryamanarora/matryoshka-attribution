@@ -66,7 +66,7 @@ for c in "${CONFIGS[@]}"; do
     name="ea-${split:0:3}-${out#*_edge_}-${task}"
     cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \
 $PY scripts/mib/eval_mib_edge.py --model llama3 --task $task --steps 5000 --k-schedule $sched \
---masking $mask --mode sufficient --lr $lr --optimizer $opt --split $split --train-split train \
+--masking $mask --mode iso --lr $lr --optimizer $opt --split $split --train-split train \
 --batch-size 2 --eval-examples 200 --output results/$out"
     if [ "$DRYRUN" = "1" ]; then
       echo "DRY $name -> $out"

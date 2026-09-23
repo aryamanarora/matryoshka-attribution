@@ -16,7 +16,7 @@ the same one plots/plot_task_corr_heatmap.py::names() documents):
 Run (GPU):
   python scripts/transfer/eval_transfer_mib.py --model llama3 --task ioi \
       --sources ioi:results/softlog_sgd_lr_1.0/ioi_llama3_scores.pt \
-                simple:results/sva_sweep_input/simple_llama3_node_sufficient_topk_sgd_bs1.scores.pt \
+                simple:results/sva_sweep_input/simple_llama3_node_iso_topk_sgd_bs1.scores.pt \
       --eval-examples 200 --batch-size 2 --output results/transfer_mib
 
 Output: <output>/{task}_{model}_transfer.json = {label: {area_under, acc_auc, faithfulnesses,

@@ -14,7 +14,7 @@ class GPT2AttributionHooks(LlamaAttributionHooks):
     Config uses n_layer/n_head/n_embd instead of num_hidden_layers etc.
     """
 
-    def __init__(self, model, mask_type, seq_len, sufficient=False, **kwargs):
+    def __init__(self, model, mask_type, seq_len, corrupt_topk=False, **kwargs):
         # GPT-2 config uses different names
         config = model.config
         config.num_hidden_layers = config.n_layer
@@ -22,7 +22,7 @@ class GPT2AttributionHooks(LlamaAttributionHooks):
         config.hidden_size = config.n_embd
         if not hasattr(config, "intermediate_size"):
             config.intermediate_size = config.n_embd * 4
-        super().__init__(model, mask_type, seq_len, sufficient=sufficient, **kwargs)
+        super().__init__(model, mask_type, seq_len, corrupt_topk=corrupt_topk, **kwargs)
 
     def _get_layer(self, li):
         return self.model.transformer.h[li]

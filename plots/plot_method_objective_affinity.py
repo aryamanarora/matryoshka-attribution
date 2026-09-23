@@ -30,7 +30,7 @@ RES = "results/sva_sweep"
 CELLS = [("nounpp", "llama3"), ("rc", "llama3"), ("simple", "llama3"), ("within_rc", "llama3"),
          ("addition", "llama3"), ("months", "llama3"), ("weekdays", "llama3"), ("hours", "llama3"),
          ("arc_easy", "llama3"), ("ioi", "qwen2.5")]
-ARM = "sufficient_topk_adam_eps1e-2{loss}_uniformk_bs1"
+ARM = "iso_topk_adam_eps1e-2{loss}_uniformk_bs1"
 # Every loss in matryoshka_attribution.losses.LOSS_CHOICES (the seven beyond the first five were
 # launched 2026-09-21 to find, per baseline, the objective its ranking matches best). A column
 # with no landed run is dropped at render time, so the figure grows as the wave lands.
@@ -46,7 +46,7 @@ BASE = [("I$\\times$G", "ixg"), ("IG ($m{=}10$)", "ig"), ("Expected Gradients", 
 # being a first-order / local estimate, not about the target it was given.
 TARGETS = [("", "logit-diff"), ("_ce", "CE"), ("_acc", "soft-acc")]
 METHODS = [(f"{ml} @{tl}" if suf else ml, f"{tag}{suf}") for ml, tag in BASE for suf, tl in TARGETS]
-METHODS += [("MAttr $-$ learning", "sufficient_topk_identity_none_uniformk_bs1"), ("Random", "random_s42")]
+METHODS += [("MAttr $-$ learning", "iso_topk_identity_none_uniformk_bs1"), ("Random", "random_s42")]
 
 
 def load(task, model, tag):

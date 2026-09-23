@@ -12,9 +12,9 @@
 # (dumped 2026-09-15), not re-chosen: 500 node steps / 5000 edge steps, batch 2 (batch 4 for the
 # two hard_topk_identity node dirs), --include-input at node level only, node = full validation
 # split, edge = --eval-examples 200 (the $\dagger$ cap). Three node dirs (mib_node_detached_tau_log,
-# mib_node_detached_tau, mib_node_hard_topk_gumbel) stored mode="necessary": they were produced
+# mib_node_detached_tau, mib_node_hard_topk_gumbel) stored mode="cause": they were produced
 # 2026-06-10/11, BEFORE the 2026-06-15 label flip (README.md), when that label meant denoising --
-# so today's flag is --mode sufficient for every row, same as the post-flip edge twin
+# so today's flag is --mode iso for every row, same as the post-flip edge twin
 # mib_edge_detached_tau already stores. Dirs whose args carried no optimizer key ran on the
 # default (adam); it is passed explicitly here so the record is unambiguous.
 #
@@ -66,12 +66,12 @@ go() {  # level spec
   if [ "$level" = node ]; then
     res="-q jag -d a6000 -c 4 -r 96G"
     cmd="$EXP uv run python scripts/mib/eval_mib.py --model $MODEL --task $TASK --steps 500 --k-schedule $sched \
---masking $mask --optimizer $opt --mode sufficient --lr $lr --split validation --train-split train \
+--masking $mask --optimizer $opt --mode iso --lr $lr --split validation --train-split train \
 --include-input --batch-size $bs --output results/$out"
   else
     res="-q sphinx -d h100 -r 128G"
     cmd="$EXP uv run python scripts/mib/eval_mib_edge.py --model $MODEL --task $TASK --steps 5000 --k-schedule $sched \
---masking $mask --optimizer $opt --mode sufficient --lr $lr --split validation --train-split train \
+--masking $mask --optimizer $opt --mode iso --lr $lr --split validation --train-split train \
 --batch-size $bs --eval-examples 200 --output results/$out"
   fi
   n=$((n+1))

@@ -17,7 +17,7 @@ for ks_out in "uniform mib_node_bernoulli_reinforce" "log mib_node_bernoulli_rei
       llama3)       res="-c 4 -r 96G"; bs="--batch-size 2";;
     esac
     nlprun -g 1 -q jag -d a6000 $res -n "b01-${ks:0:1}-${task}-${model}" \
-      "$EXP uv run python scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks --masking bernoulli_reinforce --mode sufficient --lr 0.1 --split validation --train-split train --include-input $bs --output results/$out"
+      "$EXP uv run python scripts/mib/eval_mib.py --model $model --task $task --steps 500 --k-schedule $ks --masking bernoulli_reinforce --mode iso --lr 0.1 --split validation --train-split train --include-input $bs --output results/$out"
     sleep 1
   done
 done

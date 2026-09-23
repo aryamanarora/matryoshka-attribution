@@ -25,13 +25,13 @@ for split in $SPLITS; do
         [ "$split" = test ] && out=test_node_softlog_sgd_lr_1.0 || out=softlog_sgd_lr_1.0
         res="-q jag -d a6000 -c 4 -r 96G"
         cmd="$EXP $PY scripts/mib/eval_mib.py --model $MODEL --task $TASK --steps 500 --k-schedule log \
---masking topk --optimizer sgd --mode sufficient --lr 1.0 --split $split --train-split train \
+--masking topk --optimizer sgd --mode iso --lr 1.0 --split $split --train-split train \
 --include-input --batch-size 2 --output results/$out" ;;
       edge)
         [ "$split" = test ] && out=test_edge_softlog_sgd_lr_3.0 || out=mib_edge_softlog_sgd_lr_3.0
         res="-q sphinx -d h100 -r 128G"
         cmd="$EXP $PY scripts/mib/eval_mib_edge.py --model $MODEL --task $TASK --steps 5000 --k-schedule log \
---masking topk --optimizer sgd --mode sufficient --lr 3.0 --split $split --train-split train \
+--masking topk --optimizer sgd --mode iso --lr 3.0 --split $split --train-split train \
 --batch-size 2 --eval-examples 200 --output results/$out" ;;
     esac
     if [ -f "$ABS/results/$out/${TASK}_${MODEL}_scores.pt" ]; then

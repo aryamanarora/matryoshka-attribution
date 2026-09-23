@@ -27,7 +27,7 @@
 | `plots/` | One `plot_*.py` per paper figure, shared `palette.py`. |
 | `tests/` | Pure-torch unit tests: `uv run python -m pytest tests`. |
 | `baselines/` | Our patch to `alestolfo/optimalablation` for the UGS baseline (setup in `scripts/mib/launch/run_ugs.sbatch`). |
-| `deps/MIB-circuit-track/` | Clone of **our fork** `aryamanarora/MIB-circuit-track` (with the EAP-IG submodule), made by `scripts/setup.sh` at a pinned commit; gitignored. |
+| `deps/MIB-circuit-track/` | Clone of **our fork** `aryamanarora/MIB-circuit-track` (with the EAP-IG submodule), cloned at the pinned commit by `scripts/setup.sh` or on first use by `deps.find_mib_path`; gitignored. |
 | `results/` | One directory per run, `<variant>_<optim>_lr_<lr>/<task>_<model>_<split>.pkl`; gitignored. |
 
 
@@ -74,7 +74,7 @@ Node level, the paper's headline recipe (soft top-k forward, uniform k, Adam lr 
 
 ```bash
 uv run python scripts/mib/eval_mib.py --model gpt2 --task ioi \
-  --steps 500 --k-schedule uniform --masking topk --mode sufficient --lr 0.05 \
+  --steps 500 --k-schedule uniform --masking topk --mode iso --lr 0.05 \
   --split validation --train-split train --include-input \
   --output results/mib_node_topk_uniform_lr05
 ```
@@ -83,7 +83,7 @@ Edge level:
 
 ```bash
 uv run python scripts/mib/eval_mib_edge.py --model gpt2 --task ioi \
-  --steps 5000 --k-schedule uniform --masking topk --mode sufficient --lr 0.05 \
+  --steps 5000 --k-schedule uniform --masking topk --mode iso --lr 0.05 \
   --split validation --train-split train \
   --output results/mib_edge_topk_uniform_lr05
 ```

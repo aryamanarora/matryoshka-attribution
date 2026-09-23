@@ -12,6 +12,6 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"   # submit from the repo root
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 MODEL=$1; TASK=$2; MASK=$3; KS=$4; OUT=$5; OPT=${6:-adam}; SEED=${7:-42}; BS=${8:-5}; EVAL=${9:-0}
 uv run python scripts/mib/eval_mib_edge.py --model "$MODEL" --task "$TASK" --steps 5000 \
-  --k-schedule "$KS" --masking "$MASK" --mode sufficient --optimizer "$OPT" \
+  --k-schedule "$KS" --masking "$MASK" --mode iso --optimizer "$OPT" \
   --seed "$SEED" --split validation --train-split train --batch-size "$BS" \
   --eval-examples "$EVAL" --output "results/$OUT"

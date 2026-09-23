@@ -61,12 +61,12 @@ def parse_method(fname, nodes):
         fam = "MAttr-idSTE"
     elif "hard_topk" in tag:
         fam = "MAttr+hard"
-    elif "sufficient_topk" in tag:
+    elif "iso_topk" in tag:
         # Soft top-k forward = headline. The optimizer has to be in the family name: the
         # 2026-08-21 `topk:sgd` arm shares this tag prefix and would otherwise be averaged into
         # the headline MAttr rows -- the same silent-folding failure this docstring warns about.
         fam = "MAttr-SGD" if "_topk_sgd" in tag else "MAttr"
-        # Adam's eps is part of the family for the same reason: `sufficient_topk_adam_eps1e-2`
+        # Adam's eps is part of the family for the same reason: `iso_topk_adam_eps1e-2`
         # is an Adam run sharing the whole prefix, and at neuron scale it is a different circuit.
         # This script pairs patch against zero BY FILENAME, so the eps arm pairs with its own
         # zero twin and never with the default-eps one.

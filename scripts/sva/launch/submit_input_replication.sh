@@ -16,7 +16,7 @@
 # ONLY is a space-separated list of ARM names (see `want` below); empty = every arm, the
 # original behaviour. ABLATION=zero adds --ablation zero AND the `_zeroabl` tag fragment, so
 # the skip-if-exists check still predicts the right filename -- eval_sva.run_tag inserts it
-# right after the loss fragment (`ig_ce_zeroabl`, `sufficient_topk_sgd_zeroabl_bs1`), which is
+# right after the loss fragment (`ig_ce_zeroabl`, `iso_topk_sgd_zeroabl_bs1`), which is
 # why AB is spliced into $ls rather than appended to the whole tag.
 #
 # A DIFFERENT OUT dir means a different experiment, so job names carry the dir: the QUEUED
@@ -73,7 +73,7 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
   [[ -n "${GRAD_EXAMPLES[$task]:-}" ]] && ge=(--grad-examples "${GRAD_EXAMPLES[$task]}")
   common=(--model "$model" --task "$task" --dataset "$ds" --nodes node --include-input
           --eval-examples 100 --output "$OUT" --ablation "$ABLATION")
-  mattr_common=(--mode sufficient --train-batch-size 1 --steps 2000 --lr 0.05)
+  mattr_common=(--mode iso --train-batch-size 1 --steps 2000 --lr 0.05)
   for loss in "${LOSSES[@]}"; do
     ls=""; [[ "$loss" != logit_diff ]] && ls="_$loss"
     ls="${ls}${AB}"    # tag order is base + _loss + _zeroabl + ... ; see the header
@@ -96,7 +96,7 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
     for cfg in "${MATTR_CFG[@]}"; do
       variant=${cfg%%:*}; opt=${cfg#*:}; opt=${opt%%:*}; ab=${cfg##*:}
       want "$ab" || continue
-      base="sufficient_${variant}_${opt}${ls}"   # _bs1 suffix: train-batch-size=1 (eval_sva tag)
+      base="iso_${variant}_${opt}${ls}"   # _bs1 suffix: train-batch-size=1 (eval_sva tag)
       sub "${PFX}_${task}_${ab}_log_${loss}"   "${base}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log     "${mattr_common[@]}"
       sub "${PFX}_${task}_${ab}_unif_${loss}"  "${base}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule uniform "${mattr_common[@]}"
       sub "${PFX}_${task}_${ab}_fixed_${loss}" "${base}_fixedk10_bs1" "${common[@]}" --method mattr --loss "$loss" --variant "$variant" --optimizer "$opt" --k-schedule log --fixed-k-frac 0.1 "${mattr_common[@]}"
@@ -104,8 +104,8 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
     done
     # soft top-k forward (topk gate, Adam): log + uniform only (fixed/ig not used in fingerprints)
     if want stopk; then
-    sub "${PFX}_${task}_stopk_log_${loss}"  "sufficient_topk_adam${ls}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule log     "${mattr_common[@]}"
-    sub "${PFX}_${task}_stopk_unif_${loss}" "sufficient_topk_adam${ls}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule uniform "${mattr_common[@]}"
+    sub "${PFX}_${task}_stopk_log_${loss}"  "iso_topk_adam${ls}_bs1"          "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule log     "${mattr_common[@]}"
+    sub "${PFX}_${task}_stopk_unif_${loss}" "iso_topk_adam${ls}_uniformk_bs1" "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer adam --k-schedule uniform "${mattr_common[@]}"
     fi
     # Same soft top-k forward, Adam -> SGD. This is the `MAttr (SGD)` series of fig:acc-faith,
     # and it is the arm the `+input` column was missing entirely.
@@ -124,7 +124,7 @@ for task in nounpp rc simple within_rc arc_easy ioi addition months weekdays hou
     # the old plot_kschedule_accauc_vs_faithauc.py -- the one figure that faced the schedules off across
     # both sweep dirs -- filters to `hard_topk` and never sees the soft forward at all. Adding
     # uniform would double the wave for a series no artifact reads.
-    want softsgd && sub "${PFX}_${task}_softsgd_log_${loss}" "sufficient_topk_sgd${ls}_bs1" \
+    want softsgd && sub "${PFX}_${task}_softsgd_log_${loss}" "iso_topk_sgd${ls}_bs1" \
       "${common[@]}" --method mattr --loss "$loss" --variant topk --optimizer sgd \
       --k-schedule log "${mattr_common[@]}" --lr 1.0
   done

@@ -186,21 +186,21 @@ LOSSES = [("logit_diff", "", "Logit difference"),
           ("acc", "_acc", "Accuracy")]
 # Methods and the order they appear. Keys are parse_method()'s outputs; %s takes the loss
 # fragment above. It is a template rather than a suffix because the fragment does not land at
-# the end for the two MAttr rows -- `sufficient_topk_adam_ce_bs1`, not `..._bs1_ce`.
+# the end for the two MAttr rows -- `iso_topk_adam_ce_bs1`, not `..._bs1_ce`.
 # Same series as plot_accauc_vs_faithauc's FIGURE_METHODS, so this table and that figure
 # describe the same runs. DBM's fragment DOES land at the end (eval_sva.py appends _ce/_acc to
 # the whole tag), unlike the MAttr rows -- which is why the template is a %s slot, not a suffix.
 METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
            ("sig_lr0.3_l16.0", "sig_lr0.3_l16.0%s"),
-           ("stopk-log", "sufficient_topk_adam%s_bs1"),
-           ("stopk-unif", "sufficient_topk_adam%s_uniformk_bs1"),
+           ("stopk-log", "iso_topk_adam%s_bs1"),
+           ("stopk-unif", "iso_topk_adam%s_uniformk_bs1"),
            # Same gate, same backward, Adam -> SGD (lr=1.0). Only the log-k arm is a column: the
            # unif-k one would be an eighth, and unif-k is where the two OPTIMIZERS differ most
            # (Adam drops ~0.19 acc-AUC log -> unif at the neuron substrates, SGD 0.006), so a
            # unif-k SGD column would be read as a k-schedule statement about \ourmethod{} when it
            # is really about Adam. Adding a column also re-opens the 14-of-72 recurrence cut
            # below -- main() prints the counts either side of the gap; check it after a rerun.
-           ("softsgd-log", "sufficient_topk_sgd%s_bs1")]
+           ("softsgd-log", "iso_topk_sgd%s_bs1")]
 # The 5k-tree column set (see SUBSTRATES). Same seven columns in the same order; the two MAttr
 # keys carry the eps suffix parse_method() emits for the tuned runs, and the trained baselines
 # carry the `_s5000` tag eval_sva.py appends at that budget (IG / IxG have no step count).
@@ -209,9 +209,9 @@ METHODS = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s"),
 METHODS_5K = [("IG", "ig%s"), ("IxG", "ixg%s"), ("eprun-s090", "eprun_s090%s_s5000"),
               # parse_method keeps DBM's step suffix in the key (it strips only _ce/_acc).
               ("sig_lr0.3_l16.0_s5000", "sig_lr0.3_l16.0%s_s5000"),
-              ("stopk-log-eps1e-2", "sufficient_topk_adam_eps1e-2%s_bs1_s5000"),
-              ("stopk-unif-eps1e-2", "sufficient_topk_adam_eps1e-2%s_uniformk_bs1_s5000"),
-              ("softsgd-log", "sufficient_topk_sgd%s_bs1_s5000")]
+              ("stopk-log-eps1e-2", "iso_topk_adam_eps1e-2%s_bs1_s5000"),
+              ("stopk-unif-eps1e-2", "iso_topk_adam_eps1e-2%s_uniformk_bs1_s5000"),
+              ("softsgd-log", "iso_topk_sgd%s_bs1_s5000")]
 LOSSES_LD = [LOSSES[0]]
 assert LOSSES_LD[0][0] == "logit_diff"
 LABELS = {"IG": "IG", "IxG": r"I$\times$G", "eprun-s090": "Node Pruning",

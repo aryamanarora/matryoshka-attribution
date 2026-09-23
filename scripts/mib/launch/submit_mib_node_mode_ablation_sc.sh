@@ -1,9 +1,9 @@
 #!/bin/bash
 # OBJECTIVE ABLATION of the headline MAttr (soft top-k, uniform k, Adam lr 0.05, 500 steps) at
 # node level: train under the CAUSE objective (noising: top-k corrupted, complement clean --
-# legacy `necessary`) and under JOINT (a coin flip between iso and cause every step), then
+# formerly `necessary`) and under JOINT (a coin flip between iso and cause every step), then
 # score with MIB's CPR exactly as the headline is scored. The headline itself is ISO (denoising,
-# legacy `sufficient`), which is also what CPR measures, so this asks whether a mask trained for
+# formerly `sufficient`), which is also what CPR measures, so this asks whether a mask trained for
 # necessity (or both) transfers to the sufficiency metric. Never run on MIB before 2026-09-16:
 # every results dir whose saved args say `necessary` predates the 2026-06-15 label flip and is an
 # iso run under the old name (README.md). The cause objective has only ever been run on SVA+.

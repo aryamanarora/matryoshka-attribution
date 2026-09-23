@@ -24,7 +24,7 @@ from matryoshka_attribution.schedules import AdaptiveLogK, FixedK
 from matryoshka_attribution.losses import (CLEAN_LOGITS_LOSSES, CLEAN_TARGET_LOSSES,
                                           CORRUPT_TARGET_LOSSES, LOSS_CHOICES,
                                            attribution_loss, resolve_direction)
-from matryoshka_attribution.data import SVADataset, CausalGymDataset
+from matryoshka_attribution.data import SVADataset
 from matryoshka_attribution.models import LlamaAttributionHooks
 
 
@@ -55,29 +55,7 @@ class SpanLast(dict):
         return self.perpos
 
 
-SPAN_LAST = SpanLast()   # cleaned string -> [last-tok-pos per content span]
-NUM_SPANS = None    # constant content-span count for the active task
-
-
-def _content_spans(spans):
-    """Drop the gpt2 <|endoftext|> prefix span; lstrip the first remaining span (matches the
-    cleaned string used downstream)."""
-    cs = [s for s in spans if s != "<|endoftext|>"]
-    if cs:
-        cs = [cs[0].lstrip()] + cs[1:]
-    return cs
-
-
-def _span_last(tokenizer, content_spans):
-    """Last token position of each content span in tokenizer(join(content_spans))."""
-    text = "".join(content_spans)
-    n_with_special = tokenizer(text, return_tensors="pt").input_ids.shape[1]
-    bos = n_with_special - len(tokenizer.tokenize(text))   # leading special-token offset
-    pos, last = bos, []
-    for s in content_spans:
-        pos += len(tokenizer.tokenize(s))
-        last.append(pos - 1)
-    return last
+SPAN_LAST = SpanLast()   # string -> [last-tok-pos per span] (per-position mode: 0..seq_len-1)
 
 
 # goodfire-ai/arithmetic-wild's generated datasets. Resolved like deps.find_mib_path: $MATTR_ARITH_DIR,
@@ -135,34 +113,6 @@ class ArithDataset:
         return self.recs[i]
 
 
-class CGDataset:
-    """CausalGym task as a fixed list of (clean, corrupted, [base_id, source_id]) pairs.
-    Drop-in for SVADataset; strips the gpt2 <|endoftext|> prefix (the model tokenizer adds BOS).
-    Also records per-span last-token positions (in SPAN_LAST) for span-tied attribution."""
-    def __init__(self, task, tokenizer, n=2000, seed=42):
-        global NUM_SPANS
-        cg = CausalGymDataset(f"syntaxgym/{task}", seed=seed)
-        self.recs = []
-        for _ in range(n):
-            p = cg.sample_pair()
-            bcs, scs = _content_spans(p.base_spans), _content_spans(p.src_spans)
-            clean, corr = "".join(bcs), "".join(scs)
-            if NUM_SPANS is None:
-                NUM_SPANS = len(bcs)
-            if clean not in SPAN_LAST:
-                SPAN_LAST[clean] = _span_last(tokenizer, bcs)
-            if corr not in SPAN_LAST:
-                SPAN_LAST[corr] = _span_last(tokenizer, scs)
-            bid = tokenizer(p.base_label).input_ids[-1]
-            sid = tokenizer(p.src_label).input_ids[-1]
-            self.recs.append((clean, corr, [bid, sid]))
-
-    def __len__(self):
-        return len(self.recs)
-
-    def __getitem__(self, i):
-        return self.recs[i]
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -200,8 +150,6 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     alpha=1 is patch; there alpha=1 is clean) -- U(0,1) is symmetric so the estimator is
     identical, but do not copy an alpha expression across without checking which end is which.
     """
-    if hooker.mask_type in ("das_mlp_span", "das_resid_span"):
-        raise NotImplementedError("gradient attribution not supported for DAS nodes; use --method mattr")
     # ---- example-chunking for the NON-SAE branch (the SAE branch chunks internally). Exact,
     # not an approximation: every score below is a SUM over the batch, so summing per-chunk
     # scores reproduces the full-batch result up to fp addition order. This is what makes a
@@ -215,13 +163,12 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     # stream than the unchunked run, which is fine for a Monte-Carlo estimator but means a
     # chunked and an unchunked mc run are only statistically, not bitwise, comparable.
     if grad_batch and not hooker.is_sae and not conductance:
-        span_ = hooker.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span")
         node_ = hooker.mask_type == "node"
         cl_, co_, ci_, ii_ = [], [], [], []
         i_ = 0
         while len(cl_) < n_examples and i_ < len(ds):
             clean_, corr_, lab_ = ds[i_]; i_ += 1
-            if not span_ and not node_:
+            if not node_:
                 if tok(clean_, return_tensors="pt").input_ids.shape[1] != seq_len: continue
                 if tok(corr_, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             elif node_:
@@ -252,20 +199,17 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         from matryoshka_attribution.grad_attribution import install_attnlrp, install_relp, revert_relp
         (install_attnlrp if attnlrp else install_relp)(hf)
     layers = hf.model.layers
-    use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_head", "node", "mlp+attn_span", "mlp+attn_head_span")
+    use_attn = hooker.mask_type in ("mlp+attn_dim", "mlp+attn_head", "node")
     head_nonspan = hooker.mask_type == "mlp+attn_head"   # per-(pos, head), fixed-length
     is_node = hooker.mask_type == "node"                 # MIB granularity: mlp block + attn head
-    span = hooker.mask_type in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span")
-    span_attn = hooker.mask_type == "mlp+attn_span"
-    span_head = hooker.mask_type == "mlp+attn_head_span"
     N, H, P = hooker.intermediate_size, hooker.hidden_size, seq_len
 
-    # collect a batch of clean/patch pairs (span mode: variable length; else fixed seq_len)
+    # collect a batch of clean/patch pairs (node: variable length; else fixed seq_len)
     cl, co, ci, ii = [], [], [], []
     i = 0
     while len(cl) < n_examples and i < len(ds):
         clean, corr, lab = ds[i]; i += 1
-        if not span and not is_node:   # node is position-agnostic -> variable length OK
+        if not is_node:   # node is position-agnostic -> variable length OK
             if tok(clean, return_tensors="pt").input_ids.shape[1] != seq_len: continue
             if tok(corr, return_tensors="pt").input_ids.shape[1] != seq_len: continue
         elif is_node:   # node: clean/corrupted must match length (interpolation alignment)
@@ -388,9 +332,9 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         # grad-dot-delta rule on the part of the residual the dictionary does not span:
         #     g . [(b - c) - decode_delta(f_b - f_c)].
         #
-        # SIGN: hooker.sufficient is False for --mode sufficient, so the hook's live branch is
+        # SIGN: hooker.corrupt_topk is False for --mode iso, so the hook's live branch is
         # new = b + decode_delta((1-m_f)(f_c - f_b)) + (1-m_e) err_diff -- m=1 KEEPS CLEAN, the
-        # repo-wide `sufficient` = denoising convention. Hence the delta is (clean - patch),
+        # repo-wide iso = denoising convention. Hence the delta is (clean - patch),
         # same orientation as the MLP branch's (c - p). Do not "fix" it to (patch - clean).
         #
         # CHUNKED over examples (--grad-batch). The score sums over the batch, so processing
@@ -607,7 +551,6 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
     for k in grad_acc:
         grad_acc[k] /= n_draws
 
-    tied = hooker.mask_type == "mlp_tied"
     scores = torch.zeros(total)
     if is_node:
         # MIB node granularity: one scalar per MLP block per layer (g.delta summed over the
@@ -629,53 +572,8 @@ def gradient_scores(hf, hooker, ds, seq_len, total, tok, device, n_examples=100,
         if modified_bwd:
             revert_relp(hf)
         return scores.to(device)
-    if span:
-        # per-(layer, span, neuron): node at each span's last token, cross-aligned base<-src.
-        # effect = grad[base_last] . (clean[base_last] - patch[src_last]).
-        S = hooker.num_spans
-        bi = torch.tensor([SPAN_LAST[c] for c in cl], device=device)[:, :, None].expand(-1, -1, N)
-        si = torch.tensor([SPAN_LAST[c] for c in co], device=device)[:, :, None].expand(-1, -1, N)
-        bih = torch.tensor([SPAN_LAST[c] for c in cl], device=device)[:, :, None].expand(-1, -1, H)
-        sih = torch.tensor([SPAN_LAST[c] for c in co], device=device)[:, :, None].expand(-1, -1, H)
-        if span_head:
-            nh, Hd = hooker.num_heads, hooker.head_dim
-            bl = torch.tensor([SPAN_LAST[c] for c in cl], device=device)  # [B,S]
-            sl = torch.tensor([SPAN_LAST[c] for c in co], device=device)
-            bih4 = bl[:, :, None, None].expand(-1, -1, nh, Hd)
-            sih4 = sl[:, :, None, None].expand(-1, -1, nh, Hd)
-        for li in range(len(layers)):
-            g = grad_acc[(li, "mlp")].gather(1, bi)
-            c = clean_acts[(li, "mlp")].gather(1, bi)
-            p = patch_acts[(li, "mlp")].gather(1, si)
-            eff = (g * (c - p)).sum(0)             # [S, N]
-            off = li * S * N; scores[off:off + S * N] = eff.reshape(-1).cpu()
-            if span_attn:
-                ga = grad_acc[(li, "attn")].gather(1, bih)
-                ca = clean_acts[(li, "attn")].gather(1, bih)
-                pa = patch_acts[(li, "attn")].gather(1, sih)
-                effa = (ga * (ca - pa)).sum(0)     # [S, H]
-                offa = hooker.mlp_span_total + li * S * H
-                scores[offa:offa + S * H] = effa.reshape(-1).cpu()
-            if span_head:
-                nh, Hd = hooker.num_heads, hooker.head_dim
-                Bn = grad_acc[(li, "attn")].shape[0]
-                g4 = grad_acc[(li, "attn")].view(Bn, -1, nh, Hd).gather(1, bih4)
-                c4 = clean_acts[(li, "attn")].view(Bn, -1, nh, Hd).gather(1, bih4)
-                p4 = patch_acts[(li, "attn")].view(Bn, -1, nh, Hd).gather(1, sih4)
-                effh = (g4 * (c4 - p4)).sum(-1).sum(0)   # sum head_dim, then batch -> [S, nh]
-                offh = hooker.mlp_span_total + li * S * nh
-                scores[offh:offh + S * nh] = effh.reshape(-1).cpu()
-        if modified_bwd:
-            revert_relp(hf)
-        return scores.to(device)
     for li in range(len(layers)):
         contrib = grad_acc[(li, "mlp")] * (clean_acts[(li, "mlp")] - patch_acts[(li, "mlp")])  # [B,P,N]
-        if tied:
-            # tie across token positions (MIB node convention): sum the g.delta attribution
-            # over both batch and positions -> one score per (layer, neuron).
-            eff = contrib.sum(0).sum(0)            # [N]
-            off = li * N; scores[off:off + N] = eff.cpu()
-            continue
         eff = contrib.sum(0)
         off = li * P * N; scores[off:off + P * N] = eff.reshape(-1).cpu()
         if use_attn:
@@ -752,7 +650,7 @@ def run_tag(args):
         if args.l1_coeff:
             tag += f"_l1{'logit' if args.l1_target == 'logit' else ''}{args.l1_coeff}"
     # Adam eps. It sits HERE, next to the optimizer name it qualifies and ahead of the loss, so a
-    # tag reads `sufficient_topk_adam_eps1e-2_ce_zeroabl_bs1` -- optimizer, then objective, then
+    # tag reads `iso_topk_adam_eps1e-2_ce_zeroabl_bs1` -- optimizer, then objective, then
     # setting. Written only when it is non-default, so every tag already on disk is unchanged.
     #
     # *** THIS IS AN IDENTITY KNOB, NOT A NUMERICAL ONE, AND OMITTING IT LOSES RUNS. ***
@@ -786,12 +684,6 @@ def run_tag(args):
         tag += "_adaptivek"
     if args.method == "mattr" and args.k_schedule == "log_both":
         tag += "_logboth"
-    # `logit` needs its own fragment for the same reason every other non-default schedule has
-    # one: without it a logit run writes the SAME filename as the `log` default and silently
-    # overwrites it. Spelled `_logitk` to match the `_uniformk` / `_adaptivek` convention rather
-    # than `_logit`, which reads as a loss name next to `logit_diff`.
-    if args.method == "mattr" and args.k_schedule == "logit":
-        tag += "_logitk"
     # Per-step grad normalisation changes the learned circuit, so it is part of the identity.
     # `:g` keeps 1.0 -> "gn1" and 0.01 -> "gn0.01" without a trailing ".0".
     # Substrate/intervention identity, not a method knob. "none" changes `total` and "frozen"
@@ -829,8 +721,8 @@ def wandb_init(args, tag):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="llama3", choices=list(MODEL_FULLNAMES))
-    p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; causalgym: e.g. npi_any_subj-relc
-    p.add_argument("--dataset", default="sva", choices=["sva", "causalgym", "mib", "arith"])
+    p.add_argument("--task", required=True)            # sva: nounpp|rc|simple|within_rc ; arith: addition|months|weekdays|hours ; mib: ioi|...
+    p.add_argument("--dataset", default="sva", choices=["sva", "mib", "arith"])
     p.add_argument("--method", default="mattr",
                    choices=["mattr", "ixg", "relp", "attnlrp", "ig", "mc_ig", "conductance",
                             "random", "edge_pruning", "sigmoid_mask"])
@@ -876,7 +768,7 @@ def main():
                         "interpolation points per step (1 = plain STE; >1 = IG-under-intervention). "
                         "Routed to scores through the chosen STE, so works with hard_topk (Adam) "
                         "and hard_topk_identity (SGD).")
-    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp+attn_head", "node", "mlp_tied", "mlp_span", "mlp+attn_span", "mlp+attn_head_span", "mlp_sae_span", "resid_sae_span", "das_mlp_span", "das_resid_span"])
+    p.add_argument("--nodes", default="mlp", choices=["mlp", "mlp+attn_dim", "mlp+attn_head", "node", "mlp_sae_span", "resid_sae_span"])
     # topk_detached exposed 2026-08-29 for the residual-SAE diagnosis: it is `topk`'s forward with
     # tau DETACHED in the backward, i.e. it drops the -(sp_j/T)*gsp/sp_sum cross-score coupling
     # term that implicit differentiation of the budget constraint introduces. On resid_sae_span
@@ -887,7 +779,9 @@ def main():
     p.add_argument("--variant", default="hard_topk",
                    choices=["topk", "topk_detached", "topk_identity", "hard_topk",
                             "hard_topk_identity"])  # build_mask gate
-    p.add_argument("--mode", default="sufficient", choices=["sufficient", "necessary", "joint"])
+    p.add_argument("--mode", default="iso", choices=["iso", "cause", "joint"],
+                   help="iso: top-k clean, complement patched (denoising). cause: top-k patched, "
+                        "complement clean (noising). joint: a coin flip between the two per step.")
     p.add_argument("--ablation", default="patch", choices=["patch", "zero"],
                    help="what the ablated units are set to. patch (default) = the cached SOURCE "
                         "activation from the counterfactual prompt; zero = 0. This is a property "
@@ -944,24 +838,13 @@ def main():
                    help="deprecated alias for --sae-error none")
     p.add_argument("--sae-repo", default=None, help="Llama-Scope SAE repo (auto: LXM for mlp_sae_span, LXR for resid_sae_span)")
     p.add_argument("--sae-dtype", default="float32", choices=["float32", "bfloat16"])
-    p.add_argument("--das-dim", type=int, default=None, help="DAS rotation subspace rank (default d_model)")
-    p.add_argument("--das-lr", type=float, default=1e-3, help="lr for the DAS rotation params")
-    p.add_argument("--das-optimizer", default="adam", choices=["adam", "sgd"], help="optimizer for the DAS rotation (separate from --optimizer for scores)")
     p.add_argument("--optimizer", default="adam", choices=["adam", "sgd", "none"],
                    help="none = no learning: scores stay 0 and the mean negated gradient is the attribution")
     p.add_argument("--cf-cache-gb", type=float, default=4.0,
                    help="device-memory budget for the per-example CF-activation cache "
                         "(train steps AND the sparsity sweep reuse it); 0 disables")
-    # `logit` exposed 2026-08-29 for the residual-SAE diagnosis; sample_k has implemented it all
-    # along, only this choices list gated it. It samples alpha = k/total logit-uniformly, which
-    # cancels sigmoid_topk's gate slope sp = alpha*(1-alpha) exactly, so a zero-init SGD run's
-    # expected score IS activation-path IG (see schedules.sample_k for the derivation). That is
-    # the direct antidote to what the SAE trace shows: under `log`, |grad| swings ~10 orders of
-    # magnitude with k and one large-k draw sets the whole score vector (|s|max frozen from
-    # step 3). Flattening the weight removes that lottery, and its fixed point is the estimator
-    # that actually works on this basis.
     p.add_argument("--k-schedule", default="log",
-                   choices=["uniform", "log", "logit", "adaptive_log", "log_both"])
+                   choices=["uniform", "log", "adaptive_log", "log_both"])
     p.add_argument("--fixed-k-frac", type=float, default=None,
                    help="MAttr ablation: train the mask at a single FIXED k = frac*total nodes "
                         "every step (overrides --k-schedule sampling). e.g. 0.1 = 10%% of nodes.")
@@ -1005,17 +888,7 @@ def main():
     for pp in hf.parameters():
         pp.requires_grad_(False)
 
-    if args.dataset == "causalgym":
-        train = CGDataset(args.task, tok, n=2000, seed=0)
-        test = CGDataset(args.task, tok, n=400, seed=1)
-    elif args.dataset == "arith":
-        # arithmetic-wild has no CONTENT-span schema, so the content-span substrates would
-        # silently fall back to a wrong NUM_SPANS; refuse them explicitly. The *_sae_span
-        # substrates are NOT refused any more: they fall back to per-position spans below,
-        # which need no schema (see SpanLast.set_per_position).
-        assert args.nodes not in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span",
-                                  "das_mlp_span", "das_resid_span"), \
-            f"--dataset arith does not build a span schema; {args.nodes} needs one"
+    if args.dataset == "arith":
         train = ArithDataset(args.task, tok, split="train")
         test = ArithDataset(args.task, tok, split="test")
         logger.info("arith %s: %d train / %d test pairs (dropped %d/%d with base==cf answer)",
@@ -1043,32 +916,24 @@ def main():
     logger.info("seq_len=%d (modal clean length; %s)", seq_len, dict(lens))
 
     SAE = args.nodes in ("mlp_sae_span", "resid_sae_span")
-    DAS = args.nodes in ("das_mlp_span", "das_resid_span")
-    SPAN = args.nodes in ("mlp_span", "mlp+attn_span", "mlp+attn_head_span") or SAE or DAS
-    # node is position-agnostic (mask broadcasts over positions), so it -- like span mode --
-    # does not need a fixed seq_len; both skip the modal-length filter (VARLEN).
-    VARLEN = SPAN or args.nodes == "node"
-    # PER-POSITION SAE. Only CGDataset builds a content-span schema, so on sva/arith/mib
-    # NUM_SPANS is None and *_sae_span used to die at llama.py's "requires num_spans". Rather
-    # than refuse those datasets, fall back to one span per TOKEN POSITION, which is exactly
-    # what makes the SAE substrate behave "like the MLP neuron basis": `mlp` is one score per
-    # (layer, position, neuron) and this is one per (layer, position, latent).
-    #
-    # VARLEN GOES BACK OFF when it does. Span mode normally skips the modal-length filter
-    # because content spans normalise away length differences; per-position spans do not -- the
-    # index list is 0..seq_len-1 and every pair in a batch must therefore be exactly seq_len
-    # tokens, the same requirement `mlp` has.
-    n_spans = NUM_SPANS
-    if SAE and n_spans is None:
+    SPAN = SAE
+    # node is position-agnostic (mask broadcasts over positions), so it does not need a fixed
+    # seq_len and skips the modal-length filter (VARLEN). The SAE substrates use one span per
+    # TOKEN POSITION, which is what makes them behave "like the MLP neuron basis": `mlp` is one
+    # score per (layer, position, neuron) and this is one per (layer, position, latent). The
+    # index list is 0..seq_len-1, so every pair in a batch must be exactly seq_len tokens, the
+    # same requirement `mlp` has.
+    VARLEN = args.nodes == "node"
+    n_spans = None
+    if SAE:
         n_spans = seq_len
-        VARLEN = False
         SPAN_LAST.set_per_position(seq_len)
         logger.info("Per-position SAE substrate: %d spans = %d token positions (fixed length)",
                     n_spans, seq_len)
-    corrupt_topk = args.mode == "necessary"
+    corrupt_topk = args.mode == "cause"
     hooker = LlamaAttributionHooks(hf, args.nodes, seq_len=seq_len,
-                                   sufficient=corrupt_topk, include_input=args.include_input,
-                                   num_spans=(n_spans if SPAN else None),
+                                   corrupt_topk=corrupt_topk, include_input=args.include_input,
+                                   num_spans=n_spans,
                                    zero_ablation=args.ablation == "zero",
                                    sae_error=args.sae_error)
     if SAE:
@@ -1079,10 +944,6 @@ def main():
         logger.info("Loading %d Llama-Scope SAEs (%s, component=%s, %s)...",
                     hooker.num_layers, repo, comp, sdt)
         hooker.set_saes(load_llama_scope_saes(repo, hooker.num_layers, device, dtype=sdt, component=comp))
-    if DAS:
-        logger.info("Creating %d DAS rotations (d_model=%d -> rot-dim=%d)...",
-                    hooker.num_layers, hooker.hidden_size, args.das_dim or hooker.hidden_size)
-        hooker.set_das(args.das_dim, device=device, dtype=torch.float32)
     total = hooker.total
     logger.info("Nodes (%s): %s", args.nodes, hooker.describe())
     if SPAN:
@@ -1120,7 +981,7 @@ def main():
     cf_cache = CFActivationCache(hooker, max_gb=args.cf_cache_gb, logger=logger)
 
     def set_span(cleans, corrupteds):
-        """Set the per-batch base/source span-last positions on the hooker (span mode)."""
+        """Set the per-batch base/source span-last positions on the hooker (SAE substrates)."""
         if not SPAN:
             return
         hooker.span_last = torch.tensor([SPAN_LAST[c] for c in cleans], device=device)
@@ -1141,25 +1002,25 @@ def main():
             cl.append(clean); co.append(corr); ci.append(lab[0]); ii.append(lab[1])
         return cl, co, ci, ii
 
-    def forward_last(cleans, corrupteds, ci, ii, mask, sufficient):
+    def forward_last(cleans, corrupteds, ci, ii, mask, corrupt_topk):
         """Run the masked forward; return (last-token logits [B,vocab], base idx, source idx)."""
         b_ids, b_attn, b_lens = tok_batch(cleans)
         s_ids, _, s_lens = tok_batch(corrupteds)
         last = (b_lens - 1).to(device)
         cf_cache.prepare(corrupteds, s_ids, s_lens.tolist())
         set_span(cleans, corrupteds)
-        old_suf = hooker.sufficient; hooker.sufficient = sufficient
+        old_dir = hooker.corrupt_topk; hooker.corrupt_topk = corrupt_topk
         hooker.mask = mask
         # model dtype until after the last-token gather; .float() on the full [B,P,vocab]
         # tensor put ~100 MB fp32 in the graph for a gradient nonzero at one position.
         logits = hf(b_ids, attention_mask=b_attn).logits
-        hooker.sufficient = old_suf
+        hooker.corrupt_topk = old_dir
         B = len(cleans)
         ll = logits[torch.arange(B, device=device), last].float()
         return ll, torch.tensor(ci, device=device), torch.tensor(ii, device=device)
 
-    def forward_logit_diff(cleans, corrupteds, ci, ii, mask, sufficient):
-        ll, cor, inc = forward_last(cleans, corrupteds, ci, ii, mask, sufficient)
+    def forward_logit_diff(cleans, corrupteds, ci, ii, mask, corrupt_topk):
+        ll, cor, inc = forward_last(cleans, corrupteds, ci, ii, mask, corrupt_topk)
         ar = torch.arange(ll.shape[0], device=device)
         return ll[ar, cor] - ll[ar, inc]
 
@@ -1176,7 +1037,7 @@ def main():
     IG_STEPS = args.mattr_ig_steps
 
     # Per-example CLEAN margins for the ld_match* losses, computed lazily and cached by clean
-    # text: mask=ones + sufficient=False is exactly the F_clean forward summarize() uses, so
+    # text: mask=ones + corrupt_topk=False is exactly the F_clean forward summarize() uses, so
     # the target is the same quantity the faithfulness eval calls "the full model". Each of
     # the ~1.3k train examples pays one extra no-grad forward ONCE across the whole run.
     _clean_d = {}
@@ -1187,14 +1048,14 @@ def main():
             with torch.no_grad():
                 ll, cor, inc = forward_last([cl[i] for i in miss], [co[i] for i in miss],
                                             [ci[i] for i in miss], [ii[i] for i in miss],
-                                            torch.ones(total, device=device), sufficient=False)
+                                            torch.ones(total, device=device), corrupt_topk=False)
                 ar = torch.arange(ll.shape[0], device=device)
                 dv = ll[ar, cor] - ll[ar, inc]
             for j, i in enumerate(miss):
                 _clean_d[cl[i]] = float(dv[j])
         return torch.tensor([_clean_d[c] for c in cl], device=device)
 
-    # Per-example FULLY-PATCHED margins for the cmd loss: mask=zeros + sufficient=False is the
+    # Per-example FULLY-PATCHED margins for the cmd loss: mask=zeros + corrupt_topk=False is the
     # F0 forward summarize() uses as the "corrupted" reference of faithfulness. Cached like the
     # clean margins, one extra no-grad forward per train example over the run.
     _corr_d = {}
@@ -1205,7 +1066,7 @@ def main():
             with torch.no_grad():
                 ll, cor, inc = forward_last([cl[i] for i in miss], [co[i] for i in miss],
                                             [ci[i] for i in miss], [ii[i] for i in miss],
-                                            torch.zeros(total, device=device), sufficient=False)
+                                            torch.zeros(total, device=device), corrupt_topk=False)
                 ar = torch.arange(ll.shape[0], device=device)
                 dv = ll[ar, cor] - ll[ar, inc]
             for j, i in enumerate(miss):
@@ -1222,7 +1083,7 @@ def main():
             with torch.no_grad():
                 ll, _, _ = forward_last([cl[i] for i in miss], [co[i] for i in miss],
                                         [ci[i] for i in miss], [ii[i] for i in miss],
-                                        torch.ones(total, device=device), sufficient=False)
+                                        torch.ones(total, device=device), corrupt_topk=False)
                 lp = ll.float().log_softmax(-1).half().cpu()
             for j, i in enumerate(miss):
                 _clean_lp[cl[i]] = lp[j]
@@ -1241,7 +1102,7 @@ def main():
             return None
         step_cause = resolve_direction(args.mode, corrupt_topk)   # joint -> per-step coin flip
         if IG_STEPS <= 1:
-            ll, cor, inc = forward_last(cl, co, ci, ii, mask, sufficient=step_cause)
+            ll, cor, inc = forward_last(cl, co, ci, ii, mask, corrupt_topk=step_cause)
             if k_sampler is not None:  # feed adaptive-k sampler the decided fraction at this k
                 ar = torch.arange(ll.shape[0], device=device)
                 with torch.no_grad():
@@ -1265,7 +1126,7 @@ def main():
         m_hard = mask.detach()
         extras = loss_extras(cl, co, ci, ii)
         a_ig = torch.zeros_like(m_hard); L1 = None
-        old_suf = hooker.sufficient; hooker.sufficient = step_cause
+        old_dir = hooker.corrupt_topk; hooker.corrupt_topk = step_cause
         for j in range(1, IG_STEPS + 1):
             mm = (float(j) / IG_STEPS * m_hard).requires_grad_(True)
             hooker.mask = mm
@@ -1276,14 +1137,14 @@ def main():
             a_ig = a_ig + torch.autograd.grad(Lj, mm)[0]
             if j == IG_STEPS:
                 L1 = Lj.detach()
-        hooker.sufficient = old_suf
+        hooker.corrupt_topk = old_dir
         a_ig = a_ig / IG_STEPS
         surrogate = (a_ig.detach() * mask).sum()   # d/dscores = STE(a_ig); value carries L(alpha=1)
         return surrogate - surrogate.detach() + L1
 
     # ---- eval helpers (defined pre-training so an optional train-probe can call them) ----
     @torch.no_grad()
-    def eval_metrics(examples, mask, sufficient):
+    def eval_metrics(examples, mask, corrupt_topk):
         xc, xco, xci, xii = examples
         LB, LS, PB, PS = [], [], [], []
         for s in range(0, len(xc), 20):
@@ -1292,9 +1153,9 @@ def main():
             last = (b_lens - 1).to(device)
             cf_cache.prepare(xco[s:s+20], s_ids, s_lens.tolist())
             set_span(xc[s:s+20], xco[s:s+20])
-            old = hooker.sufficient; hooker.sufficient = sufficient; hooker.mask = mask.to(device)
+            old = hooker.corrupt_topk; hooker.corrupt_topk = corrupt_topk; hooker.mask = mask.to(device)
             logits = hf(b_ids, attention_mask=b_attn).logits
-            hooker.sufficient = old
+            hooker.corrupt_topk = old
             B = b_ids.shape[0]; ar = torch.arange(B, device=device)
             ll = logits[ar, last].float(); probs = ll.softmax(-1)
             cor = torch.tensor(xci[s:s+20], device=device); inc = torch.tensor(xii[s:s+20], device=device)
@@ -1321,11 +1182,11 @@ def main():
 
     def summarize(scores_, examples):
         """Full metric suite (both directions) for a ranking on a set of examples."""
-        FM = eval_metrics(examples, torch.ones(total), sufficient=False)["logit_diff"]
-        F0 = eval_metrics(examples, torch.zeros(total), sufficient=False)["logit_diff"]
+        FM = eval_metrics(examples, torch.ones(total), corrupt_topk=False)["logit_diff"]
+        F0 = eval_metrics(examples, torch.zeros(total), corrupt_topk=False)["logit_diff"]
         denom = (FM - F0) or 1e-9
-        def metrics_at(mask, sufficient):
-            m = eval_metrics(examples, mask, sufficient)
+        def metrics_at(mask, corrupt_topk):
+            m = eval_metrics(examples, mask, corrupt_topk)
             m["faithfulness"] = (m["logit_diff"] - F0) / denom
             return m
         iso = sparsity_sweep(scores_, total, sparsities, lambda hm: metrics_at(hm, False),
@@ -1451,16 +1312,13 @@ def main():
     else:
         logger.info("Training %d steps (%s gate, %s, %s, k=%s)...", args.steps, args.variant,
                     args.mode, args.optimizer, args.k_schedule)
-        # DAS jointly learns the rotation matrices (a second param group) alongside scores.
-        das_params = hooker.das_parameters() if DAS else None
         res = learn_scores(total, loss_fn, steps=args.steps, variant=args.variant,
                            k_schedule=args.k_schedule, T=args.T, n_iters=args.n_iters,
                            lr=args.lr, optimizer=args.optimizer, device=device,
                            adam_eps=args.adam_eps, adam_betas=(0.9, args.adam_beta2),
                            sgd_momentum=args.sgd_momentum, sgd_dampening=args.sgd_dampening,
                            grad_norm=args.grad_norm,
-                           k_sampler=k_sampler, extra_params=das_params, lr_extra=args.das_lr,
-                           extra_optimizer=(args.das_optimizer if DAS else None),
+                           k_sampler=k_sampler,
                            on_step=on_step_cb,
                            # This call site was the only learn_scores/edge_pruning/sigmoid_mask
                            # one without a logger, so MAttr runs printed no per-step trace at all
@@ -1477,9 +1335,9 @@ def main():
                         100 * math.exp(k_sampler.kmax_log) / total, total)
 
     # ---- Phase 2: sparsity sweep, BOTH directions, counterfactual (patch) ablation ----
-    #   iso  (sufficiency): keep top-k CLEAN, corrupt the complement  -> recovery curve
-    #   cause(necessity):   corrupt top-k, keep the complement clean  -> breakage curve
-    # Same top-k ranking; only the hooker `sufficient` flag flips. Complement/top-k are ablated
+    #   iso:   keep top-k CLEAN, corrupt the complement  -> recovery curve
+    #   cause: corrupt top-k, keep the complement clean  -> breakage curve
+    # Same top-k ranking; only the hooker `corrupt_topk` flag flips. Complement/top-k are ablated
     # to each example's own counterfactual (patch), matching training (mean-abl deferred).
     ec, eco, eci, eii = [], [], [], []
     for i in range(len(test)):

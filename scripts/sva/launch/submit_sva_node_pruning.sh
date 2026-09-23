@@ -9,7 +9,7 @@
 # the SVA substrate (thousands of MLP neurons, or +attn heads), not of MIB's ~156 nodes, so
 # it is not the same absolute circuit size as the results/eprun_node_s0.9 rows in the tables.
 #
-# The grid is DERIVED from the MAttr headline runs already on disk (sufficient_topk_adam*_bs1,
+# The grid is DERIVED from the MAttr headline runs already on disk (iso_topk_adam*_bs1,
 # excluding uniformk/ig variants) rather than restated here, so Node Pruning lands on exactly
 # the cells the figure averages over and cannot drift out of sync with them. 60 cells:
 #   -input : mlp x 4 SVA, mlp+attn_head x 4 SVA, node x (4 SVA + arc_easy + ioi)
@@ -74,7 +74,7 @@ for res, spec in REQ.items():
 # cell exists that this grid does not cover, the figure would average a substrate/task the
 # baselines never ran -- fail loudly rather than ship a panel with a missing series.
 for res in REQ:
-    for f in glob.glob(res + "/*_sufficient_topk_adam*_bs1.json"):
+    for f in glob.glob(res + "/*_iso_topk_adam*_bs1.json"):
         mid = os.path.basename(f).split("_bs1")[0].split("adam", 1)[1]
         if "uniformk" in mid or "ig" in mid:      # ablations, not the headline series
             continue
@@ -122,12 +122,12 @@ while read -r res nodes task model loss; do
   if [ "${DRY:-0}" = "1" ]; then
     # Keep this in sync with the real sbatch below -- a preview that hides --steps is how a
     # step-count change ships unnoticed.
-    echo "sbatch -J $name scripts/sva/launch/sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method edge_pruning --loss $loss --target-sparsity $S --mode sufficient --train-batch-size 1 --steps $STEPS --eval-examples 100 ${extra[*]-} ${abl[*]-} --output $res"
+    echo "sbatch -J $name scripts/sva/launch/sva_sweep.sbatch --model $model --task $task --dataset $ds --nodes $nodes --method edge_pruning --loss $loss --target-sparsity $S --mode iso --train-batch-size 1 --steps $STEPS --eval-examples 100 ${extra[*]-} ${abl[*]-} --output $res"
   else
     sbatch -J "$name" scripts/sva/launch/sva_sweep.sbatch \
       --model "$model" --task "$task" --dataset "$ds" --nodes "$nodes" \
       --method edge_pruning --loss "$loss" --target-sparsity "$S" \
-      --mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-examples 100 \
+      --mode iso --train-batch-size 1 --steps "$STEPS" --eval-examples 100 \
       "${extra[@]+"${extra[@]}"}" "${abl[@]+"${abl[@]}"}" --output "$res" >/dev/null
   fi
   n=$((n+1))

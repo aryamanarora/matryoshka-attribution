@@ -71,7 +71,7 @@ MATTR_CONFIGS=("hard_topk:adam" "hard_topk_identity:sgd" "topk:adam" "topk:sgd:1
 
 STEPS=2000
 MATTR_LR=${MATTR_LR:-0.05}
-MATTR_COMMON=(--mode sufficient --train-batch-size 1 --steps "$STEPS" --eval-examples 100)
+MATTR_COMMON=(--mode iso --train-batch-size 1 --steps "$STEPS" --eval-examples 100)
 
 # Reproduce eval_sva.py's output tag so we can skip already-finished configs.
 # These two must stay byte-identical to eval_sva.run_tag() or the skip-if-exists check silently
@@ -86,7 +86,7 @@ grad_tag() {   # $1=method $2=loss
   echo "${t}${ABL_SUF}"
 }
 mattr_tag() {  # $1=variant $2=optimizer $3=loss $4=kschedule $5=ig_steps(optional,>1)
-  local t="sufficient_$1_$2"
+  local t="iso_$1_$2"
   [[ "$3" != "logit_diff" ]] && t="${t}_$3"
   t="${t}${ABL_SUF}"
   [[ "${5:-1}" -gt 1 ]] && t="${t}_ig${5}"

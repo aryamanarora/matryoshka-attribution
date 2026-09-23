@@ -19,7 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import math
 
-from matryoshka_attribution import (sigmoid_topk, learn_scores, normalize_mode, MODE_CHOICES,
+from matryoshka_attribution import (sigmoid_topk, learn_scores, MODE_CHOICES,
                                    CFActivationCache)
 from matryoshka_attribution import wandb_util
 from matryoshka_attribution.losses import attribution_loss, resolve_direction
@@ -101,18 +101,14 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--k-schedule", default="log",
-                        choices=["uniform", "log", "logit"],
-                        help="How to sample k: uniform, log-uniform, or logit-uniform "
-                             "(logit cancels the sigmoid_topk gate slope, making zero-init "
-                             "SGD's expected score exactly activation-path IG -- schedules.py)")
+                        choices=["uniform", "log"],
+                        help="How to sample k: uniform or log-uniform (schedules.py)")
     parser.add_argument("--mode", default="iso", choices=MODE_CHOICES + ["joint"],
-                        help="iso (=sufficient, denoising): top-k stay clean, complement "
-                             "corrupted; maximize retained clean behavior (this is "
-                             "what MIB CPR measures, and what all our runs use). "
-                             "cause (=necessary, noising): top-k get CF; find what breaks "
+                        help="iso (denoising): top-k stay clean, complement corrupted; maximize "
+                             "retained clean behavior (what MIB CPR measures, and what all our "
+                             "runs use). cause (noising): top-k get CF; find what breaks "
                              "behavior. joint: a coin flip between the two every step "
-                             "(losses.resolve_direction, as in eval_sva.py). "
-                             "(sufficient/necessary still accepted.)")
+                             "(losses.resolve_direction, as in eval_sva.py).")
     parser.add_argument("--masking", default="topk",
                         choices=["topk", "topk_detached", "topk_identity", "hard_topk", "hard_topk_identity", "hard_topk_identity_gumbel", "hard_concrete", "bernoulli_reinforce"],
                         help="topk: sigmoid top-k with random k (ours). "
@@ -168,9 +164,6 @@ def main():
                 parser.error(f"config {config_path}: unknown key {key!r}")
 
     args = parser.parse_args()
-    # iso/cause -> sufficient/necessary (both accepted); "joint" stays as is and is resolved to
-    # a direction per training step (losses.resolve_direction) below.
-    args.mode = args.mode if args.mode == "joint" else normalize_mode(args.mode)
     if args.model is None or args.task is None:
         parser.error("--model and --task are required (via CLI or config)")
 
@@ -235,11 +228,10 @@ def main():
     # Set up node-level hooks
     # For node mask, seq_len doesn't matter (position-agnostic), but we need a dummy value
     HooksCls = get_hooks_class(hf_model)
-    # "necessary" (noising) corrupts the top-k; the hooker's `sufficient` flag patches
-    # CF into the selected/top-k components, i.e. that IS the noising intervention.
-    corrupt_topk = args.mode == "necessary"
+    # cause (noising) patches CF into the top-k components; iso patches the complement.
+    corrupt_topk = args.mode == "cause"
     hooker = HooksCls(hf_model, "node", seq_len=1,
-                       sufficient=corrupt_topk,
+                       corrupt_topk=corrupt_topk,
                        include_input=args.include_input,
                        zero_ablation=args.ablation == "zero")
     total = hooker.total
@@ -307,12 +299,12 @@ def main():
         hooker.mask = mask
         # Per-step intervention direction: the fixed one for iso/cause, a coin flip for joint
         # (losses.resolve_direction, the same call eval_sva.py makes). The hooker reads its
-        # `sufficient` flag at hook time, so flipping it here flips which side gets the CF.
+        # `corrupt_topk` flag at hook time, so flipping it here flips which side gets the CF.
         # For iso/cause this is a no-op (the flag was set at construction to the same value),
         # so every existing run is bit-identical; joint additionally consumes one torch.rand
         # per step, which is why it is a NEW mode and not a default.
         step_cause = resolve_direction(args.mode, corrupt_topk)
-        hooker.sufficient = step_cause
+        hooker.corrupt_topk = step_cause
         # NOTE logits stay in model dtype until after the last-token gather: .float() on the
         # full [B, P, vocab] tensor materialized ~50-160 MB fp32 in the autograd graph for a
         # gradient that is zero everywhere but last_pos. Cast-after-slice is grad-identical.
@@ -320,9 +312,8 @@ def main():
         last_logits = logits[torch.arange(actual_B, device=device), last_pos].float()
         correct_t = torch.tensor([p[2] for p in picks], device=device)
         incorrect_t = torch.tensor([p[3] for p in picks], device=device)
-        # shared loss core: logit_diff = correct - incorrect; necessary/noising maximizes the
-        # break (returns diff.mean()), sufficient/denoising minimizes -diff. Bit-identical to the
-        # previous inline form.
+        # shared loss core: logit_diff = correct - incorrect; cause (noising) maximizes the
+        # break (returns diff.mean()), iso (denoising) minimizes -diff.
         return attribution_loss("logit_diff", last_logits, correct_t, incorrect_t,
                                 corrupt_topk=step_cause)
 
@@ -343,14 +334,14 @@ def main():
     train_time = result.train_time_s
     logger.info("Training complete in %.1fs (%s)", train_time, cf_cache.stats())
 
-    # Save per-step train log (step, k, k_frac, loss, bias_step) for convergence plots
+    # Save per-step train log (step, k, k_frac, loss) for convergence plots
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / f"{args.task}_{args.model}_trainlog.csv"
     with open(log_path, "w") as f:
-        f.write("step,k,k_frac,loss,bias_step\n")
+        f.write("step,k,k_frac,loss\n")
         for row in train_log:
-            f.write("%d,%.6g,%.6g,%.6g,%d\n" % row)
+            f.write("%d,%.6g,%.6g,%.6g\n" % row)
     logger.info("Saved train log to %s", log_path)
 
     if args.skip_eval:
@@ -419,8 +410,8 @@ def main():
             L = int(name[1:])
             node_scores_tensor[idx] = mlp_scores[L].item()
 
-    # eval ranks by score; sufficient/denoising (our runs) => positive = important
-    # to keep; necessary/noising => negative = important for breaking behavior.
+    # eval ranks by score; iso (our runs) => positive = important to keep;
+    # cause => negative = important for breaking behavior.
     graph.nodes_scores = node_scores_tensor
     logger.info("Set node scores (%d scored, %d forward nodes)",
                 (~torch.isnan(graph.nodes_scores)).sum().item(), graph.n_forward)
