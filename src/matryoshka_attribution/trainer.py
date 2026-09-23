@@ -109,18 +109,18 @@ def learn_scores(
             loss = loss_fn(mr.mask)
             if loss is None:                   # caller signalled skip (e.g. empty batch)
                 continue
-                if mr.l0_scores is not None:
-                    loss = loss + l0_lambda * mr.l0_scores.sum()
-                if mr.reinforce is not None:
-                    # REINFORCE: grad = loss * d/ds log P(sample | scores); accumulate across draws
-                    with torch.no_grad():
-                        r = mr.reinforce
-                        p = torch.sigmoid((scores - r["tau"]) / r["T"])
-                        g = loss.item() * ((r["sample"] - p) / r["T"])
-                        scores.grad = g if scores.grad is None else scores.grad + g
-                else:
-                    loss.backward()               # accumulates into .grad across draws
-                lv = loss.item()
+            if mr.l0_scores is not None:
+                loss = loss + l0_lambda * mr.l0_scores.sum()
+            if mr.reinforce is not None:
+                # REINFORCE: grad = loss * d/ds log P(sample | scores); accumulate across draws
+                with torch.no_grad():
+                    r = mr.reinforce
+                    p = torch.sigmoid((scores - r["tau"]) / r["T"])
+                    g = loss.item() * ((r["sample"] - p) / r["T"])
+                    scores.grad = g if scores.grad is None else scores.grad + g
+            else:
+                loss.backward()               # accumulates into .grad across draws
+            lv = loss.item()
             ks.append(float(k)); losses.append(lv)
         if not losses:                             # every draw skipped
             continue
