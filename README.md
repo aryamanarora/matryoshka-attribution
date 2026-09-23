@@ -1,8 +1,7 @@
 <div align="center">
-  <h1 align="center">Matryoshka Attribution</h1>
+    <!-- Put the logo files in assets/ in the repo, then paste this at the top of README.md. GitHub swaps in the dark version automatically for dark-mode readers. --> <p align="center"> <picture> <source media="(prefers-color-scheme: dark)" srcset="assets/mattr-logo-dark.svg"> <img alt="Matryoshka Attribution" src="assets/mattr-logo-light.svg" width="440"> </picture> </p> <!-- Social preview: Settings → General → Social preview → upload assets/mattr-social-preview.png (1280×640). -->
   <a href="https://arxiv.org/abs/2609.25518"><strong>Read our paper »</strong></a>
 </div>
-
 <br>
 
 **MAttr** (Matryoshka Attribution) learns an attribution ordering over a model's internal variables by optimising a mask with the *sigmoid top-k* operator, sampling a random sparsity level each step.
