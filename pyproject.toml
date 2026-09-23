@@ -38,9 +38,12 @@ vit = ["torch>=2.12.0", "torchvision>=0.27.0", "zennit>=1.0.0", "lxt>=2.1", "tra
 # The fork's own modules (MIB_circuit_track, eap) are put on sys.path by deps.find_mib_path, so
 # nothing from deps/ is installed here.
 tl2 = ["torch==2.5.1", "transformers==4.46.3", "transformer-lens==2.15.4"]
+dev = [
+    "pytest>=9.1.1",
+]
 
 [tool.uv]
-default-groups = ["lm"]
+default-groups = ["lm", "dev"]
 conflicts = [
     [{ group = "lm" }, { group = "vit" }],
     [{ group = "lm" }, { group = "tl2" }],
