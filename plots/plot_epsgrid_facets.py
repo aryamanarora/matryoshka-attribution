@@ -64,7 +64,7 @@ SW = "results/sva_sweep"
 # should appear here too. Labels name the model on every row because three of the four are
 # Llama-3 and one is not; a bare "MLP" strip would silently attribute Gemma's row to Llama.
 #
-# GEMMA IS SAFE TO RUN HERE despite CLAUDE.md's "never evaluate a gemma2 cell in the L2A venv":
+# GEMMA IS SAFE TO RUN HERE despite README.md's "never evaluate a gemma2 cell in the L2A venv":
 # that rule is about eval_mib.py's HookedTransformer path (TL 3.2.1 computes a wrong Gemma-2
 # forward). eval_sva loads through AutoModelForCausalLM and never imports transformer_lens --
 # checked, not assumed.

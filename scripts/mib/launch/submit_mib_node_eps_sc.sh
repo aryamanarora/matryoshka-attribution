@@ -1,7 +1,7 @@
 #!/bin/bash
 # The node-level MAttr headline (soft top-k, uniform k, Adam lr 0.05, 500 steps, --include-input)
 # with Adam eps = 1e-2 instead of the default 1e-8 -- the eps the SVA+ granular substrates ship
-# with (CLAUDE.md, mattr_variants.py). Asks whether one eps can serve every section. Protocol is
+# with (README.md, mattr_variants.py). Asks whether one eps can serve every section. Protocol is
 # submit_mib_node_mode_ablation_sc.sh's cell for cell (which copies the headline's saved args);
 # the ONLY change is --adam-eps 1e-2. Output dirs mirror the headline's with the eps spliced in:
 #   mib_node_topk_uniform_lr05_eps1e-2   (validation)

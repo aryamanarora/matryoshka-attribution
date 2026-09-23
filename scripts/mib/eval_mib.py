@@ -199,7 +199,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     # transformers renamed from_pretrained's `torch_dtype` to `dtype` in v5, and THIS FILE RUNS
-    # UNDER BOTH. Per CLAUDE.md every gemma2 cell must be trained/scored in
+    # UNDER BOTH. Per README.md every gemma2 cell must be trained/scored in
     # the tl2 env (transformers 4.46.3, TL 2.15.4, whose Gemma-2 forward is the
     # correct one), while gpt2/qwen2.5/llama3 run in .venv (transformers 5.9.0). Hardcoding
     # `dtype=` killed all 12 gemma2 jobs of the 2026-08-20 softlog_sgd sweep 28s in, with

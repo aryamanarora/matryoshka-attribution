@@ -4,7 +4,7 @@ IG / Expected Gradients) at MLP-neuron scale.
 ONE cell: addition / llama3 / --nodes mlp (2,293,760 neurons), sufficient (denoising), bs=1,
 100 eval pairs, 2000 steps unless stated. Everything is read from disk at build time -- no
 number is hardcoded in the prose, because re-evaluations overwrite result jsons in place and a
-copied number goes stale silently (see CLAUDE.md, "Verification anchor").
+copied number goes stale silently (see README.md, "Verification anchor").
 
     uv run python plots/plot_adamsgd_mlp_diag.py     # figures first
     uv run python scripts/sva/report_adamsgd_mlp.py      # then this

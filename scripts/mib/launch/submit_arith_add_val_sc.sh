@@ -13,7 +13,7 @@
 # two hard_topk_identity node dirs), --include-input at node level only, node = full validation
 # split, edge = --eval-examples 200 (the $\dagger$ cap). Three node dirs (mib_node_detached_tau_log,
 # mib_node_detached_tau, mib_node_hard_topk_gumbel) stored mode="necessary": they were produced
-# 2026-06-10/11, BEFORE the 2026-06-15 label flip (CLAUDE.md), when that label meant denoising --
+# 2026-06-10/11, BEFORE the 2026-06-15 label flip (README.md), when that label meant denoising --
 # so today's flag is --mode sufficient for every row, same as the post-flip edge twin
 # mib_edge_detached_tau already stores. Dirs whose args carried no optimizer key ran on the
 # default (adam); it is passed explicitly here so the record is unambiguous.

@@ -21,7 +21,7 @@
 # so a machine provisioned before deps/ existed keeps working and this script will not clone a
 # second copy next to it.
 #
-# NO SEPARATE GEMMA2 VENV. Gemma-2 cells must run under TL 2.15.4 (CLAUDE.md); that stack is the
+# NO SEPARATE GEMMA2 VENV. Gemma-2 cells must run under TL 2.15.4 (README.md); that stack is the
 # `tl2` dependency group of pyproject.toml, locked in uv.lock, and a job syncs it into its own env
 # (UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 ...), exactly like the
 # ViT group. Nothing here to build.
@@ -87,5 +87,5 @@ Done. Not covered here, and each optional:
   HF_TOKEN            meta-llama/* and google/gemma-2* are gated.
   gemma2 cells        run in the TL 2.15.4 env, the `tl2` dependency group (pyproject.toml), which the job
                       syncs itself:  UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python ...
-  results/            the paper's results dirs live on the clusters (CLAUDE.md's table); not in git.
+  results/            the paper's results dirs live on the clusters (README.md's table); not in git.
 EOF2

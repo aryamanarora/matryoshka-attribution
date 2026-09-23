@@ -15,7 +15,7 @@
 # only produce differently-named copies. Evaluation is direction-independent too: summarize()
 # sets hooker.sufficient explicitly per call, and F_clean/F_patch always use sufficient=False.
 #
-# Headline variant only (soft top-k forward + log-k, = the MAttr headline per CLAUDE.md).
+# Headline variant only (soft top-k forward + log-k, = the MAttr headline per README.md).
 # 6 tasks x 3 losses = 18 jobs. The "+hard" ablation would be another 18 via VARIANTS=...
 #
 # Results -> results/sva_sweep_cause/ (a SEPARATE dir: the mode is in the json `mode` field and

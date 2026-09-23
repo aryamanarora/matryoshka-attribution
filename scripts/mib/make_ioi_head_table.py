@@ -98,7 +98,7 @@ METHODS = [
     ("Node Pruning", _graph("eprun_node_s0.5_ld")),
     # pyvene sigmoid mask, the same lr/L1 config make_mib_table.py's SIGMOID_MASK_ROWS names.
     ("DBM",         _graph("eprun_node_ld_sig_lr0.3_l16.0")),
-    # MAttr headline = soft top-k forward, log-k, lr=0.05 (CLAUDE.md's results-dir table).
+    # MAttr headline = soft top-k forward, log-k, lr=0.05 (README.md's results-dir table).
     (r"\ourmethod{}", _mattr("topklog_lr_0.05")),
 ]
 

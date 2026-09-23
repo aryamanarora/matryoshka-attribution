@@ -4,7 +4,7 @@
 # protocol and output dirs -- see that script's header. Run INSIDE the tmux session (nlprun is
 # not on PATH over plain ssh).
 #
-# GPU choice follows the sc precedent for llama3: node level fits a 48GB a6000 (CLAUDE.md:
+# GPU choice follows the sc precedent for llama3: node level fits a 48GB a6000 (README.md:
 # -d a6000 -c 4 -r 96G --batch-size 2); edge level at 5000 steps needs 80GB, i.e. sphinx h100
 # (submit_sphinx_retry.sh -- the 40GB a100s OOM'd). nlprun's default time limit is 10 days.
 #

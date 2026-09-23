@@ -61,7 +61,7 @@ esac
 # One dir and one job-name prefix per mode: run_tag encodes the mode (`_ferr` / `_noerr`) but
 # NOT the lr, so two modes sharing a tree would collide cell for cell.
 # MODEL is a first-class knob so the same grid can be run cross-model. Verified for gemma2:
-# eval_sva loads through AutoModelForCausalLM and never imports transformer_lens, so CLAUDE.md's
+# eval_sva loads through AutoModelForCausalLM and never imports transformer_lens, so README.md's
 # "never evaluate a gemma2 cell in the L2A venv" rule -- which is about eval_mib.py's
 # HookedTransformer path -- does not apply here.
 MODEL=${MODEL:-llama3}

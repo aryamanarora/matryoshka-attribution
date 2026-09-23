@@ -27,7 +27,7 @@
 # deliberately drops -- at edge level the Adam rows are capped too, so matching them is what
 # keeps the new rows comparable to the ones directly above them.
 #
-# GEMMA2 CELLS RUN IN THE MIB VENV (TL 2.15.4), per CLAUDE.md: the L2A venv is TL 3.2.1, whose
+# GEMMA2 CELLS RUN IN THE MIB VENV (TL 2.15.4), per README.md: the L2A venv is TL 3.2.1, whose
 # Gemma-2 forward disagrees with HuggingFace (commit 525673a). Verified that eval_mib_edge.py
 # imports and resolves cleanly under that venv given PYTHONPATH=src:MIB-circuit-track:EAP-IG/src.
 #

@@ -6,7 +6,7 @@
 # legacy `sufficient`), which is also what CPR measures, so this asks whether a mask trained for
 # necessity (or both) transfers to the sufficiency metric. Never run on MIB before 2026-09-16:
 # every results dir whose saved args say `necessary` predates the 2026-06-15 label flip and is an
-# iso run under the old name (CLAUDE.md). The cause objective has only ever been run on SVA+.
+# iso run under the old name (README.md). The cause objective has only ever been run on SVA+.
 #
 # Protocol is the headline's, cell for cell (submit_softuni_lr05.sh / the saved args of
 # mib_node_topk_uniform_lr05 and test_node_topk_uniform_lr05): --steps 500 --k-schedule uniform
@@ -16,7 +16,7 @@
 #   mib_node_{cause,joint}_topk_uniform_lr05     (validation)   -> make_mib_table OUR_METHODS
 #   test_node_{cause,joint}_topk_uniform_lr05    (test)
 #
-# gemma2 cells must run under TL 2.15.4 (CLAUDE.md): the `tl2` dependency group, in its own
+# gemma2 cells must run under TL 2.15.4 (README.md): the `tl2` dependency group, in its own
 # uv-managed env (.venv-tl2) that the job syncs from uv.lock. They are opt-in via MODELS so the
 # two stacks can be submitted separately: 2 modes x 2 splits x 9 cells = 36 jobs by default,
 # 12 more with MODELS=gemma2. sc / nlprun, run INSIDE tmux.

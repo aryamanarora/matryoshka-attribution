@@ -64,7 +64,7 @@ MIB=${MATTR_MIB_PATH:-$L2A/deps/MIB-circuit-track}
 # trains and evaluates through TransformerLens.
 PY="env UV_PROJECT_ENVIRONMENT=$L2A/.venv-tl2 uv run --project $L2A --no-default-groups --group tl2 python"
 
-# Eval batch size follows the per-model guidance in CLAUDE.md. HEAD must match the eval
+# Eval batch size follows the per-model guidance in README.md. HEAD must match the eval
 # subset every other row in the table used (MIB-circuit-track/run_variants.sh): llama3
 # cells are capped at 200 validation examples, everything else runs full validation.
 # Without this the llama3 cells are scored on a different (10k-example) set than the

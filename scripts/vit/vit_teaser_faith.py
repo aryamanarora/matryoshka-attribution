@@ -2,7 +2,7 @@
 the "faithfulness" row of `plots/plot_vit_teaser.py`.
 
 For each method's patch ranking, keep the top-k% patches CLEAN and corrupt the complement
-(MIB's `sufficient` / iso intervention, see CLAUDE.md), then read the explained scalar
+(MIB's `sufficient` / iso intervention, see README.md), then read the explained scalar
 logit[dog] - logit[cat]. Sweeping k over the MIB sparsity grid gives a curve; the AUC
 reported is its log-spaced area, in raw logit units (see the note next to the printout for
 why it is not rescaled so that the clean image reads 1).

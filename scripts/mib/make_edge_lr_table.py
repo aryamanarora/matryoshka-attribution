@@ -92,7 +92,7 @@ LR_METHODS = [
 ]
 
 # Every llama3 cell here is scored on 200 validation examples (submit_mib_edge_lr_sweep.sh sets
-# ev=200 for llama3, ev=0 elsewhere), per the CLAUDE.md cap. That is the whole llama3 COLUMN,
+# ev=200 for llama3, ev=0 elsewhere), per the README.md cap. That is the whole llama3 COLUMN,
 # unlike the node table where only ioi/llama3 is capped -- so the dagger set is by model.
 DAGGER_MODELS = {"llama3"}
 

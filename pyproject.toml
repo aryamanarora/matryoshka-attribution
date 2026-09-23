@@ -31,7 +31,7 @@ lm = ["torch>=2.12.0", "transformers>=5.9.0", "transformer-lens>=3.2.1"]
 # uv-managed env:  UV_PROJECT_ENVIRONMENT=.venv-vit uv run --no-default-groups --group vit python ...
 vit = ["torch>=2.12.0", "torchvision>=0.27.0", "zennit>=1.0.0", "lxt>=2.1", "transformers>=4.51,<5"]
 # The MIB fork's evaluation stack (TL 2.x). MANDATORY for every gemma2 cell: TL 3.2.1's Gemma-2
-# forward is wrong (CLAUDE.md, proved against HF in 525673a), and every gemma2 number in the paper
+# forward is wrong (README.md, proved against HF in 525673a), and every gemma2 number in the paper
 # was produced under exactly these pins (the Tilde venv, frozen 2026-09-16). Same arrangement as
 # `vit`: its own uv-managed env, synced from the lockfile by the job itself --
 #   UV_PROJECT_ENVIRONMENT=.venv-tl2 uv run --no-default-groups --group tl2 python scripts/mib/eval_mib.py --model gemma2 ...

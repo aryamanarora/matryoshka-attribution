@@ -27,7 +27,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 mkdir -p logs
 
-MIB_DIR=results/softlog_sgd_lr_1.0                # headline MAttr, MIB harness (CLAUDE.md)
+MIB_DIR=results/softlog_sgd_lr_1.0                # headline MAttr, MIB harness (README.md)
 SVA_DIR=results/sva_sweep_input                    # headline MAttr, eval_sva harness
 SVA_TAG=node_sufficient_topk_sgd_bs1
 

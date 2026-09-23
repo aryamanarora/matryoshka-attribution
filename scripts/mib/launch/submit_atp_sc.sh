@@ -16,7 +16,7 @@
 #   results/atp_eval/<Method>_patching_node/<task-dash>_<model>_validation_abs-False.pkl
 # An existing importances.json is reused (eval-only rerun); an existing pkl skips the cell.
 # gemma2 runs in the TL 2.15.4 `tl2` env (opt-in via MODELS -- TL 3.2.1's Gemma-2 forward is
-# wrong, CLAUDE.md). llama3 ARC on the h100. sc / nlprun, run INSIDE tmux.
+# wrong, README.md). llama3 ARC on the h100. sc / nlprun, run INSIDE tmux.
 #   bash scripts/mib/launch/submit_atp_sc.sh
 #   MODELS=gemma2 bash scripts/mib/launch/submit_atp_sc.sh
 #   METHODS=AtP-star DRYRUN=1 bash scripts/mib/launch/submit_atp_sc.sh

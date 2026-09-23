@@ -7,7 +7,7 @@
 # k, soft top-k, Adam lr 0.05 (eps default 1e-8), sufficient, train on train, --include-input,
 # full test split (no llama cap: test splits are <= 1188 examples).
 #
-# gemma2 trains AND evaluates in the TL 2.15.4 stack (CLAUDE.md: the L2A venv's Gemma-2 forward
+# gemma2 trains AND evaluates in the TL 2.15.4 stack (README.md: the L2A venv's Gemma-2 forward
 # is wrong), i.e. the `tl2` dependency group in its own env, exactly as submit_mib_zero_sc.sh.
 #
 # sc / nlprun, run INSIDE tmux.

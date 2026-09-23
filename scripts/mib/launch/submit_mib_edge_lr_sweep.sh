@@ -35,7 +35,7 @@
 #    so the whole curve comes from one submission, which makes the duplicate a free
 #    reproducibility check rather than wasted compute.
 #
-# SCOPE. log-k ONLY -- that is the headline schedule (CLAUDE.md). The uniform-k SGD arm at lr=3.0
+# SCOPE. log-k ONLY -- that is the headline schedule (README.md). The uniform-k SGD arm at lr=3.0
 # is the more interesting *outlier* (it transferred at parity, +0.154, where log-k lost 1.221),
 # so `SCHEDS=uniform` is worth a second wave; it is not bundled here to keep one night's fan-out
 # at 108 jobs rather than 216.
@@ -87,7 +87,7 @@ for opt in $OPTS; do
         case $model in
           gpt2|qwen2.5) cpus=3; mem=64G;  tlim=10:00:00; bs=5; ev=0 ;;
           gemma2)       cpus=4; mem=96G;  tlim=16:00:00; bs=5; ev=0; py=$PY_TL2; pp=$PP_TL2 ;;
-          # llama3 validation is capped to 200 examples per CLAUDE.md -- the dagger in the
+          # llama3 validation is capped to 200 examples per README.md -- the dagger in the
           # appendix tables. A sweep point scored on full validation would not be comparable
           # to the rows it is meant to inform.
           llama3)       cpus=5; mem=128G; tlim=24:00:00; bs=2; ev=200 ;;

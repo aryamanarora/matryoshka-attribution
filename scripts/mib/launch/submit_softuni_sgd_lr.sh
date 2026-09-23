@@ -13,7 +13,7 @@
 #
 # WHY BOTHER, given "+ unif k" is an ablation and not the headline: the uniform-k Adam ablation
 # scores *better* than the headline on area_under (mib_results.tex "+ unif k" 2.09 vs 1.88) and
-# *worse* on acc-AUC, which is exactly the dense-end-vs-sparse-end split that CLAUDE.md warns
+# *worse* on acc-AUC, which is exactly the dense-end-vs-sparse-end split that README.md warns
 # makes uniform-k look deceptively good. The SGD arm at log-k reproduces that same split from
 # the other direction (at lr=0.05 it is -0.005 on acc-AUC but -0.373 on area_under vs Adam), so
 # whether the optimizer effect and the k-schedule effect are the SAME effect is currently
@@ -28,7 +28,7 @@
 #  1. --lr is passed on the command line, NOT through scripts/mib/launch/mib_node_seed.sbatch, which reads only
 #     $1..$8 and silently drops a 9th "lr" argument (every job would then run at the default).
 #  2. gemma2 runs in the tl2 env (TL 2.15.4) -- the default env's Gemma-2 forward is
-#     wrong (CLAUDE.md, proved in 525673a) -- and that venv needs an explicit PYTHONPATH because
+#     wrong (README.md, proved in 525673a) -- and that venv needs an explicit PYTHONPATH because
 #     matryoshka_attribution is not installed in it. Note that submit_softuni_lr05.sh, which
 #     produced the Adam uniform-k row this sweep is read against, does NOT do this; its gemma2
 #     cells were fixed after the fact by reeval_gemma_mib.py.

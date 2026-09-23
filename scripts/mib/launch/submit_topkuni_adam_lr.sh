@@ -26,7 +26,7 @@
 #
 # GEMMA2 RUNS UNDER THE MIB VENV. Copied from submit_softlog_sgd_lr.sh, NOT from
 # submit_lr_sweep_topklog.sh -- that script points every model at $ABS/.venv, whose TL 3.2.1
-# computes a wrong Gemma-2 forward (CLAUDE.md; proved in 525673a). Its gemma cells had to be
+# computes a wrong Gemma-2 forward (README.md; proved in 525673a). Its gemma cells had to be
 # repaired afterwards by scripts/mib/reeval_gemma_mib.py. Getting it right at submit time is
 # cheaper than re-evaluating 3 cells later.
 #
@@ -55,7 +55,7 @@ submit() { # lr model task
     gemma2)       local cpus=3 mem=64G tlim=08:00:00 bs="--batch-size 4"; py=$PY_TL2; pp=$PP_TL2 ;;
     llama3)       local cpus=4 mem=96G tlim=12:00:00 bs="--batch-size 2" ;;
   esac
-  # Validation-only llama3/ioi cap, matching every other arm's protocol (CLAUDE.md).
+  # Validation-only llama3/ioi cap, matching every other arm's protocol (README.md).
   local ec=""; [ "$model" = "llama3" ] && [ "$task" = "ioi" ] && { ec="--eval-examples 200"; tlim=06:00:00; }
   local name="topkuni-lr${lr}-${task}-${model}"
   local cmd="export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; \

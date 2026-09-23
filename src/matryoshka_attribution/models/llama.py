@@ -373,7 +373,7 @@ class LlamaAttributionHooks:
         """Mix clean activation `x` with the ablated value under mask `m`.
 
         NOTE the flag sense: `self.sufficient` here is the LEGACY inverted spelling (see
-        CLAUDE.md) -- `self.sufficient=True` means the top-k (m=1) is the side that gets
+        README.md) -- `self.sufficient=True` means the top-k (m=1) is the side that gets
         CORRUPTED (noising), and `False` means the top-k stays clean (denoising). eval_sva's
         `iso`/denoising sweep calls this with sufficient=False.
 

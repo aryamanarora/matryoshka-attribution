@@ -3,7 +3,7 @@
 Replicates the qualitative panel of Figure 1 of AttnLRP (Achtibat et al., ICML 2024,
 https://openreview.net/forum?id=emtXYlBrNF) -- an image containing a dog and a cat,
 explained for "dog" by several attribution methods -- with **MAttr** (soft top-k forward,
-log-k schedule, lr=0.05: the headline variant, see CLAUDE.md) as the "ours" panel.
+log-k schedule, lr=0.05: the headline variant, see README.md) as the "ours" panel.
 
 Model: torchvision ViT-B/16, ImageNet-1k weights (the architecture AttnLRP's own ViT
 example uses, and the one `lxt` ships LRP rules for).
@@ -16,7 +16,7 @@ replaced by its own mean colour -- see `--baseline` for why that one),
     E = m * E_clean + (1 - m) * E_corrupt ,
 
 which is exactly MIB/MAttr's `sufficient` (iso / denoising) intervention -- the selected
-patches stay CLEAN and the complement is corrupted (see CLAUDE.md). The gradient methods
+patches stay CLEAN and the complement is corrupted (see README.md). The gradient methods
 (AttnLRP, SmoothGrad, Grad x AttnRoll) attribute in their native space; pixel-level maps
 are additionally pooled to the same 14x14 patch grid so every panel can be shown either way.
 

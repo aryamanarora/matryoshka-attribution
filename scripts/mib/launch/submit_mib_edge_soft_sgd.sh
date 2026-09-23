@@ -17,7 +17,7 @@
 # an edge LR sweep (cf. the optimum-ring convention in plot_optimizer_lr.NO_RING).
 #
 # 9 cells, the standard edge PAIRS (no llama3 arc_* at edge level), llama3 capped to
-# eval-200/batch-2 per CLAUDE.md. GEMMA2 RUNS UNDER THE MIB VENV (TL 2.15.4) -- submit_edge_lr05.sh
+# eval-200/batch-2 per README.md. GEMMA2 RUNS UNDER THE MIB VENV (TL 2.15.4) -- submit_edge_lr05.sh
 # points every model at $ABS/.venv, whose TL 3.2.1 computes a wrong Gemma-2 forward (525673a);
 # that is a defect of that script, not a pattern to copy.
 #

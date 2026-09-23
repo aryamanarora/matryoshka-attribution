@@ -270,7 +270,7 @@ MAIN_LABELS = [
     # flip the table to Adam-default rather than renaming further in the figures.
     "IntInv",                                                    # causal reference (single-node interchange intervention, noising)
     # The HEADLINE arm (scripts/mib/mattr_variants.py: uniform k, Adam) since 2026-09-18 -- this
-    # panel drew the log-k dir as "MAttr" until then, the stale-label case CLAUDE.md flags for
+    # panel drew the log-k dir as "MAttr" until then, the stale-label case README.md flags for
     # the CPR scatter. The full heatmaps below still carry both arms under their own names.
     "MAttr (unif)*",                                             # learned, ours (1); * = lr 0.05
     "Node Pruning", "DBM",                                       # learned, external baselines (2)

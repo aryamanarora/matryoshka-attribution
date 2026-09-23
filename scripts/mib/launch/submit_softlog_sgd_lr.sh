@@ -26,7 +26,7 @@
 #     is three copies of one run, not three LRs.
 #
 #  2. It runs gemma2 in the tl2 env (TL 2.15.4), not the default env (TL 3.2.1),
-#     whose Gemma-2 forward is wrong (CLAUDE.md; proved against an HF reference in 525673a).
+#     whose Gemma-2 forward is wrong (README.md; proved against an HF reference in 525673a).
 #     submit_lr_sweep_topklog.sh ran the default (TL 3.2.1) env for every model, so re-running
 #     it would silently reintroduce the bad Gemma numbers.
 #     ...and that venv needs an explicit PYTHONPATH. It is the MIB repo's own environment and

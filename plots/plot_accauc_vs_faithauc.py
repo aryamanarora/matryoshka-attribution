@@ -1007,7 +1007,7 @@ def draw_labelled(df, figure_methods, out, ycol="faith_auc", ylabel="Faith log-A
 # (linear trapezoid over MIB's ten proportions), IIA = `acc_auc` (log-weighted over the same
 # grid). Two caveats the caption must carry: MIB's MAttr+Adam is at the DEFAULT eps
 # (topk_log_lr05), whereas the SVA+ Adam arm is eps=1e-2; and the llama3 cells are full-split
-# here (test is uncapped, see CLAUDE.md), so this is not the validation panel
+# here (test is uncapped, see README.md), so this is not the validation panel
 # plot_mib_accauc_cpr_scatter.py draws.
 MIB_FACET = "MIB (node, test)\nMIB"
 # Sentinel standing where a results dir goes in MIB_TEST, for the one row whose numbers are

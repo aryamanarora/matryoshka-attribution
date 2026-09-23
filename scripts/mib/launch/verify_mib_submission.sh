@@ -12,7 +12,7 @@
 # The MIB checkout is resolved the same way the eval scripts do (deps.find_mib_path: --mib-path /
 # $MATTR_MIB_PATH / deps/MIB-circuit-track). The interpreter is this project's default env via
 # `uv run` -- fine here because the cell is gpt2, which is version-stable; a gemma2 cell would
-# need the `tl2` group instead (CLAUDE.md). On sc, run this as a john CPU job, not on the login
+# need the `tl2` group instead (README.md). On sc, run this as a john CPU job, not on the login
 # node: importing torch from the NFS venv there crawls (nfs_wait_bit_killable for 20+ min on 2026-09-14).
 set -euo pipefail
 SUB=${1:?submission dir}; NODE_DIR=${2:?node results dir (for the full json)}; HEAD=${3:-100}

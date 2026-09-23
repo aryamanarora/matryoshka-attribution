@@ -19,7 +19,7 @@
 # edge level", and the current rows cannot tell them apart. This wave makes them able to.
 #
 # WHAT IT DOES NOT DECIDE. Even at 3.0, Adam still leads on those 4 cells (7.65 vs 6.89), so this
-# is not expected to overturn the edge default -- CLAUDE.md's "edge stays Adam-default" stands
+# is not expected to overturn the edge default -- README.md's "edge stays Adam-default" stands
 # unless the full 11 cells say otherwise. What it buys is that the `$+$ SGD` ablation row becomes
 # an honest ablation (SGD at its best) rather than a detuned strawman, and that the choice of
 # Adam at edge level rests on a tuned-vs-tuned comparison over 11 cells instead of 4.
@@ -46,7 +46,7 @@
 # (make_mib_test_table.EDGE_DAGGER); at edge level the Adam rows are capped too, so matching them
 # is what keeps these rows comparable to the ones directly above them.
 #
-# GEMMA2 CELLS RUN IN THE MIB VENV (TL 2.15.4), per CLAUDE.md -- the L2A venv is TL 3.2.1, whose
+# GEMMA2 CELLS RUN IN THE MIB VENV (TL 2.15.4), per README.md -- the L2A venv is TL 3.2.1, whose
 # Gemma-2 forward disagrees with HuggingFace (525673a). Same caveat submit_test_edge_sgd.sh
 # documents applies unchanged: the Adam edge dirs were TRAINED through the broken forward and
 # cannot be repaired by re-evaluation, so these gemma2 cells are correct and inconsistent with

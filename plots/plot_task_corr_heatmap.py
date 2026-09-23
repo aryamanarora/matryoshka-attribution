@@ -12,7 +12,7 @@ different objects that happen to share a naming scheme, which is why this figure
 rather than the 11 cells the method heatmap averages over.
 
 Method: MAttr, soft top-k forward, log-k schedule, SGD lr=1.0 -- the headline `\\ourmethod{}` row
-(see CLAUDE.md's results-dir table). Single method on purpose: the question is about tasks, and
+(see README.md's results-dir table). Single method on purpose: the question is about tasks, and
 overlaying methods would fold the method-disagreement this repo already has a figure for back
 into a panel that is trying to isolate task-disagreement.
 
@@ -171,7 +171,7 @@ def load_mib(task):
     in MIB's graph, not a variable anything attributes to, and the method heatmap drops it too."""
     p = R / METHOD_DIR / f"{task}_{MODEL}_importances.json"
     if not p.exists():
-        raise SystemExit(f"missing {p} -- is {METHOD_DIR} still the headline dir? (CLAUDE.md)")
+        raise SystemExit(f"missing {p} -- is {METHOD_DIR} still the headline dir? (README.md)")
     nodes = json.load(open(p)).get("nodes", {})
     return {n: i["score"] for n, i in nodes.items() if n != "logits" and "score" in i}
 

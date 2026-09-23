@@ -40,7 +40,7 @@ METHODS = {
                   sva_tag="sufficient_topk_sgd_bs1",
                   want={"method": "mattr", "variant": "topk", "optimizer": "sgd",
                         "k_schedule": "log", "mode": "sufficient", "include_input": True}),
-    # the "+ Adam" ablation: same recipe as the headline, optimizer swapped (CLAUDE.md table)
+    # the "+ Adam" ablation: same recipe as the headline, optimizer swapped (README.md table)
     "adam": dict(mib=("ours", R / "topklog_lr_0.05" / "{task}_llama3_scores.pt"),
                  sva_tag="sufficient_topk_adam_bs1",
                  want={"method": "mattr", "variant": "topk", "optimizer": "adam",

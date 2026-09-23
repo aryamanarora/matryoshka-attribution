@@ -1,7 +1,7 @@
 """Intervention-type naming: the new preferred names ``iso`` / ``cause`` and their mapping
 to the canonical internal names ``sufficient`` / ``necessary``.
 
-Vocabulary (see CLAUDE.md for the load-bearing convention):
+Vocabulary (see README.md for the load-bearing convention):
   - ``iso``   ("isolation")  == ``sufficient`` == denoising: top-k stays CLEAN, complement
     corrupted; recover clean behaviour (our MIB / MAttr runs).
   - ``cause`` ("causation")  == ``necessary``  == noising: top-k corrupted, complement clean;
