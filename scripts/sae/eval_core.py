@@ -1,7 +1,8 @@
 """SAEBench core eval of one of our SAEs at every target L0, next to SAEBench's own baselines.
 
 Every run of train_sae.py -- hard or soft forward, fixed or random k -- is scored the same way:
-as a plain hard TopK SAE (``sae_bench.custom_saes.topk_sae.TopKSAE``) built at each target k,
+as a plain hard TopK SAE (``sae_bench.custom_saes.topk_sae.TopKSAE``; ``ScoredTopKSAE`` below
+when the top-k ranks a separate score matmul) built at each target k,
 SAEBench's six L0s by default. A fixed-k run is scored off its training k too, which is the
 point of comparison for the random-k runs.
 
@@ -24,7 +25,10 @@ import json
 from pathlib import Path
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import sae_bench.evals.core.main as core
+from sae_bench.custom_saes.base_sae import BaseSAE
 from sae_bench.custom_saes.batch_topk_sae import load_dictionary_learning_matryoshka_batch_topk_sae
 from sae_bench.custom_saes.topk_sae import TopKSAE, load_dictionary_learning_topk_sae
 
@@ -40,12 +44,41 @@ METRICS = {"l0": ("sparsity", "l0"),
            "ce_loss_score": ("model_performance_preservation", "ce_loss_score")}
 
 
+class ScoredTopKSAE(BaseSAE):
+    """Inference form of a scores=sep SAE (matryoshka_attribution.sae): the k latents with the
+    highest SEPARATE score s = (x - b_dec) @ W_score + b_score keep their relu activations."""
+
+    def __init__(self, d_in, d_sae, k, model_name, hook_layer, device, dtype):
+        super().__init__(d_in, d_sae, model_name, hook_layer, device, dtype)
+        self.W_score = nn.Parameter(torch.zeros(d_in, d_sae))
+        self.b_score = nn.Parameter(torch.zeros(d_sae))
+        self.k = k
+
+    def encode(self, x):
+        a = F.relu((x - self.b_dec) @ self.W_enc + self.b_enc)
+        idx = ((x - self.b_dec) @ self.W_score + self.b_score).topk(self.k, dim=-1, sorted=False).indices
+        return torch.zeros_like(a).scatter_(-1, idx, a.gather(-1, idx))
+
+    def decode(self, f):
+        return f @ self.W_dec + self.b_dec
+
+    def forward(self, x):
+        return self.decode(self.encode(x))
+
+
 def ours_at_k(sae_dir, k, device):
     tr = json.loads((sae_dir / "config.json").read_text())["trainer"]
-    sae = TopKSAE(d_in=tr["activation_dim"], d_sae=tr["dict_size"], k=k, model_name=tr["lm_name"],
-                  hook_layer=tr["layer"], device=device, dtype=torch.float32)
+    kw = dict(d_in=tr["activation_dim"], d_sae=tr["dict_size"], k=k, model_name=tr["lm_name"],
+              hook_layer=tr["layer"], device=device, dtype=torch.float32)
     sd = torch.load(sae_dir / "ae.pt", map_location="cpu")
-    sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
+    # scores=acts and scores=pre select the same latents as SAEBench's TopKSAE (top-k of z and of
+    # relu(z) agree on every positive latent; any extra picks have activation 0 either way).
+    if tr.get("scores", "acts") == "sep":
+        sae = ScoredTopKSAE(**kw)
+        sae.load_state_dict(sd)
+    else:
+        sae = TopKSAE(**kw)
+        sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
     sae.to(device=device, dtype=torch.float32)
     sae.cfg.architecture = "topk"
     return tr, sae

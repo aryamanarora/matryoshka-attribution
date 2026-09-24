@@ -8,7 +8,11 @@ The runs this exists for (scripts/sae/launch/submit_sae_pythia_sc.sh, RUN=A..E):
     D  --forward soft --k-schedule log --k-max 640   both: sigmoid top-k + random k
     E  --forward ste  --k-schedule log --k-max 640   C with the sigmoid top-k as backward only
 B and D showed the soft forward is a loose relaxation in an SAE (see sae.TopKSAE.soft_encode);
-E keeps C's exact forward and changes only the gradient.
+E keeps C's exact forward and changes only the gradient. A-E rank the post-relu acts; the rest
+change what the top-k ranks (sae.py, ``--scores``), all with log k on [1, 640]:
+    F  --forward soft --scores sep    separate score matmul, soft forward
+    G  --forward ste  --scores sep    separate score matmul, straight-through
+    H  --forward ste  --scores pre    G's control: pre-relu scores from the same matmul
 
 Data/optimizer follow SAEBench's TopK baselines (released 0108 configs of
 adamkarvonen/saebench_pythia-160m-deduped_width-2pow12_date-0108; adamkarvonen/dictionary_learning_demo):
@@ -39,7 +43,7 @@ from datasets import load_dataset
 from transformer_lens import HookedTransformer
 
 from matryoshka_attribution import sample_k, wandb_util
-from matryoshka_attribution.sae import TopKSAE, fve, geometric_median
+from matryoshka_attribution.sae import SCORES, TopKSAE, fve, geometric_median
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("train_sae")
@@ -109,6 +113,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--forward", required=True, choices=["hard", "soft", "ste"],
                    help="hard top-k / sigmoid top-k / hard forward with sigmoid top-k backward")
+    p.add_argument("--scores", default="acts", choices=list(SCORES),
+                   help="what the top-k ranks: post-relu acts / pre-relu z / separate matmul")
     p.add_argument("--k-schedule", default="log", choices=["fixed", "log"])
     p.add_argument("--k", type=int, default=20, help="k for --k-schedule fixed")
     p.add_argument("--k-max", type=int, default=640, help="upper end of the log-uniform k range")
@@ -152,7 +158,7 @@ def main():
                            windows(model.tokenizer, args.dataset, args.ctx_len),
                            args.buffer_ctxs, args.ctx_len, args.llm_batch_size, args.batch_size)
 
-    sae = TopKSAE(d_in, args.d_sae).to(device)
+    sae = TopKSAE(d_in, args.d_sae, scores=args.scores).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=args.lr, betas=(0.9, 0.999))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(steps, args.warmup_steps, decay_start))
 
@@ -188,10 +194,12 @@ def main():
 
         if run is not None and (step % args.log_every == 0 or step == steps - 1):
             with torch.no_grad():
-                a = sae.acts(x)
+                s, a = sae.scores_and_acts(x)
                 row = {"loss": loss.item(), "k": k, "lr": sched.get_last_lr()[0],
                        "fve_train": fve(x, x_hat),
                        "relu_l0": float((a > 0).sum(-1).float().mean()),
+                       # per-token score spread in units of T: how sharp the sigmoid can be
+                       "score_std_over_T": float(s.std(dim=-1).mean() / args.T),
                        "tokens": (step + 1) * args.batch_size,
                        "steps_per_s": (step + 1) / (time.time() - t0)}
                 if args.forward != "hard":             # the sigmoid mask (ste: backward only)

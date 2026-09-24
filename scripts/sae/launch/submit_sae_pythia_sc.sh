@@ -9,6 +9,9 @@
 #   D  soft, log k     both
 #   E  ste, log k      C's hard forward, sigmoid top-k backward (D's soft forward was a loose
 #                      relaxation: latents rescale to absorb the mask)
+#   F  soft, sep scores   top-k ranks a separate score matmul (MAttr-like free logits)
+#   G  ste,  sep scores
+#   H  ste,  pre scores   G's control: pre-relu scores, same matmul (no relu-zero ties)
 # Both stages run in the `sae` dependency group's env (.venv-sae), synced from uv.lock by the job.
 # sc / nlprun, run INSIDE tmux.
 #   STAGE=train RUNS="A B C D" bash scripts/sae/launch/submit_sae_pythia_sc.sh
@@ -26,6 +29,9 @@ for run in $RUNS; do
     C) flags="--forward hard --k-schedule log --k-max 640"; tag=hard_logk640 ;;
     D) flags="--forward soft --k-schedule log --k-max 640"; tag=soft_logk640 ;;
     E) flags="--forward ste --k-schedule log --k-max 640";  tag=ste_logk640 ;;
+    F) flags="--forward soft --scores sep --k-schedule log --k-max 640"; tag=soft_sep_logk640 ;;
+    G) flags="--forward ste --scores sep --k-schedule log --k-max 640";  tag=ste_sep_logk640 ;;
+    H) flags="--forward ste --scores pre --k-schedule log --k-max 640";  tag=ste_pre_logk640 ;;
     *) echo "unknown run $run"; exit 1 ;;
   esac
   TAG=pythia160m_l8_4k_${tag}_100M; extra=""
