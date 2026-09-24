@@ -1,21 +1,22 @@
-"""SAEBench core eval of a sigmoid top-k SAE at every target L0, next to SAEBench's own baselines.
+"""SAEBench core eval of one of our SAEs at every target L0, next to SAEBench's own baselines.
 
-Our SAE is trained once over a k distribution, so it is scored as a plain hard TopK SAE
-(``sae_bench.custom_saes.topk_sae.TopKSAE``) built at each target k -- SAEBench's six L0s by
-default. The baselines are SAEBench's released SAEs at the same site and width, re-scored here
-under the identical core config so every point shares one code version and one data draw:
-TopK (the recipe we changed), Matryoshka BatchTopK (the nested-dictionary method closest to
-"one SAE for many sparsities") and Gated (whose gate/magnitude split GatedSigmoidTopKSAE uses),
-six trainers each. A GatedSigmoidTopKSAE is scored by top-k over its gate scores (TopKGatedSAE).
+Every run of train_sae.py -- hard or soft forward, fixed or random k -- is scored the same way:
+as a plain hard TopK SAE (``sae_bench.custom_saes.topk_sae.TopKSAE``) built at each target k,
+SAEBench's six L0s by default. A fixed-k run is scored off its training k too, which is the
+point of comparison for the random-k runs.
+
+Baselines are SAEBench's released SAEs at the same site and width, re-scored under the identical
+core config: TopK (the recipe train_sae.py follows) and Matryoshka BatchTopK (the nested method
+closest to "one SAE for many sparsities"), six trainers each. They are written once to
+``<results>/core_baselines`` and shared by every run.
 
 Core config = sae_bench/custom_saes/run_all_evals_dictionary_learning_saes.py's: 200
 reconstruction batches, 2000 sparsity/variance batches, 16 prompts x 128 tokens of openwebtext,
-special tokens excluded, featurewise statistics on, fp32. ``multiple_evals`` skips SAEs whose result json already exists,
-so a rerun only fills what is missing. It also swallows per-SAE exceptions, hence the explicit
-missing-results check at the end.
+special tokens excluded, featurewise statistics on, fp32. ``multiple_evals`` skips SAEs whose
+result json already exists, and swallows per-SAE exceptions -- hence the missing-results check.
 
   UV_PROJECT_ENVIRONMENT=.venv-sae uv run --no-default-groups --group sae \
-      python scripts/sae/eval_core.py --sae-dir results/sae/pythia160m_l8_4k_sigtopk_uniform
+      python scripts/sae/eval_core.py --sae-dir results/sae/<tag>
 """
 
 import argparse
@@ -23,10 +24,8 @@ import json
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 import sae_bench.evals.core.main as core
 from sae_bench.custom_saes.batch_topk_sae import load_dictionary_learning_matryoshka_batch_topk_sae
-from sae_bench.custom_saes.gated_sae import GatedSAE, load_dictionary_learning_gated_sae
 from sae_bench.custom_saes.topk_sae import TopKSAE, load_dictionary_learning_topk_sae
 
 from matryoshka_attribution import wandb_util
@@ -35,77 +34,24 @@ BASE_REPO = {("pythia-160m-deduped", 4096):
              "adamkarvonen/saebench_pythia-160m-deduped_width-2pow12_date-0108"}
 BASELINES = {"TopK": ("TopK_pythia-160m-deduped__0108", load_dictionary_learning_topk_sae),
              "MatryoshkaBatchTopK": ("MatryoshkaBatchTopK_pythia-160m-deduped__0108",
-                                     load_dictionary_learning_matryoshka_batch_topk_sae),
-             # the parameterisation GatedSigmoidTopKSAE borrows, with its Heaviside gate + L1
-             "Gated": ("GatedSAE_pythia-160m-deduped__0108", load_dictionary_learning_gated_sae)}
+                                     load_dictionary_learning_matryoshka_batch_topk_sae)}
 METRICS = {"l0": ("sparsity", "l0"),
            "explained_variance": ("reconstruction_quality", "explained_variance"),
-           "ce_loss_score": ("model_performance_preservation", "ce_loss_score"),
-           "kl_div_score": ("model_behavior_preservation", "kl_div_score")}
-
-
-class TopKGatedSAE(GatedSAE):
-    """sae_bench's GatedSAE with the Heaviside gate replaced by top-k over the gate scores --
-    the inference form of GatedSigmoidTopKSAE (same parameter names, so its state dict loads)."""
-
-    def __init__(self, *args, k: int, **kw):
-        super().__init__(*args, **kw)
-        self.k = k
-
-    def encode(self, x):
-        x_enc = (x - self.b_dec) @ self.W_enc
-        mag = F.relu(self.r_mag.exp() * x_enc + self.b_mag)
-        idx = (x_enc + self.gate_bias).topk(self.k, dim=-1, sorted=False).indices
-        return torch.zeros_like(mag).scatter_(-1, idx, mag.gather(-1, idx))
+           "ce_loss_score": ("model_performance_preservation", "ce_loss_score")}
 
 
 def ours_at_k(sae_dir, k, device):
     tr = json.loads((sae_dir / "config.json").read_text())["trainer"]
-    kw = dict(d_in=tr["activation_dim"], d_sae=tr["dict_size"], model_name=tr["lm_name"],
-              hook_layer=tr["layer"], device=device, dtype=torch.float32)
+    sae = TopKSAE(d_in=tr["activation_dim"], d_sae=tr["dict_size"], k=k, model_name=tr["lm_name"],
+                  hook_layer=tr["layer"], device=device, dtype=torch.float32)
     sd = torch.load(sae_dir / "ae.pt", map_location="cpu")
-    if tr["dict_class"] == "GatedSigmoidTopKSAE":
-        sae = TopKGatedSAE(**kw, k=k)
-        sae.load_state_dict(sd)
-        arch = "gated"                     # core reads b_mag as the encoder bias for "gated"
-    else:
-        sae = TopKSAE(**kw, k=k)
-        sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
-        arch = "topk"
+    sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
     sae.to(device=device, dtype=torch.float32)
-    sae.cfg.architecture = arch
+    sae.cfg.architecture = "topk"
     return tr, sae
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--sae-dir", required=True)
-    p.add_argument("--ks", type=int, nargs="+", default=[20, 40, 80, 160, 320, 640])
-    p.add_argument("--baselines", nargs="*", default=list(BASELINES))
-    p.add_argument("--n-trainers", type=int, default=6)
-    p.add_argument("--out", default=None, help="default: <sae-dir>/core")
-    wandb_util.add_args(p)
-    p.add_argument("--wandb-name", default=None)
-    args = p.parse_args()
-
-    device = "cuda"
-    sae_dir = Path(args.sae_dir)
-    out = Path(args.out or sae_dir / "core")
-    tag = sae_dir.name
-
-    selected = {}                                   # release name -> (method, SAE object)
-    for k in args.ks:
-        tr, sae = ours_at_k(sae_dir, k, device)
-        selected[f"{tag}_k{k}"] = (tag, sae)
-    repo = BASE_REPO[(tr["lm_name"], tr["dict_size"])]
-    for name in args.baselines:
-        folder, loader = BASELINES[name]
-        for i in range(args.n_trainers):
-            sae = loader(repo, f"{folder}/resid_post_layer_{tr['layer']}/trainer_{i}/ae.pt",
-                         tr["lm_name"], device, torch.float32, layer=tr["layer"],
-                         local_dir=str(out.parent / "downloaded_saes"))
-            selected[f"saebench_{name}_trainer{i}"] = (name, sae)
-
+def run_core(selected, out, device):
     core.multiple_evals(
         selected_saes=[(rel, sae) for rel, (_, sae) in selected.items()],
         n_eval_reconstruction_batches=200, n_eval_sparsity_variance_batches=2000,
@@ -116,7 +62,6 @@ def main():
         compute_featurewise_density_statistics=True, compute_featurewise_weight_based_metrics=True,
         dataset="Skylion007/openwebtext", context_size=128, output_folder=str(out),
         dtype="float32", device=device)
-
     rows, missing = [], []
     for rel, (method, _) in selected.items():
         path = out / f"{rel}_custom_sae_eval_results.json"
@@ -126,16 +71,50 @@ def main():
         m = json.loads(path.read_text())["eval_result_metrics"]
         rows.append({"sae": rel, "method": method,
                      **{name: m[a][b] for name, (a, b) in METRICS.items()}})
-    (out / "summary.json").write_text(json.dumps(rows, indent=2))
-    print(f"{'sae':<55} {'L0':>7} {'FVE':>7} {'CE':>7} {'KL':>7}")
+    return rows, missing
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--sae-dir", required=True)
+    p.add_argument("--ks", type=int, nargs="+", default=[20, 40, 80, 160, 320, 640])
+    p.add_argument("--baselines", nargs="*", default=list(BASELINES))
+    p.add_argument("--n-trainers", type=int, default=6)
+    wandb_util.add_args(p)
+    p.add_argument("--wandb-name", default=None)
+    args = p.parse_args()
+
+    device = "cuda"
+    sae_dir = Path(args.sae_dir)
+    tag = sae_dir.name
+
+    ours = {}
+    for k in args.ks:
+        tr, sae = ours_at_k(sae_dir, k, device)
+        ours[f"{tag}_k{k}"] = (tag, sae)
+    rows, missing = run_core(ours, sae_dir / "core", device)
+
+    repo = BASE_REPO[(tr["lm_name"], tr["dict_size"])]
+    base_out = sae_dir.parent / "core_baselines"
+    base = {}
+    for name in args.baselines:
+        folder, loader = BASELINES[name]
+        for i in range(args.n_trainers):
+            base[f"saebench_{name}_trainer{i}"] = (name, loader(
+                repo, f"{folder}/resid_post_layer_{tr['layer']}/trainer_{i}/ae.pt", tr["lm_name"],
+                device, torch.float32, layer=tr["layer"], local_dir=str(sae_dir.parent / "downloaded_saes")))
+    base_rows, base_missing = run_core(base, base_out, device)
+    rows += base_rows
+    missing += base_missing
+
+    (sae_dir / "core" / "summary.json").write_text(json.dumps(rows, indent=2))
+    print(f"{'sae':<60} {'L0':>7} {'FVE':>7} {'CE':>7}")
     for r in sorted(rows, key=lambda r: (r["method"], r["l0"])):
-        print(f"{r['sae']:<55} {r['l0']:7.1f} {r['explained_variance']:7.4f} "
-              f"{r['ce_loss_score']:7.4f} {r['kl_div_score']:7.4f}")
+        print(f"{r['sae']:<60} {r['l0']:7.1f} {r['explained_variance']:7.4f} {r['ce_loss_score']:7.4f}")
 
     run = wandb_util.init("sae", args.wandb_name or f"{tag}_core", vars(args),
-                          project=args.wandb_project, entity=args.wandb_entity,
-                          enabled=args.wandb, group=f"{tr['lm_name']}/L{tr['layer']}/{tr['dict_size']}",
-                          job_type="core_eval")
+                          project=args.wandb_project, entity=args.wandb_entity, enabled=args.wandb,
+                          group=f"{tr['lm_name']}/L{tr['layer']}/{tr['dict_size']}", job_type="core_eval")
     if run is not None:
         import wandb
         cols = ["sae", "method", *METRICS]
