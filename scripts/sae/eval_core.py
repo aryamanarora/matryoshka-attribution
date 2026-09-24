@@ -9,7 +9,7 @@ TopK (the recipe we changed) and Matryoshka BatchTopK (the nested-dictionary met
 
 Core config = sae_bench/custom_saes/run_all_evals_dictionary_learning_saes.py's: 200
 reconstruction batches, 2000 sparsity/variance batches, 16 prompts x 128 tokens of openwebtext,
-special tokens excluded, fp32. ``multiple_evals`` skips SAEs whose result json already exists,
+special tokens excluded, featurewise statistics on, fp32. ``multiple_evals`` skips SAEs whose result json already exists,
 so a rerun only fills what is missing. It also swallows per-SAE exceptions, hence the explicit
 missing-results check at the end.
 
@@ -83,6 +83,10 @@ def main():
         selected_saes=[(rel, sae) for rel, (_, sae) in selected.items()],
         n_eval_reconstruction_batches=200, n_eval_sparsity_variance_batches=2000,
         eval_batch_size_prompts=16, exclude_special_tokens_from_reconstruction=True,
+        # Both ON is not optional in sae-bench 0.6.0: the result json's MiscMetrics fields
+        # (frac_alive, max encoder/decoder cosine sims, ...) are required and only computed with
+        # these, so with them off every SAE fails pydantic validation at save time.
+        compute_featurewise_density_statistics=True, compute_featurewise_weight_based_metrics=True,
         dataset="Skylion007/openwebtext", context_size=128, output_folder=str(out),
         dtype="float32", device=device)
 
