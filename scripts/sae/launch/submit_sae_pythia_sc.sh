@@ -7,12 +7,13 @@
 #   STAGE=train bash scripts/sae/launch/submit_sae_pythia_sc.sh
 #   STAGE=eval  bash scripts/sae/launch/submit_sae_pythia_sc.sh      # after training finished
 #   SMOKE=1 STAGE=train bash ...  then  SMOKE=1 STAGE=eval bash ...  # 2M tokens, 1 k, 1 baseline
+#   ARCH=gated_sigtopk STAGE=train bash ...   # gate scores decoupled from magnitudes
 set -u
 ABS=${ABS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}; cd "$ABS"; mkdir -p logs
-STAGE=${STAGE:-train}; SMOKE=${SMOKE:-0}; DRYRUN=${DRYRUN:-0}
+STAGE=${STAGE:-train}; SMOKE=${SMOKE:-0}; DRYRUN=${DRYRUN:-0}; ARCH=${ARCH:-sigtopk}
 PY="UV_PROJECT_ENVIRONMENT=$ABS/.venv-sae uv run --no-default-groups --group sae python"
 RES="-q jag -d a6000 -c 4 -r 32G"
-TAG=pythia160m_l8_4k_sigtopk_uniform
+TAG=pythia160m_l8_4k_${ARCH}_uniform
 if [ "$SMOKE" = 1 ]; then
   TAG=smoke_$TAG
   TRAIN_EXTRA="--tokens 2048000 --warmup-steps 100 --log-every 10 --diag-every 100 --ckpt-every 500"
@@ -22,7 +23,7 @@ else
 fi
 OUT=results/sae/$TAG
 case $STAGE in
-  train) name="sae-train-$TAG"; cmd="$PY scripts/sae/train_sae.py --out $OUT $TRAIN_EXTRA" ;;
+  train) name="sae-train-$TAG"; cmd="$PY scripts/sae/train_sae.py --arch $ARCH --out $OUT $TRAIN_EXTRA" ;;
   eval)  name="sae-core-$TAG";  cmd="$PY scripts/sae/eval_core.py --sae-dir $OUT $EVAL_EXTRA" ;;
   *) echo "STAGE must be train or eval"; exit 1 ;;
 esac

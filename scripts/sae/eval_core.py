@@ -4,8 +4,9 @@ Our SAE is trained once over a k distribution, so it is scored as a plain hard T
 (``sae_bench.custom_saes.topk_sae.TopKSAE``) built at each target k -- SAEBench's six L0s by
 default. The baselines are SAEBench's released SAEs at the same site and width, re-scored here
 under the identical core config so every point shares one code version and one data draw:
-TopK (the recipe we changed) and Matryoshka BatchTopK (the nested-dictionary method closest to
-"one SAE for many sparsities"), six trainers each.
+TopK (the recipe we changed), Matryoshka BatchTopK (the nested-dictionary method closest to
+"one SAE for many sparsities") and Gated (whose gate/magnitude split GatedSigmoidTopKSAE uses),
+six trainers each. A GatedSigmoidTopKSAE is scored by top-k over its gate scores (TopKGatedSAE).
 
 Core config = sae_bench/custom_saes/run_all_evals_dictionary_learning_saes.py's: 200
 reconstruction batches, 2000 sparsity/variance batches, 16 prompts x 128 tokens of openwebtext,
@@ -22,8 +23,10 @@ import json
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 import sae_bench.evals.core.main as core
 from sae_bench.custom_saes.batch_topk_sae import load_dictionary_learning_matryoshka_batch_topk_sae
+from sae_bench.custom_saes.gated_sae import GatedSAE, load_dictionary_learning_gated_sae
 from sae_bench.custom_saes.topk_sae import TopKSAE, load_dictionary_learning_topk_sae
 
 from matryoshka_attribution import wandb_util
@@ -32,21 +35,45 @@ BASE_REPO = {("pythia-160m-deduped", 4096):
              "adamkarvonen/saebench_pythia-160m-deduped_width-2pow12_date-0108"}
 BASELINES = {"TopK": ("TopK_pythia-160m-deduped__0108", load_dictionary_learning_topk_sae),
              "MatryoshkaBatchTopK": ("MatryoshkaBatchTopK_pythia-160m-deduped__0108",
-                                     load_dictionary_learning_matryoshka_batch_topk_sae)}
+                                     load_dictionary_learning_matryoshka_batch_topk_sae),
+             # the parameterisation GatedSigmoidTopKSAE borrows, with its Heaviside gate + L1
+             "Gated": ("GatedSAE_pythia-160m-deduped__0108", load_dictionary_learning_gated_sae)}
 METRICS = {"l0": ("sparsity", "l0"),
            "explained_variance": ("reconstruction_quality", "explained_variance"),
            "ce_loss_score": ("model_performance_preservation", "ce_loss_score"),
            "kl_div_score": ("model_behavior_preservation", "kl_div_score")}
 
 
+class TopKGatedSAE(GatedSAE):
+    """sae_bench's GatedSAE with the Heaviside gate replaced by top-k over the gate scores --
+    the inference form of GatedSigmoidTopKSAE (same parameter names, so its state dict loads)."""
+
+    def __init__(self, *args, k: int, **kw):
+        super().__init__(*args, **kw)
+        self.k = k
+
+    def encode(self, x):
+        x_enc = (x - self.b_dec) @ self.W_enc
+        mag = F.relu(self.r_mag.exp() * x_enc + self.b_mag)
+        idx = (x_enc + self.gate_bias).topk(self.k, dim=-1, sorted=False).indices
+        return torch.zeros_like(mag).scatter_(-1, idx, mag.gather(-1, idx))
+
+
 def ours_at_k(sae_dir, k, device):
     tr = json.loads((sae_dir / "config.json").read_text())["trainer"]
-    sae = TopKSAE(d_in=tr["activation_dim"], d_sae=tr["dict_size"], k=k, model_name=tr["lm_name"],
-                  hook_layer=tr["layer"], device=device, dtype=torch.float32)
+    kw = dict(d_in=tr["activation_dim"], d_sae=tr["dict_size"], model_name=tr["lm_name"],
+              hook_layer=tr["layer"], device=device, dtype=torch.float32)
     sd = torch.load(sae_dir / "ae.pt", map_location="cpu")
-    sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
+    if tr["dict_class"] == "GatedSigmoidTopKSAE":
+        sae = TopKGatedSAE(**kw, k=k)
+        sae.load_state_dict(sd)
+        arch = "gated"                     # core reads b_mag as the encoder bias for "gated"
+    else:
+        sae = TopKSAE(**kw, k=k)
+        sae.load_state_dict({**sd, "k": torch.tensor(k, dtype=torch.int)})
+        arch = "topk"
     sae.to(device=device, dtype=torch.float32)
-    sae.cfg.architecture = "topk"
+    sae.cfg.architecture = arch
     return tr, sae
 
 

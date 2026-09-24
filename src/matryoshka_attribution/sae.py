@@ -38,10 +38,11 @@ class SigmoidTopKSAE(nn.Module):
         return F.relu((x - self.b_dec) @ self.W_enc + self.b_enc)
 
     def soft_encode(self, x, k, T=0.5, n_iters=50):
-        """Training forward: latents gated by the sigmoid top-k mask (sum of mask = k)."""
+        """Training forward: latents gated by the sigmoid top-k mask (sum of mask = k).
+        Returns (latents, scores, mask, magnitudes); here scores and magnitudes coincide."""
         a = self.acts(x)
         mask = sigmoid_topk(a, k, T=T, n_iters=n_iters)
-        return a * mask, a, mask
+        return a * mask, a, mask, a
 
     def hard_encode(self, x, k: int):
         """Inference forward (= SAEBench TopKSAE.encode): keep the k largest post-ReLU latents."""
@@ -75,6 +76,54 @@ class SigmoidTopKSAE(nn.Module):
         sd["b_enc"] *= scale
         sd["b_dec"] *= scale
         return sd
+
+
+class GatedSigmoidTopKSAE(SigmoidTopKSAE):
+    """Scores decoupled from latent magnitudes (Gated SAE parameterisation, Rajamanoharan et al.
+    2024), with the gate replaced by MAttr's sigmoid top-k:
+
+        s = (x - b_dec) @ W_enc + gate_bias                      gate scores -> sigmoid_topk(s, k)
+        m = relu((x - b_dec) @ (W_enc * exp(r_mag)) + b_mag)     magnitudes
+        f = m * sigmoid_topk(s, k)
+
+    Why: in SigmoidTopKSAE the ranked score IS the reconstruction magnitude, so it cannot grow
+    to sharpen the sigmoid at fixed T -- the mask stays diffuse and a hard top-k at eval
+    overshoots. Here the gate's scale is free, as MAttr's score logits are. Parameter names are
+    sae_bench's GatedSAE's (b_enc unused, kept at 0 so both classes share the base init);
+    evaluation takes the top-k latents by gate score and keeps their magnitudes.
+    """
+
+    def __init__(self, d_in: int, d_sae: int):
+        super().__init__(d_in, d_sae)
+        self.gate_bias = nn.Parameter(torch.zeros(d_sae))
+        self.r_mag = nn.Parameter(torch.zeros(d_sae))
+        self.b_mag = nn.Parameter(torch.zeros(d_sae))
+        del self.b_enc
+
+    def _enc(self, x):
+        x_enc = (x - self.b_dec) @ self.W_enc
+        return x_enc + self.gate_bias, F.relu(x_enc * self.r_mag.exp() + self.b_mag)
+
+    def soft_encode(self, x, k, T=0.5, n_iters=50):
+        s, m = self._enc(x)
+        mask = sigmoid_topk(s, k, T=T, n_iters=n_iters)
+        return m * mask, s, mask, m
+
+    def hard_encode(self, x, k: int):
+        s, m = self._enc(x)
+        idx = s.topk(k, dim=-1, sorted=False).indices
+        return torch.zeros_like(m).scatter_(-1, idx, m.gather(-1, idx))
+
+    def state_dict_raw_space(self, scale: float):
+        # Magnitudes rescale like b_dec; gate scores only get multiplied by `scale`, which
+        # leaves their top-k (the only thing eval reads from them) unchanged.
+        sd = {k: v.detach().clone().cpu() for k, v in self.state_dict().items()}
+        for b in ("b_dec", "gate_bias", "b_mag"):
+            sd[b] *= scale
+        return sd
+
+
+ARCHS = {"sigtopk": SigmoidTopKSAE, "gated_sigtopk": GatedSigmoidTopKSAE}
 
 
 @torch.no_grad()

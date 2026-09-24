@@ -19,6 +19,9 @@ Changes vs that recipe, all deliberate:
   * "Fired" (for AuxK's dead set) = in the hard top-round(k) AND positive. TopKTrainer counts the
     top-k indices alone, which at MAttr's large k would mark zero latents as firing.
 
+``--arch gated_sigtopk`` ranks separate gate scores and keeps ReLU magnitudes from a tied
+magnitude path (sae.GatedSigmoidTopKSAE); "fired" and AuxK then use the magnitudes.
+
 Activations come from TransformerLens' ``from_pretrained_no_processing`` -- the model SAEBench's
 core eval loads -- at ``blocks.{layer}.hook_resid_post``.
 
@@ -38,7 +41,7 @@ from datasets import load_dataset
 from transformer_lens import HookedTransformer
 
 from matryoshka_attribution import sample_k, wandb_util
-from matryoshka_attribution.sae import SigmoidTopKSAE, auxk_loss, fve, geometric_median
+from matryoshka_attribution.sae import ARCHS, auxk_loss, fve, geometric_median
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("train_sae")
@@ -107,6 +110,7 @@ def save(sae, scale, cfg, out, step):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="pythia-160m-deduped")
+    p.add_argument("--arch", default="sigtopk", choices=list(ARCHS))
     p.add_argument("--layer", type=int, default=8)
     p.add_argument("--d-sae", type=int, default=4096)
     p.add_argument("--tokens", type=int, default=500_000_000)
@@ -155,13 +159,13 @@ def main():
     scale = math.sqrt(msn / d_in)
     log.info("mean squared norm %.4g -> scale %.4g", msn, scale)
 
-    sae = SigmoidTopKSAE(d_in, args.d_sae).to(device)
+    sae = ARCHS[args.arch](d_in, args.d_sae).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=args.lr, betas=(0.9, 0.999))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(steps, args.warmup_steps, decay_start))
     since_fired = torch.zeros(args.d_sae, dtype=torch.long, device=device)
     k_aux = d_in // 2                                   # TopKTrainer's top_k_aux heuristic
 
-    cfg = {"trainer": {"trainer_class": "SigmoidTopKTrainer", "dict_class": "SigmoidTopKSAE",
+    cfg = {"trainer": {"trainer_class": "SigmoidTopKTrainer", "dict_class": type(sae).__name__,
                        "lm_name": args.model, "layer": args.layer, "hook_name": hook,
                        "activation_dim": d_in, "dict_size": args.d_sae, "steps": steps,
                        "decay_start": decay_start, "norm_scale": scale, **vars(args)}}
@@ -175,15 +179,15 @@ def main():
         if step == 0:
             sae.b_dec.data = geometric_median(x)
         k = sample_k(args.d_sae, args.k_schedule)
-        f, a, mask = sae.soft_encode(x, k, T=args.T, n_iters=args.n_iters)
+        f, s, mask, a = sae.soft_encode(x, k, T=args.T, n_iters=args.n_iters)   # s: scores, a: magnitudes
         x_hat = sae.decode(f)
         e = x - x_hat
         l2 = e.pow(2).sum(dim=-1).mean()
 
         with torch.no_grad():
-            top = a.topk(max(1, round(k)), dim=-1, sorted=False)
+            idx = s.topk(max(1, round(k)), dim=-1, sorted=False).indices
             fired = torch.zeros(args.d_sae, dtype=torch.bool, device=device)
-            fired[top.indices[top.values > 0]] = True
+            fired[idx[a.gather(-1, idx) > 0]] = True
             since_fired += len(x)
             since_fired[fired] = 0
             dead = since_fired >= args.dead_tokens
@@ -204,12 +208,14 @@ def main():
                        "lr": sched.get_last_lr()[0], "fve_soft": fve(x, x_hat),
                        "dead": int(dead.sum()), "relu_l0": float((a > 0).sum(-1).float().mean()),
                        "mask_gt_half_l0": float((mask > 0.5).sum(-1).float().mean()),
+                       # per-token score spread in units of T: how sharp the sigmoid CAN be
+                       "score_std_over_T": float(s.std(dim=-1).mean() / args.T),
                        "tokens": (step + 1) * args.batch_size,
                        "steps_per_s": (step + 1) / (time.time() - t0)}
                 if step % args.diag_every == 0 or step == steps - 1:
                     for dk in args.diag_ks:
                         row[f"fve_hard_k{dk}"] = fve(x, sae.decode(sae.hard_encode(x, dk)))
-                        fs, _, _ = sae.soft_encode(x, float(dk), T=args.T, n_iters=args.n_iters)
+                        fs = sae.soft_encode(x, float(dk), T=args.T, n_iters=args.n_iters)[0]
                         row[f"fve_soft_k{dk}"] = fve(x, sae.decode(fs))
             run.log(row, step=step)
         if step % 1000 == 0:
