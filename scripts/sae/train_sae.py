@@ -1,11 +1,14 @@
 """Train a TopK SAE on one residual-stream site, with a hard or sigmoid top-k forward and a
 fixed or random k. The only loss is reconstruction MSE.
 
-The 2x2 this exists for (scripts/sae/launch/submit_sae_pythia_sc.sh, RUN=A..D):
-    A  --hard --k-schedule fixed --k 20      does our pipeline reproduce SAEBench's TopK k=20?
-    B          --k-schedule fixed --k 20      the sigmoid top-k operator alone
-    C  --hard --k-schedule log --k-max 640   random k alone (one SAE for every L0)
-    D          --k-schedule log --k-max 640   both: sigmoid top-k + random k
+The runs this exists for (scripts/sae/launch/submit_sae_pythia_sc.sh, RUN=A..E):
+    A  --forward hard --k-schedule fixed --k 20      does our pipeline reproduce SAEBench's TopK k=20?
+    B  --forward soft --k-schedule fixed --k 20      the sigmoid top-k operator alone
+    C  --forward hard --k-schedule log --k-max 640   random k alone (one SAE for every L0)
+    D  --forward soft --k-schedule log --k-max 640   both: sigmoid top-k + random k
+    E  --forward ste  --k-schedule log --k-max 640   C with the sigmoid top-k as backward only
+B and D showed the soft forward is a loose relaxation in an SAE (see sae.TopKSAE.soft_encode);
+E keeps C's exact forward and changes only the gradient.
 
 Data/optimizer follow SAEBench's TopK baselines (released 0108 configs of
 adamkarvonen/saebench_pythia-160m-deduped_width-2pow12_date-0108; adamkarvonen/dictionary_learning_demo):
@@ -17,12 +20,12 @@ activation normalization, bf16 autocast. Activations come from TransformerLens'
 ``from_pretrained_no_processing`` (what SAEBench's core eval loads) at blocks.{layer}.hook_resid_post.
 
 k is one draw per step, shared by the whole batch (as MAttr draws one k per step); ``log`` is
-``schedules.sample_k(k_max, "log")``, i.e. log-uniform on [1, k_max]. The hard forward uses
-round(k). The soft forward is ``sigmoid_topk`` at T=0.5 with 50 bisection iterations, MAttr's
+``schedules.sample_k(k_max, "log")``, i.e. log-uniform on [1, k_max]. The hard and ste forwards
+use round(k). The soft forward (and ste's backward) is ``sigmoid_topk`` at T=0.5 with 50 bisection iterations, MAttr's
 defaults (trainer.learn_scores).
 
   UV_PROJECT_ENVIRONMENT=.venv-sae uv run --no-default-groups --group sae \
-      python scripts/sae/train_sae.py --hard --k-schedule fixed --k 20 --out results/sae/<tag>
+      python scripts/sae/train_sae.py --forward hard --k-schedule fixed --k 20 --out results/sae/<tag>
 """
 
 import argparse
@@ -104,7 +107,8 @@ def save(sae, cfg, out, step):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--hard", action="store_true", help="hard top-k forward (default: sigmoid top-k)")
+    p.add_argument("--forward", required=True, choices=["hard", "soft", "ste"],
+                   help="hard top-k / sigmoid top-k / hard forward with sigmoid top-k backward")
     p.add_argument("--k-schedule", default="log", choices=["fixed", "log"])
     p.add_argument("--k", type=int, default=20, help="k for --k-schedule fixed")
     p.add_argument("--k-max", type=int, default=640, help="upper end of the log-uniform k range")
@@ -166,10 +170,12 @@ def main():
         if step == 0:
             sae.b_dec.data = geometric_median(x)
         k = args.k if args.k_schedule == "fixed" else sample_k(args.k_max, "log")
-        if args.hard:
+        if args.forward == "hard":
             f = sae.hard_encode(x, max(1, round(k)))
-        else:
+        elif args.forward == "soft":
             f, mask = sae.soft_encode(x, k, T=args.T, n_iters=args.n_iters)
+        else:
+            f, mask = sae.ste_encode(x, k, T=args.T, n_iters=args.n_iters)
         x_hat = sae.decode(f)
         loss = (x - x_hat).pow(2).sum(dim=-1).mean()
 
@@ -188,7 +194,7 @@ def main():
                        "relu_l0": float((a > 0).sum(-1).float().mean()),
                        "tokens": (step + 1) * args.batch_size,
                        "steps_per_s": (step + 1) / (time.time() - t0)}
-                if not args.hard:
+                if args.forward != "hard":             # the sigmoid mask (ste: backward only)
                     row["mask_gt_half_l0"] = float((mask > 0.5).sum(-1).float().mean())
                 if step % args.diag_every == 0 or step == steps - 1:
                     for dk in args.diag_ks:
