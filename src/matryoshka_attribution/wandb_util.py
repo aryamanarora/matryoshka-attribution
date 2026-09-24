@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 #: dataset -> wandb project. Anything not listed falls back to ``l2a-<dataset>``.
 PROJECTS = {"sva": "l2a-sva", "arith": "l2a-arith", "causalgym": "l2a-causalgym",
-            "mib": "l2a-mib"}
+            "mib": "l2a-mib", "sae": "l2a-sae"}
 
 
 def project_for(dataset):

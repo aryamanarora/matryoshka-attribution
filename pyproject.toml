@@ -38,6 +38,10 @@ vit = ["torch>=2.12.0", "torchvision>=0.27.0", "zennit>=1.0.0", "lxt>=2.1", "tra
 # The fork's own modules (MIB_circuit_track, eap) are put on sys.path by deps.find_mib_path, so
 # nothing from deps/ is installed here.
 tl2 = ["torch==2.5.1", "transformers==4.46.3", "transformer-lens==2.15.4"]
+# SAE training with MAttr's sigmoid top-k + SAEBench evaluation (scripts/sae). sae-bench pins
+# numpy<2 / datasets<4 and pulls sae_lens, so it gets its own env like `vit` and `tl2`:
+#   UV_PROJECT_ENVIRONMENT=.venv-sae uv run --no-default-groups --group sae python scripts/sae/train_sae.py ...
+sae = ["sae-bench>=0.6.0"]
 dev = [
     "pytest>=9.1.1",
 ]
@@ -48,4 +52,7 @@ conflicts = [
     [{ group = "lm" }, { group = "vit" }],
     [{ group = "lm" }, { group = "tl2" }],
     [{ group = "vit" }, { group = "tl2" }],
+    [{ group = "sae" }, { group = "lm" }],
+    [{ group = "sae" }, { group = "vit" }],
+    [{ group = "sae" }, { group = "tl2" }],
 ]
