@@ -1,0 +1,10 @@
+cat_dog.jpg
+  Source : https://commons.wikimedia.org/wiki/File:Cat_and_dog.JPG
+  Author : Arantz (Wikimedia Commons)
+  Date   : 2002-01-02
+  License: CC BY-SA 3.0  (https://creativecommons.org/licenses/by-sa/3.0)
+
+Used as the input image for the AttnLRP-Figure-1-style teaser
+(scripts/vit_teaser_attr.py, plots/plot_vit_teaser.py). Any figure reproducing it must
+carry the attribution above; CC BY-SA 3.0 is share-alike, so keep the credit line in the
+figure caption ("Photo: Arantz / Wikimedia Commons, CC BY-SA 3.0").

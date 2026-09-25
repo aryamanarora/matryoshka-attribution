@@ -1,0 +1,27 @@
+*.png
+.DS_Store
+*.pyc
+__pycache__/
+# the MIB fork is vendored in deps/MIB-circuit-track; only its run outputs are ignored
+deps/MIB-circuit-track/results/
+deps/MIB-circuit-track/logs/
+deps/MIB-circuit-track/.venv/
+# goodfire-ai/arithmetic-wild's generated datasets (7 MB), read by scripts/sva/eval_sva.py via
+# $MATTR_ARITH_DIR or this path; not vendored.
+deps/arithmetic-wild/
+# per-group uv environments (pyproject.toml [dependency-groups]: lm -> .venv, vit -> .venv-vit, tl2 -> .venv-tl2)
+.venv*/
+results/
+logs/
+logs_*/
+plots/*
+!plots/*.py
+.claude/
+paper/
+*.log
+
+# wandb run dirs (eval_sva.py --wandb); the run of record is on wandb.ai, not on disk
+wandb/
+# scripts/vw/vw_data.py regenerates these (tok4096.json, train.bin, val.bin, meta.json)
+data/vw/
+CLAUDE.md

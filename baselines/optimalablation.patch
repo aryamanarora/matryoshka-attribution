@@ -1,0 +1,74 @@
+diff --git a/edge_pruning_unif_mib.py b/edge_pruning_unif_mib.py
+index 2bcdf51..956d16b 100644
+--- a/edge_pruning_unif_mib.py
++++ b/edge_pruning_unif_mib.py
+@@ -2,6 +2,7 @@
+ import torch
+ import datasets
+ import os
++from pathlib import Path
+ from sys import argv
+ from torch.utils.data import DataLoader
+ from transformer_lens import HookedTransformer, HookedTransformerConfig
+@@ -21,7 +22,9 @@ import pickle
+ from mask_samplers.EdgeMaskSampler import EdgeMaskUnifSampler
+ from utils.MaskConfig import EdgeInferenceConfig
+ from utils.task_datasets import get_task_ds
+-from utils.training_utils import load_model_data, load_data, LinePlot, load_args, plot_no_outliers
++# load_data does not exist in utils.training_utils (upstream import is broken); it was only used
++# by the interp-bench branch below, which we don't run.
++from utils.training_utils import load_model_data, LinePlot, load_args, plot_no_outliers
+ from pruners.EdgePruner import EdgePruner
+ from dataset import HFEAPDataset
+ from huggingface_hub import hf_hub_download
+@@ -34,7 +37,9 @@ args = load_args("pruning", 0.001, {
+     "minwindow": 0.5,
+     "maxwindow": 2,
+     "dataset": "ioi",
+-    "model": "interp-bench",
++    # load_args' parser has no --model flag (and an unknown flag silently resets every arg to
++    # its default), so the model is selected by env var instead: UGS_MODEL=gpt2-small|qwen
++    "model": os.environ.get("UGS_MODEL", "interp-bench"),
+     "lr": 1e-3
+ })
+ 
+@@ -55,7 +60,7 @@ print("Learning rate", lr)
+ if model_str == "gpt2-small":
+     model_name = "gpt2-small"
+ elif model_str == "qwen":
+-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
++    model_name = "Qwen/Qwen2.5-0.5B"   # MIB evaluates the base model, not -Instruct
+ elif model_str == "interp-bench":
+     model_name = "interp-bench"
+ else:
+@@ -91,10 +96,15 @@ def load_interpbench_model():
+ # load model
+ if model_str == "interp-bench":
+     model = load_interpbench_model()
+-    device, owt_iter = load_data(owt_batch_size, device=dev_str)
++    device, owt_iter = torch.device(dev_str), None
+     tokenizer = model.tokenizer
+ else:
+-    device, model, tokenizer, owt_iter = load_model_data(model_name, owt_batch_size, device=dev_str)
++    # owt_iter is unused by the counterfactual (cf) objective, so skip load_model_data's
++    # 100k-document OpenWebText download/tokenization.
++    device = torch.device(dev_str)
++    model = HookedTransformer.from_pretrained(model_name, device=device)
++    tokenizer = model.tokenizer
++    owt_iter = None
+ 
+ model.train()
+ model.cfg.use_split_qkv_input = True
+@@ -148,8 +158,10 @@ if ablation_type == "cf":
+ elif ablation_type == "resample" or ablation_type == "resample_agnostic":
+     pruning_cfg.lr /= 2
+ 
+-with open('./hf_token.txt', 'r') as f:
+-    hf_token = f.read().strip()
++token_path = Path('./hf_token.txt')
++if not token_path.exists():
++    token_path = Path.home() / '.cache/huggingface/token'
++hf_token = token_path.read_text().strip() if token_path.exists() else None
+ 
+ hf_dataset = HFEAPDataset(dataset_url, model.tokenizer, task=dataset, split='train', num_examples=num_examples, hf_token=hf_token, model_name=model_name)
+ if dataset == "mcqa":
