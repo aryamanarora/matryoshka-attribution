@@ -12,7 +12,7 @@
 
 **MAttr** (Matryoshka Attribution) learns an attribution ordering over a model's internal variables by optimising a mask with the *sigmoid top-k* operator, sampling a random sparsity level each step.
 
-- **Parameter attribution**: released as a separate repository (it includes RL and SFT training code and configs, along with attribution code); link withheld for anonymous review.
+- **Parameter attribution**: [anonymous mirror](https://anonymous.4open.science/r/matryoshka-attribution-parameters-3C72) of the sibling repository (we release it separately to simplify the codebase; it includes RL and SFT training code and configs, along with attribution code).
 - **MIB circuit-track submission**: node and edge circuits for every MIB subtask; link withheld for anonymous review (`scripts/mib/make_mib_submission.py` rebuilds it).
 
 
